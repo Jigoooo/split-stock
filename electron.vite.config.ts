@@ -29,7 +29,9 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/main/index.ts') },
-        external: ['electron'],
+        // native/특수 모듈은 명시 external — 런타임에 require로 로드해야
+        // 'better-sqlite3'의 .node 바인딩과 'electron' 내장 모듈을 정상 resolve.
+        external: ['electron', 'better-sqlite3'],
         output: {
           format: 'cjs',
           entryFileNames: '[name].cjs',
@@ -46,7 +48,9 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/preload/index.ts') },
-        external: ['electron'],
+        // native/특수 모듈은 명시 external — 런타임에 require로 로드해야
+        // 'better-sqlite3'의 .node 바인딩과 'electron' 내장 모듈을 정상 resolve.
+        external: ['electron', 'better-sqlite3'],
         output: {
           format: 'cjs',
           entryFileNames: '[name].cjs',
