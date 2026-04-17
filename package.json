@@ -2,7 +2,7 @@
   "name": "split-stock",
   "version": "0.0.1",
   "description": "매직스플릿 방식 N분할 자동매매 클라이언트 (한국투자증권 KIS API)",
-  "main": "./out/main/index.mjs",
+  "main": "./out/main/index.cjs",
   "author": "kimjigoooo",
   "license": "UNLICENSED",
   "private": true,

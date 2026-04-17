@@ -52,7 +52,7 @@ function createMainWindow(): BrowserWindow {
     autoHideMenuBar: true,
     title: 'split-stock (MOCK)',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
