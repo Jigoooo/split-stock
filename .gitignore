@@ -1,2 +1,33 @@
-.omc/
-.playwright-mcp/
+# deps
+node_modules
+.pnpm-store
+
+# build artifacts
+out
+dist
+*.tsbuildinfo
+
+# drizzle artifacts
+drizzle/meta
+
+# test
+coverage
+playwright-report
+test-results
+
+# OMC
+.omc
+.playwright-mcp
+
+# env
+.env
+.env.*
+!.env.example
+
+# editor
+.vscode
+.idea
+*.log
+
+# macOS
+.DS_Store
