@@ -18,6 +18,7 @@ test-results
 # OMC
 .omc
 .playwright-mcp
+/state
 
 # env
 .env

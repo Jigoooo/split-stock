@@ -1,6 +1,7 @@
 import { AppEnvSchema, CredentialsSchema } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { SETTING_KEYS } from '../../db/settings-repo';
 import { publicProcedure, router } from '../trpc-core';
 
 export const authRouter = router({
@@ -13,6 +14,7 @@ export const authRouter = router({
 
   /**
    * 활성 환경 전환. 저장된 자격증명이 없으면 에러.
+   * 성공 시 lastActiveEnv 영속 → 재시작 후 자동 복원.
    */
   setEnv: publicProcedure.input(AppEnvSchema).mutation(({ ctx, input }) => {
     const cred = ctx.credentialsRepo.loadCredentials(input);
@@ -29,8 +31,31 @@ export const authRouter = router({
       });
     }
     ctx.setCurrentEnv(input);
+    ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, input);
     return { env: input };
   }),
+
+  /**
+   * 로그아웃 — 현재 환경 비활성화. 자격증명은 기본 보존(재로그인 시 재입력 불필요).
+   * clearStored:true로 호출하면 해당 env 자격증명도 DB에서 삭제.
+   */
+  logout: publicProcedure
+    .input(z.object({ clearStored: z.boolean().default(false) }).default({ clearStored: false }))
+    .mutation(({ ctx, input }) => {
+      const current = ctx.currentEnv;
+      if (current && input.clearStored) {
+        const r = ctx.credentialsRepo.clearCredentials(current);
+        if (r.isErr()) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: '자격증명 삭제 실패',
+          });
+        }
+      }
+      ctx.setCurrentEnv(null);
+      ctx.settingsRepo.delete(SETTING_KEYS.LAST_ACTIVE_ENV);
+      return { ok: true as const };
+    }),
 
   /**
    * 자격증명 저장 — safeStorage 암호화 후 SQLite BLOB.

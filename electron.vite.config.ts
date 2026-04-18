@@ -64,10 +64,7 @@ export default defineConfig({
         '@shared': resolve(__dirname, 'src/shared'),
       },
     },
-    plugins: [
-      react(),
-      babel({ presets: [reactCompilerPreset()] }),
-    ],
+    plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
     build: {
       rollupOptions: {
         input: {

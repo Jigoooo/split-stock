@@ -104,10 +104,39 @@ export const KisOrderResponseSchema = z.object({
   output: z.object({
     KRX_FWDG_ORD_ORGNO: z.string().optional(), // 주문조직
     ODNO: z.string(), // 주문번호
-    ORD_TMD: z.string(), // 주문시각
+    ORD_TMD: z.string().optional(), // 주문시각 (일부 응답에 누락)
   }),
 });
 export type KisOrderResponse = z.infer<typeof KisOrderResponseSchema>;
+
+/**
+ * 주문 정정/취소 요청.
+ * POST /uapi/domestic-stock/v1/trading/order-rvsecncl
+ * tr_id: TTTC0013U(실전) / VTTC0013U(모의)
+ */
+export const KisOrderAmendActionSchema = z.enum(['cancel', 'revise']);
+export type KisOrderAmendAction = z.infer<typeof KisOrderAmendActionSchema>;
+
+export const KisOrderAmendRequestSchema = z.object({
+  action: KisOrderAmendActionSchema,
+  orgOrgNo: z.string().regex(/^\d+$/, '원주문 조직번호 숫자'),
+  orgOdno: z.string().regex(/^\d+$/, '원주문번호 숫자'),
+  division: KisOrderDivisionSchema, // 정정의 경우 재지정, 취소는 서버 무시
+  qty: z.number().int().positive(),
+  price: z.number().int().nonnegative(), // 취소/시장가는 0 허용
+  qtyAllOrder: z.boolean().default(false),
+});
+export type KisOrderAmendRequest = z.infer<typeof KisOrderAmendRequestSchema>;
+
+/**
+ * 정규화된 주문 결과 — UI/도메인 레이어에 노출되는 단일 타입.
+ */
+export const NormalizedOrderAckSchema = z.object({
+  odno: z.string().min(1),
+  orgNo: z.string().optional(),
+  orderedAt: z.string().optional(),
+});
+export type NormalizedOrderAck = z.infer<typeof NormalizedOrderAckSchema>;
 
 /**
  * KIS API 에러를 neverthrow Result로 감싸기 위한 에러 모델.

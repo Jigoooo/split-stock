@@ -1,37 +1,32 @@
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import type {
-  BrowserWindow as BrowserWindowType,
-  safeStorage as safeStorageType,
-} from 'electron';
+import type { BrowserWindow as BrowserWindowType, safeStorage as safeStorageType } from 'electron';
 import { createIPCHandler } from 'trpc-electron/main';
 
 // Electron은 CJS-only 모듈. Vite 8(rolldown) + CJS output 조합에서
 // `import { app } from 'electron'`이 런타임에 undefined가 되는 interop
 // 문제가 있어, createRequire로 직접 require한다.
 const electronRequire = createRequire(import.meta.url);
-const {
-  app,
-  BrowserWindow,
-  safeStorage,
-  shell,
-} = electronRequire('electron') as {
+const { app, BrowserWindow, safeStorage, shell } = electronRequire('electron') as {
   app: typeof import('electron').app;
   BrowserWindow: typeof BrowserWindowType;
   safeStorage: typeof safeStorageType;
   shell: typeof import('electron').shell;
 };
+
+import type { AppEnv } from '@shared/contracts';
 import { defaultDbPath, migrate, openDb } from './db/client';
+import { SETTING_KEYS, SettingsRepo } from './db/settings-repo';
 import { AuthService } from './kis/auth';
 import { KIS_BASE_URL } from './kis/endpoints';
 import { KisHttpClient } from './kis/http-client';
 import { TokenStore } from './kis/token-store';
+import { createEventLogger } from './logging/event-logger';
+import { createSafetyState } from './safety/safety-state';
 import { CredentialsRepo } from './security/credentials-repo';
 import { appRouter } from './trpc/app-router';
 import { createContextFactory } from './trpc/context';
-
-// __dirname/__filename은 electron.vite.config.ts의 Rollup banner가 주입.
-// 별도 폴리필 불필요 — Node 타입 선언으로 TS는 이미 해결됨.
+import { initAutoUpdater } from './updater';
 
 const isDev = !app.isPackaged;
 
@@ -56,10 +51,35 @@ function bootstrapDeps(userDataDir: string) {
     MOCK: new KisHttpClient({ baseUrl: KIS_BASE_URL.MOCK }),
     PROD: new KisHttpClient({ baseUrl: KIS_BASE_URL.PROD }),
   };
-  // auth는 env별 분리가 불필요 — http 주입만 분기
   const auth = new AuthService(httpByEnv.MOCK, tokenStore);
-  const factory = createContextFactory({ db, credentialsRepo, auth, httpByEnv });
-  return { factory };
+  const eventLogger = createEventLogger(db);
+  const safety = createSafetyState({ logger: eventLogger });
+  const settingsRepo = new SettingsRepo(db);
+  const factory = createContextFactory({
+    db,
+    credentialsRepo,
+    settingsRepo,
+    auth,
+    httpByEnv,
+    safety,
+  });
+
+  // 저장된 자격증명이 있으면 마지막 활성 환경 복원 — 재시작 후 자동 로그인.
+  const savedEnv = settingsRepo.get(SETTING_KEYS.LAST_ACTIVE_ENV);
+  if (savedEnv === 'MOCK' || savedEnv === 'PROD') {
+    const cred = credentialsRepo.loadCredentials(savedEnv as AppEnv);
+    if (cred.isOk() && cred.value) {
+      factory.setEnv(savedEnv as AppEnv);
+      eventLogger.log({
+        level: 'INFO',
+        category: 'AUTH',
+        message: 'auth.env.restored',
+        payload: { env: savedEnv },
+      });
+    }
+  }
+
+  return { factory, safety, eventLogger };
 }
 
 function createMainWindow(): BrowserWindowType {
@@ -97,7 +117,7 @@ function createMainWindow(): BrowserWindowType {
 }
 
 void app.whenReady().then(() => {
-  const { factory } = bootstrapDeps(app.getPath('userData'));
+  const { factory, safety, eventLogger } = bootstrapDeps(app.getPath('userData'));
   const win = createMainWindow();
   createIPCHandler({
     router: appRouter,
@@ -105,8 +125,26 @@ void app.whenReady().then(() => {
     createContext: async () => factory.create(),
   });
 
+  void import('electron').then(({ globalShortcut }) => {
+    const acc = 'CommandOrControl+Shift+K';
+    const registered = globalShortcut.register(acc, () => {
+      safety.triggerKillSwitch('글로벌 단축키');
+    });
+    if (!registered) {
+      // 다른 앱이 단축키를 점유 중이면 무시
+    }
+  });
+
+  void initAutoUpdater(app.isPackaged, eventLogger);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+  });
+});
+
+app.on('will-quit', () => {
+  void import('electron').then(({ globalShortcut }) => {
+    globalShortcut.unregisterAll();
   });
 });
 
