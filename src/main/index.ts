@@ -1,6 +1,26 @@
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { app, BrowserWindow, safeStorage, shell } from 'electron';
+import type {
+  BrowserWindow as BrowserWindowType,
+  safeStorage as safeStorageType,
+} from 'electron';
 import { createIPCHandler } from 'trpc-electron/main';
+
+// Electron은 CJS-only 모듈. Vite 8(rolldown) + CJS output 조합에서
+// `import { app } from 'electron'`이 런타임에 undefined가 되는 interop
+// 문제가 있어, createRequire로 직접 require한다.
+const electronRequire = createRequire(import.meta.url);
+const {
+  app,
+  BrowserWindow,
+  safeStorage,
+  shell,
+} = electronRequire('electron') as {
+  app: typeof import('electron').app;
+  BrowserWindow: typeof BrowserWindowType;
+  safeStorage: typeof safeStorageType;
+  shell: typeof import('electron').shell;
+};
 import { defaultDbPath, migrate, openDb } from './db/client';
 import { AuthService } from './kis/auth';
 import { KIS_BASE_URL } from './kis/endpoints';
@@ -42,7 +62,7 @@ function bootstrapDeps(userDataDir: string) {
   return { factory };
 }
 
-function createMainWindow(): BrowserWindow {
+function createMainWindow(): BrowserWindowType {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,

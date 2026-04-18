@@ -29,8 +29,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/main/index.ts') },
-        // native/특수 모듈은 명시 external — 런타임에 require로 로드해야
-        // 'better-sqlite3'의 .node 바인딩과 'electron' 내장 모듈을 정상 resolve.
+        // electron/native 모듈은 반드시 external — 번들 inline되면
+        // Electron 내부 `path.txt` / better-sqlite3 `.node` 바인딩 경로가 깨진다.
         external: ['electron', 'better-sqlite3'],
         output: {
           format: 'cjs',
@@ -48,9 +48,7 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/preload/index.ts') },
-        // native/특수 모듈은 명시 external — 런타임에 require로 로드해야
-        // 'better-sqlite3'의 .node 바인딩과 'electron' 내장 모듈을 정상 resolve.
-        external: ['electron', 'better-sqlite3'],
+        external: ['electron'],
         output: {
           format: 'cjs',
           entryFileNames: '[name].cjs',
