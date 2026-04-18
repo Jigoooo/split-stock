@@ -18,13 +18,16 @@ export interface AuthServiceOptions {
  * - 저장된 토큰이 재사용 가능(만료까지 >6h)하면 DB 것 반환
  * - 아니면 /oauth2/tokenP 호출 → 저장 → 반환
  * - 네트워크 실패는 지수백오프로 재시도, 그 외 에러는 즉시 반환
+ *
+ * env 별로 KisHttpClient(MOCK/PROD 각각 base URL) 를 주입받아야 한다.
+ * 하나의 클라이언트만 쓰면 PROD 전환 후에도 MOCK URL 로 발급되어 AUTH_FAILED 발생.
  */
 export class AuthService {
   private readonly maxRetries: number;
   private readonly now: () => number;
 
   constructor(
-    private readonly http: KisHttpClient,
+    private readonly httpByEnv: Record<AppEnv, KisHttpClient>,
     private readonly store: TokenStore,
     options: AuthServiceOptions = {},
   ) {
@@ -49,7 +52,7 @@ export class AuthService {
     appKey: string,
     appSecret: string,
   ): Promise<Result<StoredToken, KisError>> {
-    const result = await this.issueWithRetry(appKey, appSecret);
+    const result = await this.issueWithRetry(env, appKey, appSecret);
     if (result.isErr()) return err(result.error);
     const saveResult = this.store.save(env, result.value);
     if (saveResult.isErr()) {
@@ -59,12 +62,13 @@ export class AuthService {
   }
 
   private async issueWithRetry(
+    env: AppEnv,
     appKey: string,
     appSecret: string,
   ): Promise<Result<StoredToken, KisError>> {
     let lastErr: KisError | null = null;
     for (let attempt = 0; attempt < this.maxRetries; attempt++) {
-      const r = await this.issueOnce(appKey, appSecret);
+      const r = await this.issueOnce(env, appKey, appSecret);
       if (r.isOk()) return ok(r.value);
       lastErr = r.error;
       if (r.error.kind !== 'NETWORK' && r.error.kind !== 'RATE_LIMITED') {
@@ -77,10 +81,11 @@ export class AuthService {
   }
 
   private async issueOnce(
+    env: AppEnv,
     appKey: string,
     appSecret: string,
   ): Promise<Result<StoredToken, KisError>> {
-    const r = await this.http.post<unknown>(KIS_PATH.TOKEN_ISSUE, {
+    const r = await this.httpByEnv[env].post<unknown>(KIS_PATH.TOKEN_ISSUE, {
       grant_type: 'client_credentials',
       appkey: appKey,
       appsecret: appSecret,
