@@ -102,7 +102,10 @@ const { candles } = await trpc.market.getDailyChart.query({
 | `BUYING`/`SELLING` 상태 차수 | 오버레이 제외 — 미확정 가격은 표시하지 않음 |
 | 전략 미설정 | `profitPct=0.05` 기본값 |
 
-## 4. 실시간 WebSocket (US-011)
+## 4. 실시간 WebSocket (US-011) + Frame Parser (NM-014)
+
+> 실시간 프레임을 파싱하고 UI 까지 전달하는 전체 파이프라인은 [realtime-trading.md](./realtime-trading.md) 를 참고하세요. 여기서는 KIS WS 클라이언트 계층만 다룹니다.
+
 
 ### 사용 방법
 

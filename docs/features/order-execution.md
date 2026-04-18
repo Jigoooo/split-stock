@@ -2,6 +2,8 @@
 
 US-010 + NM-001. KIS 현금 매수/매도/정정/취소 어댑터와 지정가 주문의 미체결 감시/자동 취소를 다룹니다.
 
+> 실시간 패널에서 호가창 클릭 → 주문 티켓 연동 흐름은 별도 문서: [realtime-trading.md](./realtime-trading.md).
+
 상위 인덱스: [../README.md](../README.md)
 
 ## 1. 현금 주문 (US-010)
@@ -89,7 +91,16 @@ const r = await cancelOrRevise(deps, {
 ### 인증 필요 여부
 
 - 필요. 호출 전 `AuthService.getValidToken` 으로 토큰 확보 + `credentials.accountNo8/accountProdCd` 필수.
-- tRPC 래퍼는 아직 없음(콜러가 라우터/워커 안에서 직접 사용). 주문은 반드시 **main 프로세스에서만** — renderer에서 직접 orderCash 를 호출할 수 없음.
+- tRPC 래퍼: [`orderRouter`](../../src/main/trpc/routers/order-router.ts) 의 `placeCash` / `amend` / `listActive` / `cancelMany` 가 모두 `authedProcedure`. Renderer는 직접 `orderCash` 를 호출할 수 없고 반드시 이 라우터 경유 (자세한 사용 예는 [realtime-trading.md §6](./realtime-trading.md#6-orderrouter--즉시-주문-trpc)).
+
+### orderRouter 보강 계약
+
+| 엔드포인트 | 추가 검증 / 부수 효과 |
+| --- | --- |
+| `order.placeCash` | `ctx.safety.canTrade(pdno)=false` 면 403. 성공 시 `orders` 테이블에 PENDING + **`orgNo` (KRX_FWDG_ORD_ORGNO) 저장** — 이후 정정/취소에 필수 |
+| `order.amend` | `action='cancel'` 성공 시 `orders.status='CANCELLED'` 자동 업데이트 |
+| `order.listActive` | `status IN ('PENDING','PARTIAL')` 주문을 `placedAt ASC` 로 반환 |
+| `order.cancelMany({ odnos })` | 저장된 `orgNo` 로 각 건 취소. `orgNo` 누락 건은 `ok:false, reason:'orgNo 누락'` 로 스킵 (`{results:[...]}` 응답) |
 
 ### 테스트 방법
 

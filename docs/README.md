@@ -16,8 +16,9 @@
 | 기능 도메인 | 핵심 경로 | 인증 필요 | 상세 문서 |
 | --- | --- | --- | --- |
 | 인증 / 자격증명 / 환경 전환 | [src/main/security/credentials-repo.ts](../src/main/security/credentials-repo.ts), [src/main/kis/auth.ts](../src/main/kis/auth.ts), [src/renderer/src/features/switch-env/](../src/renderer/src/features/switch-env/) | — (저장 시점은 없음) | [features/authentication.md](features/authentication.md) |
-| 시세 조회 / 종목 검색 / 티어드 감시 / 차트 | [src/main/kis/domestic-stock.ts](../src/main/kis/domestic-stock.ts), [src/main/kis/ws-client.ts](../src/main/kis/ws-client.ts), [src/main/trading/tiered-quote-feed.ts](../src/main/trading/tiered-quote-feed.ts), [src/main/trading/stock-master-repo.ts](../src/main/trading/stock-master-repo.ts) | 대부분 필요 (검색은 public) | [features/market-data.md](features/market-data.md) |
-| 주문 실행 / 미체결 자동취소 | [src/main/kis/order.ts](../src/main/kis/order.ts), [src/main/trading/pending-order-watcher.ts](../src/main/trading/pending-order-watcher.ts) | 필요 | [features/order-execution.md](features/order-execution.md) |
+| 시세 조회 / 종목 검색 / 티어드 감시 / 차트 | [src/main/kis/domestic-stock.ts](../src/main/kis/domestic-stock.ts), [src/main/kis/ws-client.ts](../src/main/kis/ws-client.ts), [src/main/kis/ws-frame-parser.ts](../src/main/kis/ws-frame-parser.ts), [src/main/trading/tiered-quote-feed.ts](../src/main/trading/tiered-quote-feed.ts), [src/main/trading/stock-master-repo.ts](../src/main/trading/stock-master-repo.ts) | 대부분 필요 (검색은 public) | [features/market-data.md](features/market-data.md) |
+| 주문 실행 / 미체결 자동취소 | [src/main/kis/order.ts](../src/main/kis/order.ts), [src/main/trpc/routers/order-router.ts](../src/main/trpc/routers/order-router.ts), [src/main/trading/pending-order-watcher.ts](../src/main/trading/pending-order-watcher.ts) | 필요 | [features/order-execution.md](features/order-execution.md) |
+| 실시간 트레이딩 패널 (호가/체결/주문/단축키) | [src/main/realtime/](../src/main/realtime/), [src/main/trpc/routers/realtime-router.ts](../src/main/trpc/routers/realtime-router.ts), [src/renderer/src/widgets/trading-panel/](../src/renderer/src/widgets/trading-panel/), [src/renderer/src/features/order-ticket/](../src/renderer/src/features/order-ticket/) | 필요 | [features/realtime-trading.md](features/realtime-trading.md) |
 | 자동매매 FSM / 차수 장부 / 부스터 / 예약매수 / 리스플릿 | [src/main/trading/fsm.ts](../src/main/trading/fsm.ts), [src/main/trading/lots-repo.ts](../src/main/trading/lots-repo.ts), [src/main/trading/booster-watcher.ts](../src/main/trading/booster-watcher.ts), [src/main/trading/prebuy-repo.ts](../src/main/trading/prebuy-repo.ts), [src/main/trading/respiit-planner.ts](../src/main/trading/respiit-planner.ts) | 필요 (주문 경유) | [features/auto-trading.md](features/auto-trading.md) |
 | 안전 3계층 / 킬스위치 / 로그 뷰어 | [src/main/safety/safety-state.ts](../src/main/safety/safety-state.ts), [src/main/trpc/routers/logs-router.ts](../src/main/trpc/routers/logs-router.ts), [src/renderer/src/features/safety-switch/](../src/renderer/src/features/safety-switch/) | — | [features/safety.md](features/safety.md) |
 | 전략 파라미터 / 프리셋 / 감사 | [src/main/trading/strategy-repo.ts](../src/main/trading/strategy-repo.ts), [src/shared/contracts/strategy.ts](../src/shared/contracts/strategy.ts), [src/renderer/src/features/edit-strategy/](../src/renderer/src/features/edit-strategy/) | — (로컬 설정) | [features/strategy.md](features/strategy.md) |
@@ -48,15 +49,15 @@ pnpm lint
 
 Vitest 프로젝트 분리: [vitest.config.ts](../vitest.config.ts) — main은 node 환경, renderer는 jsdom + jest-dom. 통합 실행 시 두 프로젝트 모두 실행됩니다.
 
-## Session 1~7 누적 검증 (2026-04-18)
+## Session 1~8 누적 검증 (2026-04-18)
 
 | 지표 | 수치 |
 | --- | --- |
-| 테스트 파일 | 31 |
-| 테스트 케이스 | 198+ (모두 PASS) |
+| 테스트 파일 | 35 |
+| 테스트 케이스 | 222 (모두 PASS) |
 | TypeScript 에러 | 0 (`tsc -b`) |
-| Biome 린트 에러 | 0 (136 파일) |
-| 렌더러 번들 (production) | 1,110 kB + CSS 4.86 kB |
+| Biome 린트 에러 | 0 (155 파일) |
+| 렌더러 번들 (production) | ≈ 1.1 MB + CSS |
 
 ## Known Issues & 본 문서화 세션에서 수정된 항목
 
@@ -74,6 +75,7 @@ Vitest 프로젝트 분리: [vitest.config.ts](../vitest.config.ts) — main은 
 - [features/authentication.md](features/authentication.md) — US-005, US-006, NM-002
 - [features/market-data.md](features/market-data.md) — US-007, US-011, NM-003, NM-011, NM-013
 - [features/order-execution.md](features/order-execution.md) — US-010, NM-001
+- [features/realtime-trading.md](features/realtime-trading.md) — NM-014 (WS parser/FeedBus/RealtimeService + 호가/체결/주문/단축키)
 - [features/auto-trading.md](features/auto-trading.md) — US-012, NM-004, NM-005, NM-006
 - [features/safety.md](features/safety.md) — US-013
 - [features/strategy.md](features/strategy.md) — NM-010
