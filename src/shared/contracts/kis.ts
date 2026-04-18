@@ -78,6 +78,29 @@ export const KisPriceResponseSchema = z.object({
 export type KisPriceResponse = z.infer<typeof KisPriceResponseSchema>;
 
 /**
+ * 국내주식 일봉 조회.
+ * GET /uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice
+ * tr_id: FHKST03010100 (실전/모의 공통, 조회성)
+ */
+export const KisDailyCandleSchema = z.object({
+  stck_bsop_date: z.string(), // YYYYMMDD
+  stck_oprc: z.string(), // 시가
+  stck_hgpr: z.string(), // 고가
+  stck_lwpr: z.string(), // 저가
+  stck_clpr: z.string(), // 종가
+  acml_vol: z.string(), // 누적거래량
+});
+export type KisDailyCandle = z.infer<typeof KisDailyCandleSchema>;
+
+export const KisDailyChartResponseSchema = z.object({
+  rt_cd: z.string(),
+  msg_cd: z.string(),
+  msg1: z.string(),
+  output2: z.array(KisDailyCandleSchema).default([]),
+});
+export type KisDailyChartResponse = z.infer<typeof KisDailyChartResponseSchema>;
+
+/**
  * 국내주식 주문 요청.
  * POST /uapi/domestic-stock/v1/trading/order-cash
  * tr_id: TTTC0012U(실전 매수) / TTTC0011U(실전 매도) / VTTC0012U(모의 매수) / VTTC0011U(모의 매도)

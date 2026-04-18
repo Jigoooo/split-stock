@@ -24,6 +24,9 @@ import { TokenStore } from './kis/token-store';
 import { createEventLogger } from './logging/event-logger';
 import { createSafetyState } from './safety/safety-state';
 import { CredentialsRepo } from './security/credentials-repo';
+import { LotsRepo } from './trading/lots-repo';
+import { StockMasterRepo } from './trading/stock-master-repo';
+import { StrategyRepo } from './trading/strategy-repo';
 import { appRouter } from './trpc/app-router';
 import { createContextFactory } from './trpc/context';
 import { initAutoUpdater } from './updater';
@@ -55,6 +58,9 @@ function bootstrapDeps(userDataDir: string) {
   const eventLogger = createEventLogger(db);
   const safety = createSafetyState({ logger: eventLogger });
   const settingsRepo = new SettingsRepo(db);
+  const strategyRepo = new StrategyRepo(settingsRepo, eventLogger);
+  const stockMasterRepo = new StockMasterRepo(db);
+  const lotsRepo = new LotsRepo(db);
   const factory = createContextFactory({
     db,
     credentialsRepo,
@@ -62,6 +68,10 @@ function bootstrapDeps(userDataDir: string) {
     auth,
     httpByEnv,
     safety,
+    logger: eventLogger,
+    strategyRepo,
+    stockMasterRepo,
+    lotsRepo,
   });
 
   // 저장된 자격증명이 있으면 마지막 활성 환경 복원 — 재시작 후 자동 로그인.

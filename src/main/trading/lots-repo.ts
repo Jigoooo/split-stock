@@ -1,8 +1,9 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import { err, ok, type Result } from 'neverthrow';
 import type { Db } from '../db/client';
 import { lots as lotsTable } from '../db/schema';
 import type { LotStatus, PositionSnapshot } from './fsm';
+import type { RespiitPlan } from './respiit-planner';
 
 export type LotsRepoError = { kind: 'DB_ERROR'; cause: unknown };
 
@@ -95,6 +96,72 @@ export class LotsRepo {
         return row.id;
       });
       return ok(id);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
+   * 리스플리트(재편성) — 기존 OPEN 차수를 삭제하고 새 plan으로 교체.
+   * SOLD/BUYING/SELLING 상태 차수는 보존 (확정된 과거 기록).
+   * 전체 트랜잭션 — 중간 실패 시 완전 rollback.
+   */
+  replan(accountId: number, plan: RespiitPlan): Result<{ insertedIds: number[] }, LotsRepoError> {
+    try {
+      const insertedIds = this.db.transaction((tx) => {
+        // OPEN 차수만 제거. SOLD/BUYING/SELLING은 감사 기록으로 보존.
+        tx.delete(lotsTable)
+          .where(
+            and(
+              eq(lotsTable.accountId, accountId),
+              eq(lotsTable.pdno, plan.pdno),
+              eq(lotsTable.status, 'OPEN'),
+            ),
+          )
+          .run();
+        // 보존된 차수와 nth가 겹치는지 검증 — 겹치면 full rollback
+        const preserved = tx
+          .select({ nth: lotsTable.nth })
+          .from(lotsTable)
+          .where(
+            and(
+              eq(lotsTable.accountId, accountId),
+              eq(lotsTable.pdno, plan.pdno),
+              ne(lotsTable.status, 'OPEN'),
+            ),
+          )
+          .all();
+        const preservedNths = new Set(preserved.map((r) => r.nth));
+        for (const e of plan.entries) {
+          if (preservedNths.has(e.nth)) {
+            throw new Error(
+              `replan nth 충돌: account=${accountId} pdno=${plan.pdno} nth=${e.nth}은 보존된 차수와 겹칩니다`,
+            );
+          }
+        }
+        const ids: number[] = [];
+        for (const e of plan.entries) {
+          const inserted = tx
+            .insert(lotsTable)
+            .values({
+              accountId,
+              pdno: plan.pdno,
+              nth: e.nth,
+              buyPrice: e.buyPrice,
+              qty: e.qty,
+              amountKrw: e.amountKrw,
+              status: 'OPEN' as LotStatus,
+              boughtAt: e.boughtAt,
+            })
+            .returning({ id: lotsTable.id })
+            .all();
+          const row = inserted[0];
+          if (!row) throw new Error('replan insert returned no row');
+          ids.push(row.id);
+        }
+        return ids;
+      });
+      return ok({ insertedIds });
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
     }

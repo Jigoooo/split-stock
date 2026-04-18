@@ -1,5 +1,9 @@
 import type { AppEnv, KisError } from '@shared/contracts';
-import { KisBalanceResponseSchema, KisPriceResponseSchema } from '@shared/contracts';
+import {
+  KisBalanceResponseSchema,
+  KisDailyChartResponseSchema,
+  KisPriceResponseSchema,
+} from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import { KIS_PATH, trId } from './endpoints';
 import { interpretRtCd, makeKisError } from './errors';
@@ -28,6 +32,15 @@ export interface QuoteResult {
   dayChange: number;
   dayChangeRate: number;
   accumVolume: number;
+}
+
+export interface DailyCandle {
+  date: string; // ISO YYYY-MM-DD
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
 }
 
 export interface DomesticStockDeps {
@@ -146,4 +159,66 @@ export async function inquirePrice(
     dayChangeRate: parseNum(parsed.data.output.prdy_ctrt),
     accumVolume: parseNum(parsed.data.output.acml_vol),
   });
+}
+
+function toIsoDate(yyyymmdd: string): string {
+  if (yyyymmdd.length !== 8) return yyyymmdd;
+  return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
+}
+
+function yyyymmdd(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}${m}${d}`;
+}
+
+/**
+ * 일봉 조회 — inquire-daily-itemchartprice.
+ * TR_ID: FHKST03010100 (조회성, 실전/모의 공통).
+ * KIS 응답 output2는 최신 날짜부터 역순. 오래된 순으로 정렬하여 반환.
+ */
+export async function inquireDailyChart(
+  deps: Omit<DomesticStockDeps, 'accountNo8' | 'accountProdCd'>,
+  params: { code: string; from: Date; to: Date },
+): Promise<Result<DailyCandle[], KisError>> {
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${deps.token}`,
+    appkey: deps.appKey,
+    appsecret: deps.appSecret,
+    tr_id: 'FHKST03010100',
+    custtype: 'P',
+  };
+  const query = {
+    FID_COND_MRKT_DIV_CODE: 'J',
+    FID_INPUT_ISCD: params.code,
+    FID_INPUT_DATE_1: yyyymmdd(params.from),
+    FID_INPUT_DATE_2: yyyymmdd(params.to),
+    FID_PERIOD_DIV_CODE: 'D',
+    FID_ORG_ADJ_PRC: '0',
+  };
+  const res = await deps.http.get<unknown>(KIS_PATH.INQUIRE_DAILY_CHART, query, headers);
+  if (res.isErr()) return err(res.error);
+  const parsed = KisDailyChartResponseSchema.safeParse(res.value.body);
+  if (!parsed.success) {
+    return err(
+      makeKisError('VALIDATION', 'daily chart 응답 파싱 실패', { cause: parsed.error.message }),
+    );
+  }
+  const bizErr = interpretRtCd(parsed.data.rt_cd, parsed.data.msg_cd, parsed.data.msg1);
+  if (bizErr) return err(bizErr);
+
+  const candles: DailyCandle[] = parsed.data.output2
+    .map((row) => ({
+      date: toIsoDate(row.stck_bsop_date),
+      open: parseNum(row.stck_oprc),
+      high: parseNum(row.stck_hgpr),
+      low: parseNum(row.stck_lwpr),
+      close: parseNum(row.stck_clpr),
+      volume: parseNum(row.acml_vol),
+    }))
+    .filter((c) => c.close > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return ok(candles);
 }

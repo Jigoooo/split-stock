@@ -38,6 +38,7 @@ export const KIS_PATH = {
   INQUIRE_CCNL: '/uapi/domestic-stock/v1/trading/inquire-daily-ccld',
   ORDER_CASH: '/uapi/domestic-stock/v1/trading/order-cash',
   ORDER_CANCEL_REVISE: '/uapi/domestic-stock/v1/trading/order-rvsecncl',
+  INQUIRE_DAILY_CHART: '/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice',
 } as const;
 
 /**

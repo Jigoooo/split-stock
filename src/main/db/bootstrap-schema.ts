@@ -75,6 +75,21 @@ const CREATE_STATEMENTS: readonly string[] = [
     value TEXT NOT NULL,
     updated_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS stock_master (
+    pdno TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sector TEXT,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS prebuy_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pdno TEXT NOT NULL,
+    target_price INTEGER NOT NULL,
+    amount_krw INTEGER NOT NULL,
+    valid_until INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
 ];
 
 /**

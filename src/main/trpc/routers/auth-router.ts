@@ -30,8 +30,15 @@ export const authRouter = router({
         message: `${input} 환경의 자격증명이 저장되어 있지 않습니다`,
       });
     }
+    const prev = ctx.currentEnv;
     ctx.setCurrentEnv(input);
     ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, input);
+    ctx.logger.log({
+      level: input === 'PROD' ? 'WARN' : 'INFO',
+      category: 'AUTH',
+      message: input === 'PROD' ? 'env.switch-to-prod' : 'env.switch-to-mock',
+      payload: { from: prev, to: input },
+    });
     return { env: input };
   }),
 

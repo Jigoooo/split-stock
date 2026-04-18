@@ -1,8 +1,15 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import type { ReactElement } from 'react';
+import { useState } from 'react';
+import { PositionChart } from './position-chart';
 
 export const DashboardPage = (): ReactElement => {
   const balance = trpc.account.getBalance.useQuery();
+  const [selected, setSelected] = useState<{ pdno: string; name: string } | null>(null);
+  const overlay = trpc.account.getPositionOverlay.useQuery(
+    { pdno: selected?.pdno ?? '000000' },
+    { enabled: selected !== null },
+  );
 
   if (balance.isPending) {
     return (
@@ -64,8 +71,16 @@ export const DashboardPage = (): ReactElement => {
                 const sign = p.pnlAmount === 0 ? 'flat' : p.pnlAmount > 0 ? 'up' : 'down';
                 const colorClass =
                   sign === 'up' ? 'num-up' : sign === 'down' ? 'num-down' : 'num-flat';
+                const isSelected = selected?.pdno === p.code;
                 return (
-                  <tr key={p.code}>
+                  <tr
+                    key={p.code}
+                    onClick={() => setSelected({ pdno: p.code, name: p.name })}
+                    style={{
+                      cursor: 'pointer',
+                      background: isSelected ? 'rgba(45, 79, 202, 0.08)' : undefined,
+                    }}
+                  >
                     <td className="num">{p.code}</td>
                     <td>{p.name}</td>
                     <td className="num">{formatKrw(p.qty)}</td>
@@ -81,6 +96,14 @@ export const DashboardPage = (): ReactElement => {
           </table>
         </div>
       </div>
+
+      {selected ? (
+        <PositionChart
+          pdno={selected.pdno}
+          name={selected.name}
+          lines={overlay.data?.lines ?? []}
+        />
+      ) : null}
     </div>
   );
 };

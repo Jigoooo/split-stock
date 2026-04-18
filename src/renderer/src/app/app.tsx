@@ -1,14 +1,16 @@
 import { SafetySwitchPanel, useKillSwitchHotkey } from '@renderer/features/safety-switch';
+import { SwitchEnvDialog } from '@renderer/features/switch-env';
 import { DashboardPage } from '@renderer/pages/dashboard';
 import { LoginPage } from '@renderer/pages/login';
 import { LogsPage } from '@renderer/pages/logs';
+import { SettingsPage } from '@renderer/pages/settings';
 import { trpc } from '@renderer/shared/api/trpc';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { AppProviders } from './providers';
 import './app.css';
 
-type Tab = 'dashboard' | 'logs';
+type Tab = 'dashboard' | 'logs' | 'settings';
 type EnvValue = 'MOCK' | 'PROD';
 
 const AppShell = (): ReactElement => {
@@ -32,16 +34,15 @@ const AppShell = (): ReactElement => {
     },
   });
 
+  const [pendingEnv, setPendingEnv] = useState<EnvValue | null>(null);
   const onSwitchEnv = (next: EnvValue): void => {
     if (next === env) return;
-    // 보안 불변식: 모의/실전 전환은 명시적 확인 필수
-    const ok = window.confirm(
-      next === 'PROD'
-        ? '⚠️ 실전(PROD) 환경으로 전환합니다. 실제 계좌로 주문이 나갑니다. 계속할까요?'
-        : '모의(MOCK) 환경으로 전환합니다. 계속할까요?',
-    );
-    if (!ok) return;
-    setEnv.mutate(next);
+    setPendingEnv(next);
+  };
+  const onDialogConfirm = (target: EnvValue): void => {
+    setEnv.mutate(target, {
+      onSettled: () => setPendingEnv(null),
+    });
   };
 
   const onLogout = (clearStored: boolean): void => {
@@ -91,6 +92,13 @@ const AppShell = (): ReactElement => {
             >
               로그
             </button>
+            <button
+              type="button"
+              className={tab === 'settings' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
+              onClick={() => setTab('settings')}
+            >
+              설정
+            </button>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.6rem' }}>
               {stored.length > 1 ? (
                 <select
@@ -133,12 +141,25 @@ const AppShell = (): ReactElement => {
         ) : env ? (
           <>
             <SafetySwitchPanel />
-            {tab === 'dashboard' ? <DashboardPage /> : <LogsPage />}
+            {tab === 'dashboard' ? (
+              <DashboardPage />
+            ) : tab === 'logs' ? (
+              <LogsPage />
+            ) : (
+              <SettingsPage />
+            )}
           </>
         ) : (
           <LoginPage />
         )}
       </main>
+      <SwitchEnvDialog
+        open={pendingEnv !== null}
+        target={pendingEnv ?? 'MOCK'}
+        pending={setEnv.isPending}
+        onConfirm={onDialogConfirm}
+        onCancel={() => setPendingEnv(null)}
+      />
     </div>
   );
 };

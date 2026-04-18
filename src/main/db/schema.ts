@@ -103,3 +103,28 @@ export const settings = sqliteTable('settings', {
   value: text('value').notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
+
+/**
+ * 종목 마스터 — pdno→이름/섹터 로컬 캐시 (주간 갱신).
+ * KIS search-stock-info 또는 KRX 공시를 upsert.
+ */
+export const stockMaster = sqliteTable('stock_master', {
+  pdno: text('pdno').primaryKey(), // 종목코드 6자리
+  name: text('name').notNull(),
+  sector: text('sector'),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/**
+ * 예약 매수 — 잔고에 없는 신규 종목 감시 주문(최대 100건).
+ * status: 'PENDING' | 'FILLED' | 'EXPIRED' | 'CANCELLED'.
+ */
+export const prebuyOrders = sqliteTable('prebuy_orders', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  pdno: text('pdno').notNull(),
+  targetPrice: integer('target_price').notNull(),
+  amountKrw: integer('amount_krw').notNull(),
+  validUntil: integer('valid_until', { mode: 'timestamp_ms' }).notNull(),
+  status: text('status').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+});

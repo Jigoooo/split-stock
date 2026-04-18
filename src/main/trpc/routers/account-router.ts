@@ -1,10 +1,13 @@
+import { buildLotOverlay, type LotOverlaySnapshot } from '@shared/trading/lot-overlay';
 import { TRPCError } from '@trpc/server';
+import { z } from 'zod';
 import { inquireBalance } from '../../kis/domestic-stock';
 import { authedProcedure, router } from '../trpc-core';
 
 /**
  * 계좌/잔고 조회 라우터.
  * - getBalance: inquire-balance 호출 후 Position[] + 예수금 반환
+ * - getPositionOverlay: 차트 위에 표시할 차수 오버레이 라인 반환
  */
 export const accountRouter = router({
   getBalance: authedProcedure.query(async ({ ctx }) => {
@@ -45,4 +48,35 @@ export const accountRouter = router({
     }
     return r.value;
   }),
+
+  getPositionOverlay: authedProcedure
+    .input(
+      z.object({
+        pdno: z.string().regex(/^\d{6}$/),
+        accountId: z.number().int().positive().default(1),
+        includeSold: z.boolean().default(false),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const snap = ctx.lotsRepo.snapshot(input.accountId, input.pdno);
+      if (snap.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `차수 조회 실패: ${snap.error.kind}`,
+        });
+      }
+      const active = ctx.strategyRepo.getActive(input.pdno);
+      const globalActive = ctx.strategyRepo.getActive(null);
+      const profile =
+        (active.isOk() ? active.value : null) ?? (globalActive.isOk() ? globalActive.value : null);
+      const profitPct = profile?.profitPct ?? 0.05;
+      const overlay: LotOverlaySnapshot[] = snap.value.lots.map((l) => ({
+        nth: l.nth,
+        buyPrice: l.buyPrice,
+        qty: l.qty,
+        status: l.status,
+      }));
+      const lines = buildLotOverlay(overlay, { profitPct, includeSold: input.includeSold });
+      return { lines, profitPct };
+    }),
 });
