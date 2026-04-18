@@ -1,8 +1,8 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { PositionChart } from '@renderer/widgets/position-chart';
 import { TradingPanel } from '@renderer/widgets/trading-panel';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { PositionChart } from './position-chart';
 
 export const DashboardPage = (): ReactElement => {
   const balance = trpc.account.getBalance.useQuery();

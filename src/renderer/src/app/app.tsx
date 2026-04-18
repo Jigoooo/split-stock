@@ -6,13 +6,14 @@ import { LoginPage } from '@renderer/pages/login';
 import { LogsPage } from '@renderer/pages/logs';
 import { ReportsPage } from '@renderer/pages/reports';
 import { SettingsPage } from '@renderer/pages/settings';
+import { TradePage } from '@renderer/pages/trade';
 import { trpc } from '@renderer/shared/api/trpc';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { AppProviders } from './providers';
 import './app.css';
 
-type Tab = 'dashboard' | 'logs' | 'reports' | 'settings';
+type Tab = 'dashboard' | 'trade' | 'logs' | 'reports' | 'settings';
 type EnvValue = 'MOCK' | 'PROD';
 
 const AppShell = (): ReactElement => {
@@ -89,6 +90,13 @@ const AppShell = (): ReactElement => {
             </button>
             <button
               type="button"
+              className={tab === 'trade' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
+              onClick={() => setTab('trade')}
+            >
+              주문
+            </button>
+            <button
+              type="button"
               className={tab === 'logs' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
               onClick={() => setTab('logs')}
             >
@@ -153,6 +161,8 @@ const AppShell = (): ReactElement => {
             <SafetySwitchPanel />
             {tab === 'dashboard' ? (
               <DashboardPage />
+            ) : tab === 'trade' ? (
+              <TradePage />
             ) : tab === 'logs' ? (
               <LogsPage />
             ) : tab === 'reports' ? (
