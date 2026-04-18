@@ -45,6 +45,7 @@ const CREATE_STATEMENTS: readonly string[] = [
     account_id INTEGER NOT NULL,
     lot_id INTEGER,
     odno TEXT NOT NULL,
+    org_no TEXT,
     pdno TEXT NOT NULL,
     side TEXT NOT NULL,
     division TEXT NOT NULL,

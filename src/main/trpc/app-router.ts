@@ -5,6 +5,8 @@ import { backupRouter } from './routers/backup-router';
 import { logsRouter } from './routers/logs-router';
 import { marketRouter } from './routers/market-router';
 import { monitoringRouter } from './routers/monitoring-router';
+import { orderRouter } from './routers/order-router';
+import { realtimeRouter } from './routers/realtime-router';
 import { reportsRouter } from './routers/reports-router';
 import { safetyRouter } from './routers/safety-router';
 import { strategyRouter } from './routers/strategy-router';
@@ -20,6 +22,8 @@ export const appRouter = router({
   monitoring: monitoringRouter,
   reports: reportsRouter,
   backup: backupRouter,
+  realtime: realtimeRouter,
+  order: orderRouter,
 });
 
 export type AppRouter = typeof appRouter;

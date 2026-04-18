@@ -1,10 +1,17 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { TradingPanel } from '@renderer/widgets/trading-panel';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { PositionChart } from './position-chart';
 
 export const DashboardPage = (): ReactElement => {
   const balance = trpc.account.getBalance.useQuery();
+  const envQuery = trpc.auth.getEnv.useQuery();
+  const realtimeStatus = trpc.realtime.status.useQuery(undefined, {
+    enabled: (envQuery.data?.env ?? null) !== null,
+    refetchInterval: 5000,
+  });
+  const startRealtime = trpc.realtime.start.useMutation();
   const [selected, setSelected] = useState<{ pdno: string; name: string } | null>(null);
   const overlay = trpc.account.getPositionOverlay.useQuery(
     { pdno: selected?.pdno ?? '000000' },
@@ -98,11 +105,40 @@ export const DashboardPage = (): ReactElement => {
       </div>
 
       {selected ? (
-        <PositionChart
-          pdno={selected.pdno}
-          name={selected.name}
-          lines={overlay.data?.lines ?? []}
-        />
+        <>
+          <PositionChart
+            pdno={selected.pdno}
+            name={selected.name}
+            lines={overlay.data?.lines ?? []}
+          />
+          {realtimeStatus.data?.started ? (
+            <TradingPanel
+              pdno={selected.pdno}
+              name={selected.name}
+              isProd={envQuery.data?.env === 'PROD'}
+            />
+          ) : (
+            <div className="panel">
+              <div
+                className="panel__body"
+                style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}
+              >
+                <span className="muted">실시간 피드 미활성</span>
+                <button
+                  type="button"
+                  className="hts-btn hts-btn--primary"
+                  disabled={startRealtime.isPending}
+                  onClick={() => startRealtime.mutate()}
+                >
+                  실시간 시작
+                </button>
+                {startRealtime.error ? (
+                  <span className="chip chip--down">{startRealtime.error.message}</span>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </>
       ) : null}
     </div>
   );

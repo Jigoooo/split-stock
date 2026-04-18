@@ -60,6 +60,7 @@ export const orders = sqliteTable('orders', {
   accountId: integer('account_id').notNull(),
   lotId: integer('lot_id'), // 매도일 때 해당 차수
   odno: text('odno').notNull(), // KIS 주문번호
+  orgNo: text('org_no'), // KRX_FWDG_ORD_ORGNO — 정정/취소 시 필수
   pdno: text('pdno').notNull(),
   side: text('side').notNull(), // 'BUY' | 'SELL'
   division: text('division').notNull(), // 'LIMIT' | 'MARKET'

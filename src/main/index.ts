@@ -15,15 +15,19 @@ const { app, BrowserWindow, safeStorage, shell } = electronRequire('electron') a
 };
 
 import type { AppEnv } from '@shared/contracts';
+import WebSocket from 'ws';
 import { defaultDbPath, migrate, openDb } from './db/client';
 import { SETTING_KEYS, SettingsRepo } from './db/settings-repo';
 import { AuthService } from './kis/auth';
 import { KIS_BASE_URL } from './kis/endpoints';
 import { KisHttpClient } from './kis/http-client';
 import { TokenStore } from './kis/token-store';
+import type { WsLike } from './kis/ws-client';
 import { createEventLogger, teeLoggers } from './logging/event-logger';
 import { createFileLogger } from './logging/file-logger';
 import { initSentryFromSettings } from './monitoring/sentry';
+import { FeedBus } from './realtime/feed-bus';
+import { RealtimeService } from './realtime/realtime-service';
 import { createSafetyState } from './safety/safety-state';
 import { CredentialsRepo } from './security/credentials-repo';
 import { LotsRepo } from './trading/lots-repo';
@@ -56,7 +60,7 @@ function bootstrapDeps(userDataDir: string) {
     MOCK: new KisHttpClient({ baseUrl: KIS_BASE_URL.MOCK }),
     PROD: new KisHttpClient({ baseUrl: KIS_BASE_URL.PROD }),
   };
-  const auth = new AuthService(httpByEnv.MOCK, tokenStore);
+  const auth = new AuthService(httpByEnv, tokenStore);
   const dbLogger = createEventLogger(db);
   const logsDir = isDev ? join(process.cwd(), 'logs', 'dev') : join(userDataDir, 'logs');
   const fileLogger = createFileLogger({ dir: logsDir, retentionDays: 40 });
@@ -68,6 +72,10 @@ function bootstrapDeps(userDataDir: string) {
   const strategyRepo = new StrategyRepo(settingsRepo, eventLogger);
   const stockMasterRepo = new StockMasterRepo(db);
   const lotsRepo = new LotsRepo(db);
+  // 실시간 버스는 env 전환 상관없이 공유, RealtimeService는 env별 lazy 재생성.
+  const bus = new FeedBus();
+  const wsFactory = (url: string): WsLike => new WebSocket(url) as unknown as WsLike;
+  let lastRealtime: RealtimeService | null = null;
   const factory = createContextFactory({
     db,
     credentialsRepo,
@@ -79,6 +87,23 @@ function bootstrapDeps(userDataDir: string) {
     strategyRepo,
     stockMasterRepo,
     lotsRepo,
+    bus,
+    realtimeFactory: (env) => {
+      if (lastRealtime) {
+        lastRealtime.stop();
+        lastRealtime = null;
+      }
+      if (env) {
+        lastRealtime = new RealtimeService({
+          env,
+          http: httpByEnv[env],
+          bus,
+          factory: wsFactory,
+          logger: eventLogger,
+        });
+      }
+      return lastRealtime;
+    },
   });
 
   // 저장된 자격증명이 있으면 마지막 활성 환경 복원 — 재시작 후 자동 로그인.
