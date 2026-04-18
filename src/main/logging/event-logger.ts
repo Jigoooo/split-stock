@@ -66,6 +66,18 @@ export function hashIdentifier(raw: string): string {
  * - payload는 항상 maskPayload로 정화 후 JSON 직렬화.
  * - DB 쓰기 실패 시 콘솔에 fallback 기록 (logger 자신은 예외를 던지지 않음).
  */
+/**
+ * 여러 EventLogger를 병합 — 동일 entry를 모든 sink에 순차 전달.
+ * 개별 sink의 실패는 서로에게 영향을 주지 않음(각자 내부에서 swallow 전제).
+ */
+export function teeLoggers(...loggers: EventLogger[]): EventLogger {
+  return {
+    log(entry: EventLogEntry): void {
+      for (const l of loggers) l.log(entry);
+    },
+  };
+}
+
 export function createEventLogger(db: Db): EventLogger {
   return {
     log(entry: EventLogEntry): void {

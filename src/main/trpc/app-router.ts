@@ -3,6 +3,7 @@ import { accountRouter } from './routers/account-router';
 import { authRouter } from './routers/auth-router';
 import { logsRouter } from './routers/logs-router';
 import { marketRouter } from './routers/market-router';
+import { monitoringRouter } from './routers/monitoring-router';
 import { safetyRouter } from './routers/safety-router';
 import { strategyRouter } from './routers/strategy-router';
 import { router } from './trpc-core';
@@ -14,6 +15,7 @@ export const appRouter = router({
   safety: safetyRouter,
   logs: logsRouter,
   strategy: strategyRouter,
+  monitoring: monitoringRouter,
 });
 
 export type AppRouter = typeof appRouter;

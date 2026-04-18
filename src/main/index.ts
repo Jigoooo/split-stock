@@ -21,7 +21,9 @@ import { AuthService } from './kis/auth';
 import { KIS_BASE_URL } from './kis/endpoints';
 import { KisHttpClient } from './kis/http-client';
 import { TokenStore } from './kis/token-store';
-import { createEventLogger } from './logging/event-logger';
+import { createEventLogger, teeLoggers } from './logging/event-logger';
+import { createFileLogger } from './logging/file-logger';
+import { initSentryFromSettings } from './monitoring/sentry';
 import { createSafetyState } from './safety/safety-state';
 import { CredentialsRepo } from './security/credentials-repo';
 import { LotsRepo } from './trading/lots-repo';
@@ -55,7 +57,12 @@ function bootstrapDeps(userDataDir: string) {
     PROD: new KisHttpClient({ baseUrl: KIS_BASE_URL.PROD }),
   };
   const auth = new AuthService(httpByEnv.MOCK, tokenStore);
-  const eventLogger = createEventLogger(db);
+  const dbLogger = createEventLogger(db);
+  const logsDir = isDev ? join(process.cwd(), 'logs', 'dev') : join(userDataDir, 'logs');
+  const fileLogger = createFileLogger({ dir: logsDir, retentionDays: 40 });
+  // 부팅 시 1회 로테이션 — 40일 경과 파일 정리
+  fileLogger.rotate();
+  const eventLogger = teeLoggers(dbLogger, fileLogger);
   const safety = createSafetyState({ logger: eventLogger });
   const settingsRepo = new SettingsRepo(db);
   const strategyRepo = new StrategyRepo(settingsRepo, eventLogger);
@@ -89,7 +96,7 @@ function bootstrapDeps(userDataDir: string) {
     }
   }
 
-  return { factory, safety, eventLogger };
+  return { factory, safety, eventLogger, settingsRepo };
 }
 
 function createMainWindow(): BrowserWindowType {
@@ -126,8 +133,23 @@ function createMainWindow(): BrowserWindowType {
   return win;
 }
 
-void app.whenReady().then(() => {
-  const { factory, safety, eventLogger } = bootstrapDeps(app.getPath('userData'));
+void app.whenReady().then(async () => {
+  const { factory, safety, eventLogger, settingsRepo } = bootstrapDeps(app.getPath('userData'));
+
+  // Sentry opt-in 초기화 (DSN 미지정 시 no-op)
+  const sentryResult = await initSentryFromSettings({
+    settingsRepo,
+    isPackaged: app.isPackaged,
+  });
+  eventLogger.log({
+    level: 'INFO',
+    category: 'SYS',
+    message: sentryResult.active ? 'sentry.initialized' : 'sentry.skipped',
+    payload: sentryResult.active
+      ? { environment: sentryResult.environment }
+      : { reason: sentryResult.reason },
+  });
+
   const win = createMainWindow();
   createIPCHandler({
     router: appRouter,
