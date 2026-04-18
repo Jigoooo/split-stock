@@ -1,3 +1,4 @@
+import { BackupPanel } from '@renderer/features/backup-restore';
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
 import type { StrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
@@ -82,6 +83,8 @@ export const SettingsPage = (): ReactElement => {
           void strategy.saveAsPreset(name, profile);
         }}
       />
+
+      <BackupPanel />
     </div>
   );
 };

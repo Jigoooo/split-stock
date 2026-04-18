@@ -1,6 +1,7 @@
 import { AppEnvSchema, CredentialsSchema } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { clearImportedFlag, needsCredentialsReentry } from '../../backup/backup';
 import { SETTING_KEYS } from '../../db/settings-repo';
 import { publicProcedure, router } from '../trpc-core';
 
@@ -76,6 +77,10 @@ export const authRouter = router({
         code: kind === 'VALIDATION' ? 'BAD_REQUEST' : 'INTERNAL_SERVER_ERROR',
         message: `자격증명 저장 실패: ${kind}`,
       });
+    }
+    // 복원 직후 재입력이라면 안내 플래그 자동 해제.
+    if (needsCredentialsReentry(ctx.settingsRepo)) {
+      clearImportedFlag(ctx.settingsRepo, ctx.logger);
     }
     return { ok: true as const };
   }),

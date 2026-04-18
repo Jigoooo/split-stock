@@ -1,8 +1,10 @@
+import { CredentialsReentryBanner } from '@renderer/features/backup-restore';
 import { SafetySwitchPanel, useKillSwitchHotkey } from '@renderer/features/safety-switch';
 import { SwitchEnvDialog } from '@renderer/features/switch-env';
 import { DashboardPage } from '@renderer/pages/dashboard';
 import { LoginPage } from '@renderer/pages/login';
 import { LogsPage } from '@renderer/pages/logs';
+import { ReportsPage } from '@renderer/pages/reports';
 import { SettingsPage } from '@renderer/pages/settings';
 import { trpc } from '@renderer/shared/api/trpc';
 import type { ReactElement } from 'react';
@@ -10,7 +12,7 @@ import { useState } from 'react';
 import { AppProviders } from './providers';
 import './app.css';
 
-type Tab = 'dashboard' | 'logs' | 'settings';
+type Tab = 'dashboard' | 'logs' | 'reports' | 'settings';
 type EnvValue = 'MOCK' | 'PROD';
 
 const AppShell = (): ReactElement => {
@@ -94,6 +96,13 @@ const AppShell = (): ReactElement => {
             </button>
             <button
               type="button"
+              className={tab === 'reports' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
+              onClick={() => setTab('reports')}
+            >
+              리포트
+            </button>
+            <button
+              type="button"
               className={tab === 'settings' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
               onClick={() => setTab('settings')}
             >
@@ -140,11 +149,14 @@ const AppShell = (): ReactElement => {
           <div className="muted">초기화 중…</div>
         ) : env ? (
           <>
+            <CredentialsReentryBanner />
             <SafetySwitchPanel />
             {tab === 'dashboard' ? (
               <DashboardPage />
             ) : tab === 'logs' ? (
               <LogsPage />
+            ) : tab === 'reports' ? (
+              <ReportsPage />
             ) : (
               <SettingsPage />
             )}
