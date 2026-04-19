@@ -1,5 +1,6 @@
-import { createRequire, createRequire } from 'node:module';
-import { basename, existsSync, join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { basename, join } from 'node:path';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import {
@@ -56,7 +57,14 @@ export const backupRouter = router({
 
     // 단일 경로와 다중 경로 모두 처리
     const results = Array.isArray(backupResult) ? backupResult : [backupResult];
-    const primaryResult = results[0];
+    const primaryResult = results.length > 0 ? results[0] : null;
+
+    if (!primaryResult) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'exportDatabase failed to return result',
+      });
+    }
 
     return {
       canceled: false as const,
