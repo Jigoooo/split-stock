@@ -1,0 +1,41 @@
+import { trpc } from '@renderer/shared/api/trpc';
+import { useState } from 'react';
+
+export function useActiveOrders(pdnoFilter?: string | null) {
+  const utils = trpc.useUtils();
+  const query = trpc.order.listActive.useQuery(undefined, { refetchInterval: 2000 });
+  const cancelMany = trpc.order.cancelMany.useMutation({
+    onSuccess: () => utils.order.listActive.invalidate(),
+  });
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+
+  const allOrders = query.data?.orders ?? [];
+  const orders = pdnoFilter ? allOrders.filter((order) => order.pdno === pdnoFilter) : allOrders;
+
+  const toggle = (odno: string): void => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(odno)) next.delete(odno);
+      else next.add(odno);
+      return next;
+    });
+  };
+
+  const cancelSelected = async (): Promise<void> => {
+    const odnos = Array.from(selected);
+    if (odnos.length === 0) return;
+    if (!window.confirm(`${odnos.length}건 일괄 취소하시겠습니까?`)) return;
+    await cancelMany.mutateAsync({ odnos });
+    setSelected(new Set());
+  };
+
+  return {
+    orders,
+    selected,
+    queryPending: query.isPending,
+    cancelPending: cancelMany.isPending,
+    cancelError: cancelMany.error?.message ?? null,
+    toggle,
+    cancelSelected,
+  };
+}

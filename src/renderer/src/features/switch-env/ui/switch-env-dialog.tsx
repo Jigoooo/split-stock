@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { PROD_CONFIRM_PHRASE } from '../model/constants';
 
 type Env = 'MOCK' | 'PROD';
@@ -25,13 +25,11 @@ export const SwitchEnvDialog = (props: SwitchEnvDialogProps): ReactElement | nul
   const [ack, setAck] = useState(false);
   const [phrase, setPhrase] = useState('');
 
-  useEffect(() => {
-    if (!open) {
-      setStep(1);
-      setAck(false);
-      setPhrase('');
-    }
-  }, [open]);
+  if (!open && (step !== 1 || ack || phrase.length > 0)) {
+    setStep(1);
+    setAck(false);
+    setPhrase('');
+  }
 
   if (!open) return null;
 

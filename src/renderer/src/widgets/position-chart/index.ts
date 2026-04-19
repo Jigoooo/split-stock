@@ -1,2 +1,2 @@
-export type { PositionChartProps } from './position-chart';
-export { PositionChart } from './position-chart';
+export type { PositionChartProps } from './ui/position-chart';
+export { PositionChart } from './ui/position-chart';

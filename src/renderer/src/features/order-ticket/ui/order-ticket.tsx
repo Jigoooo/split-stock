@@ -1,5 +1,5 @@
 import type { ChangeEvent, ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useOrderActions } from '../model/use-order-actions';
 
 export interface OrderTicketSelection {
@@ -35,14 +35,17 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const [priceStr, setPriceStr] = useState(
     selection.suggestedPrice ? String(selection.suggestedPrice) : '',
   );
+  const suggestionKey = `${selection.pdno}:${selection.suggestedPrice ?? ''}:${selection.suggestedSide ?? ''}`;
+  const [appliedSuggestionKey, setAppliedSuggestionKey] = useState(suggestionKey);
   const actions = useOrderActions();
 
-  useEffect(() => {
+  if (appliedSuggestionKey !== suggestionKey) {
+    setAppliedSuggestionKey(suggestionKey);
     if (selection.suggestedPrice !== undefined) {
       setPriceStr(String(selection.suggestedPrice));
     }
     if (selection.suggestedSide) setSide(selection.suggestedSide);
-  }, [selection.suggestedPrice, selection.suggestedSide]);
+  }
 
   const qty = Number(qtyStr);
   const price = division === 'MARKET' ? 0 : Number(priceStr);

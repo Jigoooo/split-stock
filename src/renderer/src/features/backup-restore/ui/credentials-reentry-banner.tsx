@@ -1,5 +1,5 @@
-import { trpc } from '@renderer/shared/api/trpc';
 import type { ReactElement } from 'react';
+import { useCredentialsReentry } from '../model/use-credentials-reentry';
 
 /**
  * 복원 후 credentials 재입력 안내 배너.
@@ -8,15 +8,9 @@ import type { ReactElement } from 'react';
  *   (현재 구현은 renderer에서 명시적 확인 후 닫기)
  */
 export const CredentialsReentryBanner = (): ReactElement | null => {
-  const utils = trpc.useUtils();
-  const status = trpc.backup.needsCredentialsReentry.useQuery(undefined, {
-    refetchInterval: 5000,
-  });
-  const clear = trpc.backup.clearImportedFlag.useMutation({
-    onSuccess: () => utils.backup.needsCredentialsReentry.invalidate(),
-  });
+  const { clear, clearPending, needsReentry } = useCredentialsReentry();
 
-  if (!status.data?.needsReentry) return null;
+  if (!needsReentry) return null;
 
   return (
     <div className="panel" role="alert">
@@ -30,10 +24,10 @@ export const CredentialsReentryBanner = (): ReactElement | null => {
         <button
           type="button"
           className="hts-btn"
-          disabled={clear.isPending}
+          disabled={clearPending}
           onClick={() => {
             if (window.confirm('재입력을 완료했다면 이 배너를 숨길 수 있습니다. 계속할까요?')) {
-              clear.mutate();
+              clear();
             }
           }}
         >

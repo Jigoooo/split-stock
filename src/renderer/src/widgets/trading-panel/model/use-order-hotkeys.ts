@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 
 export type HotkeyAction = 'BUY' | 'SELL' | 'CANCEL' | 'AMEND' | 'SUBMIT';
 
@@ -20,30 +20,36 @@ export interface HotkeyHandlers {
  * enabled=false 시 리스너 미등록 (PROD 기본 OFF 대응).
  */
 export function useOrderHotkeys(handlers: HotkeyHandlers, enabled: boolean): void {
+  const handleHotkey = useEffectEvent((event: KeyboardEvent) => {
+    const target = event.target as HTMLElement | null;
+    const inFormField = target !== null && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
+    if (inFormField && event.key !== 'Enter') return;
+    if (event.key === 'F3' || event.key === 'F9') {
+      event.preventDefault();
+      handlers.onBuy?.();
+    } else if (event.key === 'F4' || event.key === 'F12') {
+      event.preventDefault();
+      handlers.onSell?.();
+    } else if (event.key === 'F5') {
+      event.preventDefault();
+      handlers.onAmend?.();
+    } else if (event.key === 'F8') {
+      event.preventDefault();
+      handlers.onCancel?.();
+    } else if (event.key === 'Enter' && !inFormField) {
+      event.preventDefault();
+      handlers.onSubmit?.();
+    }
+  });
+
   useEffect(() => {
     if (!enabled) return;
-    const onKey = (e: KeyboardEvent): void => {
-      const target = e.target as HTMLElement | null;
-      const inFormField = target !== null && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
-      if (inFormField && e.key !== 'Enter') return;
-      if (e.key === 'F3' || e.key === 'F9') {
-        e.preventDefault();
-        handlers.onBuy?.();
-      } else if (e.key === 'F4' || e.key === 'F12') {
-        e.preventDefault();
-        handlers.onSell?.();
-      } else if (e.key === 'F5') {
-        e.preventDefault();
-        handlers.onAmend?.();
-      } else if (e.key === 'F8') {
-        e.preventDefault();
-        handlers.onCancel?.();
-      } else if (e.key === 'Enter' && !inFormField) {
-        e.preventDefault();
-        handlers.onSubmit?.();
-      }
+
+    const onKey = (event: KeyboardEvent): void => {
+      handleHotkey(event);
     };
+
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [enabled, handlers]);
+  }, [enabled]);
 }

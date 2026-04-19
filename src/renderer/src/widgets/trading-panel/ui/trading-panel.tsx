@@ -1,9 +1,9 @@
 import { OrderTicket, type OrderTicketSelection } from '@renderer/features/order-ticket';
-import { trpc } from '@renderer/shared/api/trpc';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { useLiveOrderbook, useLiveTick, useTradeFeed } from '../model/use-live-feed';
 import { useOrderHotkeys } from '../model/use-order-hotkeys';
+import { useRealtimeStatus } from '../model/use-realtime-status';
 import { ActiveOrdersPanel } from './active-orders-panel';
 import { OrderbookPanel } from './orderbook-panel';
 import { TradeFeedPanel } from './trade-feed-panel';
@@ -28,12 +28,7 @@ const RealtimeStatusBar = ({
   tickTime: string | null;
   orderbookTime: string | null;
 }): ReactElement => {
-  const status = trpc.realtime.status.useQuery(undefined, { refetchInterval: 3000 });
-  const startRealtime = trpc.realtime.start.useMutation({
-    onSuccess: () => status.refetch(),
-  });
-  const started = status.data?.started ?? false;
-  const watched = status.data?.watched ?? [];
+  const { reconnect, reconnectError, reconnectPending, started, watched } = useRealtimeStatus();
   const mine = watched.find((w) => w.pdno === pdno);
   return (
     <div
@@ -64,15 +59,13 @@ const RealtimeStatusBar = ({
         <button
           type="button"
           className="hts-btn hts-btn--primary"
-          disabled={startRealtime.isPending}
-          onClick={() => startRealtime.mutate()}
+          disabled={reconnectPending}
+          onClick={reconnect}
         >
           재연결
         </button>
       ) : null}
-      {startRealtime.error ? (
-        <span className="chip chip--down">{startRealtime.error.message}</span>
-      ) : null}
+      {reconnectError ? <span className="chip chip--down">{reconnectError}</span> : null}
       <span className="muted" style={{ fontSize: '1rem' }}>
         ※ KRX 정규장 09:00–15:30 외엔 체결가가 흐르지 않을 수 있음
       </span>

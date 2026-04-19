@@ -1,6 +1,6 @@
 import type { StrategyProfile } from '@shared/contracts';
 import type { ChangeEvent, ReactElement } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { DEFAULT_PROFILE, type StrategyFormErrors, validateProfile } from '../model/validate';
 
 type FormRaw = {
@@ -54,17 +54,20 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
   const [raw, setRaw] = useState<FormRaw>(() => toRaw(props.initial));
   const [errors, setErrors] = useState<StrategyFormErrors>({});
   const [presetInput, setPresetInput] = useState('');
+  const initialKey = JSON.stringify(toRaw(props.initial));
+  const [lastInitialKey, setLastInitialKey] = useState(initialKey);
 
-  useEffect(() => {
+  if (lastInitialKey !== initialKey) {
+    setLastInitialKey(initialKey);
     setRaw(toRaw(props.initial));
     setErrors({});
-  }, [props.initial]);
+  }
 
   const update = (key: keyof FormRaw) => (e: ChangeEvent<HTMLInputElement>) => {
     setRaw((prev) => ({ ...prev, [key]: e.target.value }));
   };
 
-  const validated = useMemo(() => validateProfile(toProfile(raw)), [raw]);
+  const validated = validateProfile(toProfile(raw));
 
   const onSubmit = (): void => {
     if (!validated.ok) {

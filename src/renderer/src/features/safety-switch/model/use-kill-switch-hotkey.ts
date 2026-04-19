@@ -1,5 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 
 /**
  * Ctrl/Cmd+Shift+K 단축키로 main 프로세스의 킬 스위치를 트리거.
@@ -8,16 +8,19 @@ import { useEffect } from 'react';
  */
 export function useKillSwitchHotkey(): void {
   const trigger = trpc.safety.triggerKillSwitch.useMutation();
+  const triggerKillSwitch = useEffectEvent(() => {
+    trigger.mutate({ reason: '렌더러 단축키' });
+  });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const isMod = e.ctrlKey || e.metaKey;
       if (isMod && e.shiftKey && (e.key === 'K' || e.key === 'k')) {
         e.preventDefault();
-        trigger.mutate({ reason: '렌더러 단축키' });
+        triggerKillSwitch();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [trigger]);
+  }, []);
 }

@@ -1,15 +1,5 @@
-import { trpc } from '@renderer/shared/api/trpc';
 import type { ReactElement } from 'react';
-import { useMemo, useState } from 'react';
-
-type CsvKind = 'trades' | 'lots' | 'events';
-
-function toISODate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
+import { useReports } from '../model/use-reports';
 
 function downloadCsv(csv: string, filename: string): void {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -24,24 +14,12 @@ function downloadCsv(csv: string, filename: string): void {
 }
 
 export const ReportsPage = (): ReactElement => {
-  const today = new Date();
-  const oneMonthAgo = new Date(today);
-  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-  const [fromStr, setFromStr] = useState(toISODate(oneMonthAgo));
-  const [toStr, setToStr] = useState(toISODate(today));
+  const { exportCsv, fromStr, setFromStr, summary, summaryError, summaryPending, toStr, setToStr } =
+    useReports();
 
-  const range = useMemo(
-    () => ({ from: new Date(`${fromStr}T00:00:00Z`), to: new Date(`${toStr}T23:59:59Z`) }),
-    [fromStr, toStr],
-  );
-
-  const summary = trpc.reports.getSummary.useQuery(range);
-  const utils = trpc.useUtils();
-
-  const onExport = async (kind: CsvKind): Promise<void> => {
-    const r = await utils.reports.exportCsv.fetch({ ...range, kind });
-    const stamp = `${fromStr}_${toStr}`;
-    downloadCsv(r.csv, `${kind}-${stamp}.csv`);
+  const onExport = async (kind: 'trades' | 'lots' | 'events'): Promise<void> => {
+    const result = await exportCsv(kind);
+    downloadCsv(result.csv, result.filename);
   };
 
   return (
@@ -76,21 +54,21 @@ export const ReportsPage = (): ReactElement => {
       <div className="panel">
         <div className="panel__title">KPI 요약</div>
         <div className="panel__body" style={{ display: 'flex', gap: '2.4rem', flexWrap: 'wrap' }}>
-          {summary.isPending ? (
+          {summaryPending ? (
             <span className="muted">집계 중…</span>
-          ) : summary.error ? (
-            <span className="chip chip--down">{summary.error.message}</span>
-          ) : summary.data ? (
+          ) : summaryError ? (
+            <span className="chip chip--down">{summaryError.message}</span>
+          ) : summary ? (
             <>
-              <Kpi label="실현손익" value={formatKrwSigned(summary.data.realizedPnlKrw)} />
-              <Kpi label="승률" value={`${(summary.data.winRate * 100).toFixed(1)}%`} />
+              <Kpi label="실현손익" value={formatKrwSigned(summary.realizedPnlKrw)} />
+              <Kpi label="승률" value={`${(summary.winRate * 100).toFixed(1)}%`} />
               <Kpi
                 label="최대 Drawdown"
-                value={`-${summary.data.maxDrawdownKrw.toLocaleString('ko-KR')}원`}
+                value={`-${summary.maxDrawdownKrw.toLocaleString('ko-KR')}원`}
               />
-              <Kpi label="청산 차수" value={`${summary.data.soldLots}건`} />
-              <Kpi label="체결 건수" value={`${summary.data.totalTrades}건`} />
-              <Kpi label="평균 보유일" value={`${summary.data.avgHoldingDays.toFixed(1)}일`} />
+              <Kpi label="청산 차수" value={`${summary.soldLots}건`} />
+              <Kpi label="체결 건수" value={`${summary.totalTrades}건`} />
+              <Kpi label="평균 보유일" value={`${summary.avgHoldingDays.toFixed(1)}일`} />
             </>
           ) : null}
         </div>

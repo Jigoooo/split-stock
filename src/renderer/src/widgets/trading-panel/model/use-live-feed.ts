@@ -1,5 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 type Topic = 'tick' | 'orderbook';
 
@@ -86,15 +86,17 @@ export function useTradeFeed(pdno: string, capacity = 200): LiveTick[] {
 function useWatch(pdno: string, topic: Topic): void {
   const watchMutation = trpc.realtime.watch.useMutation();
   const unwatchMutation = trpc.realtime.unwatch.useMutation();
-  const watchRef = useRef(watchMutation.mutate);
-  const unwatchRef = useRef(unwatchMutation.mutate);
-  watchRef.current = watchMutation.mutate;
-  unwatchRef.current = unwatchMutation.mutate;
+  const watch = useEffectEvent((nextPdno: string, nextTopic: Topic) => {
+    watchMutation.mutate({ pdno: nextPdno, topic: nextTopic });
+  });
+  const unwatch = useEffectEvent((nextPdno: string, nextTopic: Topic) => {
+    unwatchMutation.mutate({ pdno: nextPdno, topic: nextTopic });
+  });
 
   useEffect(() => {
-    watchRef.current({ pdno, topic });
+    watch(pdno, topic);
     return () => {
-      unwatchRef.current({ pdno, topic });
+      unwatch(pdno, topic);
     };
   }, [pdno, topic]);
 }

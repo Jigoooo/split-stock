@@ -1,11 +1,10 @@
-import { trpc } from '@renderer/shared/api/trpc';
 import { highlightMatches } from '@renderer/shared/lib/search';
-import { usePopoutState } from '@renderer/widgets/panel-workspace';
 import { ExternalLink, RefreshCw, Search } from 'lucide-react';
 import type { KeyboardEvent, ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { StockListEntry } from '../model/use-stock-list';
 import { useStockList } from '../model/use-stock-list';
+import { useStockMasterSync } from '../model/use-stock-master-sync';
 
 const ROW_HEIGHT_PX = 34;
 const MAX_VISIBLE = 40;
@@ -17,6 +16,8 @@ export interface StockPickerListProps {
   hidePopoutButton?: boolean;
   /** true면 펼친 목록 모드 (팝아웃 창 전용) — 포커스와 무관하게 항상 목록 표시 */
   alwaysOpen?: boolean;
+  onOpenPopout?: (() => Promise<void> | void) | undefined;
+  isPopoutOpen?: boolean | undefined;
 }
 
 /**
@@ -27,19 +28,12 @@ export interface StockPickerListProps {
  */
 export const StockPickerList = (props: StockPickerListProps): ReactElement => {
   const { selectedPdno, onSelect, hidePopoutButton = false, alwaysOpen = false } = props;
+  const { onOpenPopout, isPopoutOpen = false } = props;
   const [keyword, setKeyword] = useState('');
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const list = useStockList(keyword);
-  const status = trpc.market.getStockMasterStatus.useQuery();
-  const utils = trpc.useUtils();
-  const popout = usePopoutState();
-  const syncMutation = trpc.market.syncStockMaster.useMutation({
-    onSuccess: async () => {
-      await utils.market.listAllStock.invalidate();
-      status.refetch();
-    },
-  });
+  const { isEmpty, sync, syncError, syncPending } = useStockMasterSync();
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 문서 다른 곳 클릭 시 드롭다운 닫힘
@@ -82,8 +76,6 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
     }
   };
 
-  const isEmpty = !list.isLoading && status.data?.total === 0;
-
   return (
     <div
       ref={containerRef}
@@ -112,32 +104,33 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
         <button
           type="button"
           className="hts-btn"
-          disabled={syncMutation.isPending}
-          onClick={() => syncMutation.mutate()}
+          disabled={syncPending}
+          onClick={sync}
           aria-label="종목 마스터 재동기화"
           title="KIS 마스터 파일 다시 다운로드"
           style={{ padding: '0.4rem 0.5rem' }}
         >
           <RefreshCw size={14} />
         </button>
-        {!hidePopoutButton ? (
+        {!hidePopoutButton && onOpenPopout ? (
           <button
             type="button"
             className="hts-btn"
             onClick={() => {
-              void popout.popout('stock-picker');
+              void onOpenPopout();
             }}
+            aria-pressed={isPopoutOpen}
             aria-label="종목 선택 팝아웃 창"
-            title="별도 창에서 검색/할당"
+            title={isPopoutOpen ? '별도 창에서 검색/할당 중' : '별도 창에서 검색/할당'}
             style={{ padding: '0.4rem 0.5rem' }}
           >
             <ExternalLink size={14} />
           </button>
         ) : null}
       </div>
-      {syncMutation.error ? (
+      {syncError ? (
         <span className="chip chip--down" style={{ marginTop: 6 }}>
-          {syncMutation.error.message}
+          {syncError}
         </span>
       ) : null}
       {isEmpty ? (

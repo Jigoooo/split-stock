@@ -1,34 +1,29 @@
-import { trpc } from '@renderer/shared/api/trpc';
 import type { ReactElement } from 'react';
+import { useSafetySwitch } from '../model/use-safety-switch';
 
 export const SafetySwitchPanel = (): ReactElement => {
-  const state = trpc.safety.getState.useQuery(undefined, {
-    refetchInterval: 2000,
-  });
-  const setMaster = trpc.safety.setMaster.useMutation({
-    onSuccess: () => state.refetch(),
-  });
-  const clear = trpc.safety.clearErrorLock.useMutation({
-    onSuccess: () => state.refetch(),
-  });
+  const { clearErrorLock, clearPending, error, isPending, setMaster, setMasterPending, snapshot } =
+    useSafetySwitch();
 
-  if (state.isPending) {
+  if (isPending) {
     return (
       <div className="panel">
         <div className="panel__body muted">안전 상태 로딩…</div>
       </div>
     );
   }
-  if (state.error) {
+  if (error) {
     return (
       <div className="panel">
         <div className="panel__body">
-          <span className="chip chip--down">{state.error.message}</span>
+          <span className="chip chip--down">{error.message}</span>
         </div>
       </div>
     );
   }
-  const snap = state.data;
+  if (!snapshot) return <div className="panel" />;
+
+  const snap = snapshot;
   const errorLocked = snap.errorLock.active;
 
   return (
@@ -41,8 +36,8 @@ export const SafetySwitchPanel = (): ReactElement => {
         <button
           type="button"
           className={snap.master ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-          disabled={errorLocked || setMaster.isPending}
-          onClick={() => setMaster.mutate({ on: !snap.master })}
+          disabled={errorLocked || setMasterPending}
+          onClick={() => setMaster(!snap.master)}
         >
           마스터 {snap.master ? 'ON' : 'OFF'}
         </button>
@@ -55,8 +50,8 @@ export const SafetySwitchPanel = (): ReactElement => {
           <button
             type="button"
             className="hts-btn"
-            disabled={clear.isPending}
-            onClick={() => clear.mutate()}
+            disabled={clearPending}
+            onClick={clearErrorLock}
           >
             잠금 해제
           </button>

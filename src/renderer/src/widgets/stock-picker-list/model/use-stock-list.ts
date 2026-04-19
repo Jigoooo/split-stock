@@ -1,6 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { createKoreanSearchRegex } from '@renderer/shared/lib/search';
-import { useMemo } from 'react';
+import { useDeferredValue } from 'react';
 
 export interface StockListEntry {
   pdno: string;
@@ -24,16 +24,14 @@ export function useStockList(keyword: string): UseStockListResult {
   const query = trpc.market.listAllStock.useQuery(undefined, {
     staleTime: 10 * 60 * 1000,
   });
-
+  const deferredKeyword = useDeferredValue(keyword);
   const all = query.data?.entries ?? [];
-
-  const entries = useMemo(() => {
-    const trimmed = keyword.trim();
-    if (!trimmed) return all;
-    const regex = createKoreanSearchRegex(trimmed);
-    if (!regex.source || regex.source === '(?:)') return all;
-    return all.filter((e) => regex.test(e.name) || e.pdno.includes(trimmed));
-  }, [all, keyword]);
+  const trimmed = deferredKeyword.trim();
+  const regex = trimmed ? createKoreanSearchRegex(trimmed) : null;
+  const entries =
+    regex?.source && regex.source !== '(?:)'
+      ? all.filter((entry) => regex.test(entry.name) || entry.pdno.includes(trimmed))
+      : all;
 
   return {
     entries,

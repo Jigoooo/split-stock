@@ -1,26 +1,8 @@
-import { trpc } from '@renderer/shared/api/trpc';
 import type { ReactElement } from 'react';
-import { useMemo, useState } from 'react';
-
-const LEVELS = ['', 'INFO', 'WARN', 'ERROR'] as const;
-const CATEGORIES = ['', 'AUTH', 'ORDER', 'FSM', 'WS', 'SYS'] as const;
+import { LOG_CATEGORIES, LOG_LEVELS, useLogTail } from '../model/use-log-tail';
 
 export const LogsPage = (): ReactElement => {
-  const [level, setLevel] = useState<(typeof LEVELS)[number]>('');
-  const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('');
-
-  const input = useMemo(
-    () => ({
-      limit: 200,
-      ...(level ? { level } : {}),
-      ...(category ? { category } : {}),
-    }),
-    [level, category],
-  );
-
-  const tail = trpc.logs.tail.useQuery(input, {
-    refetchInterval: 2000,
-  });
+  const { category, entries, error, isPending, level, setCategory, setLevel } = useLogTail();
 
   return (
     <div className="panel">
@@ -32,7 +14,7 @@ export const LogsPage = (): ReactElement => {
         <label>
           레벨:{' '}
           <select value={level} onChange={(e) => setLevel(e.target.value as typeof level)}>
-            {LEVELS.map((l) => (
+            {LOG_LEVELS.map((l) => (
               <option key={l} value={l}>
                 {l || '전체'}
               </option>
@@ -42,7 +24,7 @@ export const LogsPage = (): ReactElement => {
         <label>
           카테고리:{' '}
           <select value={category} onChange={(e) => setCategory(e.target.value as typeof category)}>
-            {CATEGORIES.map((c) => (
+            {LOG_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {c || '전체'}
               </option>
@@ -50,7 +32,7 @@ export const LogsPage = (): ReactElement => {
           </select>
         </label>
         <span className="muted" style={{ marginLeft: 'auto' }}>
-          2초마다 새로고침 · {tail.data?.entries.length ?? 0}건 표시
+          2초마다 새로고침 · {entries.length}건 표시
         </span>
       </div>
       <div className="panel__body" style={{ padding: 0 }}>
@@ -65,28 +47,28 @@ export const LogsPage = (): ReactElement => {
             </tr>
           </thead>
           <tbody>
-            {tail.isPending ? (
+            {isPending ? (
               <tr>
                 <td colSpan={5} className="muted" style={{ textAlign: 'center' }}>
                   로드 중…
                 </td>
               </tr>
             ) : null}
-            {tail.error ? (
+            {error ? (
               <tr>
                 <td colSpan={5}>
-                  <span className="chip chip--down">{tail.error.message}</span>
+                  <span className="chip chip--down">{error.message}</span>
                 </td>
               </tr>
             ) : null}
-            {tail.data?.entries.length === 0 && (
+            {entries.length === 0 && (
               <tr>
                 <td colSpan={5} className="muted" style={{ textAlign: 'center' }}>
                   기록된 로그가 없습니다.
                 </td>
               </tr>
             )}
-            {tail.data?.entries.map((e) => (
+            {entries.map((e) => (
               <tr key={e.id}>
                 <td className="num">{formatTs(e.ts)}</td>
                 <td>

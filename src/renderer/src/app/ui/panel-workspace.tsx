@@ -1,13 +1,10 @@
 import { DashboardPage } from '@renderer/pages/dashboard';
 import { LogsPage } from '@renderer/pages/logs';
-import { ReportsPage } from '@renderer/pages/reports';
-import { SettingsPage } from '@renderer/pages/settings';
 import { TradePage } from '@renderer/pages/trade';
-import { StockPickerList } from '@renderer/widgets/stock-picker-list';
 import type { ReactElement, ReactNode } from 'react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
-import type { PopoutApi, PopoutRoute } from '../model/use-popout-state';
-import { usePopoutState } from '../model/use-popout-state';
+import type { PopoutRoute } from '../model/popout-route';
+import type { PopoutApi } from '../model/use-popout-state';
 
 const DIVIDER = (direction: 'horizontal' | 'vertical'): ReactElement => (
   <Separator
@@ -81,15 +78,13 @@ const PanelCard = ({ title, route, popout, children }: PanelCardProps): ReactEle
   );
 };
 
-/**
- * HTS 스타일 분할 화면 워크스페이스.
- * 좌측 Dashboard + 우측 Trade/Logs 수직 분할. 각 패널 헤더의 "팝아웃" 버튼으로 별도 창 분리.
- * Reports/Settings 팝아웃 진입은 AppShell 헤더 쪽에 배치.
- */
-export const PanelWorkspace = (): ReactElement => {
-  const popout = usePopoutState();
+export interface PanelWorkspaceProps {
+  popout: PopoutApi;
+}
 
+export const PanelWorkspace = ({ popout }: PanelWorkspaceProps): ReactElement => {
   const panelStyle = { overflow: 'hidden' } as const;
+
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <Group orientation="vertical">
@@ -111,58 +106,13 @@ export const PanelWorkspace = (): ReactElement => {
         {DIVIDER('vertical')}
         <Panel defaultSize={60} minSize={30} style={panelStyle}>
           <PanelCard title="주문" route="trade" popout={popout}>
-            <TradePage />
+            <TradePage
+              isStockPickerPopoutOpen={popout.isOpen('stock-picker')}
+              onOpenStockPickerPopout={() => popout.popout('stock-picker')}
+            />
           </PanelCard>
         </Panel>
       </Group>
-    </div>
-  );
-};
-
-export function readPopoutRoute(): PopoutRoute | null {
-  if (typeof window === 'undefined') return null;
-  const hash = window.location.hash || '';
-  const match = /popout=([^&]+)/.exec(hash);
-  if (!match) return null;
-  const decoded = decodeURIComponent(match[1] ?? '');
-  return isPopoutRoute(decoded) ? decoded : null;
-}
-
-function isPopoutRoute(v: string): v is PopoutRoute {
-  return (
-    v === 'dashboard' ||
-    v === 'trade' ||
-    v === 'logs' ||
-    v === 'reports' ||
-    v === 'settings' ||
-    v === 'stock-picker'
-  );
-}
-
-export const PopoutPage = ({ route }: { route: PopoutRoute }): ReactElement => {
-  return (
-    <div style={{ padding: '1rem', height: '100vh', overflow: 'auto' }}>
-      {route === 'dashboard' ? (
-        <DashboardPage />
-      ) : route === 'trade' ? (
-        <TradePage />
-      ) : route === 'logs' ? (
-        <LogsPage />
-      ) : route === 'reports' ? (
-        <ReportsPage />
-      ) : route === 'stock-picker' ? (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <StockPickerList
-            hidePopoutButton
-            alwaysOpen
-            onSelect={(entry) => {
-              window.appShell?.assignStock?.(entry.pdno, entry.name);
-            }}
-          />
-        </div>
-      ) : (
-        <SettingsPage />
-      )}
     </div>
   );
 };
