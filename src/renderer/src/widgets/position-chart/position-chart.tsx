@@ -301,9 +301,11 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
         <span>
           {name} ({pdno})
         </span>
-        <span className="muted" style={{ fontSize: '1rem' }}>
-          {candles.length > 0 ? `${candles.length}봉` : '로드 중…'}
-        </span>
+        {candles.length === 0 ? (
+          <span className="muted" style={{ fontSize: '1rem' }}>
+            로드 중…
+          </span>
+        ) : null}
         <span style={{ flex: 1 }} />
         <div role="tablist" aria-label="봉 단위" style={{ display: 'flex', gap: '0.3rem' }}>
           {(['D', 'W', 'M'] as const).map((p) => (

@@ -91,6 +91,18 @@ const CREATE_STATEMENTS: readonly string[] = [
     status TEXT NOT NULL,
     created_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS daily_candles (
+    pdno TEXT NOT NULL,
+    period TEXT NOT NULL,
+    date TEXT NOT NULL,
+    open INTEGER NOT NULL,
+    high INTEGER NOT NULL,
+    low INTEGER NOT NULL,
+    close INTEGER NOT NULL,
+    volume INTEGER NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (pdno, period, date)
+  )`,
 ];
 
 /**

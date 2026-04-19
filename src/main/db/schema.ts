@@ -1,4 +1,4 @@
-import { blob, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { blob, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 /**
  * 자격증명 — safeStorage로 암호화된 직렬화 결과를 BLOB으로 저장.
@@ -115,6 +115,26 @@ export const stockMaster = sqliteTable('stock_master', {
   sector: text('sector'),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
+
+/**
+ * 일/주/월봉 로컬 캐시 — KIS inquire-daily-itemchartprice 호출 결과 누적.
+ * (pdno, period, date) 복합 PK. 오래된 바는 고정(불변), 최근 바는 upsert로 갱신.
+ */
+export const dailyCandles = sqliteTable(
+  'daily_candles',
+  {
+    pdno: text('pdno').notNull(),
+    period: text('period').notNull(), // 'D' | 'W' | 'M'
+    date: text('date').notNull(), // YYYY-MM-DD
+    open: integer('open').notNull(),
+    high: integer('high').notNull(),
+    low: integer('low').notNull(),
+    close: integer('close').notNull(),
+    volume: integer('volume').notNull(),
+    fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.pdno, t.period, t.date] })],
+);
 
 /**
  * 예약 매수 — 잔고에 없는 신규 종목 감시 주문(최대 100건).

@@ -1,6 +1,14 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { inquireDailyChart, inquireOrderbook, inquirePrice } from '../../kis/domestic-stock';
+
+function toIsoDate(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 export const marketRouter = router({
@@ -110,6 +118,17 @@ export const marketRouter = router({
       const to = input.toMs ? new Date(input.toMs) : new Date();
       const from = new Date(to);
       from.setMonth(from.getMonth() - CHUNK_MONTHS[input.period]);
+
+      const fromStr = toIsoDate(from);
+      const toStr = toIsoDate(to);
+      const cached = ctx.candlesRepo.getInRange(input.code, input.period, fromStr, toStr);
+      // 최근 chunk(toMs 미지정)는 오늘 부분체결 바 갱신을 위해 항상 KIS 재조회.
+      // 과거 chunk는 cache에 30건 이상 있으면 KIS 호출 생략.
+      const isRecent = input.toMs === undefined;
+      if (!isRecent && cached.length >= 30) {
+        return { candles: cached, toMs: to.getTime() };
+      }
+
       const r = await inquireDailyChart(
         {
           http: ctx.httpByEnv[env],
@@ -121,11 +140,17 @@ export const marketRouter = router({
         { code: input.code, from, to, period: input.period },
       );
       if (r.isErr()) {
+        // 네트워크/상장이전 등으로 실패했어도 cache에 이미 있는 것만이라도 보여주면 UX에 유리.
+        if (cached.length > 0) {
+          return { candles: cached, toMs: to.getTime() };
+        }
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: `봉 조회 실패: ${r.error.kind} - ${r.error.msg}`,
         });
       }
+      // 받은 봉을 cache에 upsert — 다음번엔 네트워크 왕복 없이 반환 가능
+      ctx.candlesRepo.upsertMany(input.code, input.period, r.value);
       return { candles: r.value, toMs: to.getTime() };
     }),
 

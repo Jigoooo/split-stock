@@ -8,6 +8,7 @@ import type { FeedBus } from '../realtime/feed-bus';
 import type { RealtimeService } from '../realtime/realtime-service';
 import type { SafetyState } from '../safety/safety-state';
 import type { CredentialsRepo } from '../security/credentials-repo';
+import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import type { LotsRepo } from '../trading/lots-repo';
 import type { StockMasterRepo } from '../trading/stock-master-repo';
 import type { StockMasterSyncService } from '../trading/stock-master-sync';
@@ -24,6 +25,7 @@ export interface Context {
   strategyRepo: StrategyRepo;
   stockMasterRepo: StockMasterRepo;
   stockMasterSync: StockMasterSyncService;
+  candlesRepo: DailyCandlesRepo;
   lotsRepo: LotsRepo;
   realtime: RealtimeService | null;
   bus: FeedBus | null;

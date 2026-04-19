@@ -43,6 +43,7 @@ import { FeedBus } from './realtime/feed-bus';
 import { RealtimeService } from './realtime/realtime-service';
 import { createSafetyState } from './safety/safety-state';
 import { CredentialsRepo } from './security/credentials-repo';
+import { DailyCandlesRepo } from './trading/daily-candles-repo';
 import { LotsRepo } from './trading/lots-repo';
 import { StockMasterRepo } from './trading/stock-master-repo';
 import { StockMasterSyncService } from './trading/stock-master-sync';
@@ -86,6 +87,7 @@ function bootstrapDeps(userDataDir: string) {
   const strategyRepo = new StrategyRepo(settingsRepo, eventLogger);
   const stockMasterRepo = new StockMasterRepo(db);
   const stockMasterSync = new StockMasterSyncService(stockMasterRepo, settingsRepo);
+  const candlesRepo = new DailyCandlesRepo(db);
   const lotsRepo = new LotsRepo(db);
   // 실시간 버스는 env 전환 상관없이 공유, RealtimeService는 env별 lazy 재생성.
   const bus = new FeedBus();
@@ -102,6 +104,7 @@ function bootstrapDeps(userDataDir: string) {
     strategyRepo,
     stockMasterRepo,
     stockMasterSync,
+    candlesRepo,
     lotsRepo,
     bus,
     realtimeFactory: (env) => {
