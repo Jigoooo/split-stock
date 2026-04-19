@@ -92,27 +92,27 @@ export const PanelWorkspace = (): ReactElement => {
   const panelStyle = { overflow: 'hidden' } as const;
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-      <Group orientation="horizontal">
-        <Panel defaultSize={42} minSize={25} style={panelStyle}>
-          <PanelCard title="대시보드" route="dashboard" popout={popout}>
-            <DashboardPage />
-          </PanelCard>
-        </Panel>
-        {DIVIDER('horizontal')}
-        <Panel defaultSize={58} minSize={30} style={panelStyle}>
-          <Group orientation="vertical">
-            <Panel defaultSize={62} minSize={25} style={panelStyle}>
-              <PanelCard title="주문" route="trade" popout={popout}>
-                <TradePage />
+      <Group orientation="vertical">
+        <Panel defaultSize={40} minSize={20} style={panelStyle}>
+          <Group orientation="horizontal">
+            <Panel defaultSize={55} minSize={25} style={panelStyle}>
+              <PanelCard title="대시보드" route="dashboard" popout={popout}>
+                <DashboardPage />
               </PanelCard>
             </Panel>
-            {DIVIDER('vertical')}
-            <Panel defaultSize={38} minSize={20} style={panelStyle}>
-              <PanelCard title="로그" route="logs" popout={popout}>
+            {DIVIDER('horizontal')}
+            <Panel defaultSize={45} minSize={20} style={panelStyle}>
+              <PanelCard title="이벤트 로그" route="logs" popout={popout}>
                 <LogsPage />
               </PanelCard>
             </Panel>
           </Group>
+        </Panel>
+        {DIVIDER('vertical')}
+        <Panel defaultSize={60} minSize={30} style={panelStyle}>
+          <PanelCard title="주문" route="trade" popout={popout}>
+            <TradePage />
+          </PanelCard>
         </Panel>
       </Group>
     </div>

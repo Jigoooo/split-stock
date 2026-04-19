@@ -89,18 +89,38 @@ export const TradePage = (): ReactElement => {
       </div>
 
       {selected ? (
-        <>
-          <PositionChart
-            pdno={selected.pdno}
-            name={selected.name}
-            lines={overlay.data?.lines ?? []}
-          />
-          <TradingPanel
-            pdno={selected.pdno}
-            name={selected.name}
-            isProd={envQuery.data?.env === 'PROD'}
-          />
-        </>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) minmax(420px, 520px)',
+            gap: '1.2rem',
+          }}
+        >
+          <div style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <PositionChart
+              pdno={selected.pdno}
+              name={selected.name}
+              lines={overlay.data?.lines ?? []}
+            />
+          </div>
+          <div
+            style={{
+              minHeight: 0,
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'auto',
+            }}
+          >
+            <TradingPanel
+              pdno={selected.pdno}
+              name={selected.name}
+              isProd={envQuery.data?.env === 'PROD'}
+            />
+          </div>
+        </div>
       ) : null}
     </div>
   );
