@@ -146,8 +146,9 @@ export class BalanceSync {
         accountId,
         env,
         positionCount: balanceResult.value.positions.length,
-        deposit: balanceResult.value.deposit,
-        totalEval: balanceResult.value.totalEval,
+        // 보안: 정확 금액 대신 bucket 마스킹 — 잔고 노출 최소화 (Wave 1 verifier H2).
+        depositBucket: bucketAmount(balanceResult.value.deposit),
+        totalEvalBucket: bucketAmount(balanceResult.value.totalEval),
       },
     });
 
@@ -188,4 +189,25 @@ export class BalanceSync {
     // lots-repo에는 있지만 KIS 잔고에 없는 종목 (0주 / 매도 완료 후 미반영 케이스)
     // → 현재 구현에서는 별도 처리 없음 (SOLD 상태 lot은 정상이므로 노이즈 발생 가능)
   }
+}
+
+/**
+ * 보안: 잔고 정확 금액 대신 자릿수 bucket으로 마스킹.
+ * 운영 로그/Sentry에 평문 자산 규모가 흘러가는 것을 방지하면서도 자릿수 추세는 관측 가능.
+ *
+ * - 0~99,999원 → '<10만'
+ * - ~999,999 → '<100만'
+ * - ~9,999,999 → '<1천만'
+ * - ~99,999,999 → '<1억'
+ * - ~999,999,999 → '<10억'
+ * - 1,000,000,000+ → '>=10억'
+ */
+function bucketAmount(amount: number): string {
+  if (!Number.isFinite(amount) || amount < 0) return 'unknown';
+  if (amount < 100_000) return '<10만';
+  if (amount < 1_000_000) return '<100만';
+  if (amount < 10_000_000) return '<1천만';
+  if (amount < 100_000_000) return '<1억';
+  if (amount < 1_000_000_000) return '<10억';
+  return '>=10억';
 }
