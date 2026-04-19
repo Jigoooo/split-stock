@@ -1,4 +1,6 @@
-import type { ChangeEvent, ReactElement } from 'react';
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { Button, NumberInput, Select } from '@renderer/shared/ui';
+import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { useOrderActions } from '../model/use-order-actions';
 
@@ -60,7 +62,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
       const verb = chosenSide === 'BUY' ? '매수' : '매도';
       const msg =
         `${selection.pdno} (${selection.name})\n` +
-        `${verb} ${qty}주 · ${division === 'MARKET' ? '시장가' : `${price.toLocaleString('ko-KR')}원`}\n\n` +
+        `${verb} ${thousandSeparator(qty)}주 · ${division === 'MARKET' ? '시장가' : `${thousandSeparator(price)}원`}\n\n` +
         `${isProd ? '⚠️ 실전 계좌로 ' : ''}주문하시겠습니까?`;
       if (!window.confirm(msg)) return;
     }
@@ -82,38 +84,39 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
         {isProd ? <span className="chip chip--down">PROD</span> : null}
       </div>
       <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>
-        <label>
-          구분:{' '}
-          <select
+        <label htmlFor="order-division" style={{ display: 'grid', gap: '0.25rem' }}>
+          <span className="muted">구분</span>
+          <Select
+            id="order-division"
             value={division}
             onChange={(e) => setDivision(e.target.value as Division)}
             aria-label="주문 구분"
+            dense
           >
             <option value="LIMIT">지정가</option>
             <option value="MARKET">시장가</option>
-          </select>
+          </Select>
         </label>
-        <label>
-          수량:{' '}
-          <input
-            type="number"
-            min={1}
-            step={1}
+        <label htmlFor="order-qty" style={{ display: 'grid', gap: '0.25rem' }}>
+          <span className="muted">수량</span>
+          <NumberInput
+            id="order-qty"
             value={qtyStr}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setQtyStr(e.target.value)}
+            onValueChange={setQtyStr}
             aria-label="주문 수량"
+            dense
           />
         </label>
-        <label>
-          가격:{' '}
-          <input
-            type="number"
-            min={0}
-            step={1}
-            value={division === 'MARKET' ? '시장가' : priceStr}
+        <label htmlFor="order-price" style={{ display: 'grid', gap: '0.25rem' }}>
+          <span className="muted">가격</span>
+          <NumberInput
+            id="order-price"
+            value={division === 'MARKET' ? '' : priceStr}
             disabled={division === 'MARKET'}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setPriceStr(e.target.value)}
+            emptyDisplay="시장가"
+            onValueChange={setPriceStr}
             aria-label="주문 가격"
+            dense
           />
         </label>
       </div>
@@ -121,10 +124,10 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
         className="panel__body"
         style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
       >
-        <button
-          type="button"
-          className="hts-btn num-up"
+        <Button
           disabled={!canSubmit}
+          variant="danger"
+          dense
           onClick={() => {
             setSide('BUY');
             void submit('BUY');
@@ -132,11 +135,11 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
           aria-label="매수 주문"
         >
           매수
-        </button>
-        <button
-          type="button"
-          className="hts-btn num-down"
+        </Button>
+        <Button
           disabled={!canSubmit}
+          className="hts-btn--down"
+          dense
           onClick={() => {
             setSide('SELL');
             void submit('SELL');
@@ -144,7 +147,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
           aria-label="매도 주문"
         >
           매도
-        </button>
+        </Button>
       </div>
       {actions.lastError ? (
         <div className="panel__body">
@@ -154,7 +157,9 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
         </div>
       ) : null}
       <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
-        현재 선택: {side} · {division === 'MARKET' ? '시장가' : '지정가'} · {qtyStr}주
+        현재 선택: {side} · {division === 'MARKET' ? '시장가' : '지정가'} ·{' '}
+        {qtyStr ? thousandSeparator(qtyStr) : '0'}주
+        {division === 'LIMIT' && priceStr ? ` · ${thousandSeparator(priceStr)}원` : ''}
         {oneClick && !isProd ? ' · 원터치 ON' : ''}
       </div>
     </form>

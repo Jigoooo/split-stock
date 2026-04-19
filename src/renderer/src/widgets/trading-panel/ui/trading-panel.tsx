@@ -1,4 +1,6 @@
 import { OrderTicket, type OrderTicketSelection } from '@renderer/features/order-ticket';
+import { Button, SegmentedToggle } from '@renderer/shared/ui';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { useLiveOrderbook, useLiveTick, useTradeFeed } from '../model/use-live-feed';
@@ -56,14 +58,9 @@ const RealtimeStatusBar = ({
       {orderbookTime ? <span className="muted">호가 {orderbookTime}</span> : null}
       <span style={{ flex: 1 }} />
       {!started ? (
-        <button
-          type="button"
-          className="hts-btn hts-btn--primary"
-          disabled={reconnectPending}
-          onClick={reconnect}
-        >
+        <Button disabled={reconnectPending} onClick={reconnect} variant="primary" dense>
           재연결
-        </button>
+        </Button>
       ) : null}
       {reconnectError ? <span className="chip chip--down">{reconnectError}</span> : null}
       <span className="muted" style={{ fontSize: '1rem' }}>
@@ -136,31 +133,31 @@ const FeedTabs = ({
   const [tab, setTab] = useState<FeedTab>('feed');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-      <div role="tablist" aria-label="체결/미체결" style={{ display: 'flex', gap: '0.3rem' }}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'feed'}
-          className={tab === 'feed' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-          onClick={() => setTab('feed')}
+      <SegmentedToggle
+        value={tab}
+        onChange={setTab}
+        ariaLabel="체결/미체결"
+        dense
+        items={[
+          { value: 'feed', label: '실시간 체결' },
+          { value: 'active', label: '미체결 주문' },
+        ]}
+      />
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={tab}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.16 }}
         >
-          실시간 체결
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === 'active'}
-          className={tab === 'active' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-          onClick={() => setTab('active')}
-        >
-          미체결 주문
-        </button>
-      </div>
-      {tab === 'feed' ? (
-        <TradeFeedPanel feed={feed} name={name} pdno={pdno} />
-      ) : (
-        <ActiveOrdersPanel pdnoFilter={pdno} />
-      )}
+          {tab === 'feed' ? (
+            <TradeFeedPanel feed={feed} name={name} pdno={pdno} />
+          ) : (
+            <ActiveOrdersPanel pdnoFilter={pdno} />
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 };

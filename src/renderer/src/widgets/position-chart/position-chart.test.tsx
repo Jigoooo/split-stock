@@ -2,14 +2,53 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const fetchChartMock = vi.fn();
-const trpcUtilsMock = {
-  market: {
-    getDailyChart: {
-      fetch: fetchChartMock,
+const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoisted(() => {
+  const fetchChartMock = vi.fn();
+  const setDataMock = vi.fn();
+  const createPriceLineMock = vi.fn();
+  const removePriceLineMock = vi.fn();
+  const addSeriesMock = vi.fn(
+    (
+      _seriesType: unknown,
+      _options: { priceFormat: { formatter: (price: number) => string } },
+    ) => ({
+      setData: setDataMock,
+      createPriceLine: createPriceLineMock,
+      removePriceLine: removePriceLineMock,
+    }),
+  );
+  const createChartMock = vi.fn(
+    (
+      _container: unknown,
+      _options: { localization: { priceFormatter: (price: number) => string } },
+    ) => ({
+      applyOptions: vi.fn(),
+      remove: vi.fn(),
+      addSeries: addSeriesMock,
+      removeSeries: vi.fn(),
+      timeScale: () => ({
+        subscribeVisibleLogicalRangeChange: vi.fn(),
+        unsubscribeVisibleLogicalRangeChange: vi.fn(),
+        getVisibleLogicalRange: () => null,
+        setVisibleLogicalRange: vi.fn(),
+      }),
+    }),
+  );
+  const trpcUtilsMock = {
+    market: {
+      getDailyChart: {
+        fetch: fetchChartMock,
+      },
     },
-  },
-};
+  };
+
+  return {
+    fetchChartMock,
+    addSeriesMock,
+    createChartMock,
+    trpcUtilsMock,
+  };
+});
 
 vi.mock('@renderer/shared/api/trpc', () => ({
   trpc: {
@@ -23,22 +62,7 @@ vi.mock('lightweight-charts', () => ({
     Solid: 0,
     Dashed: 1,
   },
-  createChart: () => ({
-    applyOptions: vi.fn(),
-    remove: vi.fn(),
-    addSeries: () => ({
-      setData: vi.fn(),
-      createPriceLine: vi.fn(),
-      removePriceLine: vi.fn(),
-    }),
-    removeSeries: vi.fn(),
-    timeScale: () => ({
-      subscribeVisibleLogicalRangeChange: vi.fn(),
-      unsubscribeVisibleLogicalRangeChange: vi.fn(),
-      getVisibleLogicalRange: () => null,
-      setVisibleLogicalRange: vi.fn(),
-    }),
-  }),
+  createChart: createChartMock,
 }));
 
 import { PositionChart } from './ui/position-chart';
@@ -54,6 +78,8 @@ beforeAll(() => {
 
 beforeEach(() => {
   fetchChartMock.mockReset();
+  createChartMock.mockClear();
+  addSeriesMock.mockClear();
 });
 
 describe('PositionChart', () => {
@@ -81,5 +107,41 @@ describe('PositionChart', () => {
     await waitFor(() =>
       expect(screen.queryByText('봉 조회 실패: NETWORK - HTTP 500')).not.toBeInTheDocument(),
     );
+  });
+
+  it('차트 가격 축과 시리즈 포맷에 세 자리 구분자를 적용한다', async () => {
+    fetchChartMock.mockResolvedValueOnce({
+      candles: [
+        {
+          date: '2026-04-18',
+          open: 10000,
+          high: 12345,
+          low: 9800,
+          close: 12000,
+          volume: 123456,
+        },
+      ],
+      toMs: Date.UTC(2026, 3, 19),
+    });
+
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+
+    await waitFor(() => expect(createChartMock).toHaveBeenCalled());
+    await waitFor(() => expect(addSeriesMock).toHaveBeenCalled());
+
+    const chartCall = createChartMock.mock.calls[0];
+    const seriesCall = addSeriesMock.mock.calls[0];
+
+    expect(chartCall).toBeDefined();
+    expect(seriesCall).toBeDefined();
+    if (!chartCall || !seriesCall) {
+      throw new Error('chart mocks were not called');
+    }
+
+    const [, chartOptions] = chartCall;
+    const [, seriesOptions] = seriesCall;
+
+    expect(chartOptions.localization.priceFormatter(12345)).toBe('12,345');
+    expect(seriesOptions.priceFormat.formatter(12345)).toBe('12,345');
   });
 });

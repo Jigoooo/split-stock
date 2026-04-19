@@ -60,6 +60,7 @@
     "drizzle-orm": "^0.45.2",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.3",
+    "framer-motion": "^12.38.0",
     "iconv-lite": "^0.7.2",
     "lightweight-charts": "^5.1.0",
     "lucide-react": "^1.8.0",

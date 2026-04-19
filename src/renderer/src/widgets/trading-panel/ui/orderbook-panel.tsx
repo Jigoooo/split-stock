@@ -1,3 +1,4 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import type { ReactElement } from 'react';
 import type { LiveOrderbook } from '../model/use-live-feed';
 
@@ -72,8 +73,8 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
         </tbody>
       </table>
       <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
-        총 매도 {orderbook.totalAskQty.toLocaleString('ko-KR')} · 총 매수{' '}
-        {orderbook.totalBidQty.toLocaleString('ko-KR')}
+        총 매도 {thousandSeparator(orderbook.totalAskQty)} · 총 매수{' '}
+        {thousandSeparator(orderbook.totalBidQty)}
       </div>
     </div>
   );
@@ -122,7 +123,7 @@ const OrderbookRow = ({
                 background: 'rgba(45, 79, 202, 0.18)',
               }}
             />
-            <span style={{ position: 'relative' }}>{leftQty.toLocaleString('ko-KR')}</span>
+            <span style={{ position: 'relative' }}>{thousandSeparator(leftQty)}</span>
           </>
         ) : null}
       </td>
@@ -130,7 +131,7 @@ const OrderbookRow = ({
         className={`num ${priceColor}`}
         style={{ fontWeight: current ? 700 : 500, textAlign: 'center' }}
       >
-        {price.toLocaleString('ko-KR')}
+        {thousandSeparator(price)}
       </td>
       <td className="num" style={{ position: 'relative' }}>
         {rightQty > 0 ? (
@@ -145,7 +146,7 @@ const OrderbookRow = ({
                 background: 'rgba(215, 51, 51, 0.18)',
               }}
             />
-            <span style={{ position: 'relative' }}>{rightQty.toLocaleString('ko-KR')}</span>
+            <span style={{ position: 'relative' }}>{thousandSeparator(rightQty)}</span>
           </>
         ) : null}
       </td>

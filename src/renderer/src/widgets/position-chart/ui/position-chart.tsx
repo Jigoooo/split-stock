@@ -1,3 +1,4 @@
+import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import type { LotOverlayLine } from '@shared/trading/lot-overlay';
 import type { ReactElement } from 'react';
 import { type ChartPeriod, usePositionChart } from '../model/use-position-chart';
@@ -36,21 +37,16 @@ export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactE
           </span>
         ) : null}
         <span style={{ flex: 1 }} />
-        <div role="tablist" aria-label="봉 단위" style={{ display: 'flex', gap: '0.3rem' }}>
-          {(['D', 'W', 'M'] as const).map((period) => (
-            <button
-              key={period}
-              type="button"
-              role="tab"
-              aria-selected={chart.period === period}
-              className={chart.period === period ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-              onClick={() => chart.setPeriod(period)}
-              style={{ padding: '0.3rem 0.7rem' }}
-            >
-              {PERIOD_LABEL[period]}
-            </button>
-          ))}
-        </div>
+        <SegmentedToggle
+          value={chart.period}
+          onChange={chart.setPeriod}
+          ariaLabel="봉 단위"
+          dense
+          items={(['D', 'W', 'M'] as const).map((period) => ({
+            value: period,
+            label: PERIOD_LABEL[period],
+          }))}
+        />
       </div>
       <div
         className="panel__body"
@@ -73,15 +69,14 @@ export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactE
             }}
           >
             <span className="chip chip--down">{chart.error}</span>
-            <button
-              type="button"
-              className="hts-btn"
+            <Button
               onClick={chart.retry}
               disabled={chart.isLoading}
               aria-label="봉 다시 시도"
+              dense
             >
               다시 시도
-            </button>
+            </Button>
           </div>
         ) : null}
         <CandlestickChart

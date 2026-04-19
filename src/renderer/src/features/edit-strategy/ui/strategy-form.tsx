@@ -1,5 +1,6 @@
+import { Button, NumberInput, TextInput } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
-import type { ChangeEvent, ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { DEFAULT_PROFILE, type StrategyFormErrors, validateProfile } from '../model/validate';
 
@@ -63,8 +64,8 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
     setErrors({});
   }
 
-  const update = (key: keyof FormRaw) => (e: ChangeEvent<HTMLInputElement>) => {
-    setRaw((prev) => ({ ...prev, [key]: e.target.value }));
+  const update = (key: keyof FormRaw) => (value: string) => {
+    setRaw((prev) => ({ ...prev, [key]: value }));
   };
 
   const validated = validateProfile(toProfile(raw));
@@ -92,107 +93,119 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
   return (
     <form className="panel" onSubmit={(e) => e.preventDefault()} aria-label="전략 파라미터 폼">
       <div className="panel__title">전략 파라미터</div>
-      <div className="panel__body" style={{ display: 'grid', gap: '0.8rem', maxWidth: 480 }}>
+      <div className="panel__body" style={{ display: 'grid', gap: '0.8rem', maxWidth: 520 }}>
         <Field
+          id="strategy-total-amount"
           label="총 투입 금액 (원)"
           value={raw.totalAmountKrw}
-          onChange={update('totalAmountKrw')}
+          onValueChange={update('totalAmountKrw')}
           error={errors.totalAmountKrw}
-          fieldKey="totalAmountKrw"
+          inputMode="numeric"
         />
         <Field
+          id="strategy-max-stages"
           label="차수 (1~20)"
           value={raw.maxStages}
-          onChange={update('maxStages')}
+          onValueChange={update('maxStages')}
           error={errors.maxStages}
-          fieldKey="maxStages"
+          inputMode="numeric"
         />
         <Field
+          id="strategy-drop-pct"
           label="하향매수 비율 (%)"
           value={raw.dropPct}
-          onChange={update('dropPct')}
+          onValueChange={update('dropPct')}
           error={errors.dropPct}
-          fieldKey="dropPct"
+          allowDecimal
+          inputMode="decimal"
         />
         <Field
+          id="strategy-profit-pct"
           label="익절 비율 (%)"
           value={raw.profitPct}
-          onChange={update('profitPct')}
+          onValueChange={update('profitPct')}
           error={errors.profitPct}
-          fieldKey="profitPct"
+          allowDecimal
+          inputMode="decimal"
         />
         <Field
+          id="strategy-booster-pct"
           label="부스터 비율 (%, 선택)"
           value={raw.boosterPct}
-          onChange={update('boosterPct')}
+          onValueChange={update('boosterPct')}
           error={errors.boosterPct}
-          fieldKey="boosterPct"
+          allowDecimal
+          inputMode="decimal"
         />
         <Field
+          id="strategy-booster-amount"
           label="부스터 금액 (원, 선택)"
           value={raw.boosterAmountKrw}
-          onChange={update('boosterAmountKrw')}
+          onValueChange={update('boosterAmountKrw')}
           error={errors.boosterAmountKrw}
-          fieldKey="boosterAmountKrw"
+          inputMode="numeric"
         />
       </div>
       <div
         className="panel__body"
         style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}
       >
-        <input
-          type="text"
+        <TextInput
+          id="strategy-preset-name"
           value={presetInput}
           onChange={(e) => setPresetInput(e.target.value)}
           placeholder="프리셋 이름"
           aria-label="프리셋 이름"
           disabled={props.disabled}
+          dense
           style={{ flex: 1, minWidth: 120 }}
         />
-        <button
-          type="button"
-          className="hts-btn"
+        <Button
           onClick={onSavePreset}
           disabled={props.disabled || presetInput.trim().length === 0 || !validated.ok}
           aria-label="프리셋 저장"
+          dense
         >
           프리셋 저장
-        </button>
-        <button
-          type="button"
-          className="hts-btn hts-btn--primary"
+        </Button>
+        <Button
           onClick={onSubmit}
           disabled={props.disabled || !validated.ok}
           aria-label="전략 저장"
+          variant="primary"
+          dense
         >
           저장
-        </button>
+        </Button>
       </div>
     </form>
   );
 };
 
 interface FieldProps {
+  id: string;
   label: string;
   value: string;
-  onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+  onValueChange: (value: string) => void;
   error: string | undefined;
-  fieldKey: string;
+  allowDecimal?: boolean;
+  inputMode?: 'numeric' | 'decimal';
 }
 
 const Field = (p: FieldProps): ReactElement => (
-  <label style={{ display: 'grid', gap: '0.3rem' }}>
+  <label htmlFor={p.id} style={{ display: 'grid', gap: '0.3rem' }}>
     <span className="muted" style={{ fontSize: '1.1rem' }}>
       {p.label}
     </span>
-    <input
-      type="text"
-      inputMode="decimal"
+    <NumberInput
+      id={p.id}
       value={p.value}
-      onChange={p.onChange}
+      onValueChange={p.onValueChange}
       aria-label={p.label}
       aria-invalid={Boolean(p.error)}
-      name={p.fieldKey}
+      dense
+      {...(p.allowDecimal ? { allowDecimal: true } : {})}
+      {...(p.inputMode ? { inputMode: p.inputMode } : {})}
     />
     {p.error ? (
       <span className="chip chip--down" role="alert">

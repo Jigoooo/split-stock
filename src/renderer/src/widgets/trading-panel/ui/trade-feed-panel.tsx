@@ -1,3 +1,4 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import type { ReactElement } from 'react';
 import type { LiveTick } from '../model/use-live-feed';
 
@@ -27,7 +28,7 @@ export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
   return (
     <div className="panel">
       <div className="panel__title">
-        실시간 체결{headerSuffix} (최근 {feed.length}건)
+        실시간 체결{headerSuffix} (최근 {thousandSeparator(feed.length)}건)
       </div>
       <table className="hts-table" aria-label="실시간 체결">
         <thead>
@@ -49,9 +50,9 @@ export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
             return (
               <tr key={`${t.time}-${t.accumVolume}`}>
                 <td className="num">{formatTime(t.time)}</td>
-                <td className={`num ${color}`}>{t.price.toLocaleString('ko-KR')}</td>
-                <td className="num">{t.volume.toLocaleString('ko-KR')}</td>
-                <td className="num muted">{t.accumVolume.toLocaleString('ko-KR')}</td>
+                <td className={`num ${color}`}>{thousandSeparator(t.price)}</td>
+                <td className="num">{thousandSeparator(t.volume)}</td>
+                <td className="num muted">{thousandSeparator(t.accumVolume)}</td>
               </tr>
             );
           })}

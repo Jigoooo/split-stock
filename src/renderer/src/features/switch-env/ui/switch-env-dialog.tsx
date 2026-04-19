@@ -1,3 +1,4 @@
+import { Button, Checkbox, TextInput } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { PROD_CONFIRM_PHRASE } from '../model/constants';
@@ -71,25 +72,25 @@ export const SwitchEnvDialog = (props: SwitchEnvDialogProps): ReactElement | nul
             </>
           ) : (
             <>
-              <label style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-                <input
-                  type="checkbox"
-                  checked={ack}
-                  onChange={(e) => setAck(e.target.checked)}
-                  aria-label="실전 모드 동의"
-                />
-                <span>실전 모드임을 이해했고 계속 진행하는 데 동의합니다.</span>
-              </label>
-              <label style={{ display: 'grid', gap: '0.4rem' }}>
+              <Checkbox
+                aria-label="실전 모드 동의"
+                checked={ack}
+                onChange={(e) => setAck(e.target.checked)}
+                label="실전 모드임을 이해했고 계속 진행하는 데 동의합니다."
+                dense
+              />
+              <label htmlFor="switch-env-phrase" style={{ display: 'grid', gap: '0.4rem' }}>
                 <span>
                   아래에 <code>{PROD_CONFIRM_PHRASE}</code> 이라고 정확히 타이핑하세요:
                 </span>
-                <input
+                <TextInput
+                  id="switch-env-phrase"
                   type="text"
                   value={phrase}
                   onChange={(e) => setPhrase(e.target.value)}
                   placeholder={PROD_CONFIRM_PHRASE}
                   aria-label="실전전환 확인 문구"
+                  dense
                 />
               </label>
             </>
@@ -99,20 +100,18 @@ export const SwitchEnvDialog = (props: SwitchEnvDialogProps): ReactElement | nul
           className="panel__body"
           style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
         >
-          <button type="button" className="hts-btn" onClick={onCancel} disabled={pending}>
+          <Button onClick={onCancel} disabled={pending} dense>
             취소
-          </button>
-          <button
-            type="button"
-            className={
-              canConfirm || (isProd && step === 1) ? 'hts-btn hts-btn--primary' : 'hts-btn'
-            }
+          </Button>
+          <Button
             onClick={onPrimary}
             disabled={pending || (isProd && step === 2 && !canConfirm)}
             aria-label={isProd && step === 1 ? '다음 단계' : '전환 확정'}
+            variant={canConfirm || (isProd && step === 1) ? 'primary' : 'default'}
+            dense
           >
             {isProd && step === 1 ? '다음' : '전환'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

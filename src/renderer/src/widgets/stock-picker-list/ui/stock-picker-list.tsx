@@ -1,4 +1,7 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { highlightMatches } from '@renderer/shared/lib/search';
+import { Button, TextInput } from '@renderer/shared/ui';
+import { AnimatePresence, motion } from 'framer-motion';
 import { ExternalLink, RefreshCw, Search } from 'lucide-react';
 import type { KeyboardEvent, ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -49,6 +52,13 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
 
   const visible = alwaysOpen ? list.entries : list.entries.slice(0, MAX_VISIBLE);
   const open = alwaysOpen || (focused && keyword.trim().length > 0);
+  const dropdownMotionProps = alwaysOpen
+    ? {}
+    : {
+        initial: { opacity: 0, y: -6 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -6 },
+      };
 
   const commit = (entry: StockListEntry): void => {
     onSelect(entry);
@@ -81,13 +91,8 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
       ref={containerRef}
       style={{ position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', position: 'relative' }}>
-        <Search
-          size={14}
-          aria-hidden
-          style={{ position: 'absolute', left: 8, color: 'var(--fg-2)', pointerEvents: 'none' }}
-        />
-        <input
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        <TextInput
           type="text"
           value={keyword}
           onChange={(e) => {
@@ -99,33 +104,36 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
           placeholder="종목을 검색하세요"
           aria-label="종목 검색"
           autoComplete="off"
-          style={{ width: '100%', paddingLeft: 26 }}
+          iconLeading={<Search size={14} />}
+          dense
+          style={{ width: '100%' }}
         />
-        <button
-          type="button"
-          className="hts-btn"
+        <Button
           disabled={syncPending}
           onClick={sync}
           aria-label="종목 마스터 재동기화"
           title="KIS 마스터 파일 다시 다운로드"
-          style={{ padding: '0.4rem 0.5rem' }}
+          iconOnly
+          dense
+          iconLeading={<RefreshCw size={14} />}
         >
-          <RefreshCw size={14} />
-        </button>
+          종목 마스터 재동기화
+        </Button>
         {!hidePopoutButton && onOpenPopout ? (
-          <button
-            type="button"
-            className="hts-btn"
+          <Button
             onClick={() => {
               void onOpenPopout();
             }}
             aria-pressed={isPopoutOpen}
             aria-label="종목 선택 팝아웃 창"
             title={isPopoutOpen ? '별도 창에서 검색/할당 중' : '별도 창에서 검색/할당'}
-            style={{ padding: '0.4rem 0.5rem' }}
+            iconOnly
+            dense
+            iconLeading={<ExternalLink size={14} />}
+            variant={isPopoutOpen ? 'primary' : 'default'}
           >
-            <ExternalLink size={14} />
-          </button>
+            종목 선택 팝아웃
+          </Button>
         ) : null}
       </div>
       {syncError ? (
@@ -138,74 +146,78 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
           종목 마스터가 비어 있습니다. 새로고침 아이콘으로 받아오세요.
         </div>
       ) : null}
-      {open ? (
-        <div
-          role="listbox"
-          aria-label="종목 검색 결과"
-          className="panel"
-          style={{
-            position: alwaysOpen ? 'relative' : 'absolute',
-            top: alwaysOpen ? undefined : '100%',
-            left: 0,
-            right: 0,
-            marginTop: '0.3rem',
-            zIndex: 10,
-            maxHeight: alwaysOpen ? undefined : '28rem',
-            height: alwaysOpen ? '100%' : undefined,
-            overflowY: 'auto',
-            flex: alwaysOpen ? 1 : undefined,
-            minHeight: alwaysOpen ? 0 : undefined,
-          }}
-        >
-          {list.isLoading ? (
-            <div className="panel__body muted">로딩 중…</div>
-          ) : visible.length === 0 ? (
-            <div className="panel__body muted">결과 없음</div>
-          ) : (
-            visible.map((entry, idx) => {
-              const isActive = idx === activeIndex;
-              const isSelected = entry.pdno === selectedPdno;
-              return (
-                <button
-                  type="button"
-                  key={entry.pdno}
-                  role="option"
-                  aria-selected={isActive}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    commit(entry);
-                  }}
-                  onMouseEnter={() => setActiveIndex(idx)}
-                  className={isActive ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-                  style={{
-                    width: '100%',
-                    height: ROW_HEIGHT_PX,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-start',
-                    gap: '0.8rem',
-                    borderRadius: 0,
-                    padding: '0 0.8rem',
-                    textAlign: 'left',
-                    background: isSelected && !isActive ? 'var(--up-soft)' : undefined,
-                  }}
-                >
-                  <span className="num" style={{ minWidth: '6rem' }}>
-                    {highlightMatches(entry.pdno, keyword)}
-                  </span>
-                  <span style={{ flex: 1 }}>{highlightMatches(entry.name, keyword)}</span>
-                  {entry.sector ? <span className="muted">{entry.sector}</span> : null}
-                </button>
-              );
-            })
-          )}
-          {!alwaysOpen && list.entries.length > visible.length ? (
-            <div className="panel__body muted" style={{ fontSize: '1rem' }}>
-              상위 {visible.length}건 표시 중 · 전체 {list.entries.length.toLocaleString('ko-KR')}건
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div
+            role="listbox"
+            aria-label="종목 검색 결과"
+            className="panel"
+            transition={{ duration: 0.15 }}
+            {...dropdownMotionProps}
+            style={{
+              position: alwaysOpen ? 'relative' : 'absolute',
+              top: alwaysOpen ? undefined : '100%',
+              left: 0,
+              right: 0,
+              marginTop: '0.3rem',
+              zIndex: 10,
+              maxHeight: alwaysOpen ? undefined : '28rem',
+              height: alwaysOpen ? '100%' : undefined,
+              overflowY: 'auto',
+              flex: alwaysOpen ? 1 : undefined,
+              minHeight: alwaysOpen ? 0 : undefined,
+            }}
+          >
+            {list.isLoading ? (
+              <div className="panel__body muted">로딩 중…</div>
+            ) : visible.length === 0 ? (
+              <div className="panel__body muted">결과 없음</div>
+            ) : (
+              visible.map((entry, idx) => {
+                const isActive = idx === activeIndex;
+                const isSelected = entry.pdno === selectedPdno;
+                return (
+                  <button
+                    type="button"
+                    key={entry.pdno}
+                    role="option"
+                    aria-selected={isActive}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      commit(entry);
+                    }}
+                    onMouseEnter={() => setActiveIndex(idx)}
+                    className={isActive ? 'hts-btn hts-btn--primary' : 'hts-btn'}
+                    style={{
+                      width: '100%',
+                      height: ROW_HEIGHT_PX,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'flex-start',
+                      gap: '0.8rem',
+                      borderRadius: 0,
+                      padding: '0 0.8rem',
+                      textAlign: 'left',
+                      background: isSelected && !isActive ? 'var(--up-soft)' : undefined,
+                    }}
+                  >
+                    <span className="num" style={{ minWidth: '6rem' }}>
+                      {highlightMatches(entry.pdno, keyword)}
+                    </span>
+                    <span style={{ flex: 1 }}>{highlightMatches(entry.name, keyword)}</span>
+                    {entry.sector ? <span className="muted">{entry.sector}</span> : null}
+                  </button>
+                );
+              })
+            )}
+            {!alwaysOpen && list.entries.length > visible.length ? (
+              <div className="panel__body muted" style={{ fontSize: '1rem' }}>
+                상위 {visible.length}건 표시 중 · 전체 {thousandSeparator(list.entries.length)}건
+              </div>
+            ) : null}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 };

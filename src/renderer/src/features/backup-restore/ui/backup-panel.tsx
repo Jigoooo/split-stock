@@ -1,3 +1,4 @@
+import { Button } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useBackupPanel } from '../model/use-backup-panel';
 
@@ -14,21 +15,21 @@ export const BackupPanel = (): ReactElement => {
   return (
     <div className="panel">
       <div className="panel__title">백업/복원</div>
-      <div className="panel__body" style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          className="hts-btn"
+      <div
+        className="panel__body"
+        style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}
+      >
+        <Button
           onClick={() => {
             clearMessage();
             exportDatabase();
           }}
           disabled={exportPending}
+          dense
         >
           DB 내보내기
-        </button>
-        <button
-          type="button"
-          className="hts-btn"
+        </Button>
+        <Button
           onClick={() => {
             if (
               !window.confirm(
@@ -41,9 +42,10 @@ export const BackupPanel = (): ReactElement => {
             importDatabase();
           }}
           disabled={importPending}
+          dense
         >
           DB 복원
-        </button>
+        </Button>
         <span className="muted" style={{ marginLeft: 'auto' }}>
           복원 후 credentials는 OS 사용자 키 변경으로 재입력이 필요할 수 있음
         </span>

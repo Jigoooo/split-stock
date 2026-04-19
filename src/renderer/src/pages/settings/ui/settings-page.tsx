@@ -1,5 +1,6 @@
 import { BackupPanel } from '@renderer/features/backup-restore';
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
+import { Button, Select } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
@@ -44,11 +45,14 @@ export const SettingsPage = (): ReactElement => {
           className="panel__body"
           style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}
         >
-          <select
+          <Select
+            id="settings-preset-select"
             value={selectedPreset}
             onChange={(e) => applyPreset(e.target.value)}
             aria-label="프리셋 선택"
             disabled={strategy.isPending || presets.length === 0}
+            dense
+            style={{ width: 'auto', minWidth: '18rem' }}
           >
             <option value="">— 프리셋 선택 —</option>
             {presets.map((p) => (
@@ -56,18 +60,17 @@ export const SettingsPage = (): ReactElement => {
                 {p.name}
               </option>
             ))}
-          </select>
-          <button
-            type="button"
-            className="hts-btn"
+          </Select>
+          <Button
             onClick={() => {
               if (selectedPreset) strategy.removePreset(selectedPreset);
               setSelectedPreset('');
             }}
             disabled={!selectedPreset || strategy.isPending}
+            dense
           >
             프리셋 삭제
-          </button>
+          </Button>
           {presets.length === 0 ? <span className="muted">저장된 프리셋이 없습니다.</span> : null}
         </div>
       </div>

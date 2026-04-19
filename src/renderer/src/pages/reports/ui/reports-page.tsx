@@ -1,3 +1,5 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { Button, DateInput } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useReports } from '../model/use-reports';
 
@@ -30,22 +32,24 @@ export const ReportsPage = (): ReactElement => {
           className="panel__body"
           style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}
         >
-          <label>
-            시작:{' '}
-            <input
-              type="date"
+          <label htmlFor="reports-from" style={{ display: 'grid', gap: '0.25rem' }}>
+            <span className="muted">시작</span>
+            <DateInput
+              id="reports-from"
               value={fromStr}
               onChange={(e) => setFromStr(e.target.value)}
               aria-label="리포트 시작일"
+              dense
             />
           </label>
-          <label>
-            종료:{' '}
-            <input
-              type="date"
+          <label htmlFor="reports-to" style={{ display: 'grid', gap: '0.25rem' }}>
+            <span className="muted">종료</span>
+            <DateInput
+              id="reports-to"
               value={toStr}
               onChange={(e) => setToStr(e.target.value)}
               aria-label="리포트 종료일"
+              dense
             />
           </label>
         </div>
@@ -64,10 +68,10 @@ export const ReportsPage = (): ReactElement => {
               <Kpi label="승률" value={`${(summary.winRate * 100).toFixed(1)}%`} />
               <Kpi
                 label="최대 Drawdown"
-                value={`-${summary.maxDrawdownKrw.toLocaleString('ko-KR')}원`}
+                value={`-${thousandSeparator(summary.maxDrawdownKrw)}원`}
               />
-              <Kpi label="청산 차수" value={`${summary.soldLots}건`} />
-              <Kpi label="체결 건수" value={`${summary.totalTrades}건`} />
+              <Kpi label="청산 차수" value={`${thousandSeparator(summary.soldLots)}건`} />
+              <Kpi label="체결 건수" value={`${thousandSeparator(summary.totalTrades)}건`} />
               <Kpi label="평균 보유일" value={`${summary.avgHoldingDays.toFixed(1)}일`} />
             </>
           ) : null}
@@ -77,15 +81,15 @@ export const ReportsPage = (): ReactElement => {
       <div className="panel">
         <div className="panel__title">CSV Export</div>
         <div className="panel__body" style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-          <button type="button" className="hts-btn" onClick={() => onExport('trades')}>
+          <Button onClick={() => onExport('trades')} dense>
             체결 CSV
-          </button>
-          <button type="button" className="hts-btn" onClick={() => onExport('lots')}>
+          </Button>
+          <Button onClick={() => onExport('lots')} dense>
             차수 CSV
-          </button>
-          <button type="button" className="hts-btn" onClick={() => onExport('events')}>
+          </Button>
+          <Button onClick={() => onExport('events')} dense>
             이벤트 로그 CSV
-          </button>
+          </Button>
           <span className="muted" style={{ marginLeft: 'auto' }}>
             BOM 포함 UTF-8 — Excel에서 한글 정상 표시
           </span>
@@ -108,5 +112,5 @@ const Kpi = ({ label, value }: { label: string; value: string }): ReactElement =
 
 function formatKrwSigned(v: number): string {
   const sign = v > 0 ? '+' : v < 0 ? '-' : '';
-  return `${sign}${Math.abs(v).toLocaleString('ko-KR')}원`;
+  return `${sign}${thousandSeparator(Math.abs(v))}원`;
 }

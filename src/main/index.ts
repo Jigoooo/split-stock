@@ -208,7 +208,7 @@ function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
     maxHeight: bounds.maxHeight,
     show: false,
     autoHideMenuBar: true,
-    title: popoutRoute ? `split-stock · ${popoutRoute}` : 'split-stock (MOCK)',
+    title: popoutRoute ? `Split Stock · ${popoutRoute}` : 'Split Stock',
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,

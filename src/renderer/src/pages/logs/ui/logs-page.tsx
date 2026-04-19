@@ -1,3 +1,5 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { Select } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { LOG_CATEGORIES, LOG_LEVELS, useLogTail } from '../model/use-log-tail';
 
@@ -11,28 +13,38 @@ export const LogsPage = (): ReactElement => {
         className="panel__body"
         style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}
       >
-        <label>
-          레벨:{' '}
-          <select value={level} onChange={(e) => setLevel(e.target.value as typeof level)}>
+        <label htmlFor="logs-level" style={{ display: 'grid', gap: '0.25rem' }}>
+          <span className="muted">레벨</span>
+          <Select
+            id="logs-level"
+            value={level}
+            onChange={(e) => setLevel(e.target.value as typeof level)}
+            dense
+          >
             {LOG_LEVELS.map((l) => (
               <option key={l} value={l}>
                 {l || '전체'}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
-        <label>
-          카테고리:{' '}
-          <select value={category} onChange={(e) => setCategory(e.target.value as typeof category)}>
+        <label htmlFor="logs-category" style={{ display: 'grid', gap: '0.25rem' }}>
+          <span className="muted">카테고리</span>
+          <Select
+            id="logs-category"
+            value={category}
+            onChange={(e) => setCategory(e.target.value as typeof category)}
+            dense
+          >
             {LOG_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {c || '전체'}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <span className="muted" style={{ marginLeft: 'auto' }}>
-          2초마다 새로고침 · {entries.length}건 표시
+          2초마다 새로고침 · {thousandSeparator(entries.length)}건 표시
         </span>
       </div>
       <div className="panel__body" style={{ padding: 0 }}>

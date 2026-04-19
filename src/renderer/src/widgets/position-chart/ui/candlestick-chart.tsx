@@ -1,3 +1,4 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import {
   type CandlestickData,
   CandlestickSeries,
@@ -45,6 +46,10 @@ export const CandlestickChart = ({
       },
       rightPriceScale: { borderColor: '#cccccc' },
       timeScale: { borderColor: '#cccccc' },
+      localization: {
+        priceFormatter: (price: number): string =>
+          thousandSeparator(price, { allowNegative: true, allowDecimal: true }),
+      },
     });
     chartRef.current = chart;
 
@@ -107,6 +112,11 @@ export const CandlestickChart = ({
         wickUpColor: '#d73333',
         wickDownColor: '#2d4fca',
         borderVisible: false,
+        priceFormat: {
+          type: 'custom',
+          formatter: (price: number): string =>
+            thousandSeparator(price, { allowNegative: true, allowDecimal: true }),
+        },
       });
       seriesRef.current = series;
     }

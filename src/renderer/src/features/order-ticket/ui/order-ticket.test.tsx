@@ -43,7 +43,7 @@ function wrap(ui: ReactElement): ReactElement {
 const origConfirm = window.confirm;
 
 describe('OrderTicket', () => {
-  it('가격/수량 입력 후 매수 클릭 → confirm → place 호출', async () => {
+  it('콤마 표시 상태에서도 숫자 payload로 주문한다', async () => {
     window.confirm = vi.fn().mockReturnValue(true);
     placeMock.mockResolvedValue({ odno: 'ODN1' });
     render(
@@ -55,18 +55,19 @@ describe('OrderTicket', () => {
         />,
       ),
     );
-    fireEvent.change(screen.getByRole('spinbutton', { name: '주문 수량' }), {
-      target: { value: '10' },
-    });
+    fireEvent.change(screen.getByLabelText('주문 수량'), { target: { value: '12345' } });
+    fireEvent.change(screen.getByLabelText('주문 가격'), { target: { value: '70000' } });
+
+    expect(screen.getByLabelText('주문 수량')).toHaveValue('12,345');
+    expect(screen.getByLabelText('주문 가격')).toHaveValue('70,000');
+
     fireEvent.click(screen.getByRole('button', { name: '매수 주문' }));
-    // confirm 호출됨
     expect(window.confirm).toHaveBeenCalled();
-    // 비동기 mutateAsync는 await 없이 즉시 호출 확인
     expect(placeMock).toHaveBeenCalledWith(
       expect.objectContaining({
         pdno: '005930',
         side: 'BUY',
-        qty: 10,
+        qty: 12345,
         price: 70000,
         division: 'LIMIT',
       }),
@@ -105,5 +106,6 @@ describe('OrderTicket', () => {
     const divSelect = screen.getByRole('combobox', { name: '주문 구분' });
     fireEvent.change(divSelect, { target: { value: 'MARKET' } });
     expect(screen.getByLabelText('주문 가격')).toBeDisabled();
+    expect(screen.getByLabelText('주문 가격')).toHaveValue('시장가');
   });
 });

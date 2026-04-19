@@ -1,6 +1,8 @@
 import { DashboardPage } from '@renderer/pages/dashboard';
 import { LogsPage } from '@renderer/pages/logs';
 import { TradePage } from '@renderer/pages/trade';
+import { Button } from '@renderer/shared/ui';
+import { ExternalLink } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import type { PopoutRoute } from '../model/popout-route';
@@ -51,29 +53,20 @@ const PanelCard = ({ title, route, popout, children }: PanelCardProps): ReactEle
       >
         <span>{title}</span>
         <span style={{ flex: 1 }} />
-        <button
-          type="button"
-          className="hts-btn"
+        <Button
           onClick={() => {
             void popout.popout(route);
           }}
           aria-label={`${title} 팝아웃`}
           title="팝아웃 창으로 분리"
+          iconLeading={<ExternalLink size={14} />}
+          dense
+          variant={isOut ? 'primary' : 'default'}
         >
-          {isOut ? '⤢ 창 전환됨' : '⤢ 팝아웃'}
-        </button>
+          {isOut ? '열린 창 보기' : '팝아웃'}
+        </Button>
       </div>
-      <div className="panel-card-body">
-        {isOut ? (
-          <div className="muted" style={{ padding: '2rem', textAlign: 'center' }}>
-            현재 이 화면은 팝아웃 창에서 표시 중입니다.
-            <br />
-            창을 닫으면 여기로 복귀합니다.
-          </div>
-        ) : (
-          children
-        )}
-      </div>
+      <div className="panel-card-body">{children}</div>
     </div>
   );
 };

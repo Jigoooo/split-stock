@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld('appEnv', {
 /**
  * 팝아웃 창 브릿지.
  * - openPopout(route): main 프로세스가 별도 BrowserWindow를 생성해 해당 route 페이지만 렌더.
- * - onPopoutClosed(listener): 팝아웃 창이 닫혔을 때 메인 그리드의 placeholder를 원복하도록 알림.
+ * - onPopoutClosed(listener): 팝아웃 창이 닫혔을 때 열린 route 상태를 갱신하도록 알림.
  */
 contextBridge.exposeInMainWorld('appShell', {
   openPopout: (route: string): Promise<{ ok: boolean }> =>
