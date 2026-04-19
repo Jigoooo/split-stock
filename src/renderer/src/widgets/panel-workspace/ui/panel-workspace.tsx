@@ -88,24 +88,25 @@ const PanelCard = ({ title, route, popout, children }: PanelCardProps): ReactEle
 export const PanelWorkspace = (): ReactElement => {
   const popout = usePopoutState();
 
+  const panelStyle = { overflow: 'hidden' } as const;
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <Group orientation="horizontal">
-        <Panel defaultSize={42} minSize={25}>
+        <Panel defaultSize={42} minSize={25} style={panelStyle}>
           <PanelCard title="대시보드" route="dashboard" popout={popout}>
             <DashboardPage />
           </PanelCard>
         </Panel>
         {DIVIDER('horizontal')}
-        <Panel defaultSize={58} minSize={30}>
+        <Panel defaultSize={58} minSize={30} style={panelStyle}>
           <Group orientation="vertical">
-            <Panel defaultSize={62} minSize={25}>
+            <Panel defaultSize={62} minSize={25} style={panelStyle}>
               <PanelCard title="주문" route="trade" popout={popout}>
                 <TradePage />
               </PanelCard>
             </Panel>
             {DIVIDER('vertical')}
-            <Panel defaultSize={38} minSize={20}>
+            <Panel defaultSize={38} minSize={20} style={panelStyle}>
               <PanelCard title="로그" route="logs" popout={popout}>
                 <LogsPage />
               </PanelCard>

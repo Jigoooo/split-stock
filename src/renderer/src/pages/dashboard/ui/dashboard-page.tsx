@@ -40,7 +40,15 @@ export const DashboardPage = (): ReactElement => {
   const { positions, deposit, totalEval } = balance.data;
 
   return (
-    <div style={{ display: 'grid', gap: '1.2rem' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1.2rem',
+        height: '100%',
+        minHeight: 0,
+      }}
+    >
       <div className="panel">
         <div className="panel__title">계좌 요약</div>
         <div className="panel__body" style={{ display: 'flex', gap: '2.4rem', flexWrap: 'wrap' }}>

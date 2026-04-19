@@ -35,16 +35,26 @@ export const TradePage = (): ReactElement => {
         display: 'grid',
         gridTemplateColumns: 'minmax(320px, 360px) 1fr',
         gap: '1.2rem',
-        alignItems: 'start',
+        height: '100%',
+        minHeight: 0,
       }}
     >
-      <StockPickerList
-        {...(selected ? { selectedPdno: selected.pdno } : {})}
-        onSelect={(entry) => setSelected({ pdno: entry.pdno, name: entry.name })}
-        height={560}
-      />
+      <div style={{ minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <StockPickerList
+          {...(selected ? { selectedPdno: selected.pdno } : {})}
+          onSelect={(entry) => setSelected({ pdno: entry.pdno, name: entry.name })}
+        />
+      </div>
 
-      <div style={{ display: 'grid', gap: '1.2rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '1.2rem',
+          minHeight: 0,
+          overflow: 'auto',
+        }}
+      >
         <div className="panel">
           <div className="panel__title">선택한 종목</div>
           <div
