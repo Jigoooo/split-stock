@@ -1,10 +1,10 @@
+import { ProfitCalculatorPage } from '@renderer/features/profit-calculator';
 import { DashboardPage } from '@renderer/pages/dashboard';
 import { LogsPage } from '@renderer/pages/logs';
 import { ReportsPage } from '@renderer/pages/reports';
 import { SettingsPage } from '@renderer/pages/settings';
 import { TradePage } from '@renderer/pages/trade';
 import { StockPickerList } from '@renderer/widgets/stock-picker-list';
-import { ProfitCalculatorPage } from '@renderer/features/profit-calculator';
 import type { ReactElement } from 'react';
 import type { PopoutRoute } from '../model/popout-route';
 import type { PopoutApi } from '../model/use-popout-state';

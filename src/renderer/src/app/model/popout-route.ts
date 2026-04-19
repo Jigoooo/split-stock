@@ -1,4 +1,11 @@
-export type PopoutRoute = 'dashboard' | 'trade' | 'logs' | 'reports' | 'settings' | 'stock-picker' | 'profit-calculator';
+export type PopoutRoute =
+  | 'dashboard'
+  | 'trade'
+  | 'logs'
+  | 'reports'
+  | 'settings'
+  | 'stock-picker'
+  | 'profit-calculator';
 
 export function isPopoutRoute(value: string): value is PopoutRoute {
   return (
