@@ -11,6 +11,12 @@ vi.mock('@renderer/shared/api/trpc', () => ({
         useQuery: () => ({ data: { accountId: 1, account: null }, isPending: false }),
       },
     },
+    protection: {
+      get: {
+        useQuery: () => ({ data: { limits: null }, isPending: false, error: null }),
+      },
+      set: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
     tradingWindows: {
       list: {
         useQuery: () => ({ data: { windows: [] }, isPending: false, error: null }),
@@ -29,6 +35,7 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       updateSettings: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
     useUtils: () => ({
+      protection: { get: { invalidate: vi.fn() } },
       tradingWindows: { list: { invalidate: vi.fn() } },
       rateGuard: { getSettings: { invalidate: vi.fn() } },
     }),
