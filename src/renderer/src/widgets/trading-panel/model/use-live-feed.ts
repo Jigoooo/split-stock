@@ -3,6 +3,8 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 type Topic = 'tick' | 'orderbook';
 
+export type WsRoutingMode = 'WS' | 'POLLING' | 'UNKNOWN';
+
 export interface LiveTick {
   pdno: string;
   time: string;
@@ -37,7 +39,7 @@ export interface LiveOrderbook {
 
 /**
  * 종목 실시간 구독 라이프사이클 훅.
- * - mount 시 watch(pdno, topic) 호출하여 main process에서 KIS WS 구독
+ * - mount 시 watch(pdno, topic) 호출하여 main process에서 KIS WS 구독 등록 (priority=60 기본)
  * - unmount 시 unwatch
  * - 최신 스냅샷은 주기적으로 polling (1초 default)
  */
@@ -58,6 +60,40 @@ export function useLiveOrderbook(pdno: string, pollMs = 500): LiveOrderbook | nu
   const wsData = (ws.data?.orderbook ?? null) as LiveOrderbook | null;
   if (wsData) return wsData;
   return (rest.data?.orderbook ?? null) as LiveOrderbook | null;
+}
+
+/**
+ * 사용자가 보고 있는 종목을 priority=100 으로 끌어올리고, 종목 변경 시 이전 종목은 자동 강등.
+ * 같은 pdno 가 자동매매/예약매수 등 다른 경로로도 watch 중이라면 unmount 후에도 watch 자체는 살아 있음.
+ */
+export function useFocusedSubscription(pdno: string): void {
+  const focusMutation = trpc.realtime.focus.useMutation();
+  const blurMutation = trpc.realtime.blur.useMutation();
+  const focus = useEffectEvent((next: string) => {
+    focusMutation.mutate({ pdno: next });
+  });
+  const blur = useEffectEvent((next: string) => {
+    blurMutation.mutate({ pdno: next });
+  });
+
+  useEffect(() => {
+    focus(pdno);
+    return () => {
+      blur(pdno);
+    };
+  }, [pdno]);
+}
+
+/**
+ * 종목별 WS/REST 라우팅 모드 — orderbook-panel 등 UI 인디케이터에 사용.
+ * WS 슬롯에 배정되면 'WS', capacity 초과로 REST 폴링이면 'POLLING'.
+ * 데이터 미수집 상태(start 전 등)는 'UNKNOWN'.
+ */
+export function useRoutingMode(pdno: string, pollMs = 2000): WsRoutingMode {
+  const q = trpc.realtime.getRoutingStatus.useQuery({ pdno }, { refetchInterval: pollMs });
+  const sub = q.data?.subscriptions.find((s) => s.pdno === pdno);
+  if (!sub) return 'UNKNOWN';
+  return sub.isWS ? 'WS' : 'POLLING';
 }
 
 /**

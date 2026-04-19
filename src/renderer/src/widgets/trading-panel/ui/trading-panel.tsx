@@ -3,7 +3,13 @@ import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { useLiveOrderbook, useLiveTick, useTradeFeed } from '../model/use-live-feed';
+import {
+  useFocusedSubscription,
+  useLiveOrderbook,
+  useLiveTick,
+  useRoutingMode,
+  useTradeFeed,
+} from '../model/use-live-feed';
 import { useOrderHotkeys } from '../model/use-order-hotkeys';
 import { useRealtimeStatus } from '../model/use-realtime-status';
 import { ActiveOrdersPanel } from './active-orders-panel';
@@ -75,9 +81,12 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
   const oneClick = !isProd && (props.oneClick ?? false);
   const hotkeysEnabled = !isProd && (props.hotkeys ?? false);
 
+  // 사용자가 보고 있는 종목 — priority=100 으로 끌어올려 WS 슬롯 우선 배정.
+  useFocusedSubscription(pdno);
   const tick = useLiveTick(pdno);
   const orderbook = useLiveOrderbook(pdno);
   const feed = useTradeFeed(pdno);
+  const orderbookRoutingMode = useRoutingMode(pdno);
   const [selection, setSelection] = useState<OrderTicketSelection>({ pdno, name });
 
   const onPriceClick = (price: number, side: 'BUY' | 'SELL'): void => {
@@ -111,6 +120,7 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
           orderbook={orderbook}
           currentPrice={tick?.price ?? 0}
           onClickPrice={onPriceClick}
+          routingMode={orderbookRoutingMode}
         />
         <OrderTicket selection={selection} isProd={isProd} oneClick={oneClick} />
         <FeedTabs pdno={pdno} name={name} feed={feed} />

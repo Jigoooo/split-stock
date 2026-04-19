@@ -1,25 +1,55 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import type { ReactElement } from 'react';
-import type { LiveOrderbook } from '../model/use-live-feed';
+import type { LiveOrderbook, WsRoutingMode } from '../model/use-live-feed';
 
 export interface OrderbookPanelProps {
   orderbook: LiveOrderbook | null;
   currentPrice: number;
   onClickPrice: (price: number, side: 'BUY' | 'SELL') => void;
+  /**
+   * WS/REST 라우팅 모드 — 'POLLING' 시 "폴링 중" 칩 표시.
+   * 미주입 시 인디케이터 숨김 (BC).
+   */
+  routingMode?: WsRoutingMode;
 }
+
+const RoutingIndicator = ({ mode }: { mode: WsRoutingMode }): ReactElement | null => {
+  if (mode === 'WS') {
+    return (
+      <span className="chip chip--up" data-testid="orderbook-routing-ws">
+        실시간
+      </span>
+    );
+  }
+  if (mode === 'POLLING') {
+    return (
+      <span className="chip chip--down" data-testid="orderbook-routing-polling">
+        폴링 중
+      </span>
+    );
+  }
+  return null;
+};
 
 /**
  * 10단 호가창 — 매도(상단 10단) + 현재가 + 매수(하단 10단).
  * - 각 행 클릭 시 onClickPrice(price, side) 호출 → order-ticket prefill
  * - 잔량 bar: max 잔량 대비 상대 길이
  * - 한국식 색상 (매수 row=up 빨강, 매도 row=down 파랑)
+ * - routingMode='POLLING' 이면 우측 상단에 "폴링 중" 칩 노출 (WS 한도 초과)
  */
 export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
-  const { orderbook, currentPrice, onClickPrice } = props;
+  const { orderbook, currentPrice, onClickPrice, routingMode } = props;
   if (!orderbook) {
     return (
       <div className="panel">
-        <div className="panel__body muted">호가 로드 중…</div>
+        <div
+          className="panel__body"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+        >
+          <span className="muted">호가 로드 중…</span>
+          {routingMode ? <RoutingIndicator mode={routingMode} /> : null}
+        </div>
       </div>
     );
   }
@@ -72,9 +102,21 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
           ))}
         </tbody>
       </table>
-      <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
-        총 매도 {thousandSeparator(orderbook.totalAskQty)} · 총 매수{' '}
-        {thousandSeparator(orderbook.totalBidQty)}
+      <div
+        className="panel__body"
+        style={{
+          fontSize: '1.05rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.6rem',
+        }}
+      >
+        <span className="muted">
+          총 매도 {thousandSeparator(orderbook.totalAskQty)} · 총 매수{' '}
+          {thousandSeparator(orderbook.totalBidQty)}
+        </span>
+        <span style={{ flex: 1 }} />
+        {routingMode ? <RoutingIndicator mode={routingMode} /> : null}
       </div>
     </div>
   );
