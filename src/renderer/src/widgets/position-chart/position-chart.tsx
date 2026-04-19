@@ -88,7 +88,14 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     chart.timeScale().fitContent();
 
     return () => {
-      chart.removeSeries(series);
+      // chartRef.current가 이미 null(상위 useEffect cleanup이 먼저 돌았거나 리마운트)이면 스킵.
+      // lightweight-charts는 disposed chart에 removeSeries 호출 시 throw가 남음.
+      if (chartRef.current !== chart) return;
+      try {
+        chart.removeSeries(series);
+      } catch {
+        // chart가 이미 내부적으로 dispose된 경우 무시
+      }
     };
   }, [chartQuery.data, lines]);
 
