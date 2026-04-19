@@ -73,10 +73,15 @@ export async function issueApprovalKey(
 
 /**
  * 지원 TR 목록.
- * H0STCNT0: 국내주식 체결가 (BC 유지, RotatingQuoteFeed 위임 후 미사용)
- * H0STASP0: 국내주식 호가   (BC 유지, RotatingQuoteFeed 위임 후 미사용)
- * H0STCNI0: 국내주식 체결통보 실전 (AES-256-CBC 암호화)
- * H0STCNI9: 국내주식 체결통보 모의 (AES-256-CBC 암호화)
+ *
+ * @deprecated H0STCNT0 — 국내주식 체결가. W0-4 이후 RotatingQuoteFeed(REST 회전 폴링)가 메인
+ *   가격 소스로 대체함. 하위 호환을 위해 타입은 보존하되 신규 구독은 생성하지 않는다.
+ *   이 TR 구독은 후속 마일스톤(BC 정리 단계)에서 완전 제거 예정.
+ * @deprecated H0STASP0 — 국내주식 호가. H0STCNT0와 동일한 이유로 미사용 상태.
+ *   후속 마일스톤에서 제거 예정.
+ *
+ * H0STCNI0: 국내주식 체결통보 실전 (AES-256-CBC 암호화, tr_key = HTS ID)
+ * H0STCNI9: 국내주식 체결통보 모의 (AES-256-CBC 암호화, tr_key = HTS ID)
  */
 export type RealtimeTr = 'H0STCNT0' | 'H0STASP0' | 'H0STCNI0' | 'H0STCNI9';
 
@@ -139,7 +144,7 @@ interface ConnectedState {
 }
 
 /**
- * KIS 실시간 WebSocket 클라이언트 — 매직스플릿 단일 계정 전용.
+ * KIS 실시간 WebSocket 클라이언트 — 현재 단일 계정 전용.
  *
  * 보장:
  * - 하트비트 PINGPONG 주기 발송
@@ -150,6 +155,17 @@ interface ConnectedState {
  * 비보장 (호출측 책임):
  * - approval_key 만료 시 재발급 (호출측이 reconnectNow를 통해 유도)
  * - credentials 관리
+ *
+ * --- 다계좌 확장 정책 (후속 마일스톤용 설계 메모) ---
+ * KIS WS 체결통보(H0STCNI0/9)는 tr_key=HTS_ID(계좌 식별자)로 구독하며,
+ * 하나의 WS 연결에는 하나의 approval_key(= 하나의 appKey/appSecret 쌍)만 사용 가능.
+ * 따라서 다계좌 환경에서는 계좌별로 독립된 KisWsClient 인스턴스가 필요하다.
+ *
+ * 향후 다계좌 지원 시:
+ * - RealtimeService를 per-accountId로 인스턴스화 (현재는 per-env 단일 인스턴스).
+ * - 각 계좌의 (appKey, appSecret) 쌍으로 별도 approval_key 발급 후 WS 연결.
+ * - 체결통보 수신 시 notice.htsId로 accountId를 resolve하여 해당 계좌 BalanceSync 트리거.
+ * - KIS 스펙상 계좌당 WS 동시 접속 수 제한(1개) 준수 필요.
  */
 export class KisWsClient {
   private readonly env: AppEnv;
