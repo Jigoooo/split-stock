@@ -30,6 +30,7 @@ nativeTheme.themeSource = 'light';
 import type { AppEnv } from '@shared/contracts';
 import WebSocket from 'ws';
 import { ActiveAccountRepo } from './account/active-account';
+import { BackupScheduler } from './backup/scheduler';
 import { defaultDbPath, migrate, openDb } from './db/client';
 import { readRealtimeConfig, SETTING_KEYS, SettingsRepo } from './db/settings-repo';
 import { AuthService } from './kis/auth';
@@ -263,7 +264,14 @@ function bootstrapDeps(userDataDir: string) {
   // start() 자체는 no-op이므로 env가 없어도 safe.
   balanceSync.start();
 
-  return { factory, safetyRegistry, eventLogger, settingsRepo, balanceSync };
+  return {
+    factory,
+    safetyRegistry,
+    eventLogger,
+    settingsRepo,
+    balanceSync,
+    dbPath: defaultDbPath(userDataDir),
+  };
 }
 
 interface CreateWindowOpts {
@@ -362,9 +370,16 @@ function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
 }
 
 void app.whenReady().then(async () => {
-  const { factory, safetyRegistry, eventLogger, settingsRepo, balanceSync } = bootstrapDeps(
-    app.getPath('userData'),
-  );
+  const userDataDir = app.getPath('userData');
+  const { factory, safetyRegistry, eventLogger, settingsRepo, balanceSync, dbPath } =
+    bootstrapDeps(userDataDir);
+
+  const backupScheduler = new BackupScheduler({
+    dbPath,
+    destDirs: [join(userDataDir, 'backups')],
+    logger: eventLogger,
+  });
+  backupScheduler.start();
 
   // Sentry opt-in 초기화 (DSN 미지정 시 no-op)
   const sentryResult = await initSentryFromSettings({
@@ -456,9 +471,10 @@ void app.whenReady().then(async () => {
 
   void initAutoUpdater(app.isPackaged, eventLogger);
 
-  // BalanceSync 종료 시 polling 타이머 해제
+  // BalanceSync / BackupScheduler 종료 시 타이머 해제
   app.once('will-quit', () => {
     balanceSync.dispose();
+    backupScheduler.stop();
   });
 
   app.on('activate', () => {
