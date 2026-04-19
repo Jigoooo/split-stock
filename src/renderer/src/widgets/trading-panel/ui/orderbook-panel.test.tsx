@@ -60,4 +60,49 @@ describe('OrderbookPanel', () => {
     expect(screen.getByText(/총 매도 1,000/)).toBeInTheDocument();
     expect(screen.getByText(/총 매수 2,000/)).toBeInTheDocument();
   });
+
+  it('routingMode="POLLING" 일 때 폴링 인디케이터 노출', () => {
+    render(
+      <OrderbookPanel
+        orderbook={mkOrderbook()}
+        currentPrice={70400}
+        onClickPrice={vi.fn()}
+        routingMode="POLLING"
+      />,
+    );
+    expect(screen.getByTestId('orderbook-routing-polling')).toBeInTheDocument();
+    expect(screen.queryByTestId('orderbook-routing-ws')).toBeNull();
+  });
+
+  it('routingMode="WS" 일 때 실시간 인디케이터 노출', () => {
+    render(
+      <OrderbookPanel
+        orderbook={mkOrderbook()}
+        currentPrice={70400}
+        onClickPrice={vi.fn()}
+        routingMode="WS"
+      />,
+    );
+    expect(screen.getByTestId('orderbook-routing-ws')).toBeInTheDocument();
+  });
+
+  it('routingMode 미지정 시 인디케이터 미표시 (BC)', () => {
+    render(
+      <OrderbookPanel orderbook={mkOrderbook()} currentPrice={70400} onClickPrice={vi.fn()} />,
+    );
+    expect(screen.queryByTestId('orderbook-routing-ws')).toBeNull();
+    expect(screen.queryByTestId('orderbook-routing-polling')).toBeNull();
+  });
+
+  it('orderbook=null + routingMode="POLLING" 일 때도 인디케이터 표시', () => {
+    render(
+      <OrderbookPanel
+        orderbook={null}
+        currentPrice={0}
+        onClickPrice={vi.fn()}
+        routingMode="POLLING"
+      />,
+    );
+    expect(screen.getByTestId('orderbook-routing-polling')).toBeInTheDocument();
+  });
 });
