@@ -1,167 +1,241 @@
+import { EventEmitter } from 'node:events';
+import type { KisError } from '@shared/contracts';
+import type { Result } from 'neverthrow';
 import type { Timer } from '../kis/ws-client';
 import type { EventLogger } from '../logging/event-logger';
 
-export type QuoteTier = 'ws' | 'rest';
+/**
+ * 회전 폴링 큐 — 등록된 종목 전체를 Timer 기반 고정 간격으로 순회.
+ *
+ * 배경(W0-4): KIS WS 실시간 시세는 계좌당 20종목 한도가 있어 종목 수 무제한 요건과 충돌.
+ * 대신 KIS REST(`inquirePrice`, FHKST01010100)는 15rps 한도 안에서 사용 가능.
+ * N종목을 ⌈N/15⌉초 주기로 순회 폴링하면 한도 안에서 모든 종목 가격을 갱신할 수 있다.
+ *
+ * 레이트 리밋 설계:
+ * - 종목 간 간격: minTimeMs = ⌊1000/ratePerSec⌋ ms (기본 67ms @ 15rps)
+ * - HTTP 레이어(KisHttpClient)의 Bottleneck reservoir=15/s 가 하드캡을 보장.
+ * - 본 모듈은 Timer 인터페이스로 간격을 제어 → FakeTimer 주입으로 테스트 가능.
+ *
+ * 책임 분리:
+ * - 본 모듈: REST 회전 폴링이 메인 가격 소스. WS는 건드리지 않음.
+ * - W1-7에서 KIS WS는 체결통보(H0STCNI0/9) + 잔고 전용으로 분리 예정.
+ *
+ * 불변식:
+ * - 같은 사이클 안에서 같은 종목은 한 번만 폴링.
+ * - 한 사이클 = 등록된 모든 종목을 한 번 순회. 사이클 길이 ≈ N * minTimeMs ms.
+ * - 5회 연속 실패한 종목은 다음 사이클부터 cooldownCycles 만큼 skip.
+ */
 
-export interface QuoteUpdate {
+export interface QuoteSnapshot {
   pdno: string;
   price: number;
-  at: number;
+  /** epoch ms — emit 시점. */
+  ts: number;
 }
 
 export interface PricePoller {
-  /** 지정 종목 현재가 조회. 실패 시 onError 호출. */
-  fetch(pdno: string): Promise<{ price: number } | { error: string }>;
+  fetch(pdno: string): Promise<Result<{ price: number }, KisError>>;
 }
 
-export interface TieredQuoteFeedOptions {
+export interface QuoteFeedEvents {
+  quote: (snapshot: QuoteSnapshot) => void;
+  /** maxConsecutiveFailures 회 연속 실패 후 쿨다운 진입. */
+  cooldown: (info: { pdno: string; failures: number; error: KisError }) => void;
+}
+
+export interface QuoteFeedOptions {
   timer: Timer;
-  logger: EventLogger;
   poller: PricePoller;
-  /** WS tier 최대 슬롯. KIS 실전 20. */
-  maxWsSlots?: number;
-  /** REST tier polling 주기 ms. */
-  restIntervalMs?: number;
-  /** WS tier 핸들러 — 구독 추가/제거는 호출측이 KisWsClient에 위임. */
-  wsSubscribe?: (pdno: string) => void;
-  wsUnsubscribe?: (pdno: string) => void;
-  onUpdate?: (update: QuoteUpdate) => void;
+  logger: EventLogger;
+  /** KIS REST 글로벌 한도 (기본 15rps). minTimeMs = ⌊1000/ratePerSec⌋. */
+  ratePerSec?: number;
+  /** 연속 실패 임계값. 도달 시 cooldownCycles 만큼 skip (기본 5). */
+  maxConsecutiveFailures?: number;
+  /** 쿨다운 시 skip 사이클 수 (기본 1). */
+  cooldownCycles?: number;
 }
 
-interface WatchEntry {
-  pdno: string;
-  /** 요청된 선호 tier. 실제 배정 tier는 allocatedTier. */
-  preferredTier: QuoteTier;
-  allocatedTier: QuoteTier;
+export interface QuoteFeed {
+  subscribe(pdno: string): void;
+  unsubscribe(pdno: string): void;
+  on<E extends keyof QuoteFeedEvents>(event: E, handler: QuoteFeedEvents[E]): void;
+  off<E extends keyof QuoteFeedEvents>(event: E, handler: QuoteFeedEvents[E]): void;
+  getActiveSymbols(): string[];
+  dispose(): void;
+}
+
+interface SymbolState {
+  consecutiveFailures: number;
+  /** 0이면 즉시 폴링, >0이면 다음 사이클에 -1 하면서 skip. */
+  skipCyclesRemaining: number;
 }
 
 /**
- * 티어드 시세 피드 — WS 슬롯이 부족하면 REST polling으로 강등, 여유가 생기면 승격.
- * 실제 WS/REST 호출은 주입된 콜백/poller에 위임 (테스트 용이).
+ * 회전 폴링 큐 구현.
  *
- * 불변식:
- * - 동일 pdno 중복 watch → 우선 tier 업그레이드 요청으로 해석
- * - WS 슬롯 초과 시 강등(rest tier로 배정), 자유 슬롯 생기면 rest→ws로 승격
- * - REST polling은 단일 주기 interval로 현재 rest 배정 전체 순회
+ * 동작:
+ * 1. `subscribe(pdno)` 시 종목 추가. 사이클이 없으면 즉시 시작.
+ * 2. 매 tick: cycleQueue 에서 종목 하나 꺼내 fetch 호출 → minTimeMs 후 다음 tick.
+ * 3. 큐 소진 시 다음 사이클 시작 (symbols 스냅샷 재취득, 쿨다운 tick-down).
+ * 4. fetch 성공: emit `quote`, failure counter 리셋.
+ *    실패: counter +1, 임계 도달 시 emit `cooldown` + skipCyclesRemaining 설정.
+ *
+ * 종료: `dispose()` 호출 시 pending 타이머 해제, 이후 이벤트 emit 없음.
  */
-export class TieredQuoteFeed {
-  private readonly maxWs: number;
-  private readonly restIntervalMs: number;
-  private readonly watches = new Map<string, WatchEntry>();
-  private restHandle: { clear: () => void } | null = null;
+export class RotatingQuoteFeed implements QuoteFeed {
+  private readonly emitter = new EventEmitter();
+  private readonly symbols = new Map<string, SymbolState>();
+  private readonly minTimeMs: number;
+  private readonly maxFailures: number;
+  private readonly cooldownCycles: number;
 
-  constructor(private readonly opts: TieredQuoteFeedOptions) {
-    this.maxWs = opts.maxWsSlots ?? 20;
-    this.restIntervalMs = opts.restIntervalMs ?? 5_000;
+  private disposed = false;
+  private cycleQueue: string[] = [];
+  private tickHandle: { clear: () => void } | null = null;
+  /** 디버깅/테스트용 — 누적 사이클 수. */
+  private _cyclesStarted = 0;
+
+  constructor(private readonly opts: QuoteFeedOptions) {
+    const rps = opts.ratePerSec ?? 15;
+    if (rps <= 0) throw new Error('ratePerSec must be > 0');
+    this.minTimeMs = Math.floor(1000 / rps);
+    this.maxFailures = opts.maxConsecutiveFailures ?? 5;
+    this.cooldownCycles = opts.cooldownCycles ?? 1;
   }
 
-  getAllocations(): Array<{ pdno: string; tier: QuoteTier }> {
-    return Array.from(this.watches.values()).map((w) => ({
-      pdno: w.pdno,
-      tier: w.allocatedTier,
-    }));
-  }
-
-  wsSlotsUsed(): number {
-    let n = 0;
-    for (const w of this.watches.values()) if (w.allocatedTier === 'ws') n += 1;
-    return n;
-  }
-
-  watch(req: { pdno: string; tier: QuoteTier }): void {
-    const existing = this.watches.get(req.pdno);
-    if (existing) {
-      // 이미 감시 중 → preferredTier 업그레이드 요청만 반영
-      if (req.tier === 'ws' && existing.preferredTier !== 'ws') {
-        existing.preferredTier = 'ws';
-        this.rebalance();
-      }
-      return;
+  subscribe(pdno: string): void {
+    if (this.disposed) return;
+    if (this.symbols.has(pdno)) return;
+    this.symbols.set(pdno, { consecutiveFailures: 0, skipCyclesRemaining: 0 });
+    if (!this.tickHandle) {
+      this.startCycle();
     }
-    const allocatedTier = this.decideTier(req.tier);
-    const entry: WatchEntry = {
-      pdno: req.pdno,
-      preferredTier: req.tier,
-      allocatedTier,
-    };
-    this.watches.set(req.pdno, entry);
-    if (allocatedTier === 'ws') this.opts.wsSubscribe?.(req.pdno);
-    this.ensureRestLoop();
   }
 
-  unwatch(pdno: string): void {
-    const entry = this.watches.get(pdno);
-    if (!entry) return;
-    this.watches.delete(pdno);
-    if (entry.allocatedTier === 'ws') this.opts.wsUnsubscribe?.(pdno);
-    this.rebalance();
+  unsubscribe(pdno: string): void {
+    this.symbols.delete(pdno);
+    this.cycleQueue = this.cycleQueue.filter((p) => p !== pdno);
   }
 
-  /**
-   * WS에서 수신한 실시간 가격 — 외부에서 호출.
-   */
-  acceptWsUpdate(update: QuoteUpdate): void {
-    const entry = this.watches.get(update.pdno);
-    if (!entry || entry.allocatedTier !== 'ws') return;
-    this.opts.onUpdate?.(update);
+  on<E extends keyof QuoteFeedEvents>(event: E, handler: QuoteFeedEvents[E]): void {
+    this.emitter.on(event, handler as (...args: unknown[]) => void);
+  }
+
+  off<E extends keyof QuoteFeedEvents>(event: E, handler: QuoteFeedEvents[E]): void {
+    this.emitter.off(event, handler as (...args: unknown[]) => void);
+  }
+
+  getActiveSymbols(): string[] {
+    return Array.from(this.symbols.keys());
+  }
+
+  getCyclesStarted(): number {
+    return this._cyclesStarted;
   }
 
   dispose(): void {
-    this.restHandle?.clear();
-    this.restHandle = null;
-    for (const w of this.watches.values()) {
-      if (w.allocatedTier === 'ws') this.opts.wsUnsubscribe?.(w.pdno);
-    }
-    this.watches.clear();
+    this.disposed = true;
+    this.tickHandle?.clear();
+    this.tickHandle = null;
+    this.symbols.clear();
+    this.cycleQueue = [];
   }
 
-  private decideTier(preferred: QuoteTier): QuoteTier {
-    if (preferred === 'rest') return 'rest';
-    return this.wsSlotsUsed() < this.maxWs ? 'ws' : 'rest';
-  }
+  /** 새 사이클 — 현재 symbols 스냅샷을 큐로 복사하고 첫 tick 예약. */
+  private startCycle(): void {
+    if (this.disposed || this.symbols.size === 0) return;
+    this._cyclesStarted += 1;
 
-  private rebalance(): void {
-    // WS 슬롯 여유가 생기면, rest 배정 중 ws를 선호하는 것부터 승격.
-    const slotsFree = this.maxWs - this.wsSlotsUsed();
-    if (slotsFree <= 0) return;
-    let promoted = 0;
-    for (const w of this.watches.values()) {
-      if (promoted >= slotsFree) break;
-      if (w.allocatedTier === 'rest' && w.preferredTier === 'ws') {
-        w.allocatedTier = 'ws';
-        this.opts.wsSubscribe?.(w.pdno);
-        promoted += 1;
-        this.opts.logger.log({
-          level: 'INFO',
-          category: 'WS',
-          message: 'tiered.promoted',
-          payload: { pdno: w.pdno },
-        });
+    const queue: string[] = [];
+    for (const [pdno, state] of this.symbols.entries()) {
+      if (state.skipCyclesRemaining > 0) {
+        state.skipCyclesRemaining -= 1;
+      } else {
+        queue.push(pdno);
       }
     }
+    this.cycleQueue = queue;
+    this.scheduleNextTick();
   }
 
-  private ensureRestLoop(): void {
-    if (this.restHandle) return;
-    this.restHandle = this.opts.timer.setInterval(() => {
-      void this.pollRestBatch();
-    }, this.restIntervalMs);
+  private scheduleNextTick(): void {
+    if (this.disposed) return;
+
+    this.tickHandle = this.opts.timer.setTimeout(() => {
+      this.tickHandle = null;
+
+      if (this.cycleQueue.length === 0) {
+        // 사이클 종료 → 다음 사이클 시작
+        this.startCycle();
+        return;
+      }
+
+      const pdno = this.cycleQueue.shift();
+      if (!pdno) {
+        this.startCycle();
+        return;
+      }
+
+      // unsubscribe 됐으면 건너뜀
+      if (!this.symbols.has(pdno)) {
+        this.scheduleNextTick();
+        return;
+      }
+
+      // fetch는 비동기로 띄우고, 타이머는 바로 다음 tick 예약
+      void this.pollOne(pdno);
+      this.scheduleNextTick();
+    }, this.minTimeMs);
   }
 
-  private async pollRestBatch(): Promise<void> {
-    const targets = Array.from(this.watches.values()).filter((w) => w.allocatedTier === 'rest');
-    for (const w of targets) {
-      const r = await this.opts.poller.fetch(w.pdno);
-      if ('error' in r) {
+  private async pollOne(pdno: string): Promise<void> {
+    if (this.disposed || !this.symbols.has(pdno)) return;
+    const state = this.symbols.get(pdno);
+    if (!state) return;
+
+    const result = await this.opts.poller.fetch(pdno);
+    if (this.disposed) return;
+
+    if (result.isErr()) {
+      state.consecutiveFailures += 1;
+      this.opts.logger.log({
+        level: 'WARN',
+        category: 'WS',
+        message: 'rotating-quote-feed.fetch_failed',
+        payload: { pdno, error: result.error.kind, failures: state.consecutiveFailures },
+      });
+      if (state.consecutiveFailures >= this.maxFailures) {
+        state.skipCyclesRemaining = this.cooldownCycles;
+        state.consecutiveFailures = 0;
         this.opts.logger.log({
           level: 'WARN',
           category: 'WS',
-          message: 'tiered.rest.fetch_failed',
-          payload: { pdno: w.pdno, error: r.error },
+          message: 'rotating-quote-feed.cooldown',
+          payload: { pdno, skipCycles: this.cooldownCycles },
         });
-        continue;
+        this.emitter.emit('cooldown', {
+          pdno,
+          failures: this.maxFailures,
+          error: result.error,
+        });
       }
-      this.opts.onUpdate?.({ pdno: w.pdno, price: r.price, at: this.opts.timer.now() });
+      return;
     }
+
+    state.consecutiveFailures = 0;
+    this.emitter.emit('quote', {
+      pdno,
+      price: result.value.price,
+      ts: this.opts.timer.now(),
+    } satisfies QuoteSnapshot);
   }
 }
+
+/**
+ * 기존 `TieredQuoteFeed` 식별자 alias — 하위 호환용(production caller 없음, alias만 보존).
+ * W0-4 재설계로 회전 폴링 큐(`RotatingQuoteFeed`)로 교체됨.
+ * 신규 호출자는 `RotatingQuoteFeed` 직접 사용.
+ *
+ * @deprecated W0-4 이후 이 alias는 제거 예정. `RotatingQuoteFeed` 사용.
+ */
+export const TieredQuoteFeed = RotatingQuoteFeed;
