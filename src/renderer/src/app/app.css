@@ -50,6 +50,16 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   letter-spacing: -0.01em;
+  /* 앱 셸이 viewport 전체를 차지하고 내부에서 flex로 나눠 스크롤을 테이블로만 위임 */
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 body {
@@ -278,8 +288,9 @@ body {
 }
 
 /* ===== 분할 화면 패널 카드 (PanelWorkspace) =====
- * 외곽 카드에는 스크롤이 없게 하고, 테이블이 있는 하위 .panel만 flex-grow + 내부 스크롤.
- * :has() 셀렉터로 "테이블을 포함한 패널"만 골라 body 영역이 overflow:auto.
+ * 외곽 카드에 스크롤 없음. 페이지 루트가 container query처럼 가용 높이를 모두 차지.
+ * 페이지는 자체 레이아웃(grid/flex)을 유지하며, 테이블을 담은 .panel만 남은 공간을 채우고
+ * 내부 body가 overflow:auto — 실제 스크롤은 테이블 내부에서만 발생.
  */
 .panel-card-body {
   flex: 1;
@@ -290,28 +301,19 @@ body {
   flex-direction: column;
 }
 
-/* 페이지 루트(div[display:grid|flex])를 column flex 컨테이너로 취급 */
 .panel-card-body > * {
   flex: 1;
   min-height: 0;
+  max-height: 100%;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 1.2rem;
 }
 
-/* 기본적으로 하위 패널은 본연의 크기 유지 */
-.panel-card-body .panel {
-  flex: 0 0 auto;
-}
-
-/* 테이블을 포함한 패널은 남는 공간 차지 + 내부만 스크롤 */
+/* 테이블을 포함한 .panel만 남은 공간 차지 + 내부 body가 overflow:auto */
 .panel-card-body .panel:has(> .panel__body > table.hts-table) {
-  flex: 1 1 0;
-  min-height: 10rem;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 10rem;
 }
 .panel-card-body .panel:has(> .panel__body > table.hts-table) > .panel__body {
   flex: 1;

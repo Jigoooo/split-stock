@@ -1,15 +1,50 @@
 import { CredentialsReentryBanner } from '@renderer/features/backup-restore';
-import { SafetySwitchPanel, useKillSwitchHotkey } from '@renderer/features/safety-switch';
+import { SafetySwitchHeader, useKillSwitchHotkey } from '@renderer/features/safety-switch';
 import { SwitchEnvDialog } from '@renderer/features/switch-env';
 import { LoginPage } from '@renderer/pages/login';
 import { trpc } from '@renderer/shared/api/trpc';
-import { PanelWorkspace, PopoutPage, readPopoutRoute } from '@renderer/widgets/panel-workspace';
+import {
+  PanelWorkspace,
+  PopoutPage,
+  readPopoutRoute,
+  usePopoutState,
+} from '@renderer/widgets/panel-workspace';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { AppProviders } from './providers';
 import './app.css';
 
 type EnvValue = 'MOCK' | 'PROD';
+
+const HeaderPopoutButtons = (): ReactElement => {
+  const popout = usePopoutState();
+  return (
+    <>
+      <button
+        type="button"
+        className="hts-btn"
+        onClick={() => {
+          void popout.popout('reports');
+        }}
+        aria-pressed={popout.isOpen('reports')}
+        title="팝아웃 창"
+      >
+        📊 리포트{popout.isOpen('reports') ? ' (열림)' : ''}
+      </button>
+      <button
+        type="button"
+        className="hts-btn"
+        onClick={() => {
+          void popout.popout('settings');
+        }}
+        aria-pressed={popout.isOpen('settings')}
+        title="팝아웃 창"
+      >
+        ⚙ 설정{popout.isOpen('settings') ? ' (열림)' : ''}
+      </button>
+    </>
+  );
+};
 
 const AppShell = (): ReactElement => {
   const utils = trpc.useUtils();
@@ -66,49 +101,65 @@ const AppShell = (): ReactElement => {
           <span className="chip">연결 안 됨</span>
         )}
         {env ? (
-          <nav
-            style={{
-              display: 'flex',
-              gap: '0.6rem',
-              marginLeft: '1.6rem',
-              alignItems: 'center',
-              flex: 1,
-              justifyContent: 'flex-end',
-              flexWrap: 'wrap',
-            }}
-          >
-            {stored.length > 1 ? (
-              <select
-                value={env}
-                onChange={(e) => onSwitchEnv(e.target.value as EnvValue)}
-                disabled={setEnv.isPending}
-                aria-label="환경 전환"
+          <>
+            <div
+              style={{
+                display: 'flex',
+                gap: '0.6rem',
+                marginLeft: '1.2rem',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              <SafetySwitchHeader />
+              <span
+                aria-hidden
+                style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)' }}
+              />
+              <HeaderPopoutButtons />
+            </div>
+            <nav
+              style={{
+                display: 'flex',
+                gap: '0.6rem',
+                marginLeft: 'auto',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+              }}
+            >
+              {stored.length > 1 ? (
+                <select
+                  value={env}
+                  onChange={(e) => onSwitchEnv(e.target.value as EnvValue)}
+                  disabled={setEnv.isPending}
+                  aria-label="환경 전환"
+                >
+                  {stored.map((s) => (
+                    <option key={s.env} value={s.env}>
+                      {s.env} · {s.accountNo8.slice(-4)}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              <button
+                type="button"
+                className="hts-btn"
+                onClick={() => onLogout(false)}
+                disabled={logout.isPending}
               >
-                {stored.map((s) => (
-                  <option key={s.env} value={s.env}>
-                    {s.env} · {s.accountNo8.slice(-4)}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <button
-              type="button"
-              className="hts-btn"
-              onClick={() => onLogout(false)}
-              disabled={logout.isPending}
-            >
-              로그아웃
-            </button>
-            <button
-              type="button"
-              className="hts-btn"
-              onClick={() => onLogout(true)}
-              disabled={logout.isPending}
-              title="저장된 자격증명까지 삭제"
-            >
-              자격증명 삭제
-            </button>
-          </nav>
+                로그아웃
+              </button>
+              <button
+                type="button"
+                className="hts-btn"
+                onClick={() => onLogout(true)}
+                disabled={logout.isPending}
+                title="저장된 자격증명까지 삭제"
+              >
+                자격증명 삭제
+              </button>
+            </nav>
+          </>
         ) : null}
       </header>
       <main
@@ -127,7 +178,6 @@ const AppShell = (): ReactElement => {
         ) : env ? (
           <>
             <CredentialsReentryBanner />
-            <SafetySwitchPanel />
             <PanelWorkspace />
           </>
         ) : (

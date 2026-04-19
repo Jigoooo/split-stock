@@ -80,71 +80,39 @@ const PanelCard = ({ title, route, popout, children }: PanelCardProps): ReactEle
   );
 };
 
-export interface PanelWorkspaceProps {
-  renderExtraPopouts?: (popout: PopoutApi) => ReactNode;
-}
-
 /**
  * HTS 스타일 분할 화면 워크스페이스.
  * 좌측 Dashboard + 우측 Trade/Logs 수직 분할. 각 패널 헤더의 "팝아웃" 버튼으로 별도 창 분리.
- * Reports/Settings는 팝아웃 전용 — 상단 툴바에서 호출.
+ * Reports/Settings 팝아웃 진입은 AppShell 헤더 쪽에 배치.
  */
-export const PanelWorkspace = ({ renderExtraPopouts }: PanelWorkspaceProps): ReactElement => {
+export const PanelWorkspace = (): ReactElement => {
   const popout = usePopoutState();
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', flex: 1, minHeight: 0 }}>
-      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <span className="muted" style={{ fontSize: '1.1rem' }}>
-          팝아웃 전용
-        </span>
-        <button
-          type="button"
-          className="hts-btn"
-          onClick={() => {
-            void popout.popout('reports');
-          }}
-          aria-pressed={popout.isOpen('reports')}
-        >
-          📊 리포트 {popout.isOpen('reports') ? '(열림)' : ''}
-        </button>
-        <button
-          type="button"
-          className="hts-btn"
-          onClick={() => {
-            void popout.popout('settings');
-          }}
-          aria-pressed={popout.isOpen('settings')}
-        >
-          ⚙ 설정 {popout.isOpen('settings') ? '(열림)' : ''}
-        </button>
-        {renderExtraPopouts?.(popout)}
-      </div>
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <Group orientation="horizontal">
-          <Panel defaultSize={42} minSize={25}>
-            <PanelCard title="대시보드" route="dashboard" popout={popout}>
-              <DashboardPage />
-            </PanelCard>
-          </Panel>
-          {DIVIDER('horizontal')}
-          <Panel defaultSize={58} minSize={30}>
-            <Group orientation="vertical">
-              <Panel defaultSize={62} minSize={25}>
-                <PanelCard title="주문" route="trade" popout={popout}>
-                  <TradePage />
-                </PanelCard>
-              </Panel>
-              {DIVIDER('vertical')}
-              <Panel defaultSize={38} minSize={20}>
-                <PanelCard title="로그" route="logs" popout={popout}>
-                  <LogsPage />
-                </PanelCard>
-              </Panel>
-            </Group>
-          </Panel>
-        </Group>
-      </div>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+      <Group orientation="horizontal">
+        <Panel defaultSize={42} minSize={25}>
+          <PanelCard title="대시보드" route="dashboard" popout={popout}>
+            <DashboardPage />
+          </PanelCard>
+        </Panel>
+        {DIVIDER('horizontal')}
+        <Panel defaultSize={58} minSize={30}>
+          <Group orientation="vertical">
+            <Panel defaultSize={62} minSize={25}>
+              <PanelCard title="주문" route="trade" popout={popout}>
+                <TradePage />
+              </PanelCard>
+            </Panel>
+            {DIVIDER('vertical')}
+            <Panel defaultSize={38} minSize={20}>
+              <PanelCard title="로그" route="logs" popout={popout}>
+                <LogsPage />
+              </PanelCard>
+            </Panel>
+          </Group>
+        </Panel>
+      </Group>
     </div>
   );
 };
