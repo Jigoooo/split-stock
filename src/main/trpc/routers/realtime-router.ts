@@ -61,4 +61,27 @@ export const realtimeRouter = router({
   getLatestOrderbook: authedProcedure.input(PdnoSchema).query(({ ctx, input }) => ({
     orderbook: ctx.bus?.getLatestOrderbook(input.pdno) ?? null,
   })),
+
+  /** 사용자가 보고 있는 종목을 priority=100 으로 끌어올려 WS 슬롯 우선 배정. */
+  focus: authedProcedure.input(PdnoSchema).mutation(({ ctx, input }) => {
+    if (!ctx.realtime) return { ok: false as const };
+    ctx.realtime.focus(input.pdno);
+    return { ok: true as const };
+  }),
+
+  blur: authedProcedure.input(PdnoSchema).mutation(({ ctx, input }) => {
+    ctx.realtime?.blur(input.pdno);
+    return { ok: true as const };
+  }),
+
+  /**
+   * WS/REST 라우팅 결과 — 호가창 등 UI 인디케이터에서 종목별 폴링/실시간 모드 표시용.
+   * pdno 미지정 시 활성 계좌 전체 반환.
+   */
+  getRoutingStatus: authedProcedure.input(PdnoSchema.partial()).query(({ ctx, input }) => {
+    if (!ctx.realtime) return { subscriptions: [] };
+    const all = ctx.realtime.getActiveSubscriptions();
+    if (!input.pdno) return { subscriptions: all };
+    return { subscriptions: all.filter((s) => s.pdno === input.pdno) };
+  }),
 });

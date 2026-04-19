@@ -31,7 +31,7 @@ import type { AppEnv } from '@shared/contracts';
 import WebSocket from 'ws';
 import { ActiveAccountRepo } from './account/active-account';
 import { defaultDbPath, migrate, openDb } from './db/client';
-import { SETTING_KEYS, SettingsRepo } from './db/settings-repo';
+import { readRealtimeConfig, SETTING_KEYS, SettingsRepo } from './db/settings-repo';
 import { AuthService } from './kis/auth';
 import { KIS_BASE_URL } from './kis/endpoints';
 import { KisHttpClient } from './kis/http-client';
@@ -119,6 +119,52 @@ function bootstrapDeps(userDataDir: string) {
   // 실시간 버스는 env 전환 상관없이 공유, RealtimeService는 env별 lazy 재생성.
   const bus = new FeedBus();
   const wsFactory = (url: string): WsLike => new WebSocket(url) as unknown as WsLike;
+
+  /**
+   * REST 회전 폴링 큐. WS 한도(20·향후 60) 초과 종목을 자동 위임받아 가격을
+   * watchEngine.onPrice 로 흘려 보낸다. BOOSTER/PREBUY/CUSTOM watch_orders 트리거 평가도
+   * 동일 경로로 가동됨.
+   *
+   * 활성 env 가 바뀌어도 본 인스턴스는 동일 — env-aware poller 가 매 fetch 마다 currentEnv 를
+   * lazy 로 끌어와 최신 자격증명/토큰 사용. env 미선택/자격증명 부재 시 NETWORK 에러 → 쿨다운.
+   */
+  const tieredFeed = new RotatingQuoteFeed({
+    timer: realTimer,
+    poller: createEnvAwarePricePoller({
+      getEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
+      credentialsRepo,
+      auth,
+      httpByEnv,
+    }),
+    logger: eventLogger,
+  });
+  tieredFeed.on('quote', ({ pdno, price }) => {
+    bus.emitTick({
+      pdno,
+      time: '',
+      price,
+      dayChange: 0,
+      dayChangeRate: 0,
+      tickDirection: 'FLAT',
+      volume: 0,
+      accumVolume: 0,
+      open: 0,
+      high: 0,
+      low: 0,
+      bestAsk: 0,
+      bestBid: 0,
+    });
+    watchEngine.onPrice(pdno, price);
+  });
+
+  // RealtimeService 가 capacity 초과 종목을 RotatingQuoteFeed 에 위임하도록 어댑터 wiring.
+  const restFallbackAdapter = {
+    subscribe: (pdno: string) => tieredFeed.subscribe(pdno),
+    unsubscribe: (pdno: string) => tieredFeed.unsubscribe(pdno),
+  };
+
+  // factory 참조를 closure 로 빼는 래퍼 — RealtimeService 초기화 시점이 factory 생성 전이라 필요.
+  const factoryRef: { factory: ReturnType<typeof createContextFactory> | null } = { factory: null };
   let lastRealtime: RealtimeService | null = null;
   const factory = createContextFactory({
     db,
@@ -147,39 +193,23 @@ function bootstrapDeps(userDataDir: string) {
         lastRealtime = null;
       }
       if (env) {
+        const realtimeCfg = readRealtimeConfig(settingsRepo);
         lastRealtime = new RealtimeService({
           env,
           http: httpByEnv[env],
           bus,
           factory: wsFactory,
           logger: eventLogger,
+          maxSubscriptions: realtimeCfg.wsCapacity,
+          getAccountId: () => factoryRef.factory?.getActiveAccountId() ?? null,
+          restFallback: restFallbackAdapter,
         });
       }
       return lastRealtime;
     },
   });
+  factoryRef.factory = factory;
 
-  /**
-   * REST 회전 폴링 큐. 등록된 종목 가격을 watchEngine.onPrice 로 흘려 보내
-   * BOOSTER/PREBUY/CUSTOM watch_orders 트리거 평가를 가동시킨다.
-   *
-   * Wave 0: 빈 종목 리스트로 부팅 (subscribe 0건). Wave 1 에서 lots-repo / watch_orders 변동
-   * 시 자동 subscribe/unsubscribe hook 으로 살아있는 종목만 회전 폴링하도록 확장.
-   *
-   * 활성 env 가 바뀌어도 본 인스턴스는 동일 — env-aware poller 가 매 fetch 마다 currentEnv 를
-   * lazy 로 끌어와 최신 자격증명/토큰 사용. env 미선택/자격증명 부재 시 NETWORK 에러 → 쿨다운.
-   */
-  const tieredFeed = new RotatingQuoteFeed({
-    timer: realTimer,
-    poller: createEnvAwarePricePoller({
-      getEnv: () => factory.getCurrentEnv(),
-      credentialsRepo,
-      auth,
-      httpByEnv,
-    }),
-    logger: eventLogger,
-  });
-  tieredFeed.on('quote', ({ pdno, price }) => watchEngine.onPrice(pdno, price));
   eventLogger.log({
     level: 'INFO',
     category: 'WS',
