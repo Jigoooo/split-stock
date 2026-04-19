@@ -1,3 +1,4 @@
+import { createDecipheriv } from 'node:crypto';
 import type { AppEnv, KisError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import { z } from 'zod';
@@ -71,8 +72,20 @@ export async function issueApprovalKey(
   return ok(parsed.data.approval_key);
 }
 
-/** 지원 TR 목록. H0STCNT0: 체결가, H0STASP0: 호가. */
-export type RealtimeTr = 'H0STCNT0' | 'H0STASP0';
+/**
+ * 지원 TR 목록.
+ * H0STCNT0: 국내주식 체결가 (BC 유지, RotatingQuoteFeed 위임 후 미사용)
+ * H0STASP0: 국내주식 호가   (BC 유지, RotatingQuoteFeed 위임 후 미사용)
+ * H0STCNI0: 국내주식 체결통보 실전 (AES-256-CBC 암호화)
+ * H0STCNI9: 국내주식 체결통보 모의 (AES-256-CBC 암호화)
+ */
+export type RealtimeTr = 'H0STCNT0' | 'H0STASP0' | 'H0STCNI0' | 'H0STCNI9';
+
+/** CNI 구독 ACK 에서 수신한 AES 파라미터. */
+export interface CniCryptoParams {
+  iv: string;
+  key: string;
+}
 
 export interface SubscriptionKey {
   tr: RealtimeTr;
@@ -87,6 +100,16 @@ export interface RealtimeMessage {
   tr: string;
   code: string;
   seq: number;
+  raw: string;
+}
+
+/** 체결통보 파싱 결과 — AES 복호화 후 pipe-delimited 레코드. */
+export interface CniNotice {
+  tr: 'H0STCNI0' | 'H0STCNI9';
+  /** 고객 HTS ID (tr_key). */
+  htsId: string;
+  seq: number;
+  /** 복호화된 원시 레코드 문자열 (^-delimited). */
   raw: string;
 }
 
@@ -105,6 +128,8 @@ export interface KisWsClientOptions {
   /** 최대 백오프 ms (기본 30s). */
   reconnectMaxMs?: number;
   onMessage?: (msg: RealtimeMessage) => void;
+  /** 체결통보 수신 시 콜백. AES 복호화 성공한 레코드만 전달. */
+  onCniNotice?: (notice: CniNotice) => void;
 }
 
 type WsPhase = 'idle' | 'connecting' | 'open' | 'reconnect-wait' | 'closed';
@@ -148,6 +173,11 @@ export class KisWsClient {
   private seenKeys = new Set<string>();
   private readonly seenLimit = 2048;
   private seenOrder: string[] = [];
+  /**
+   * CNI TR별 AES 파라미터 — 구독 ACK JSON body.output에서 수신.
+   * key: 'H0STCNI0' | 'H0STCNI9'
+   */
+  private readonly cniCryptoParams = new Map<string, CniCryptoParams>();
 
   constructor(opts: KisWsClientOptions) {
     this.env = opts.env;

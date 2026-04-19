@@ -1,7 +1,7 @@
-import { TRPCError } from '@trpc/server';
+import type { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { bootstrapSchema } from '../../db/bootstrap-schema';
-import { type Db, createTestDb } from '../../db/client';
+import { createTestDb, type Db } from '../../db/client';
 import { FakeTimer } from '../../testing/fake-timer';
 import { WatchEngine } from '../../trading/watch-engine';
 import type { Context } from '../context';

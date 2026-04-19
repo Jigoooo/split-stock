@@ -1,5 +1,6 @@
 import { BackupPanel } from '@renderer/features/backup-restore';
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
+import { ActivePendingList, PendingCancelForm } from '@renderer/features/pending-cancel-settings';
 import { Button, Select } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
@@ -9,10 +10,7 @@ import { useState } from 'react';
  * StrategyForm 의 `key` 계산 — initial 이 바뀌면 폼이 재마운트되어 sub-hook 들이
  * 새 initial 로 useState initializer 를 재실행한다.
  */
-function presetKey(
-  override: StrategyProfile | null,
-  active: StrategyProfile | null,
-): string {
+function presetKey(override: StrategyProfile | null, active: StrategyProfile | null): string {
   return JSON.stringify(override ?? active ?? {});
 }
 
@@ -104,6 +102,8 @@ export const SettingsPage = (): ReactElement => {
         }}
       />
 
+      <PendingCancelForm />
+      <ActivePendingList />
       <BackupPanel />
     </div>
   );

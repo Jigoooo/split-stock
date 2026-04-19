@@ -2,8 +2,8 @@ import type { AppEnv, KisError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import type { AuthService } from '../kis/auth';
 import { inquirePrice } from '../kis/domestic-stock';
-import type { KisHttpClient } from '../kis/http-client';
 import { makeKisError } from '../kis/errors';
+import type { KisHttpClient } from '../kis/http-client';
 import type { CredentialsRepo } from '../security/credentials-repo';
 import type { PricePoller } from './tiered-quote-feed';
 

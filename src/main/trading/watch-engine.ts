@@ -59,8 +59,7 @@ export const WatchOrderInputSchema = z
         ? v.qty !== undefined && v.amountKrw === undefined
         : v.amountKrw !== undefined && v.qty === undefined,
     {
-      message:
-        'mode가 QTY면 qty만, AMOUNT면 amount_krw만 지정하세요 (반대 필드는 비워야 함)',
+      message: 'mode가 QTY면 qty만, AMOUNT면 amount_krw만 지정하세요 (반대 필드는 비워야 함)',
     },
   );
 

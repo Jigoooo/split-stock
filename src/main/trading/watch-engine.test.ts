@@ -396,9 +396,7 @@ describe('WatchEngine', () => {
   it('register: QTY 모드에 amountKrw 같이 전달 시 VALIDATION 거부', () => {
     const { db, timer } = setup();
     const engine = new WatchEngine({ db, timer, handlers: { CUSTOM: okHandler } });
-    const r = engine.register(
-      buyInput({ qtyOrAmountMode: 'QTY', qty: 10, amountKrw: 1_000_000 }),
-    );
+    const r = engine.register(buyInput({ qtyOrAmountMode: 'QTY', qty: 10, amountKrw: 1_000_000 }));
     expect(r.isErr()).toBe(true);
     if (r.isOk()) throw new Error('expected error');
     expect(r.error.kind).toBe('VALIDATION');

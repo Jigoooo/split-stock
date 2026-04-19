@@ -7,10 +7,14 @@ import type { KisHttpClient } from '../kis/http-client';
 import type { EventLogger } from '../logging/event-logger';
 import type { FeedBus } from '../realtime/feed-bus';
 import type { RealtimeService } from '../realtime/realtime-service';
+import type { RateGuardRepo } from '../safety/rate-guard';
 import type { SafetyState, SafetyStateRegistry } from '../safety/safety-state';
+import type { TimeWindowRepo } from '../safety/time-window';
+import type { ProtectionLimitsRepo } from '../safety/protection-limits-repo';
 import type { CredentialsRepo } from '../security/credentials-repo';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import type { LotsRepo } from '../trading/lots-repo';
+import type { PendingOrderWatcher } from '../trading/pending-order-watcher';
 import type { StockMasterRepo } from '../trading/stock-master-repo';
 import type { StockMasterSyncService } from '../trading/stock-master-sync';
 import type { StrategyRepo } from '../trading/strategy-repo';
@@ -41,7 +45,11 @@ export interface Context {
    * fallback 으로 사용한다.
    */
   activeAccountId: number | null;
+  timeWindowRepo: TimeWindowRepo;
+  rateGuardRepo: RateGuardRepo;
   watchEngine: WatchEngine | null;
+  /** 미체결 자동취소(F6) 감시 인스턴스 — 부팅 시 주입, 미활성화 시 null. */
+  pendingOrderWatcher: PendingOrderWatcher | null;
   realtime: RealtimeService | null;
   bus: FeedBus | null;
   currentEnv: AppEnv | null;
