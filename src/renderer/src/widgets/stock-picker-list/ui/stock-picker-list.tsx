@@ -55,9 +55,9 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
   const dropdownMotionProps = alwaysOpen
     ? {}
     : {
-        initial: { opacity: 0, y: -6 },
+        initial: { opacity: 0, y: -3 },
         animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, y: -6 },
+        exit: { opacity: 0, y: -3 },
       };
 
   const commit = (entry: StockListEntry): void => {
@@ -91,7 +91,7 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
       ref={containerRef}
       style={{ position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0 }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'visible' }}>
         <TextInput
           type="text"
           value={keyword}
@@ -152,7 +152,7 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
             role="listbox"
             aria-label="종목 검색 결과"
             className="panel"
-            transition={{ duration: 0.15 }}
+            transition={{ duration: 0.1 }}
             {...dropdownMotionProps}
             style={{
               position: alwaysOpen ? 'relative' : 'absolute',

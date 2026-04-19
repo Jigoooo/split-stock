@@ -1,3 +1,4 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import type { ReactElement } from 'react';
 
 export interface DashboardPosition {
@@ -23,10 +24,10 @@ export const PositionsPanel = ({
   onSelect,
 }: PositionsPanelProps): ReactElement => {
   return (
-    <div className="panel">
-      <div className="panel__title">보유 종목</div>
+    <div className="panel dashboard-positions-panel">
+      <div className="panel__title">보유 종목 ({thousandSeparator(positions.length)}건)</div>
       <div className="panel__body" style={{ padding: 0 }}>
-        <table className="hts-table">
+        <table className="hts-table dashboard-positions-table">
           <thead>
             <tr>
               <th>종목코드</th>
@@ -58,10 +59,7 @@ export const PositionsPanel = ({
                 <tr
                   key={position.code}
                   onClick={() => onSelect({ pdno: position.code, name: position.name })}
-                  style={{
-                    cursor: 'pointer',
-                    background: isSelected ? 'rgba(45, 79, 202, 0.08)' : undefined,
-                  }}
+                  data-selected={isSelected}
                 >
                   <td className="num">{position.code}</td>
                   <td>{position.name}</td>
@@ -84,5 +82,5 @@ export const PositionsPanel = ({
 function formatKrw(value: number, signed = false): string {
   if (!Number.isFinite(value)) return '-';
   const sign = signed && value > 0 ? '+' : '';
-  return `${sign}${Math.round(value).toLocaleString('ko-KR')}`;
+  return `${sign}${thousandSeparator(Math.round(value))}`;
 }

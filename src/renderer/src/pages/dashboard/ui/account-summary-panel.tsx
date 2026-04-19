@@ -1,3 +1,4 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import type { ReactElement } from 'react';
 
 export interface AccountSummaryPanelProps {
@@ -14,9 +15,9 @@ export const AccountSummaryPanel = ({
   return (
     <div className="panel">
       <div className="panel__title">계좌 요약</div>
-      <div className="panel__body" style={{ display: 'flex', gap: '2.4rem', flexWrap: 'wrap' }}>
-        <Kpi label="예수금 총액" value={deposit} />
-        <Kpi label="총 평가금액" value={totalEval} />
+      <div className="panel__body dashboard-summary-grid">
+        <Kpi label="예수금 총액" value={deposit} unit="원" primary />
+        <Kpi label="총 평가금액" value={totalEval} unit="원" />
         <Kpi label="보유 종목 수" value={positionsCount} unit="종목" />
       </div>
     </div>
@@ -27,27 +28,27 @@ const Kpi = ({
   label,
   value,
   unit,
+  primary = false,
 }: {
   label: string;
   value: number;
   unit?: string;
+  primary?: boolean;
 }): ReactElement => (
-  <div>
-    <div className="muted" style={{ fontSize: '1.1rem' }}>
-      {label}
-    </div>
-    <div className="num" style={{ fontSize: '1.6rem', fontWeight: 600 }}>
-      {formatKrw(value)}
-      {unit ? (
-        <span className="muted" style={{ fontSize: '1.1rem', marginLeft: '0.4rem' }}>
-          {unit}
-        </span>
-      ) : null}
+  <div
+    className={
+      primary ? 'dashboard-summary-card dashboard-summary-card--primary' : 'dashboard-summary-card'
+    }
+  >
+    <div className="dashboard-summary-label">{label}</div>
+    <div className="dashboard-summary-value">
+      {formatValue(value)}
+      {unit ? <span className="dashboard-summary-unit">{unit}</span> : null}
     </div>
   </div>
 );
 
-function formatKrw(value: number): string {
+function formatValue(value: number): string {
   if (!Number.isFinite(value)) return '-';
-  return Math.round(value).toLocaleString('ko-KR');
+  return thousandSeparator(Math.round(value));
 }
