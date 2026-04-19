@@ -184,3 +184,46 @@ export const prebuyOrders = sqliteTable('prebuy_orders', {
   status: text('status').notNull(),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 });
+
+/**
+ * 통합 자동감시주문 큐 — booster/prebuy/custom을 단일 큐로 일원화.
+ *
+ * source:
+ *   - 'BOOSTER' : 1차 전량 매도 후 lastFilledPrice*(1-boosterPct) 도달 시 1차 재매수
+ *   - 'PREBUY'  : 잔고 없는 신규 종목의 예약 매수
+ *   - 'CUSTOM'  : 사용자 정의 자동감시 (BUY/SELL 모두 가능)
+ *
+ * comparator:
+ *   - 'LTE' : price ≤ target_price 일 때 트리거 (BUY 기본)
+ *   - 'GTE' : price ≥ target_price 일 때 트리거 (SELL 기본)
+ *
+ * status:
+ *   - 'WATCHING' : 가격 감시 중
+ *   - 'EXECUTED' : 주문 발사 성공
+ *   - 'FAILED'   : 주문 발사 실패 (last_failure_reason 참조)
+ *   - 'EXPIRED'  : expires_at 경과
+ *   - 'CANCELLED': 사용자 취소
+ *
+ * qty_or_amount_mode == 'QTY'    → qty 사용 (수량 직접 지정)
+ * qty_or_amount_mode == 'AMOUNT' → amount_krw 사용 (금액 → 트리거 시점 가격으로 수량 환산)
+ */
+export const watchOrders = sqliteTable('watch_orders', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id').notNull(), // FK → accounts.id
+  pdno: text('pdno').notNull(),
+  source: text('source').notNull(), // 'BOOSTER' | 'PREBUY' | 'CUSTOM'
+  side: text('side').notNull(), // 'BUY' | 'SELL'
+  targetPrice: integer('target_price').notNull(),
+  comparator: text('comparator').notNull(), // 'LTE' | 'GTE'
+  orderType: text('order_type').notNull(), // 'MARKET' | 'LIMIT'
+  qtyOrAmountMode: text('qty_or_amount_mode').notNull(), // 'QTY' | 'AMOUNT'
+  qty: integer('qty'),
+  amountKrw: integer('amount_krw'),
+  nth: integer('nth'), // booster=1, prebuy=1, custom=사용자 지정 (nullable)
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
+  status: text('status').notNull(), // 'WATCHING' | 'EXECUTED' | 'FAILED' | 'EXPIRED' | 'CANCELLED'
+  lastFailureReason: text('last_failure_reason'),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  executedAt: integer('executed_at', { mode: 'timestamp_ms' }),
+});

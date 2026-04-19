@@ -103,6 +103,48 @@ const CREATE_STATEMENTS: readonly string[] = [
     fetched_at INTEGER NOT NULL,
     PRIMARY KEY (pdno, period, date)
   )`,
+  `CREATE TABLE IF NOT EXISTS watch_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    pdno TEXT NOT NULL,
+    source TEXT NOT NULL,
+    side TEXT NOT NULL,
+    target_price INTEGER NOT NULL,
+    comparator TEXT NOT NULL,
+    order_type TEXT NOT NULL,
+    qty_or_amount_mode TEXT NOT NULL,
+    qty INTEGER,
+    amount_krw INTEGER,
+    nth INTEGER,
+    expires_at INTEGER,
+    status TEXT NOT NULL,
+    last_failure_reason TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    executed_at INTEGER
+  )`,
+  `CREATE TABLE IF NOT EXISTS time_windows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    side TEXT NOT NULL,
+    slot INTEGER NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 0,
+    start_minute INTEGER NOT NULL,
+    end_minute INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS protection_limits (
+    account_id INTEGER PRIMARY KEY,
+    per_symbol_daily_max_buys INTEGER,
+    daily_total_max_amount INTEGER,
+    daily_total_max_count INTEGER,
+    account_total_max_amount INTEGER,
+    rate_guard_enabled INTEGER NOT NULL DEFAULT 0,
+    rate_guard_window_seconds INTEGER DEFAULT 40,
+    rate_guard_max_count INTEGER DEFAULT 5,
+    updated_at INTEGER NOT NULL
+  )`,
 ];
 
 /**
