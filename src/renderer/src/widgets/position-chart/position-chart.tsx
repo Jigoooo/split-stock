@@ -85,9 +85,9 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
         }
         let merged = [...first];
         setCandles(merged);
-        // 과거 3 chunk 선제 로드 — 사용자가 스크롤 시작 전에 buffer 확보
+        // 과거 2 chunk 선제 로드 — buffer 확보. 서버 500은 일시 오류일 수 있으니 reachedEnd 세팅하지 않고 중단만 함.
         let toMs = new Date(first[0]?.date ?? '').getTime() - 86400000;
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 2; i++) {
           if (cancelled) return;
           if (!Number.isFinite(toMs)) break;
           try {
@@ -100,7 +100,7 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
             const seen = new Set(merged.map((c) => c.date));
             const addedUnique = older.filter((c) => !seen.has(c.date));
             if (addedUnique.length === 0) {
-              // 서버가 같은 범위를 다시 돌려보낸 경우 → 더 과거 없음
+              // 서버가 같은 범위를 다시 돌려보낸 경우 → 더 과거 없음 확정
               setReachedEnd(true);
               break;
             }
@@ -110,8 +110,8 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
             if (!nextOldest) break;
             toMs = new Date(nextOldest).getTime() - 86400000;
           } catch {
-            // 과거 범위가 상장 이전이라 KIS가 500을 돌려주는 경우 등 — 더 이상 과거 데이터 없음으로 간주
-            setReachedEnd(true);
+            // 500 등 일시 오류 — 이번 선제 로드는 중단하되 reachedEnd는 세팅하지 않음.
+            // 다음에 사용자가 스크롤하면 fetchMore가 재시도.
             break;
           }
         }
@@ -154,8 +154,7 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
           current = [...addedUnique, ...current].sort((a, b) => a.date.localeCompare(b.date));
           setCandles(current);
         } catch {
-          // 상장 이전 구간 등 서버 500 → 더 이상 과거 없음으로 간주 후 조용히 종료
-          setReachedEnd(true);
+          // 500 등 일시 오류 — 이번 호출만 중단, 다음 스크롤에서 재시도 허용 (reachedEnd 세팅 안 함)
           break;
         }
       }
