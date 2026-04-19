@@ -4,6 +4,8 @@ import type { Context } from './context';
 
 /**
  * tRPC 초기화. Superjson으로 Buffer/Date 직렬화 지원.
+ *
+ * `t` 는 라우터 단위 테스트가 `t.createCallerFactory(router)(ctx)` 패턴을 쓰기 위해 export.
  */
 export const t = initTRPC.context<Context>().create({
   transformer: superjson,
