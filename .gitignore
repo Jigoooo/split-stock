@@ -32,3 +32,5 @@ test-results
 
 # macOS
 .DS_Store
+
+.omx
