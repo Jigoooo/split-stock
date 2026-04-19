@@ -145,19 +145,32 @@ function bootstrapDeps(userDataDir: string) {
 
 interface CreateWindowOpts {
   popoutRoute?: string;
-  width?: number;
-  height?: number;
+  /** 팝아웃 창은 parent가 위치한 모니터에 열리도록 기준 창을 전달 */
+  parent?: BrowserWindowType;
+}
+
+/** 다중 모니터 환경에서 창을 배치할 Display를 고름. */
+function pickTargetDisplay(parent?: BrowserWindowType): Electron.Display {
+  if (parent && !parent.isDestroyed()) {
+    // 팝아웃: 부모 창의 현재 위치와 가장 많이 겹치는 모니터
+    return screen.getDisplayMatching(parent.getBounds());
+  }
+  // 메인: 커서 위치 기준 모니터 (앱을 실행한 곳으로 간주)
+  return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
 }
 
 /**
- * 화면 작업영역을 기준으로 min/max를 클램프한다.
- * - designedMin보다 현재 화면이 더 작은 노트북/저해상도 모니터에서도 창이 잘려나가지 않음.
- * - max는 작업영역 크기(=dock/메뉴바 제외)로 상한.
+ * 지정 Display의 작업영역을 기준으로 min/max 클램프 + 중앙 배치 좌표 계산.
+ * - designedMin이 해당 모니터보다 크면 모니터 크기로 축소 (잘림 방지)
+ * - 초기 크기는 중간, 좌표는 작업영역 중앙
  */
 function resolveWindowBounds(
   designedMinW: number,
   designedMinH: number,
+  display: Electron.Display,
 ): {
+  x: number;
+  y: number;
   width: number;
   height: number;
   minWidth: number;
@@ -165,23 +178,27 @@ function resolveWindowBounds(
   maxWidth: number;
   maxHeight: number;
 } {
-  const { width: availW, height: availH } = screen.getPrimaryDisplay().workAreaSize;
-  const minWidth = Math.min(designedMinW, availW);
-  const minHeight = Math.min(designedMinH, availH);
-  const maxWidth = availW;
-  const maxHeight = availH;
-  // 초기 크기는 최소보다 크고 최대 이하
+  const area = display.workArea; // {x, y, width, height} — 실제 스크린 좌표 기준
+  const minWidth = Math.min(designedMinW, area.width);
+  const minHeight = Math.min(designedMinH, area.height);
+  const maxWidth = area.width;
+  const maxHeight = area.height;
   const width = Math.min(Math.max(designedMinW + 320, minWidth), maxWidth);
   const height = Math.min(Math.max(designedMinH + 200, minHeight), maxHeight);
-  return { width, height, minWidth, minHeight, maxWidth, maxHeight };
+  const x = Math.round(area.x + (area.width - width) / 2);
+  const y = Math.round(area.y + (area.height - height) / 2);
+  return { x, y, width, height, minWidth, minHeight, maxWidth, maxHeight };
 }
 
 function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
-  const { popoutRoute } = opts;
-  const bounds = resolveWindowBounds(popoutRoute ? 640 : 960, popoutRoute ? 480 : 600);
+  const { popoutRoute, parent } = opts;
+  const display = pickTargetDisplay(parent);
+  const bounds = resolveWindowBounds(popoutRoute ? 640 : 960, popoutRoute ? 480 : 600, display);
   const win = new BrowserWindow({
-    width: opts.width ?? bounds.width,
-    height: opts.height ?? bounds.height,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
     minWidth: bounds.minWidth,
     minHeight: bounds.minHeight,
     maxWidth: bounds.maxWidth,
@@ -243,7 +260,7 @@ void app.whenReady().then(async () => {
   // route별 1개 창만 유지 — 이미 열려 있으면 포커스만 이동, 닫히면 렌더러에 통지해 placeholder 원복.
   const ALLOWED_POPOUT_ROUTES = new Set(['dashboard', 'trade', 'logs', 'reports', 'settings']);
   const popouts = new Map<string, BrowserWindowType>();
-  ipcMain.handle('appShell:openPopout', (_, route: unknown): { ok: boolean } => {
+  ipcMain.handle('appShell:openPopout', (event, route: unknown): { ok: boolean } => {
     if (typeof route !== 'string' || !ALLOWED_POPOUT_ROUTES.has(route)) {
       return { ok: false };
     }
@@ -253,7 +270,9 @@ void app.whenReady().then(async () => {
       existing.focus();
       return { ok: true };
     }
-    const popout = createMainWindow({ popoutRoute: route });
+    // 팝아웃은 호출한 창(부모)이 있는 모니터에 열리도록 parent 전달.
+    const sender = BrowserWindow.fromWebContents(event.sender) ?? win;
+    const popout = createMainWindow({ popoutRoute: route, parent: sender });
     popouts.set(route, popout);
     ipcHandler.attachWindow(popout);
     popout.on('closed', () => {
