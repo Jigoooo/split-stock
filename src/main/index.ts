@@ -11,13 +11,20 @@ import { createIPCHandler } from 'trpc-electron/main';
 // `import { app } from 'electron'`이 런타임에 undefined가 되는 interop
 // 문제가 있어, createRequire로 직접 require한다.
 const electronRequire = createRequire(import.meta.url);
-const { app, BrowserWindow, ipcMain, safeStorage, shell } = electronRequire('electron') as {
+const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, shell } = electronRequire(
+  'electron',
+) as {
   app: typeof import('electron').app;
   BrowserWindow: typeof BrowserWindowType;
   ipcMain: IpcMainType;
+  nativeTheme: typeof import('electron').nativeTheme;
   safeStorage: typeof safeStorageType;
   shell: typeof import('electron').shell;
 };
+
+// 앱 전반을 라이트 테마로 고정 — 시스템 다크모드 무시.
+// macOS 타이틀바, 네이티브 메뉴, 렌더러 color-scheme 모두 light 기반.
+nativeTheme.themeSource = 'light';
 
 import type { AppEnv } from '@shared/contracts';
 import WebSocket from 'ws';
@@ -203,13 +210,7 @@ void app.whenReady().then(async () => {
 
   // 팝아웃 창: 메인 화면에서 특정 페이지(logs, reports, settings 등)를 별도 창으로 띄움.
   // route별 1개 창만 유지 — 이미 열려 있으면 포커스만 이동, 닫히면 렌더러에 통지해 placeholder 원복.
-  const ALLOWED_POPOUT_ROUTES = new Set([
-    'dashboard',
-    'trade',
-    'logs',
-    'reports',
-    'settings',
-  ]);
+  const ALLOWED_POPOUT_ROUTES = new Set(['dashboard', 'trade', 'logs', 'reports', 'settings']);
   const popouts = new Map<string, BrowserWindowType>();
   ipcMain.handle('appShell:openPopout', (_, route: unknown): { ok: boolean } => {
     if (typeof route !== 'string' || !ALLOWED_POPOUT_ROUTES.has(route)) {

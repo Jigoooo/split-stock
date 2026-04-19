@@ -6,5 +6,3 @@ declare global {
     appShell?: AppShellBridge;
   }
 }
-
-export {};

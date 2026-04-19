@@ -148,8 +148,6 @@ const AppShell = (): ReactElement => {
 export const App = (): ReactElement => {
   const popoutRoute = readPopoutRoute();
   return (
-    <AppProviders>
-      {popoutRoute ? <PopoutPage route={popoutRoute} /> : <AppShell />}
-    </AppProviders>
+    <AppProviders>{popoutRoute ? <PopoutPage route={popoutRoute} /> : <AppShell />}</AppProviders>
   );
 };
