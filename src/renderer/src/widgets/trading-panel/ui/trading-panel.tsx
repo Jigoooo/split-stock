@@ -109,17 +109,22 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
         tickTime={tick?.time ?? null}
         orderbookTime={orderbook?.time ?? null}
       />
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1.2fr', gap: '1.2rem' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(220px, 260px) minmax(260px, 320px) 1fr 1fr',
+          gap: '1rem',
+          alignItems: 'start',
+        }}
+      >
         <OrderbookPanel
           orderbook={orderbook}
           currentPrice={tick?.price ?? 0}
           onClickPrice={onPriceClick}
         />
-        <div style={{ display: 'grid', gap: '1.2rem' }}>
-          <OrderTicket selection={selection} isProd={isProd} oneClick={oneClick} />
-          <ActiveOrdersPanel pdnoFilter={pdno} />
-        </div>
+        <OrderTicket selection={selection} isProd={isProd} oneClick={oneClick} />
         <TradeFeedPanel feed={feed} />
+        <ActiveOrdersPanel pdnoFilter={pdno} />
       </div>
     </div>
   );

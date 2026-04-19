@@ -32,9 +32,9 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
   const asksReversed = [...orderbook.asks].reverse();
 
   return (
-    <div className="panel">
+    <div className="panel orderbook-panel">
       <div className="panel__title">호가 10단</div>
-      <table className="hts-table" aria-label="호가창">
+      <table className="hts-table orderbook-table" aria-label="호가창">
         <thead>
           <tr>
             <th className="num" style={{ width: '40%' }}>

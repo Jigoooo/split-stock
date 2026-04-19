@@ -14,14 +14,19 @@ export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
   if (feed.length === 0) {
     return (
       <div className="panel">
-        <div className="panel__title">체결</div>
-        <div className="panel__body muted">체결 대기 중…</div>
+        <div className="panel__title">실시간 체결</div>
+        <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
+          실시간 체결 수신 대기…
+          <div style={{ marginTop: '0.3rem', fontSize: '0.95rem' }}>
+            시장에서 체결될 때마다 여기에 누적 표시됩니다.
+          </div>
+        </div>
       </div>
     );
   }
   return (
     <div className="panel">
-      <div className="panel__title">체결 (최근 {feed.length}건)</div>
+      <div className="panel__title">실시간 체결 (최근 {feed.length}건)</div>
       <table className="hts-table" aria-label="체결창">
         <thead>
           <tr>

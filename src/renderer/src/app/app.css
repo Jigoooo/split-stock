@@ -323,3 +323,17 @@ body {
   min-height: 0;
   overflow: auto;
 }
+
+/* ===== 호가창 (OrderbookPanel) — 20행이 스크롤 없이 한 번에 보이도록 컴팩트 ===== */
+.orderbook-panel {
+  overflow: visible;
+}
+.orderbook-table th,
+.orderbook-table td {
+  padding: 0.15rem 0.4rem;
+  font-size: 1.05rem;
+}
+.orderbook-table thead th {
+  padding: 0.2rem 0.4rem;
+  font-size: 1rem;
+}
