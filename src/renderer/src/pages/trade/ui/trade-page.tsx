@@ -3,11 +3,33 @@ import { PositionChart } from '@renderer/widgets/position-chart';
 import { StockPickerList } from '@renderer/widgets/stock-picker-list';
 import { TradingPanel } from '@renderer/widgets/trading-panel';
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 interface Selected {
   pdno: string;
   name: string;
+}
+
+const LAST_SELECTED_KEY = 'trade.lastSelected';
+
+function readLastSelected(): Selected | null {
+  try {
+    const raw = window.localStorage.getItem(LAST_SELECTED_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      typeof (parsed as Selected).pdno === 'string' &&
+      typeof (parsed as Selected).name === 'string' &&
+      /^\d{6}$/.test((parsed as Selected).pdno)
+    ) {
+      return parsed as Selected;
+    }
+  } catch {
+    // JSON 파싱 실패 등 무시
+  }
+  return null;
 }
 
 /**
@@ -28,7 +50,19 @@ export const TradePage = (): ReactElement => {
     onSuccess: () => realtimeStatus.refetch(),
   });
 
-  const [selected, setSelected] = useState<Selected | null>(null);
+  const [selected, setSelectedState] = useState<Selected | null>(() => readLastSelected());
+  const setSelected = useCallback((next: Selected | null): void => {
+    setSelectedState(next);
+    try {
+      if (next) {
+        window.localStorage.setItem(LAST_SELECTED_KEY, JSON.stringify(next));
+      } else {
+        window.localStorage.removeItem(LAST_SELECTED_KEY);
+      }
+    } catch {
+      // storage 쿼터/권한 문제 무시 — 세션 내 동작엔 영향 없음
+    }
+  }, []);
   const overlay = trpc.account.getPositionOverlay.useQuery(
     { pdno: selected?.pdno ?? '000000', includeSold: true },
     { enabled: selected !== null },
@@ -41,7 +75,7 @@ export const TradePage = (): ReactElement => {
     return shell.onStockAssigned((pdno, name) => {
       setSelected({ pdno, name });
     });
-  }, []);
+  }, [setSelected]);
 
   // 실시간 피드는 항상 켜짐 — 환경 준비 후 자동 start 1회.
   useEffect(() => {
