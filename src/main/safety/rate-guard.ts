@@ -146,6 +146,8 @@ export function createRateGuard(opts: CreateRateGuardOptions): RateGuard {
               maxCount: settings.maxCount,
             },
           });
+          // 트리거 후 이력 초기화 — 재시작 없이 재활성화 시 즉시 재트리거 방지
+          acct.clear();
           return { switchedToManual: true };
         }
       }

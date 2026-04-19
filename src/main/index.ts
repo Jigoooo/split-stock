@@ -42,6 +42,7 @@ import { createFileLogger } from './logging/file-logger';
 import { initSentryFromSettings } from './monitoring/sentry';
 import { FeedBus } from './realtime/feed-bus';
 import { RealtimeService } from './realtime/realtime-service';
+import { ProtectionLimitsRepo } from './safety/protection-limits-repo';
 import { createRateGuardRepo } from './safety/rate-guard';
 import { SafetyStateRegistry } from './safety/safety-state';
 import { createTimeWindowRepo } from './safety/time-window';
@@ -99,6 +100,7 @@ function bootstrapDeps(userDataDir: string) {
   const activeAccounts = new ActiveAccountRepo(db);
   const timeWindowRepo = createTimeWindowRepo(db);
   const rateGuardRepo = createRateGuardRepo(db);
+  const protectionLimitsRepo = new ProtectionLimitsRepo(db);
   // 활성 계좌 보장 — 계좌 0개면 null. 자격증명 저장 시 자동 시드.
   const ensured = activeAccounts.ensureActive();
   const initialActiveAccountId = ensured.isOk() ? ensured.value : null;
@@ -133,6 +135,7 @@ function bootstrapDeps(userDataDir: string) {
     activeAccounts,
     timeWindowRepo,
     rateGuardRepo,
+    protectionLimitsRepo,
     watchEngine,
     pendingOrderWatcher: null,
     bus,

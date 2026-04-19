@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EventLogger } from '../logging/event-logger';
 import { createRateGuard, type RateGuardRepo, type RateGuardSettings } from './rate-guard';
-import { createSafetyState, SafetyStateRegistry } from './safety-state';
+import { SafetyStateRegistry } from './safety-state';
 
 function noopLogger(): EventLogger & { entries: Array<{ message: string; payload?: unknown }> } {
   const entries: Array<{ message: string; payload?: unknown }> = [];

@@ -162,7 +162,7 @@ describe('isTradeAllowedAt — 매매 시간대 가드', () => {
   });
 
   it('per-account 격리 — accountId 다른 슬롯은 무시', () => {
-    const repo = makeRepo([
+    const _repo = makeRepo([
       {
         id: 1,
         accountId: 2, // 다른 계좌

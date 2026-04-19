@@ -4,6 +4,37 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { StrategyForm } from './strategy-form';
 
+vi.mock('@renderer/shared/api/trpc', () => ({
+  trpc: {
+    account: {
+      getActive: {
+        useQuery: () => ({ data: { accountId: 1, account: null }, isPending: false }),
+      },
+    },
+    tradingWindows: {
+      list: {
+        useQuery: () => ({ data: { windows: [] }, isPending: false, error: null }),
+      },
+      upsert: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      delete: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
+    rateGuard: {
+      getSettings: {
+        useQuery: () => ({
+          data: { enabled: false, windowSeconds: 40, maxCount: 5 },
+          isPending: false,
+          error: null,
+        }),
+      },
+      updateSettings: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
+    useUtils: () => ({
+      tradingWindows: { list: { invalidate: vi.fn() } },
+      rateGuard: { getSettings: { invalidate: vi.fn() } },
+    }),
+  },
+}));
+
 const initial: StrategyProfile = {
   totalAmountKrw: 5_000_000,
   maxStages: 5,
