@@ -232,4 +232,54 @@ export class ActiveAccountRepo {
       return null;
     }
   }
+
+  /**
+   * 표시 이름 변경 — UI 표시용 displayName 컬럼만 갱신.
+   * 빈 문자열은 null 로 정규화.
+   */
+  rename(id: number, displayName: string | null): Result<void, ActiveAccountError> {
+    try {
+      const target = this.db
+        .select({ id: accountsTable.id })
+        .from(accountsTable)
+        .where(eq(accountsTable.id, id))
+        .limit(1)
+        .all()[0];
+      if (!target) {
+        return err({ kind: 'NOT_FOUND', msg: `account not found: id=${id}` });
+      }
+      const normalized =
+        displayName !== null && displayName.trim().length > 0 ? displayName.trim() : null;
+      this.db
+        .update(accountsTable)
+        .set({ displayName: normalized })
+        .where(eq(accountsTable.id, id))
+        .run();
+      return ok(undefined);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
+   * 계좌 삭제 — accounts 행 1개 제거.
+   * 활성 계좌 보호/lots 잔여 보호는 호출측(라우터)에서 가드. 이 메서드는 단순 DELETE.
+   */
+  remove(id: number): Result<void, ActiveAccountError> {
+    try {
+      const target = this.db
+        .select({ id: accountsTable.id })
+        .from(accountsTable)
+        .where(eq(accountsTable.id, id))
+        .limit(1)
+        .all()[0];
+      if (!target) {
+        return err({ kind: 'NOT_FOUND', msg: `account not found: id=${id}` });
+      }
+      this.db.delete(accountsTable).where(eq(accountsTable.id, id)).run();
+      return ok(undefined);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
 }

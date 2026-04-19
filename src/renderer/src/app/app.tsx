@@ -1,8 +1,8 @@
 import { CredentialsReentryBanner } from '@renderer/features/backup-restore';
-import { SafetySwitchHeader } from '@renderer/features/safety-switch';
 import { SwitchEnvDialog } from '@renderer/features/switch-env';
 import { LoginPage } from '@renderer/pages/login';
-import { Button, Select } from '@renderer/shared/ui';
+import { Button } from '@renderer/shared/ui';
+import { AccountBar } from '@renderer/widgets/account-bar';
 import type { ReactElement } from 'react';
 import { readPopoutRoute } from './model/popout-route';
 import { useAppShell } from './model/use-app-shell';
@@ -20,17 +20,7 @@ const AppShell = ({ popout }: { popout: PopoutApi }): ReactElement => {
     <div className="app-root" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <header className="app-header">
         <h1>Split Stock</h1>
-        {shell.env ? (
-          <span
-            className={
-              shell.env === 'PROD' ? 'env-badge env-badge--prod' : 'env-badge env-badge--mock'
-            }
-          >
-            {shell.env}
-          </span>
-        ) : (
-          <span className="chip">연결 안 됨</span>
-        )}
+        <AccountBar env={shell.env} />
         {shell.env ? (
           <>
             <div
@@ -42,11 +32,6 @@ const AppShell = ({ popout }: { popout: PopoutApi }): ReactElement => {
                 flexWrap: 'wrap',
               }}
             >
-              <SafetySwitchHeader />
-              <span
-                aria-hidden
-                style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)' }}
-              />
               <HeaderPopoutButtons popout={popout} />
             </div>
             <nav
@@ -58,22 +43,6 @@ const AppShell = ({ popout }: { popout: PopoutApi }): ReactElement => {
                 flexWrap: 'wrap',
               }}
             >
-              {shell.stored.length > 1 ? (
-                <Select
-                  value={shell.env}
-                  onChange={(e) => shell.requestEnvSwitch(e.target.value as 'MOCK' | 'PROD')}
-                  disabled={shell.isSwitchingEnv}
-                  aria-label="환경 전환"
-                  dense
-                  style={{ width: 'auto' }}
-                >
-                  {shell.stored.map((s) => (
-                    <option key={s.env} value={s.env}>
-                      {s.env} · {s.accountNo8.slice(-4)}
-                    </option>
-                  ))}
-                </Select>
-              ) : null}
               <Button onClick={() => shell.logout(false)} disabled={shell.isLoggingOut} dense>
                 로그아웃
               </Button>
