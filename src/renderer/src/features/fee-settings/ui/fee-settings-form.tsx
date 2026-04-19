@@ -30,8 +30,11 @@ export function FeeSettingsForm() {
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">매입 수수료 (%)</label>
+          <label htmlFor={`${env}-buy`} className="block text-sm font-medium text-gray-700 mb-1">
+            매입 수수료 (%)
+          </label>
           <input
+            id={`${env}-buy`}
             type="number"
             step="0.001"
             min="0"
@@ -44,8 +47,11 @@ export function FeeSettingsForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">매도 수수료 (%)</label>
+          <label htmlFor={`${env}-sell`} className="block text-sm font-medium text-gray-700 mb-1">
+            매도 수수료 (%)
+          </label>
           <input
+            id={`${env}-sell`}
             type="number"
             step="0.001"
             min="0"
@@ -58,8 +64,11 @@ export function FeeSettingsForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">제세금 (%)</label>
+          <label htmlFor={`${env}-tax`} className="block text-sm font-medium text-gray-700 mb-1">
+            제세금 (%)
+          </label>
           <input
+            id={`${env}-tax`}
             type="number"
             step="0.001"
             min="0"
@@ -73,6 +82,7 @@ export function FeeSettingsForm() {
       </div>
 
       <button
+        type="button"
         onClick={() => handleSubmit(env)}
         disabled={isSaving || savingEnv === env}
         className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"

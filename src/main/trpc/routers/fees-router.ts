@@ -1,10 +1,9 @@
 import { z } from 'zod';
-import type { FeeEnv } from '../../db/settings-repo';
 import { FEES_DEFAULTS, readFeesConfig, SETTING_KEYS } from '../../db/settings-repo';
 import { publicProcedure, router } from '../trpc-core';
 
 const FeeEnvSchema = z.enum(['real', 'mock']);
-const FeesSchema = z.object({
+const _FeesSchema = z.object({
   buy: z.number().nonnegative().finite(),
   sell: z.number().nonnegative().finite(),
   tax: z.number().nonnegative().finite(),

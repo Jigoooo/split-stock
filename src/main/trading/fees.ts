@@ -25,7 +25,7 @@ export interface FeeApplied {
  * - sell: amount - (amount * sell_rate) (세금 미포함)
  */
 export function applyFees(
-  env: FeeEnv,
+  _env: FeeEnv,
   side: TradeSide,
   amount: number,
   fees: { buy: number; sell: number; tax: number },

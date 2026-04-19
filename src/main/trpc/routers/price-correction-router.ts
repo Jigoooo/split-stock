@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   PRICE_CORRECTION_DEFAULTS,
-  type PriceCorrectionStrategy,
   readPriceCorrectionConfig,
   SETTING_KEYS,
 } from '../../db/settings-repo';

@@ -1,4 +1,3 @@
-import { createDecipheriv } from 'node:crypto';
 import type { AppEnv, KisError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import { z } from 'zod';
@@ -173,11 +172,6 @@ export class KisWsClient {
   private seenKeys = new Set<string>();
   private readonly seenLimit = 2048;
   private seenOrder: string[] = [];
-  /**
-   * CNI TR별 AES 파라미터 — 구독 ACK JSON body.output에서 수신.
-   * key: 'H0STCNI0' | 'H0STCNI9'
-   */
-  private readonly cniCryptoParams = new Map<string, CniCryptoParams>();
 
   constructor(opts: KisWsClientOptions) {
     this.env = opts.env;
