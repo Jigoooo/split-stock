@@ -8,6 +8,8 @@ import { marketRouter } from './routers/market-router';
 import { monitoringRouter } from './routers/monitoring-router';
 import { orderRouter } from './routers/order-router';
 import { pendingCancelRouter } from './routers/pending-cancel-router';
+import { priceCorrectionRouter } from './routers/price-correction-router';
+import { protectionRouter } from './routers/protection-router';
 import { rateGuardRouter } from './routers/rate-guard-router';
 import { realtimeRouter } from './routers/realtime-router';
 import { reportsRouter } from './routers/reports-router';
@@ -34,6 +36,8 @@ export const appRouter = router({
   tradingWindows: tradingWindowsRouter,
   rateGuard: rateGuardRouter,
   pendingCancel: pendingCancelRouter,
+  protection: protectionRouter,
+  priceCorrection: priceCorrectionRouter,
 });
 
 export type AppRouter = typeof appRouter;
