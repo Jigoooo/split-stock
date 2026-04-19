@@ -4,7 +4,7 @@ import {
   readPriceCorrectionConfig,
   SETTING_KEYS,
 } from '../../db/settings-repo';
-import { publicProcedure, router } from '../trpc-core';
+import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 const PriceCorrectionStrategySchema = z.enum(['AGGRESSIVE', 'CONSERVATIVE']);
 
@@ -21,7 +21,7 @@ export const priceCorrectionRouter = router({
    * 호가 자동 보정 설정 저장.
    * buy / sell 각각 AGGRESSIVE 또는 CONSERVATIVE.
    */
-  updateSettings: publicProcedure
+  updateSettings: authedProcedure
     .input(
       z.object({
         buy: PriceCorrectionStrategySchema,
@@ -37,7 +37,7 @@ export const priceCorrectionRouter = router({
   /**
    * 보정 설정을 기본값으로 초기화.
    */
-  resetSettings: publicProcedure.mutation(({ ctx }) => {
+  resetSettings: authedProcedure.mutation(({ ctx }) => {
     ctx.settingsRepo.set(SETTING_KEYS.PRICE_CORRECTION_BUY, PRICE_CORRECTION_DEFAULTS.buy);
     ctx.settingsRepo.set(SETTING_KEYS.PRICE_CORRECTION_SELL, PRICE_CORRECTION_DEFAULTS.sell);
     return { ok: true as const };

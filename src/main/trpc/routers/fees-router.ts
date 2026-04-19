@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { FEES_DEFAULTS, readFeesConfig, SETTING_KEYS } from '../../db/settings-repo';
-import { publicProcedure, router } from '../trpc-core';
+import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 const FeeEnvSchema = z.enum(['real', 'mock']);
 const _FeesSchema = z.object({
@@ -40,7 +40,7 @@ export const feesRouter = router({
    * @param sell 매도 수수료 (%)
    * @param tax 제세금 (%)
    */
-  updateSettings: publicProcedure
+  updateSettings: authedProcedure
     .input(
       z.object({
         env: FeeEnvSchema,
@@ -66,7 +66,7 @@ export const feesRouter = router({
    * 수수료 설정을 기본값으로 초기화
    * @param env 'real' | 'mock'
    */
-  resetToDefaults: publicProcedure
+  resetToDefaults: authedProcedure
     .input(z.object({ env: FeeEnvSchema }))
     .mutation(({ ctx, input }) => {
       const defaults = FEES_DEFAULTS[input.env];
