@@ -3,31 +3,33 @@ import type { LiveTick } from '../model/use-live-feed';
 
 export interface TradeFeedPanelProps {
   feed: LiveTick[];
+  name?: string;
+  pdno?: string;
 }
 
 /**
- * 체결창 — 최근 N건 tick을 시간 역순(신규 위)로 표시.
+ * 실시간 체결 — 최근 N건 tick을 시간 역순(신규 위)로 표시.
  * 한국식 색상: 상승 방향 체결 = 빨강, 하락 = 파랑.
  */
 export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
-  const { feed } = props;
+  const { feed, name, pdno } = props;
+  const headerSuffix = name && pdno ? ` — ${name} (${pdno})` : '';
   if (feed.length === 0) {
     return (
       <div className="panel">
-        <div className="panel__title">실시간 체결</div>
+        <div className="panel__title">실시간 체결{headerSuffix}</div>
         <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
           실시간 체결 수신 대기…
-          <div style={{ marginTop: '0.3rem', fontSize: '0.95rem' }}>
-            시장에서 체결될 때마다 여기에 누적 표시됩니다.
-          </div>
         </div>
       </div>
     );
   }
   return (
     <div className="panel">
-      <div className="panel__title">실시간 체결 (최근 {feed.length}건)</div>
-      <table className="hts-table" aria-label="체결창">
+      <div className="panel__title">
+        실시간 체결{headerSuffix} (최근 {feed.length}건)
+      </div>
+      <table className="hts-table" aria-label="실시간 체결">
         <thead>
           <tr>
             <th style={{ width: '24%' }}>시각</th>

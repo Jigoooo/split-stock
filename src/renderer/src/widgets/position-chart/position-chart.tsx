@@ -131,15 +131,6 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
         </span>
         <span style={{ flex: 1 }} />
         <div role="tablist" aria-label="봉 단위" style={{ display: 'flex', gap: '0.3rem' }}>
-          <button
-            type="button"
-            className="hts-btn"
-            disabled
-            title="분봉은 준비 중입니다"
-            style={{ padding: '0.3rem 0.7rem', opacity: 0.5 }}
-          >
-            분
-          </button>
           {(['D', 'W', 'M'] as const).map((p) => (
             <button
               key={p}

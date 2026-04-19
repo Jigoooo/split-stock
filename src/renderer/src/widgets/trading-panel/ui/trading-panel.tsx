@@ -112,8 +112,8 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(220px, 260px) minmax(260px, 320px) 1fr 1fr',
-          gap: '1rem',
+          gridTemplateColumns: 'minmax(180px, 220px) minmax(200px, 240px) minmax(240px, 1fr)',
+          gap: '0.6rem',
           alignItems: 'start',
         }}
       >
@@ -123,9 +123,51 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
           onClickPrice={onPriceClick}
         />
         <OrderTicket selection={selection} isProd={isProd} oneClick={oneClick} />
-        <TradeFeedPanel feed={feed} />
-        <ActiveOrdersPanel pdnoFilter={pdno} />
+        <FeedTabs pdno={pdno} name={name} feed={feed} />
       </div>
+    </div>
+  );
+};
+
+type FeedTab = 'feed' | 'active';
+
+const FeedTabs = ({
+  pdno,
+  name,
+  feed,
+}: {
+  pdno: string;
+  name: string;
+  feed: ReturnType<typeof useTradeFeed>;
+}): ReactElement => {
+  const [tab, setTab] = useState<FeedTab>('feed');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+      <div role="tablist" aria-label="체결/미체결" style={{ display: 'flex', gap: '0.3rem' }}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'feed'}
+          className={tab === 'feed' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
+          onClick={() => setTab('feed')}
+        >
+          실시간 체결
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'active'}
+          className={tab === 'active' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
+          onClick={() => setTab('active')}
+        >
+          미체결 주문
+        </button>
+      </div>
+      {tab === 'feed' ? (
+        <TradeFeedPanel feed={feed} name={name} pdno={pdno} />
+      ) : (
+        <ActiveOrdersPanel pdnoFilter={pdno} />
+      )}
     </div>
   );
 };

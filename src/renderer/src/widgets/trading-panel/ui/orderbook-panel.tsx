@@ -18,7 +18,6 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
   if (!orderbook) {
     return (
       <div className="panel">
-        <div className="panel__title">호가</div>
         <div className="panel__body muted">호가 로드 중…</div>
       </div>
     );
@@ -33,8 +32,7 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
 
   return (
     <div className="panel orderbook-panel">
-      <div className="panel__title">호가 10단</div>
-      <table className="hts-table orderbook-table" aria-label="호가창">
+      <table className="hts-table orderbook-table" aria-label="호가 10단">
         <thead>
           <tr>
             <th className="num" style={{ width: '40%' }}>

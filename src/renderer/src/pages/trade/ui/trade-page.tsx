@@ -128,7 +128,7 @@ export const TradePage = (): ReactElement => {
             flex: 1,
             minHeight: 0,
             display: 'grid',
-            gridTemplateColumns: 'minmax(280px, 360px) minmax(0, 1fr)',
+            gridTemplateColumns: 'minmax(360px, 1fr) minmax(640px, 760px)',
             gap: '1.2rem',
           }}
         >
