@@ -32,7 +32,7 @@ export function createEnvAwarePricePoller(opts: EnvAwarePricePollerOptions): Pri
       }
       const credResult = opts.credentialsRepo.loadCredentialsByEnv(env);
       if (credResult.isErr() || !credResult.value) {
-        return err(makeKisError('NETWORK', 'credentials missing for env', { env }));
+        return err(makeKisError('NETWORK', `credentials missing for env=${env}`));
       }
       const cred = credResult.value;
       const tokenResult = await opts.auth.getValidToken(env, cred.appKey, cred.appSecret);
