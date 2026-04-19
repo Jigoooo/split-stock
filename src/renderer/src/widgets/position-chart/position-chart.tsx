@@ -65,7 +65,7 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     [pdno, utils.market.getDailyChart],
   );
 
-  // 종목/period 바뀌면 초기 chunk 로드
+  // 종목/period 바뀌면 초기 chunk + 과거 N chunk 미리 로드 (왼쪽 끊김 방지)
   useEffect(() => {
     let cancelled = false;
     setError(null);
@@ -74,7 +74,29 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
       try {
         const first = await loadChunk(period);
         if (cancelled) return;
-        setCandles(first);
+        if (first.length === 0) {
+          setCandles([]);
+          return;
+        }
+        let merged = [...first];
+        setCandles(merged);
+        // 과거 3 chunk 선제 로드 — 사용자가 스크롤 시작 전에 ~400봉 buffer 확보
+        let toMs = new Date(first[0]?.date ?? '').getTime() - 86400000;
+        for (let i = 0; i < 3; i++) {
+          if (cancelled) return;
+          if (!Number.isFinite(toMs)) break;
+          const older = await loadChunk(period, toMs);
+          if (cancelled) return;
+          if (older.length === 0) break;
+          const seen = new Set(merged.map((c) => c.date));
+          merged = [...older.filter((c) => !seen.has(c.date)), ...merged].sort((a, b) =>
+            a.date.localeCompare(b.date),
+          );
+          setCandles(merged);
+          const nextOldest = merged[0]?.date;
+          if (!nextOldest) break;
+          toMs = new Date(nextOldest).getTime() - 86400000;
+        }
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
@@ -85,25 +107,28 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     };
   }, [period, loadChunk]);
 
-  // 좌측 스크롤 시 더 오래된 chunk 로드
+  // 좌측 스크롤 시 더 오래된 chunk 여러 개를 한 번에 추가 (왼쪽 끊김 방지)
   const fetchMore = useCallback(async (): Promise<void> => {
     if (loadingRef.current) return;
     if (candles.length === 0) return;
     loadingRef.current = true;
     setIsFetchingMore(true);
     try {
-      const oldest = candles[0];
-      if (!oldest) return;
-      const oldestMs = new Date(oldest.date).getTime();
-      const toMs = oldestMs - 24 * 60 * 60 * 1000; // 하루 전
-      const older = await loadChunk(period, toMs);
-      // merge: 중복 date는 older 우선 (새 chunk 겹치면 가장 오래된 쪽으로 덮어쓰기 불필요 — 합집합)
-      const seen = new Set(candles.map((c) => c.date));
-      const merged = [...older.filter((c) => !seen.has(c.date)), ...candles];
-      merged.sort((a, b) => a.date.localeCompare(b.date));
-      // 새로 합쳐진 데이터가 0건이면 더 이상 과거 데이터가 없는 상태
-      if (older.length === 0) return;
-      setCandles(merged);
+      let current = candles;
+      // 연속으로 2 chunk 까지 당겨와 충분한 buffer 확보 (각 chunk는 독립적으로 merge)
+      for (let i = 0; i < 2; i++) {
+        const oldest = current[0];
+        if (!oldest) break;
+        const toMs = new Date(oldest.date).getTime() - 24 * 60 * 60 * 1000;
+        if (!Number.isFinite(toMs)) break;
+        const older = await loadChunk(period, toMs);
+        if (older.length === 0) break; // 더 이상 과거 없음
+        const seen = new Set(current.map((c) => c.date));
+        current = [...older.filter((c) => !seen.has(c.date)), ...current].sort((a, b) =>
+          a.date.localeCompare(b.date),
+        );
+        setCandles(current);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -150,7 +175,8 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     if (!chart) return;
     const onRange = (range: { from: number; to: number } | null): void => {
       if (!range) return;
-      if (range.from > 10) return;
+      // left edge로부터 50바 이내로 다가오면 미리 prefetch — 사용자가 스크롤하는 동안 끊김 방지
+      if (range.from > 50) return;
       void fetchMore();
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
