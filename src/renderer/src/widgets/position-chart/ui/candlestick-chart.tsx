@@ -1,6 +1,7 @@
 import type { DisplaySettings, MaPeriod } from '@renderer/entities/display-settings';
 import { MA_PERIODS } from '@renderer/entities/display-settings';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { Button } from '@renderer/shared/ui';
 import {
   type CandlestickData,
   CandlestickSeries,
@@ -13,6 +14,11 @@ import {
 } from 'lightweight-charts';
 import { type ReactElement, useEffect, useEffectEvent, useRef } from 'react';
 import type { Candle } from '../model/use-position-chart';
+
+const DEFAULT_VISIBLE_BARS = 60;
+const MIN_VISIBLE_BARS = 5;
+const ZOOM_IN_FACTOR = 0.7;
+const ZOOM_OUT_FACTOR = 1.4;
 
 type PriceLineHandle = ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']>;
 type LineStyleMap = { solid: number; dashed: number; dotted: number };
@@ -304,5 +310,74 @@ export const CandlestickChart = ({
     prevLengthRef.current = data.length;
   }, [candles, lines, displaySettings]);
 
-  return <div ref={ref} style={{ flex: 1, minHeight: 240, width: '100%' }} />;
+  const zoom = (factor: number): void => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const range = chart.timeScale().getVisibleLogicalRange();
+    if (!range) return;
+    const width = range.to - range.from;
+    const newWidth = Math.max(MIN_VISIBLE_BARS, width * factor);
+    const total = prevLengthRef.current;
+    const to = total > 0 ? Math.min(range.to, total - 1) : range.to;
+    const from = Math.max(0, to - newWidth);
+    chart.timeScale().setVisibleLogicalRange({ from, to });
+  };
+
+  const handleReset = (): void => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const total = prevLengthRef.current;
+    if (total === 0) return;
+    const shown = Math.min(DEFAULT_VISIBLE_BARS, total);
+    chart.timeScale().setVisibleLogicalRange({
+      from: Math.max(0, total - shown),
+      to: total - 1,
+    });
+  };
+
+  return (
+    <div
+      style={{
+        position: 'relative',
+        flex: 1,
+        minHeight: 240,
+        width: '100%',
+        display: 'flex',
+      }}
+    >
+      <div ref={ref} style={{ flex: 1, minHeight: 240, width: '100%' }} />
+      <div
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          display: 'flex',
+          gap: 4,
+          zIndex: 2,
+        }}
+      >
+        <Button
+          dense
+          iconOnly
+          aria-label="차트 확대"
+          title="확대"
+          onClick={() => zoom(ZOOM_IN_FACTOR)}
+        >
+          ＋
+        </Button>
+        <Button
+          dense
+          iconOnly
+          aria-label="차트 축소"
+          title="축소"
+          onClick={() => zoom(ZOOM_OUT_FACTOR)}
+        >
+          －
+        </Button>
+        <Button dense aria-label="차트 보기 초기화" title="맞춤" onClick={handleReset}>
+          맞춤
+        </Button>
+      </div>
+    </div>
+  );
 };
