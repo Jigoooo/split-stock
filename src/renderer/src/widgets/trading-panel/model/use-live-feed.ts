@@ -49,8 +49,15 @@ export function useLiveTick(pdno: string, pollMs = 1000): LiveTick | null {
 
 export function useLiveOrderbook(pdno: string, pollMs = 500): LiveOrderbook | null {
   useWatch(pdno, 'orderbook');
-  const q = trpc.realtime.getLatestOrderbook.useQuery({ pdno }, { refetchInterval: pollMs });
-  return (q.data?.orderbook ?? null) as LiveOrderbook | null;
+  const ws = trpc.realtime.getLatestOrderbook.useQuery({ pdno }, { refetchInterval: pollMs });
+  // WS 피드가 오지 않는 장외 시간대를 위한 REST fallback (5초 간격).
+  const rest = trpc.market.getOrderbook.useQuery(
+    { code: pdno },
+    { refetchInterval: 5000, staleTime: 3000 },
+  );
+  const wsData = (ws.data?.orderbook ?? null) as LiveOrderbook | null;
+  if (wsData) return wsData;
+  return (rest.data?.orderbook ?? null) as LiveOrderbook | null;
 }
 
 /**

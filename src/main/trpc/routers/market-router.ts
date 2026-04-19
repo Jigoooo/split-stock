@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { inquireDailyChart, inquirePrice } from '../../kis/domestic-stock';
+import { inquireDailyChart, inquireOrderbook, inquirePrice } from '../../kis/domestic-stock';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 export const marketRouter = router({
@@ -119,6 +119,46 @@ export const marketRouter = router({
         });
       }
       return { candles: r.value };
+    }),
+
+  /**
+   * REST 호가 스냅샷 (장외 시간대 fallback용).
+   * 실시간 WS(H0STASP0)가 흐르지 않을 때 UI가 주기적으로 폴링해 최소 정보 표시.
+   */
+  getOrderbook: authedProcedure
+    .input(z.object({ code: z.string().regex(/^\d{6}$/) }))
+    .query(async ({ ctx, input }) => {
+      const env = ctx.currentEnv;
+      if (!env) throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
+      const credResult = ctx.credentialsRepo.loadCredentials(env);
+      if (credResult.isErr() || !credResult.value) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
+      }
+      const cred = credResult.value;
+      const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
+      if (tokenResult.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `토큰 발급 실패: ${tokenResult.error.kind}`,
+        });
+      }
+      const r = await inquireOrderbook(
+        {
+          http: ctx.httpByEnv[env],
+          env,
+          token: tokenResult.value.token,
+          appKey: cred.appKey,
+          appSecret: cred.appSecret,
+        },
+        input.code,
+      );
+      if (r.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `호가 조회 실패: ${r.error.kind} - ${r.error.msg}`,
+        });
+      }
+      return { orderbook: r.value };
     }),
 
   getPrice: authedProcedure

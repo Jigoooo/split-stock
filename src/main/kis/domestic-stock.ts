@@ -224,3 +224,87 @@ export async function inquireDailyChart(
 
   return ok(candles);
 }
+
+export interface OrderbookLevel {
+  price: number;
+  quantity: number;
+}
+
+export interface OrderbookSnapshot {
+  pdno: string;
+  time: string; // HHMMSS (스냅샷 시각)
+  asks: OrderbookLevel[]; // 매도 1~10호가
+  bids: OrderbookLevel[]; // 매수 1~10호가
+  totalAskQty: number;
+  totalBidQty: number;
+  expectedPrice: number;
+  expectedQty: number;
+}
+
+/**
+ * 주식현재가 호가/예상체결 (REST 스냅샷).
+ * TR_ID: FHKST01010200 — 실전/모의 공통.
+ * WebSocket(H0STASP0) 데이터가 흐르지 않는 장외 시간대에 fallback으로 사용.
+ */
+export async function inquireOrderbook(
+  deps: Omit<DomesticStockDeps, 'accountNo8' | 'accountProdCd'>,
+  pdno: string,
+): Promise<Result<OrderbookSnapshot, KisError>> {
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${deps.token}`,
+    appkey: deps.appKey,
+    appsecret: deps.appSecret,
+    tr_id: 'FHKST01010200',
+    custtype: 'P',
+  };
+  const query = {
+    FID_COND_MRKT_DIV_CODE: 'J',
+    FID_INPUT_ISCD: pdno,
+  };
+  const res = await deps.http.get<unknown>(KIS_PATH.INQUIRE_ASKING_PRICE, query, headers);
+  if (res.isErr()) return err(res.error);
+  const body = res.value.body as {
+    rt_cd?: string;
+    msg_cd?: string;
+    msg1?: string;
+    output1?: Record<string, string>;
+    output2?: Record<string, string>;
+  };
+  const bizErr = interpretRtCd(body.rt_cd ?? '', body.msg_cd ?? '', body.msg1 ?? '');
+  if (bizErr) return err(bizErr);
+  if (!body.output1) {
+    return err(makeKisError('VALIDATION', 'orderbook 응답에 output1 없음'));
+  }
+  const o1 = body.output1;
+  const asks: OrderbookLevel[] = [];
+  const bids: OrderbookLevel[] = [];
+  for (let i = 1; i <= 10; i++) {
+    asks.push({
+      price: parseNum(o1[`askp${i}`] ?? '0'),
+      quantity: parseNum(o1[`askp_rsqn${i}`] ?? '0'),
+    });
+    bids.push({
+      price: parseNum(o1[`bidp${i}`] ?? '0'),
+      quantity: parseNum(o1[`bidp_rsqn${i}`] ?? '0'),
+    });
+  }
+  const o2 = body.output2 ?? {};
+  return ok({
+    pdno,
+    time: o1.aspr_acpt_hour ?? hhmmssNow(),
+    asks,
+    bids,
+    totalAskQty: parseNum(o1.total_askp_rsqn ?? '0'),
+    totalBidQty: parseNum(o1.total_bidp_rsqn ?? '0'),
+    expectedPrice: parseNum(o2.antc_cnpr ?? '0'),
+    expectedQty: parseNum(o2.antc_cnqn ?? '0'),
+  });
+}
+
+function hhmmssNow(): string {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}${mm}${ss}`;
+}
