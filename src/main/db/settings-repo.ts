@@ -91,6 +91,10 @@ export const SETTING_KEYS = {
 
   // ── 표시 설정: 그리드 ─────────────────────────────────────────────
   DISPLAY_GRID_ROW_HEIGHT_PX: 'display.grid.rowHeightPx',
+
+  // ── 실시간 설정 ─────────────────────────────────────────────────
+  /** WS 세션 capacity — KIS 기본 20, 향후 60 확장 시 사용자가 변경 가능 (1~60). */
+  REALTIME_WS_CAPACITY: 'realtime.wsCapacity',
 } as const;
 
 export const PENDING_CANCEL_DEFAULTS = {
@@ -341,3 +345,31 @@ export const DISPLAY_DEFAULTS = {
   volume: VOLUME_DEFAULTS,
   grid: DISPLAY_GRID_DEFAULTS,
 } as const;
+
+// ═══════════════════════════════════════════════════════════════════
+// Realtime Settings
+// ═══════════════════════════════════════════════════════════════════
+
+export const REALTIME_DEFAULTS = {
+  /** KIS WS 세션 capacity 기본값 — 현행 한도(20). 60 확장 시 UI에서 변경 가능. */
+  wsCapacity: 20,
+  /** 사용자가 설정 가능한 capacity 범위 — 60종목 확장 시 상한 60. */
+  wsCapacityMin: 1,
+  wsCapacityMax: 60,
+} as const;
+
+export interface RealtimeConfig {
+  wsCapacity: number;
+}
+
+export function readRealtimeConfig(repo: SettingsRepo): RealtimeConfig {
+  const raw = repo.get(SETTING_KEYS.REALTIME_WS_CAPACITY);
+  const n = raw !== null ? Number(raw) : REALTIME_DEFAULTS.wsCapacity;
+  const wsCapacity =
+    Number.isFinite(n) &&
+    n >= REALTIME_DEFAULTS.wsCapacityMin &&
+    n <= REALTIME_DEFAULTS.wsCapacityMax
+      ? Math.floor(n)
+      : REALTIME_DEFAULTS.wsCapacity;
+  return { wsCapacity };
+}
