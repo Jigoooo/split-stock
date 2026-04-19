@@ -1,4 +1,4 @@
-import type { LotEntry, SnapshotRow } from './use-lots-log';
+import type { SnapshotRow } from './use-lots-log';
 
 function krw(n: number): string {
   return n.toLocaleString('ko-KR');
@@ -6,7 +6,7 @@ function krw(n: number): string {
 
 function pct(numerator: number, denominator: number): string {
   if (denominator === 0) return '0.00%';
-  return ((numerator / denominator) * 100).toFixed(2) + '%';
+  return `${((numerator / denominator) * 100).toFixed(2)}%`;
 }
 
 /**

@@ -1,7 +1,7 @@
+import { StrategyProfileSchema } from '@shared/contracts/strategy';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { applyPriceRatio } from '../../trading/respiit-planner';
-import { StrategyProfileSchema } from '@shared/contracts/strategy';
 import { resolveAccountId } from '../router-helpers';
 import { publicProcedure, router } from '../trpc-core';
 

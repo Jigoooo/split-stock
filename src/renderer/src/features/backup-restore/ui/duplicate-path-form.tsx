@@ -100,6 +100,7 @@ export function DuplicatePathForm({ onPathSelected }: DuplicatePathFormProps) {
       {/* 버튼 그룹 */}
       <div className="flex gap-2">
         <button
+          type="button"
           onClick={handlePickFolder}
           disabled={
             pickFolderMutation.isPending || setPathMutation.isPending || getDuplicatePath.isLoading
@@ -111,6 +112,7 @@ export function DuplicatePathForm({ onPathSelected }: DuplicatePathFormProps) {
 
         {selectedPath && (
           <button
+            type="button"
             onClick={handleConfirmPath}
             disabled={setPathMutation.isPending}
             className="flex-1 px-3 py-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
@@ -121,6 +123,7 @@ export function DuplicatePathForm({ onPathSelected }: DuplicatePathFormProps) {
 
         {currentPath && (
           <button
+            type="button"
             onClick={handleClearPath}
             disabled={getDuplicatePath.isLoading}
             className="px-3 py-2 bg-gray-400 text-white text-xs rounded hover:bg-gray-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
