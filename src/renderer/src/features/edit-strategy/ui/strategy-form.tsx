@@ -138,14 +138,17 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
           inputMode="numeric"
         />
 
-        {/* 차수별 그리드 (Wave 1에서 1~50차 가변 행으로 확장) */}
+        {/* 차수별 그리드 + 감지% 자동입력 도구 (E3) */}
         <StageGrid
           raw={stageGrid.raw}
           errors={{ dropPct: errors.dropPct, profitPct: errors.profitPct }}
           dropBaseline={stageGrid.dropBaseline}
+          rows={stageGrid.rows}
+          maxStages={Number(base.maxStages) || 5}
           disabled={props.disabled}
           onUpdate={stageGrid.update}
           onToggleDropBaseline={stageGrid.toggleDropBaseline}
+          onAutoFill={stageGrid.autoFill}
         />
 
         {/* 수익부스터 */}
