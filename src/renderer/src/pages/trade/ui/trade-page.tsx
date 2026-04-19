@@ -12,20 +12,29 @@ interface Selected {
 
 /**
  * 주문 전용 페이지.
- * 상단: 선택한 종목 칩 → 차트(좌우 풀폭) → 2컬럼(종목 리스트 | 트레이딩 패널).
+ * 레이아웃(항상 동일):
+ *   1) 상단: 종목 검색 인풋 (autocomplete) + 현재 선택 칩
+ *   2) 중단: 차트 (일/주/월 탭)
+ *   3) 하단: 호가창/체결창/주문 티켓 (실시간 자동 시작)
  */
 export const TradePage = (): ReactElement => {
   const envQuery = trpc.auth.getEnv.useQuery();
+  const envReady = (envQuery.data?.env ?? null) !== null;
   const realtimeStatus = trpc.realtime.status.useQuery(undefined, {
-    enabled: (envQuery.data?.env ?? null) !== null,
+    enabled: envReady,
     refetchInterval: 5000,
   });
   const startRealtime = trpc.realtime.start.useMutation({
     onSuccess: () => realtimeStatus.refetch(),
   });
-  const [selected, setSelected] = useState<Selected | null>(null);
 
-  // 팝아웃 창(stock-picker 등)에서 선택된 종목을 이 페이지에도 반영
+  const [selected, setSelected] = useState<Selected | null>(null);
+  const overlay = trpc.account.getPositionOverlay.useQuery(
+    { pdno: selected?.pdno ?? '000000', includeSold: true },
+    { enabled: selected !== null },
+  );
+
+  // 팝아웃 창(stock-picker 등)에서 선택한 종목을 메인 창에도 반영
   useEffect(() => {
     const shell = window.appShell;
     if (!shell) return;
@@ -34,10 +43,13 @@ export const TradePage = (): ReactElement => {
     });
   }, []);
 
-  const overlay = trpc.account.getPositionOverlay.useQuery(
-    { pdno: selected?.pdno ?? '000000', includeSold: true },
-    { enabled: selected !== null },
-  );
+  // 실시간 피드는 항상 켜짐 — 환경 준비 후 자동 start 1회.
+  useEffect(() => {
+    if (!envReady) return;
+    if (realtimeStatus.data?.started) return;
+    if (startRealtime.isPending || startRealtime.isSuccess) return;
+    startRealtime.mutate();
+  }, [envReady, realtimeStatus.data?.started, startRealtime]);
 
   return (
     <div
@@ -49,103 +61,47 @@ export const TradePage = (): ReactElement => {
         minHeight: 0,
       }}
     >
-      <div className="panel">
-        <div
-          className="panel__body"
-          style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}
-        >
-          {selected ? (
-            <>
-              <span className="chip chip--up">
-                {selected.name} ({selected.pdno})
-              </span>
-              <button
-                type="button"
-                className="hts-btn"
-                onClick={() => setSelected(null)}
-                aria-label="선택 해제"
-              >
-                선택 해제
-              </button>
-            </>
-          ) : (
-            <span className="muted">아래 목록에서 종목을 선택하세요</span>
-          )}
-        </div>
-      </div>
-
-      {selected ? (
-        <PositionChart
-          pdno={selected.pdno}
-          name={selected.name}
-          lines={overlay.data?.lines ?? []}
-        />
-      ) : (
-        <div className="panel">
-          <div className="panel__body muted">종목 선택 시 차트가 여기에 표시됩니다.</div>
-        </div>
-      )}
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(320px, 360px) 1fr',
-          gap: '1.2rem',
-          flex: 1,
-          minHeight: 0,
-        }}
-      >
-        <div style={{ minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
           <StockPickerList
             {...(selected ? { selectedPdno: selected.pdno } : {})}
             onSelect={(entry) => setSelected({ pdno: entry.pdno, name: entry.name })}
           />
         </div>
-
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1.2rem',
-            minHeight: 0,
-            overflow: 'auto',
-          }}
-        >
-          {selected && realtimeStatus.data?.started ? (
-            <TradingPanel
-              pdno={selected.pdno}
-              name={selected.name}
-              isProd={envQuery.data?.env === 'PROD'}
-            />
-          ) : selected ? (
-            <div className="panel">
-              <div
-                className="panel__body"
-                style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}
-              >
-                <span className="muted">실시간 피드 미활성 — 호가/체결을 보려면 시작 필요</span>
-                <button
-                  type="button"
-                  className="hts-btn hts-btn--primary"
-                  disabled={startRealtime.isPending}
-                  onClick={() => startRealtime.mutate()}
-                >
-                  실시간 시작
-                </button>
-                {startRealtime.error ? (
-                  <span className="chip chip--down">{startRealtime.error.message}</span>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <div className="panel">
-              <div className="panel__body muted">
-                종목 선택 시 호가창/체결창/주문 티켓이 여기에 표시됩니다.
-              </div>
-            </div>
-          )}
-        </div>
+        {selected ? (
+          <span className="chip chip--up">
+            {selected.name} ({selected.pdno})
+            <button
+              type="button"
+              className="hts-btn"
+              onClick={() => setSelected(null)}
+              aria-label="선택 해제"
+              style={{
+                marginLeft: '0.6rem',
+                padding: '0.1rem 0.5rem',
+                fontSize: '1rem',
+              }}
+            >
+              ✕
+            </button>
+          </span>
+        ) : null}
       </div>
+
+      {selected ? (
+        <>
+          <PositionChart
+            pdno={selected.pdno}
+            name={selected.name}
+            lines={overlay.data?.lines ?? []}
+          />
+          <TradingPanel
+            pdno={selected.pdno}
+            name={selected.name}
+            isProd={envQuery.data?.env === 'PROD'}
+          />
+        </>
+      ) : null}
     </div>
   );
 };

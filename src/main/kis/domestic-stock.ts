@@ -178,9 +178,11 @@ function yyyymmdd(date: Date): string {
  * TR_ID: FHKST03010100 (조회성, 실전/모의 공통).
  * KIS 응답 output2는 최신 날짜부터 역순. 오래된 순으로 정렬하여 반환.
  */
+export type ChartPeriod = 'D' | 'W' | 'M';
+
 export async function inquireDailyChart(
   deps: Omit<DomesticStockDeps, 'accountNo8' | 'accountProdCd'>,
-  params: { code: string; from: Date; to: Date },
+  params: { code: string; from: Date; to: Date; period?: ChartPeriod },
 ): Promise<Result<DailyCandle[], KisError>> {
   const headers: Record<string, string> = {
     authorization: `Bearer ${deps.token}`,
@@ -194,7 +196,7 @@ export async function inquireDailyChart(
     FID_INPUT_ISCD: params.code,
     FID_INPUT_DATE_1: yyyymmdd(params.from),
     FID_INPUT_DATE_2: yyyymmdd(params.to),
-    FID_PERIOD_DIV_CODE: 'D',
+    FID_PERIOD_DIV_CODE: params.period ?? 'D',
     FID_ORG_ADJ_PRC: '0',
   };
   const res = await deps.http.get<unknown>(KIS_PATH.INQUIRE_DAILY_CHART, query, headers);

@@ -8,33 +8,50 @@ import {
   LineStyle,
 } from 'lightweight-charts';
 import type { ReactElement } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+export type ChartPeriod = 'D' | 'W' | 'M';
+
+const PERIOD_LABEL: Record<ChartPeriod, string> = {
+  D: '일',
+  W: '주',
+  M: '월',
+};
+
+const PERIOD_MONTHS: Record<ChartPeriod, number> = {
+  D: 3,
+  W: 12,
+  M: 60,
+};
 
 export interface PositionChartProps {
   pdno: string;
   name: string;
   lines: LotOverlayLine[];
-  months?: number;
 }
 
 /**
  * 보유 종목 차트 + 차수 오버레이.
- * - lightweight-charts: candlestick + priceLine (buy: 빨강 실선, sell-target: 파랑 점선)
- * - tRPC market.getDailyChart 호출 → CandlestickData[] 매핑
- * - lines는 lot-overlay.buildLotOverlay 결과를 호출측이 주입
+ * 상단 period 탭(일/주/월) — KIS inquire-daily-itemchartprice의 FID_PERIOD_DIV_CODE 매핑.
+ * 분봉은 별도 엔드포인트 필요 — 현재는 비활성 버튼 + 안내.
  */
 export const PositionChart = (props: PositionChartProps): ReactElement => {
-  const { pdno, name, lines, months = 3 } = props;
+  const { pdno, name, lines } = props;
+  const [period, setPeriod] = useState<ChartPeriod>('D');
   const ref = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const chartQuery = trpc.market.getDailyChart.useQuery({ code: pdno, months });
+  const chartQuery = trpc.market.getDailyChart.useQuery({
+    code: pdno,
+    months: PERIOD_MONTHS[period],
+    period,
+  });
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const chart = createChart(el, {
       width: el.clientWidth,
-      height: 340,
+      height: el.clientHeight || 340,
       layout: { background: { color: '#ffffff' }, textColor: '#222' },
       grid: {
         vertLines: { color: '#f0f0f0' },
@@ -45,11 +62,14 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     });
     chartRef.current = chart;
     const handleResize = (): void => {
-      if (el) chart.applyOptions({ width: el.clientWidth });
+      if (el) chart.applyOptions({ width: el.clientWidth, height: el.clientHeight || 340 });
     };
     window.addEventListener('resize', handleResize);
+    const ro = new ResizeObserver(handleResize);
+    ro.observe(el);
     return () => {
       window.removeEventListener('resize', handleResize);
+      ro.disconnect();
       chart.remove();
       chartRef.current = null;
     };
@@ -88,29 +108,71 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     chart.timeScale().fitContent();
 
     return () => {
-      // chartRef.current가 이미 null(상위 useEffect cleanup이 먼저 돌았거나 리마운트)이면 스킵.
-      // lightweight-charts는 disposed chart에 removeSeries 호출 시 throw가 남음.
       if (chartRef.current !== chart) return;
       try {
         chart.removeSeries(series);
       } catch {
-        // chart가 이미 내부적으로 dispose된 경우 무시
+        // dispose race 무시
       }
     };
   }, [chartQuery.data, lines]);
 
   return (
-    <div className="panel">
-      <div className="panel__title">
-        {name} ({pdno}) — {months}개월 일봉 + 차수
+    <div
+      className="panel"
+      style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}
+    >
+      <div
+        className="panel__title"
+        style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}
+      >
+        <span>
+          {name} ({pdno})
+        </span>
+        <span style={{ flex: 1 }} />
+        <div role="tablist" aria-label="봉 단위" style={{ display: 'flex', gap: '0.3rem' }}>
+          <button
+            type="button"
+            className="hts-btn"
+            disabled
+            title="분봉은 준비 중입니다"
+            style={{ padding: '0.3rem 0.7rem', opacity: 0.5 }}
+          >
+            분
+          </button>
+          {(['D', 'W', 'M'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              role="tab"
+              aria-selected={period === p}
+              className={period === p ? 'hts-btn hts-btn--primary' : 'hts-btn'}
+              onClick={() => setPeriod(p)}
+              style={{ padding: '0.3rem 0.7rem' }}
+            >
+              {PERIOD_LABEL[p]}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="panel__body" style={{ padding: '1.2rem' }}>
+      <div
+        className="panel__body"
+        style={{
+          padding: '0.6rem',
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         {chartQuery.isPending ? (
-          <div className="muted">차트 로드 중…</div>
+          <div className="muted" style={{ padding: '0.4rem 0' }}>
+            차트 로드 중…
+          </div>
         ) : chartQuery.error ? (
           <span className="chip chip--down">{chartQuery.error.message}</span>
         ) : null}
-        <div ref={ref} style={{ width: '100%', minHeight: 340 }} />
+        <div ref={ref} style={{ flex: 1, minHeight: 240, width: '100%' }} />
       </div>
     </div>
   );

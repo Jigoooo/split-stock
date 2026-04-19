@@ -104,7 +104,7 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
           }}
           onFocus={() => setFocused(true)}
           onKeyDown={onKey}
-          placeholder="종목명/초성/6자리 코드 (예: ㅅㅅ, 삼전)"
+          placeholder="종목을 검색하세요"
           aria-label="종목 검색"
           autoComplete="off"
           style={{ width: '100%', paddingLeft: 26 }}

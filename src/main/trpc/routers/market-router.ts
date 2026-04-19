@@ -80,7 +80,8 @@ export const marketRouter = router({
     .input(
       z.object({
         code: z.string().regex(/^\d{6}$/),
-        months: z.number().int().min(1).max(24).default(3),
+        months: z.number().int().min(1).max(60).default(3),
+        period: z.enum(['D', 'W', 'M']).default('D'),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -109,12 +110,12 @@ export const marketRouter = router({
           appKey: cred.appKey,
           appSecret: cred.appSecret,
         },
-        { code: input.code, from, to },
+        { code: input.code, from, to, period: input.period },
       );
       if (r.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: `일봉 조회 실패: ${r.error.kind} - ${r.error.msg}`,
+          message: `봉 조회 실패: ${r.error.kind} - ${r.error.msg}`,
         });
       }
       return { candles: r.value };
