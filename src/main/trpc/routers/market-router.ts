@@ -76,12 +76,19 @@ export const marketRouter = router({
     };
   }),
 
+  /**
+   * 봉 조회 — period별 KIS inquire-daily-itemchartprice.
+   * KIS는 1회 호출당 최대 100건만 반환하므로, 확장은 클라이언트가 toIsoDate를 옮겨가며 여러 번 호출해 chunk로 취합.
+   *   - toIsoDate 미지정: 오늘까지. 범위는 period별 chunk months 고정
+   *   - D: 4개월 chunk (~80 영업일), W: 24개월 chunk (~100주), M: 100개월 chunk (~100봉)
+   */
   getDailyChart: authedProcedure
     .input(
       z.object({
         code: z.string().regex(/^\d{6}$/),
-        months: z.number().int().min(1).max(60).default(3),
         period: z.enum(['D', 'W', 'M']).default('D'),
+        /** 조회 종료 시각 (ms epoch). 생략 시 현재. */
+        toMs: z.number().int().positive().optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -99,9 +106,10 @@ export const marketRouter = router({
           message: `토큰 발급 실패: ${tokenResult.error.kind}`,
         });
       }
-      const to = new Date();
+      const CHUNK_MONTHS: Record<'D' | 'W' | 'M', number> = { D: 4, W: 24, M: 100 };
+      const to = input.toMs ? new Date(input.toMs) : new Date();
       const from = new Date(to);
-      from.setMonth(from.getMonth() - input.months);
+      from.setMonth(from.getMonth() - CHUNK_MONTHS[input.period]);
       const r = await inquireDailyChart(
         {
           http: ctx.httpByEnv[env],
@@ -118,7 +126,7 @@ export const marketRouter = router({
           message: `봉 조회 실패: ${r.error.kind} - ${r.error.msg}`,
         });
       }
-      return { candles: r.value };
+      return { candles: r.value, toMs: to.getTime() };
     }),
 
   /**
