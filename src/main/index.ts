@@ -1,15 +1,20 @@
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import type { BrowserWindow as BrowserWindowType, safeStorage as safeStorageType } from 'electron';
+import type {
+  BrowserWindow as BrowserWindowType,
+  IpcMain as IpcMainType,
+  safeStorage as safeStorageType,
+} from 'electron';
 import { createIPCHandler } from 'trpc-electron/main';
 
 // Electron은 CJS-only 모듈. Vite 8(rolldown) + CJS output 조합에서
 // `import { app } from 'electron'`이 런타임에 undefined가 되는 interop
 // 문제가 있어, createRequire로 직접 require한다.
 const electronRequire = createRequire(import.meta.url);
-const { app, BrowserWindow, safeStorage, shell } = electronRequire('electron') as {
+const { app, BrowserWindow, ipcMain, safeStorage, shell } = electronRequire('electron') as {
   app: typeof import('electron').app;
   BrowserWindow: typeof BrowserWindowType;
+  ipcMain: IpcMainType;
   safeStorage: typeof safeStorageType;
   shell: typeof import('electron').shell;
 };
@@ -130,15 +135,22 @@ function bootstrapDeps(userDataDir: string) {
   return { factory, safety, eventLogger, settingsRepo };
 }
 
-function createMainWindow(): BrowserWindowType {
+interface CreateWindowOpts {
+  popoutRoute?: string;
+  width?: number;
+  height?: number;
+}
+
+function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
+  const { popoutRoute, width = 1280, height = 800 } = opts;
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 960,
-    minHeight: 600,
+    width,
+    height,
+    minWidth: popoutRoute ? 640 : 960,
+    minHeight: popoutRoute ? 480 : 600,
     show: false,
     autoHideMenuBar: true,
-    title: 'split-stock (MOCK)',
+    title: popoutRoute ? `split-stock · ${popoutRoute}` : 'split-stock (MOCK)',
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -155,10 +167,11 @@ function createMainWindow(): BrowserWindowType {
     return { action: 'deny' };
   });
 
+  const hash = popoutRoute ? `#popout=${encodeURIComponent(popoutRoute)}` : '';
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(process.env.ELECTRON_RENDERER_URL);
+    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}${hash}`);
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'));
+    void win.loadFile(join(__dirname, '../renderer/index.html'), { hash: hash.slice(1) });
   }
 
   return win;
@@ -182,10 +195,42 @@ void app.whenReady().then(async () => {
   });
 
   const win = createMainWindow();
-  createIPCHandler({
+  const ipcHandler = createIPCHandler({
     router: appRouter,
     windows: [win],
     createContext: async () => factory.create(),
+  });
+
+  // 팝아웃 창: 메인 화면에서 특정 페이지(logs, reports, settings 등)를 별도 창으로 띄움.
+  // route별 1개 창만 유지 — 이미 열려 있으면 포커스만 이동, 닫히면 렌더러에 통지해 placeholder 원복.
+  const ALLOWED_POPOUT_ROUTES = new Set([
+    'dashboard',
+    'trade',
+    'logs',
+    'reports',
+    'settings',
+  ]);
+  const popouts = new Map<string, BrowserWindowType>();
+  ipcMain.handle('appShell:openPopout', (_, route: unknown): { ok: boolean } => {
+    if (typeof route !== 'string' || !ALLOWED_POPOUT_ROUTES.has(route)) {
+      return { ok: false };
+    }
+    const existing = popouts.get(route);
+    if (existing && !existing.isDestroyed()) {
+      if (existing.isMinimized()) existing.restore();
+      existing.focus();
+      return { ok: true };
+    }
+    const popout = createMainWindow({ popoutRoute: route, width: 900, height: 720 });
+    popouts.set(route, popout);
+    ipcHandler.attachWindow(popout);
+    popout.on('closed', () => {
+      popouts.delete(route);
+      for (const target of BrowserWindow.getAllWindows()) {
+        if (!target.isDestroyed()) target.webContents.send('appShell:popout-closed', route);
+      }
+    });
+    return { ok: true };
   });
 
   void import('electron').then(({ globalShortcut }) => {

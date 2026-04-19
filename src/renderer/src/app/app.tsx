@@ -1,19 +1,14 @@
 import { CredentialsReentryBanner } from '@renderer/features/backup-restore';
 import { SafetySwitchPanel, useKillSwitchHotkey } from '@renderer/features/safety-switch';
 import { SwitchEnvDialog } from '@renderer/features/switch-env';
-import { DashboardPage } from '@renderer/pages/dashboard';
 import { LoginPage } from '@renderer/pages/login';
-import { LogsPage } from '@renderer/pages/logs';
-import { ReportsPage } from '@renderer/pages/reports';
-import { SettingsPage } from '@renderer/pages/settings';
-import { TradePage } from '@renderer/pages/trade';
 import { trpc } from '@renderer/shared/api/trpc';
+import { PanelWorkspace, PopoutPage, readPopoutRoute } from '@renderer/widgets/panel-workspace';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { AppProviders } from './providers';
 import './app.css';
 
-type Tab = 'dashboard' | 'trade' | 'logs' | 'reports' | 'settings';
 type EnvValue = 'MOCK' | 'PROD';
 
 const AppShell = (): ReactElement => {
@@ -21,7 +16,6 @@ const AppShell = (): ReactElement => {
   const envQuery = trpc.auth.getEnv.useQuery();
   const storedQuery = trpc.auth.listStored.useQuery();
   const env = envQuery.data?.env ?? null;
-  const [tab, setTab] = useState<Tab>('dashboard');
   useKillSwitchHotkey();
 
   const setEnv = trpc.auth.setEnv.useMutation({
@@ -59,7 +53,7 @@ const AppShell = (): ReactElement => {
   const stored = storedQuery.data?.entries ?? [];
 
   return (
-    <div className="app-root">
+    <div className="app-root" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <header className="app-header">
         <h1>split-stock</h1>
         {env ? (
@@ -78,98 +72,63 @@ const AppShell = (): ReactElement => {
               gap: '0.6rem',
               marginLeft: '1.6rem',
               alignItems: 'center',
+              flex: 1,
+              justifyContent: 'flex-end',
               flexWrap: 'wrap',
             }}
           >
-            <button
-              type="button"
-              className={tab === 'dashboard' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-              onClick={() => setTab('dashboard')}
-            >
-              대시보드
-            </button>
-            <button
-              type="button"
-              className={tab === 'trade' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-              onClick={() => setTab('trade')}
-            >
-              주문
-            </button>
-            <button
-              type="button"
-              className={tab === 'logs' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-              onClick={() => setTab('logs')}
-            >
-              로그
-            </button>
-            <button
-              type="button"
-              className={tab === 'reports' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-              onClick={() => setTab('reports')}
-            >
-              리포트
-            </button>
-            <button
-              type="button"
-              className={tab === 'settings' ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-              onClick={() => setTab('settings')}
-            >
-              설정
-            </button>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.6rem' }}>
-              {stored.length > 1 ? (
-                <select
-                  value={env}
-                  onChange={(e) => onSwitchEnv(e.target.value as EnvValue)}
-                  disabled={setEnv.isPending}
-                  aria-label="환경 전환"
-                >
-                  {stored.map((s) => (
-                    <option key={s.env} value={s.env}>
-                      {s.env} · {s.accountNo8.slice(-4)}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-              <button
-                type="button"
-                className="hts-btn"
-                onClick={() => onLogout(false)}
-                disabled={logout.isPending}
+            {stored.length > 1 ? (
+              <select
+                value={env}
+                onChange={(e) => onSwitchEnv(e.target.value as EnvValue)}
+                disabled={setEnv.isPending}
+                aria-label="환경 전환"
               >
-                로그아웃
-              </button>
-              <button
-                type="button"
-                className="hts-btn"
-                onClick={() => onLogout(true)}
-                disabled={logout.isPending}
-                title="저장된 자격증명까지 삭제"
-              >
-                자격증명 삭제
-              </button>
-            </div>
+                {stored.map((s) => (
+                  <option key={s.env} value={s.env}>
+                    {s.env} · {s.accountNo8.slice(-4)}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <button
+              type="button"
+              className="hts-btn"
+              onClick={() => onLogout(false)}
+              disabled={logout.isPending}
+            >
+              로그아웃
+            </button>
+            <button
+              type="button"
+              className="hts-btn"
+              onClick={() => onLogout(true)}
+              disabled={logout.isPending}
+              title="저장된 자격증명까지 삭제"
+            >
+              자격증명 삭제
+            </button>
           </nav>
         ) : null}
       </header>
-      <main className="app-main" style={{ display: 'grid', gap: '1.2rem' }}>
+      <main
+        className="app-main"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.8rem',
+          flex: 1,
+          minHeight: 0,
+          padding: '0.8rem',
+        }}
+      >
         {envQuery.isPending ? (
           <div className="muted">초기화 중…</div>
         ) : env ? (
           <>
             <CredentialsReentryBanner />
             <SafetySwitchPanel />
-            {tab === 'dashboard' ? (
-              <DashboardPage />
-            ) : tab === 'trade' ? (
-              <TradePage />
-            ) : tab === 'logs' ? (
-              <LogsPage />
-            ) : tab === 'reports' ? (
-              <ReportsPage />
-            ) : (
-              <SettingsPage />
-            )}
+            <PanelWorkspace />
           </>
         ) : (
           <LoginPage />
@@ -186,8 +145,11 @@ const AppShell = (): ReactElement => {
   );
 };
 
-export const App = (): ReactElement => (
-  <AppProviders>
-    <AppShell />
-  </AppProviders>
-);
+export const App = (): ReactElement => {
+  const popoutRoute = readPopoutRoute();
+  return (
+    <AppProviders>
+      {popoutRoute ? <PopoutPage route={popoutRoute} /> : <AppShell />}
+    </AppProviders>
+  );
+};
