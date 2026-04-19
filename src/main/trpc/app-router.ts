@@ -5,6 +5,7 @@ import { backupRouter } from './routers/backup-router';
 import { displayRouter } from './routers/display-router';
 import { feesRouter } from './routers/fees-router';
 import { logsRouter } from './routers/logs-router';
+import { lotsRouter } from './routers/lots-router';
 import { marketRouter } from './routers/market-router';
 import { monitoringRouter } from './routers/monitoring-router';
 import { notificationsRouter } from './routers/notifications-router';
@@ -30,6 +31,7 @@ export const appRouter = router({
   market: marketRouter,
   safety: safetyRouter,
   logs: logsRouter,
+  lots: lotsRouter,
   strategy: strategyRouter,
   monitoring: monitoringRouter,
   notifications: notificationsRouter,

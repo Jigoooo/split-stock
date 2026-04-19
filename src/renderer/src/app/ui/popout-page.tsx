@@ -1,6 +1,7 @@
 import { ProfitCalculatorPage } from '@renderer/features/profit-calculator';
 import { DashboardPage } from '@renderer/pages/dashboard';
 import { LogsPage } from '@renderer/pages/logs';
+import { LotsLogPage } from '@renderer/pages/lots-log';
 import { ReportsPage } from '@renderer/pages/reports';
 import { SettingsPage } from '@renderer/pages/settings';
 import { TradePage } from '@renderer/pages/trade';
@@ -26,6 +27,10 @@ export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => 
         />
       ) : route === 'logs' ? (
         <LogsPage />
+      ) : route === 'lots-log' ? (
+        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <LotsLogPage />
+        </div>
       ) : route === 'reports' ? (
         <ReportsPage />
       ) : route === 'stock-picker' ? (

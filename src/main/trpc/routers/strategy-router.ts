@@ -1,7 +1,7 @@
-import { StrategyProfileSchema } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { applyPriceRatio, type RespiitPlan } from '../../trading/respiit-planner';
+import { applyPriceRatio } from '../../trading/respiit-planner';
+import { StrategyProfileSchema } from '@shared/contracts/strategy';
 import { resolveAccountId } from '../router-helpers';
 import { publicProcedure, router } from '../trpc-core';
 
@@ -97,6 +97,13 @@ export const strategyRouter = router({
         });
       }
       const profile = activeResult.value;
+
+      if (!profile) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: '프로필 로드 실패',
+        });
+      }
 
       // respiitPlan이 있는지 확인
       if (!profile.respiitPlan) {

@@ -1,5 +1,5 @@
-import type { RespiitPlan } from '@main/trading/respiit-planner';
 import { trpc } from '@renderer/shared/api/trpc';
+import type { RespiitPlan } from '@shared/contracts';
 import { useState } from 'react';
 
 interface UseRatioPriceToolReturn {
@@ -34,9 +34,12 @@ export function usePriceRatioTool(): UseRatioPriceToolReturn {
     try {
       // applyPriceRatio 로직을 클라이언트에서 재현 (또는 서버 미리보기 엔드포인트 사용)
       const multiplier = 1 + ratioPct / 100;
-      const stageSet = stages === 'all' ? new Set(plan.entries.map((e) => e.nth)) : new Set(stages);
+      const stageSet =
+        stages === 'all'
+          ? new Set(plan.entries.map((e: (typeof plan.entries)[0]) => e.nth))
+          : new Set(stages);
 
-      const newEntries = plan.entries.map((entry) => {
+      const newEntries = plan.entries.map((entry: (typeof plan.entries)[0]) => {
         if (!stageSet.has(entry.nth)) {
           return entry;
         }

@@ -176,8 +176,22 @@ describe('LotsRepo', () => {
     it('pdno 필터 동작', () => {
       const repo = setupRepo();
       const lots = makeLots();
-      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 72000, lots });
-      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '000660', name: 'SK하이닉스', currentPrice: 185000, lots });
+      repo.saveSnapshot({
+        accountId: 1,
+        snapshotDate: '2025-04-01',
+        pdno: '005930',
+        name: '삼성전자',
+        currentPrice: 72000,
+        lots,
+      });
+      repo.saveSnapshot({
+        accountId: 1,
+        snapshotDate: '2025-04-01',
+        pdno: '000660',
+        name: 'SK하이닉스',
+        currentPrice: 185000,
+        lots,
+      });
 
       const snap = repo.snapshotByDate(1, '2025-04-01', '000660');
       expect(snap.isOk()).toBe(true);
@@ -190,8 +204,22 @@ describe('LotsRepo', () => {
     it('upsert — 같은 날짜/종목 재저장하면 덮어씀', () => {
       const repo = setupRepo();
       const lots = makeLots();
-      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 72000, lots });
-      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 75000, lots: lots.slice(0, 1) });
+      repo.saveSnapshot({
+        accountId: 1,
+        snapshotDate: '2025-04-01',
+        pdno: '005930',
+        name: '삼성전자',
+        currentPrice: 72000,
+        lots,
+      });
+      repo.saveSnapshot({
+        accountId: 1,
+        snapshotDate: '2025-04-01',
+        pdno: '005930',
+        name: '삼성전자',
+        currentPrice: 75000,
+        lots: lots.slice(0, 1),
+      });
 
       const snap = repo.snapshotByDate(1, '2025-04-01');
       expect(snap.isOk()).toBe(true);
@@ -205,9 +233,30 @@ describe('LotsRepo', () => {
     it('listSnapshotDates — 최신순 반환', () => {
       const repo = setupRepo();
       const lots = makeLots();
-      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 72000, lots });
-      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-03', pdno: '005930', name: '삼성전자', currentPrice: 73000, lots });
-      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-02', pdno: '000660', name: 'SK하이닉스', currentPrice: 185000, lots });
+      repo.saveSnapshot({
+        accountId: 1,
+        snapshotDate: '2025-04-01',
+        pdno: '005930',
+        name: '삼성전자',
+        currentPrice: 72000,
+        lots,
+      });
+      repo.saveSnapshot({
+        accountId: 1,
+        snapshotDate: '2025-04-03',
+        pdno: '005930',
+        name: '삼성전자',
+        currentPrice: 73000,
+        lots,
+      });
+      repo.saveSnapshot({
+        accountId: 1,
+        snapshotDate: '2025-04-02',
+        pdno: '000660',
+        name: 'SK하이닉스',
+        currentPrice: 185000,
+        lots,
+      });
 
       const dates = repo.listSnapshotDates(1);
       expect(dates.isOk()).toBe(true);
@@ -219,8 +268,22 @@ describe('LotsRepo', () => {
     it('per-account 격리 — 계좌 A 스냅샷이 계좌 B에 안 나옴', () => {
       const repo = setupRepo();
       const lots = makeLots();
-      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 72000, lots });
-      repo.saveSnapshot({ accountId: 2, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 60000, lots });
+      repo.saveSnapshot({
+        accountId: 1,
+        snapshotDate: '2025-04-01',
+        pdno: '005930',
+        name: '삼성전자',
+        currentPrice: 72000,
+        lots,
+      });
+      repo.saveSnapshot({
+        accountId: 2,
+        snapshotDate: '2025-04-01',
+        pdno: '005930',
+        name: '삼성전자',
+        currentPrice: 60000,
+        lots,
+      });
 
       const snapA = repo.snapshotByDate(1, '2025-04-01');
       const snapB = repo.snapshotByDate(2, '2025-04-01');
