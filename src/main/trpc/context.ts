@@ -47,6 +47,7 @@ export interface Context {
   activeAccountId: number | null;
   timeWindowRepo: TimeWindowRepo;
   rateGuardRepo: RateGuardRepo;
+  protectionLimitsRepo: ProtectionLimitsRepo;
   watchEngine: WatchEngine | null;
   /** 미체결 자동취소(F6) 감시 인스턴스 — 부팅 시 주입, 미활성화 시 null. */
   pendingOrderWatcher: PendingOrderWatcher | null;
