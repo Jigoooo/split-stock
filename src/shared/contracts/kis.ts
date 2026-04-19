@@ -162,6 +162,19 @@ export const NormalizedOrderAckSchema = z.object({
 export type NormalizedOrderAck = z.infer<typeof NormalizedOrderAckSchema>;
 
 /**
+ * 실시간 WS 체결통보(H0STCNI0/H0STCNI9) — AES 복호화 후 pipe-delimited 레코드.
+ * renderer는 main 모듈을 직접 import할 수 없으므로 shared/contracts에서 공유.
+ */
+export interface CniNotice {
+  tr: 'H0STCNI0' | 'H0STCNI9';
+  /** 고객 HTS ID (tr_key). */
+  htsId: string;
+  seq: number;
+  /** 복호화된 원시 레코드 문자열 (^-delimited). */
+  raw: string;
+}
+
+/**
  * KIS API 에러를 neverthrow Result로 감싸기 위한 에러 모델.
  */
 export type KisErrorKind =

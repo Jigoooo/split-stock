@@ -1,10 +1,13 @@
-import type { AppEnv, KisError } from '@shared/contracts';
+import type { AppEnv, CniNotice, KisError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import { z } from 'zod';
 import type { EventLogger } from '../logging/event-logger';
 import { KIS_PATH, KIS_WS_URL } from './endpoints';
 import { makeKisError } from './errors';
 import type { KisHttpClient } from './http-client';
+
+// renderer 가 동일 타입을 참조해야 하므로 shared/contracts 에 단일 정의 — 본 모듈에서도 재export.
+export type { CniNotice };
 
 /** 브라우저/ws 호환 최소 WebSocket 인터페이스. */
 export interface WsLike {
@@ -104,16 +107,6 @@ export interface RealtimeMessage {
   tr: string;
   code: string;
   seq: number;
-  raw: string;
-}
-
-/** 체결통보 파싱 결과 — AES 복호화 후 pipe-delimited 레코드. */
-export interface CniNotice {
-  tr: 'H0STCNI0' | 'H0STCNI9';
-  /** 고객 HTS ID (tr_key). */
-  htsId: string;
-  seq: number;
-  /** 복호화된 원시 레코드 문자열 (^-delimited). */
   raw: string;
 }
 
