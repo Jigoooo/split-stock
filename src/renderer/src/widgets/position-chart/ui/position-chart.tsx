@@ -1,3 +1,4 @@
+import { useGetDisplaySettings } from '@renderer/entities/display-settings';
 import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import type { LotOverlayLine } from '@shared/trading/lot-overlay';
 import type { ReactElement } from 'react';
@@ -18,6 +19,7 @@ export interface PositionChartProps {
 
 export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactElement => {
   const chart = usePositionChart(pdno);
+  const { settings: displaySettings } = useGetDisplaySettings();
 
   return (
     <div
@@ -84,6 +86,7 @@ export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactE
           lines={lines}
           onFetchMore={chart.fetchMore}
           reachedEnd={chart.reachedEnd}
+          displaySettings={displaySettings}
         />
       </div>
     </div>

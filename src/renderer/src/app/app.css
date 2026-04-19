@@ -31,6 +31,9 @@
   --hts-header-bg: #f1f5f9;
   --hts-line: #e2e8f0;
 
+  /* 그리드 행 높이 — GridDensityForm에서 document.documentElement.style.setProperty로 덮어씀 */
+  --hts-row-height: 26px;
+
   --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, "D2Coding", monospace;
   --motion-fast: 100ms;
   --motion-crisp: cubic-bezier(0.2, 0, 0, 1);
@@ -191,8 +194,10 @@ body {
 .hts-table th,
 .hts-table td {
   padding: 0.35rem 0.6rem;
+  height: var(--hts-row-height);
   border-bottom: 0.1rem solid var(--border);
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .hts-table thead th {
