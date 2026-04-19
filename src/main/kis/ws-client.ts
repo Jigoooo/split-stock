@@ -77,12 +77,11 @@ export async function issueApprovalKey(
 /**
  * 지원 TR 목록.
  *
- * @deprecated H0STCNT0 — 국내주식 체결가. W0-4 이후 RotatingQuoteFeed(REST 회전 폴링)가 메인
- *   가격 소스로 대체함. 하위 호환을 위해 타입은 보존하되 신규 구독은 생성하지 않는다.
- *   이 TR 구독은 후속 마일스톤(BC 정리 단계)에서 완전 제거 예정.
- * @deprecated H0STASP0 — 국내주식 호가. H0STCNT0와 동일한 이유로 미사용 상태.
- *   후속 마일스톤에서 제거 예정.
- *
+ * H0STCNT0: 국내주식 체결가 — WS 세션당 호가와 합산 20종목 한도 (향후 60 확장 예정).
+ *   WsPoolManager 가 우선순위 desc 로 capacity 안에 든 종목을 WS 로 라우팅하고
+ *   초과분은 RotatingQuoteFeed(REST 15rps) 로 위임한다.
+ * H0STASP0: 국내주식 호가 (10단 매도/매수 + 잔량 + 예상체결가).
+ *   H0STCNT0 와 슬롯 합산 — 같은 종목 둘 다 활성화 시 슬롯 2개 소비.
  * H0STCNI0: 국내주식 체결통보 실전 (AES-256-CBC 암호화, tr_key = HTS ID)
  * H0STCNI9: 국내주식 체결통보 모의 (AES-256-CBC 암호화, tr_key = HTS ID)
  */
