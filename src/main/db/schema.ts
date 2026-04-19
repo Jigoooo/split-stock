@@ -32,6 +32,8 @@ export const accounts = sqliteTable('accounts', {
   accountProdCd: text('account_prod_cd').notNull(),
   nickname: text('nickname').notNull().default(''),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  isActive: integer('is_active').notNull().default(0), // boolean — 현재 활성 계좌 여부. 한 시점에 1개만 true 보장은 앱 레벨에서.
+  displayName: text('display_name'), // UI 표시용 (선택)
 });
 
 /**
@@ -94,6 +96,7 @@ export const eventLogs = sqliteTable('event_logs', {
   category: text('category').notNull(), // 'AUTH' | 'ORDER' | 'FSM' | 'WS' | 'SYS'
   message: text('message').notNull(),
   payloadJson: text('payload_json'), // nullable JSON text
+  auditPayload: text('audit_payload'), // 차수 수동편집 등 before/after 스냅샷 (JSON 직렬화, NULL 허용)
 });
 
 /**
@@ -113,6 +116,38 @@ export const stockMaster = sqliteTable('stock_master', {
   pdno: text('pdno').primaryKey(), // 종목코드 6자리
   name: text('name').notNull(),
   sector: text('sector'),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/**
+ * 매매 시간대 설정 — 계좌별 BUY/SELL 구간 최대 3슬롯.
+ * side: 'BUY' | 'SELL', slot: 1~3, start/end_minute: 0~1439 (00:00=0, 23:59=1439).
+ */
+export const timeWindows = sqliteTable('time_windows', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id').notNull(), // FK → accounts.id
+  side: text('side').notNull(), // 'BUY' | 'SELL'
+  slot: integer('slot').notNull(), // 1 | 2 | 3
+  enabled: integer('enabled').notNull().default(0), // boolean
+  startMinute: integer('start_minute').notNull(), // 0~1439
+  endMinute: integer('end_minute').notNull(), // 0~1439
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/**
+ * 자동매매 보호 한도 — 계좌 단위 1행. accountId가 PK.
+ * NULL = 미설정(제한 없음).
+ */
+export const protectionLimits = sqliteTable('protection_limits', {
+  accountId: integer('account_id').primaryKey(), // FK → accounts.id
+  perSymbolDailyMaxBuys: integer('per_symbol_daily_max_buys'), // NULL = 미설정
+  dailyTotalMaxAmount: integer('daily_total_max_amount'),
+  dailyTotalMaxCount: integer('daily_total_max_count'),
+  accountTotalMaxAmount: integer('account_total_max_amount'),
+  rateGuardEnabled: integer('rate_guard_enabled').notNull().default(0), // boolean
+  rateGuardWindowSeconds: integer('rate_guard_window_seconds').default(40),
+  rateGuardMaxCount: integer('rate_guard_max_count').default(5),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
 });
 
