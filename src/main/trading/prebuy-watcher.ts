@@ -50,12 +50,28 @@ export class PrebuyWatcher {
       this.mode = 'engine';
       this.engine = opts.engine;
       this.accountId = opts.accountId;
-      installPrebuyHandler(this.engine, this.engineMap, this.opts);
+      this.engine.registerHandler('PREBUY', this.accountId, this.makeHandler());
     } else {
       this.mode = 'legacy';
       this.engine = null;
       this.accountId = 0;
     }
+  }
+
+  /**
+   * 본 인스턴스(accountId 한정) PREBUY 핸들러.
+   * engineMap 클로저는 인스턴스 단위로 격리되어 다계좌에서도 안전.
+   */
+  private makeHandler(): WatchHandler {
+    return async (order: WatchOrder, ctx) => {
+      const found = Array.from(this.engineMap.values()).find((m) => m.watchId === order.id);
+      if (found) {
+        this.opts.onTrigger(found.order, { price: ctx.price });
+        this.opts.repo.markFilled(found.order.id);
+        this.engineMap.delete(found.order.id);
+      }
+      return { ok: true };
+    };
   }
 
   /** DB에서 PENDING 전체 로드 → 내부 맵 재구성. */
@@ -98,6 +114,8 @@ export class PrebuyWatcher {
     if (this.mode === 'engine') {
       for (const m of this.engineMap.values()) this.engine?.cancel(m.watchId);
       this.engineMap.clear();
+      // stale closure 누수 방지 — 인스턴스 폐기 시 핸들러도 함께 해제.
+      this.engine?.unregisterHandler('PREBUY', this.accountId);
       return;
     }
     this.watchMap.clear();
@@ -166,25 +184,3 @@ export class PrebuyWatcher {
   }
 }
 
-/**
- * PREBUY 핸들러를 engine에 등록.
- * 트리거 시 외부 onTrigger 콜백 호출 + prebuy_orders.markFilled로 BC 유지.
- * 핸들러는 항상 ok=true 반환 (실제 주문 실행은 onTrigger 안에서 처리).
- */
-function installPrebuyHandler(
-  engine: WatchEngine,
-  engineMap: Map<number, EngineMapping>,
-  opts: PrebuyWatcherOptions,
-): void {
-  const handler: WatchHandler = async (order: WatchOrder, ctx) => {
-    const found = Array.from(engineMap.values()).find((m) => m.watchId === order.id);
-    if (found) {
-      opts.onTrigger(found.order, { price: ctx.price });
-      opts.repo.markFilled(found.order.id);
-      engineMap.delete(found.order.id);
-    }
-    return { ok: true };
-  };
-  (engine as unknown as { opts: { handlers: Record<string, WatchHandler> } }).opts.handlers.PREBUY =
-    handler;
-}

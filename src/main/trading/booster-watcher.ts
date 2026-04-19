@@ -60,12 +60,27 @@ export class BoosterWatcher {
       this.mode = 'engine';
       this.engine = opts.engine;
       this.accountId = opts.accountId;
-      installBoosterHandler(this.engine, this.engineEntries, this.opts);
+      this.engine.registerHandler('BOOSTER', this.accountId, this.makeHandler());
     } else {
       this.mode = 'legacy';
       this.engine = null;
       this.accountId = 0;
     }
+  }
+
+  /**
+   * 본 인스턴스의 (accountId 한정) BOOSTER 핸들러.
+   * engineEntries 클로저는 인스턴스 단위라 다계좌에서도 안전.
+   */
+  private makeHandler(): WatchHandler {
+    return async (order: WatchOrder, ctx) => {
+      const found = Array.from(this.engineEntries.values()).find((e) => e.watchId === order.id);
+      if (found) {
+        this.opts.onTrigger(found.task, { price: ctx.price, at: this.opts.timer.now() });
+        this.engineEntries.delete(found.task.pdno);
+      }
+      return { ok: true };
+    };
   }
 
   register(task: BoosterTask): void {
@@ -112,6 +127,8 @@ export class BoosterWatcher {
     if (this.mode === 'engine') {
       for (const e of this.engineEntries.values()) this.engine?.cancel(e.watchId);
       this.engineEntries.clear();
+      // stale closure 누수 방지 — 인스턴스 폐기 시 핸들러도 함께 해제.
+      this.engine?.unregisterHandler('BOOSTER', this.accountId);
       return;
     }
     for (const e of this.legacyEntries.values()) {
@@ -187,27 +204,3 @@ export class BoosterWatcher {
   }
 }
 
-/**
- * BOOSTER 핸들러를 engine에 등록.
- * 트리거 시 외부 onTrigger 콜백을 호출해 ASIS의 1차 재매수 후속처리(주문 발사 등)를 위임.
- * onTrigger는 동기로 가정하므로, 핸들러는 항상 ok=true 반환.
- * 실제 주문 실패는 외부 onTrigger 핸들러 안에서 처리하고, 필요시 별도 watch_orders 행을 새로 등록.
- */
-function installBoosterHandler(
-  engine: WatchEngine,
-  entries: Map<string, EngineEntry>,
-  opts: BoosterWatcherOptions,
-): void {
-  const handler: WatchHandler = async (order: WatchOrder, ctx) => {
-    const found = Array.from(entries.values()).find((e) => e.watchId === order.id);
-    if (found) {
-      opts.onTrigger(found.task, { price: ctx.price, at: opts.timer.now() });
-      entries.delete(found.task.pdno);
-    }
-    return { ok: true };
-  };
-  // engine 옵션 객체에 직접 BOOSTER 핸들러 주입.
-  (
-    engine as unknown as { opts: { handlers: Record<string, WatchHandler> } }
-  ).opts.handlers.BOOSTER = handler;
-}
