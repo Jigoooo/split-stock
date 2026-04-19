@@ -1,14 +1,43 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Select } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
+import { useTransition } from 'react';
 import { LOG_CATEGORIES, LOG_LEVELS, useLogTail } from '../model/use-log-tail';
 
 export const LogsPage = (): ReactElement => {
-  const { category, entries, error, isPending, level, setCategory, setLevel } = useLogTail();
+  const {
+    level,
+    setLevel,
+    categories,
+    setCategories,
+    search,
+    setSearch,
+    dateRange,
+    setDateRange,
+    entries,
+    error,
+    isPending,
+  } = useLogTail();
+  const [isPending_, startTransition] = useTransition();
+
+  const handleCategoryToggle = (cat: (typeof LOG_CATEGORIES)[number]) => {
+    if (!cat) return; // '전체' 필터 무시
+    startTransition(() => {
+      const newCategories = new Set(categories);
+      if (newCategories.has(cat)) {
+        newCategories.delete(cat);
+      } else {
+        newCategories.add(cat);
+      }
+      setCategories(newCategories);
+    });
+  };
 
   return (
     <div className="panel">
       <div className="panel__title">이벤트 로그 (실시간 tail)</div>
+
+      {/* 필터 행 1: 레벨, 날짜 범위 */}
       <div
         className="panel__body"
         style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}
@@ -18,7 +47,11 @@ export const LogsPage = (): ReactElement => {
           <Select
             id="logs-level"
             value={level}
-            onChange={(e) => setLevel(e.target.value as typeof level)}
+            onChange={(e) =>
+              startTransition(() => {
+                setLevel(e.target.value as typeof level);
+              })
+            }
             dense
           >
             {LOG_LEVELS.map((l) => (
@@ -28,25 +61,84 @@ export const LogsPage = (): ReactElement => {
             ))}
           </Select>
         </label>
-        <label htmlFor="logs-category" style={{ display: 'grid', gap: '0.25rem' }}>
-          <span className="muted">카테고리</span>
+
+        <label htmlFor="logs-date-range" style={{ display: 'grid', gap: '0.25rem' }}>
+          <span className="muted">기간</span>
           <Select
-            id="logs-category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as typeof category)}
+            id="logs-date-range"
+            value={dateRange}
+            onChange={(e) =>
+              startTransition(() => {
+                setDateRange(
+                  e.target.value as 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' | '',
+                );
+              })
+            }
             dense
           >
-            {LOG_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c || '전체'}
-              </option>
-            ))}
+            <option value="">전체</option>
+            <option value="today">오늘</option>
+            <option value="month">이번달</option>
+            <option value="lastMonth">지난달</option>
+            <option value="last3Months">3개월</option>
+            <option value="year">1년</option>
           </Select>
         </label>
+
+        <label htmlFor="logs-search" style={{ display: 'grid', gap: '0.25rem' }}>
+          <span className="muted">검색</span>
+          <input
+            id="logs-search"
+            type="text"
+            placeholder="메시지 검색..."
+            value={search}
+            onChange={(e) =>
+              startTransition(() => {
+                setSearch(e.target.value);
+              })
+            }
+            style={{ padding: '0.4rem', fontSize: '0.9rem' }}
+          />
+        </label>
+
         <span className="muted" style={{ marginLeft: 'auto' }}>
-          2초마다 새로고침 · {thousandSeparator(entries.length)}건 표시
+          {thousandSeparator(entries.length)}건 표시
         </span>
       </div>
+
+      {/* 필터 행 2: 카테고리 multi-select */}
+      <div
+        className="panel__body"
+        style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}
+      >
+        <span className="muted">카테고리:</span>
+        {LOG_CATEGORIES.filter((c) => c !== '').map((cat) => (
+          <label
+            key={cat}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.3rem',
+              padding: '0.3rem 0.6rem',
+              border: categories.has(cat) ? '1px solid #0f0' : '1px solid #666',
+              borderRadius: '0.25rem',
+              backgroundColor: categories.has(cat) ? 'rgba(0, 255, 0, 0.1)' : 'transparent',
+              cursor: 'pointer',
+              fontSize: '0.9rem',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={categories.has(cat)}
+              onChange={() => handleCategoryToggle(cat)}
+              style={{ cursor: 'pointer' }}
+            />
+            {cat}
+          </label>
+        ))}
+      </div>
+
+      {/* 로그 테이블 */}
       <div className="panel__body" style={{ padding: 0 }}>
         <table className="hts-table">
           <thead>
@@ -59,7 +151,7 @@ export const LogsPage = (): ReactElement => {
             </tr>
           </thead>
           <tbody>
-            {isPending ? (
+            {isPending || isPending_ ? (
               <tr>
                 <td colSpan={5} className="muted" style={{ textAlign: 'center' }}>
                   로드 중…
