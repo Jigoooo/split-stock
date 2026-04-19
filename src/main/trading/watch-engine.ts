@@ -83,8 +83,17 @@ export interface WatchEngineOptions {
   timer: Timer;
   /** 만료 체크 주기 ms (기본 60s). */
   expiryCheckMs?: number;
-  /** source별 주문 발사 핸들러. 누락된 source는 트리거 시 FAILED 처리. */
-  handlers: Partial<Record<WatchSource, WatchHandler>>;
+  /**
+   * source별 글로벌 fallback 핸들러.
+   *
+   * 라우팅 우선순위:
+   *   1. registerHandler(source, accountId, handler) 로 등록된 per-account 핸들러
+   *   2. 본 글로벌 fallback (모든 계좌가 동일 핸들러를 공유하는 단일계좌 환경 호환)
+   *   3. 둘 다 없으면 FAILED + reason='NO_HANDLER'
+   *
+   * @deprecated 다계좌 환경에서는 `registerHandler` 사용. 본 필드는 BC 보존용.
+   */
+  handlers?: Partial<Record<WatchSource, WatchHandler>>;
   /** 트리거/만료 등 라이프사이클 콜백 (옵션). */
   onTriggered?: (order: WatchOrder) => void;
   onExpired?: (order: WatchOrder) => void;
@@ -124,12 +133,41 @@ interface QueueEntry {
 export class WatchEngine {
   private readonly expiryCheckMs: number;
   private readonly queue = new Map<string, QueueEntry[]>(); // pdno → entries
+  /**
+   * source × accountId 단위 핸들러 라우팅 테이블.
+   * 다계좌 환경에서 BoosterWatcher/PrebuyWatcher 인스턴스 N개가 안전하게 공존하도록 분리.
+   */
+  private readonly handlerRegistry = new Map<WatchSource, Map<number, WatchHandler>>();
   private intervalHandle: { clear: () => void } | null = null;
   private disposed = false;
 
   constructor(private readonly opts: WatchEngineOptions) {
     this.expiryCheckMs = opts.expiryCheckMs ?? 60_000;
     this.reload();
+  }
+
+  /**
+   * source × accountId 핸들러 등록.
+   * BoosterWatcher/PrebuyWatcher 어댑터가 인스턴스 생성 시 호출.
+   * 같은 (source, accountId) 재등록 시 이전 핸들러를 덮어쓴다.
+   */
+  registerHandler(source: WatchSource, accountId: number, handler: WatchHandler): void {
+    let perAccount = this.handlerRegistry.get(source);
+    if (!perAccount) {
+      perAccount = new Map<number, WatchHandler>();
+      this.handlerRegistry.set(source, perAccount);
+    }
+    perAccount.set(accountId, handler);
+  }
+
+  /**
+   * source × accountId 핸들러 해제. dispose 시 stale closure 방지를 위해 호출.
+   */
+  unregisterHandler(source: WatchSource, accountId: number): void {
+    const perAccount = this.handlerRegistry.get(source);
+    if (!perAccount) return;
+    perAccount.delete(accountId);
+    if (perAccount.size === 0) this.handlerRegistry.delete(source);
   }
 
   /**
@@ -306,7 +344,9 @@ export class WatchEngine {
 
     this.opts.onTriggered?.(order);
 
-    const handler = this.opts.handlers[order.source];
+    // 라우팅: 1) per-account → 2) 글로벌 fallback (deprecated, BC) → 3) FAILED
+    const perAccount = this.handlerRegistry.get(order.source);
+    const handler = perAccount?.get(order.accountId) ?? this.opts.handlers?.[order.source];
     let result: ExecutionResult;
     if (!handler) {
       result = { ok: false, reason: `handler 미등록: source=${order.source}` };

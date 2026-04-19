@@ -299,6 +299,100 @@ describe('WatchEngine', () => {
     await flush();
   });
 
+  it('registerHandler: per-account 핸들러가 글로벌 fallback보다 우선', async () => {
+    const { db, timer } = setup();
+    const fallbackCalls: number[] = [];
+    const perAccountCalls: number[] = [];
+    const fallback: WatchHandler = async (o) => {
+      fallbackCalls.push(o.accountId);
+      return { ok: true };
+    };
+    const perAccount: WatchHandler = async (o) => {
+      perAccountCalls.push(o.accountId);
+      return { ok: true };
+    };
+    const engine = new WatchEngine({ db, timer, handlers: { CUSTOM: fallback } });
+    engine.registerHandler('CUSTOM', 1, perAccount);
+
+    const r = engine.register(buyInput({ accountId: 1 }));
+    if (r.isErr()) throw new Error('register failed');
+    engine.onPrice('005930', 50_000);
+    await flush();
+    expect(perAccountCalls).toEqual([1]);
+    expect(fallbackCalls).toEqual([]);
+  });
+
+  it('registerHandler: per-account 핸들러 미등록 시 글로벌 fallback 사용 (BC)', async () => {
+    const { db, timer } = setup();
+    const calls: number[] = [];
+    const fallback: WatchHandler = async (o) => {
+      calls.push(o.accountId);
+      return { ok: true };
+    };
+    const engine = new WatchEngine({ db, timer, handlers: { CUSTOM: fallback } });
+    // registerHandler 호출 없음 → 단일계좌 시나리오 (기존 BC)
+    const r = engine.register(buyInput({ accountId: 7 }));
+    if (r.isErr()) throw new Error('register failed');
+    engine.onPrice('005930', 50_000);
+    await flush();
+    expect(calls).toEqual([7]);
+  });
+
+  it('registerHandler: 다계좌 라우팅 — A의 트리거가 B의 핸들러를 호출하지 않음', async () => {
+    const { db, timer } = setup();
+    const aCalls: number[] = [];
+    const bCalls: number[] = [];
+    const handlerA: WatchHandler = async (o) => {
+      aCalls.push(o.accountId);
+      return { ok: true };
+    };
+    const handlerB: WatchHandler = async (o) => {
+      bCalls.push(o.accountId);
+      return { ok: true };
+    };
+    const engine = new WatchEngine({ db, timer });
+    engine.registerHandler('BOOSTER', 1, handlerA);
+    engine.registerHandler('BOOSTER', 2, handlerB);
+
+    const ra = engine.register(buyInput({ source: 'BOOSTER', accountId: 1, pdno: '005930' }));
+    const rb = engine.register(buyInput({ source: 'BOOSTER', accountId: 2, pdno: '000660' }));
+    if (ra.isErr() || rb.isErr()) throw new Error('register failed');
+
+    engine.onPrice('005930', 50_000); // A만 트리거
+    await flush();
+    expect(aCalls).toEqual([1]);
+    expect(bCalls).toEqual([]);
+
+    engine.onPrice('000660', 50_000); // B만 트리거
+    await flush();
+    expect(aCalls).toEqual([1]);
+    expect(bCalls).toEqual([2]);
+  });
+
+  it('unregisterHandler: 해제 후 fallback 핸들러로 라우팅', async () => {
+    const { db, timer } = setup();
+    const fallbackCalls: number[] = [];
+    const perAccountCalls: number[] = [];
+    const fallback: WatchHandler = async (o) => {
+      fallbackCalls.push(o.accountId);
+      return { ok: true };
+    };
+    const perAccount: WatchHandler = async (o) => {
+      perAccountCalls.push(o.accountId);
+      return { ok: true };
+    };
+    const engine = new WatchEngine({ db, timer, handlers: { CUSTOM: fallback } });
+    engine.registerHandler('CUSTOM', 1, perAccount);
+    engine.unregisterHandler('CUSTOM', 1);
+
+    const r = engine.register(buyInput({ accountId: 1 }));
+    if (r.isErr()) throw new Error('register failed');
+    engine.onPrice('005930', 50_000);
+    await flush();
+    expect(perAccountCalls).toEqual([]);
+    expect(fallbackCalls).toEqual([1]);
+  });
+
   it('stop: 이후 onPrice는 무시', async () => {
     const { db, timer } = setup();
     let called = 0;
