@@ -286,7 +286,13 @@ function resolveWindowBounds(
 function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
   const { popoutRoute, parent } = opts;
   const display = pickTargetDisplay(parent);
-  const bounds = resolveWindowBounds(popoutRoute ? 720 : 1440, popoutRoute ? 540 : 900, display);
+  // profit-calculator는 작은 창 (380x420)
+  const isProfitCalc = popoutRoute === 'profit-calculator';
+  const bounds = resolveWindowBounds(
+    isProfitCalc ? 380 : popoutRoute ? 720 : 1440,
+    isProfitCalc ? 420 : popoutRoute ? 540 : 900,
+    display,
+  );
   const win = new BrowserWindow({
     x: bounds.x,
     y: bounds.y,
@@ -360,6 +366,7 @@ void app.whenReady().then(async () => {
     'reports',
     'settings',
     'stock-picker',
+    'profit-calculator',
   ]);
   const popouts = new Map<string, BrowserWindowType>();
   ipcMain.handle('appShell:openPopout', (event, route: unknown): { ok: boolean } => {
@@ -394,6 +401,15 @@ void app.whenReady().then(async () => {
       if (target.isDestroyed()) continue;
       if (target.webContents.id === event.sender.id) continue;
       target.webContents.send('appShell:stock-assigned', pdno, name);
+    }
+  });
+
+  // 팝아웃 창의 "창 항상 위로" 토글
+  ipcMain.handle('appShell:setAlwaysOnTop', (event, on: unknown) => {
+    if (typeof on !== 'boolean') return;
+    const target = BrowserWindow.fromWebContents(event.sender);
+    if (target && !target.isDestroyed()) {
+      target.setAlwaysOnTop(on);
     }
   });
 

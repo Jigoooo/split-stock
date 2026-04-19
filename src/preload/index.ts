@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:stock-assigned', handler);
     return () => ipcRenderer.off('appShell:stock-assigned', handler);
   },
+  setAlwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('appShell:setAlwaysOnTop', on),
 });
 
 export type AppEnvBridge = {
@@ -41,4 +42,5 @@ export type AppShellBridge = {
   onPopoutClosed: (listener: (route: string) => void) => () => void;
   assignStock: (pdno: string, name: string) => void;
   onStockAssigned: (listener: (pdno: string, name: string) => void) => () => void;
+  setAlwaysOnTop: (on: boolean) => Promise<void>;
 };
