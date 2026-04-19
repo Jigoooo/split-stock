@@ -11,7 +11,7 @@ import { createIPCHandler } from 'trpc-electron/main';
 // `import { app } from 'electron'`이 런타임에 undefined가 되는 interop
 // 문제가 있어, createRequire로 직접 require한다.
 const electronRequire = createRequire(import.meta.url);
-const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, shell } = electronRequire(
+const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, screen, shell } = electronRequire(
   'electron',
 ) as {
   app: typeof import('electron').app;
@@ -19,6 +19,7 @@ const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, shell } = electro
   ipcMain: IpcMainType;
   nativeTheme: typeof import('electron').nativeTheme;
   safeStorage: typeof safeStorageType;
+  screen: typeof import('electron').screen;
   shell: typeof import('electron').shell;
 };
 
@@ -148,13 +149,43 @@ interface CreateWindowOpts {
   height?: number;
 }
 
+/**
+ * 화면 작업영역을 기준으로 min/max를 클램프한다.
+ * - designedMin보다 현재 화면이 더 작은 노트북/저해상도 모니터에서도 창이 잘려나가지 않음.
+ * - max는 작업영역 크기(=dock/메뉴바 제외)로 상한.
+ */
+function resolveWindowBounds(
+  designedMinW: number,
+  designedMinH: number,
+): {
+  width: number;
+  height: number;
+  minWidth: number;
+  minHeight: number;
+  maxWidth: number;
+  maxHeight: number;
+} {
+  const { width: availW, height: availH } = screen.getPrimaryDisplay().workAreaSize;
+  const minWidth = Math.min(designedMinW, availW);
+  const minHeight = Math.min(designedMinH, availH);
+  const maxWidth = availW;
+  const maxHeight = availH;
+  // 초기 크기는 최소보다 크고 최대 이하
+  const width = Math.min(Math.max(designedMinW + 320, minWidth), maxWidth);
+  const height = Math.min(Math.max(designedMinH + 200, minHeight), maxHeight);
+  return { width, height, minWidth, minHeight, maxWidth, maxHeight };
+}
+
 function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
-  const { popoutRoute, width = 1280, height = 800 } = opts;
+  const { popoutRoute } = opts;
+  const bounds = resolveWindowBounds(popoutRoute ? 640 : 960, popoutRoute ? 480 : 600);
   const win = new BrowserWindow({
-    width,
-    height,
-    minWidth: popoutRoute ? 640 : 960,
-    minHeight: popoutRoute ? 480 : 600,
+    width: opts.width ?? bounds.width,
+    height: opts.height ?? bounds.height,
+    minWidth: bounds.minWidth,
+    minHeight: bounds.minHeight,
+    maxWidth: bounds.maxWidth,
+    maxHeight: bounds.maxHeight,
     show: false,
     autoHideMenuBar: true,
     title: popoutRoute ? `split-stock · ${popoutRoute}` : 'split-stock (MOCK)',
@@ -222,7 +253,7 @@ void app.whenReady().then(async () => {
       existing.focus();
       return { ok: true };
     }
-    const popout = createMainWindow({ popoutRoute: route, width: 900, height: 720 });
+    const popout = createMainWindow({ popoutRoute: route });
     popouts.set(route, popout);
     ipcHandler.attachWindow(popout);
     popout.on('closed', () => {
