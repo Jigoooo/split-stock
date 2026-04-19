@@ -276,3 +276,45 @@ body {
 .panel__body {
   padding: 0.8rem;
 }
+
+/* ===== 분할 화면 패널 카드 (PanelWorkspace) =====
+ * 외곽 카드에는 스크롤이 없게 하고, 테이블이 있는 하위 .panel만 flex-grow + 내부 스크롤.
+ * :has() 셀렉터로 "테이블을 포함한 패널"만 골라 body 영역이 overflow:auto.
+ */
+.panel-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 페이지 루트(div[display:grid|flex])를 column flex 컨테이너로 취급 */
+.panel-card-body > * {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+/* 기본적으로 하위 패널은 본연의 크기 유지 */
+.panel-card-body .panel {
+  flex: 0 0 auto;
+}
+
+/* 테이블을 포함한 패널은 남는 공간 차지 + 내부만 스크롤 */
+.panel-card-body .panel:has(> .panel__body > table.hts-table) {
+  flex: 1 1 0;
+  min-height: 10rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel-card-body .panel:has(> .panel__body > table.hts-table) > .panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}

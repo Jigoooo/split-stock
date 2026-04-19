@@ -65,7 +65,7 @@ const PanelCard = ({ title, route, popout, children }: PanelCardProps): ReactEle
           {isOut ? '⤢ 창 전환됨' : '⤢ 팝아웃'}
         </button>
       </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '0.8rem' }}>
+      <div className="panel-card-body">
         {isOut ? (
           <div className="muted" style={{ padding: '2rem', textAlign: 'center' }}>
             현재 이 화면은 팝아웃 창에서 표시 중입니다.
