@@ -393,6 +393,51 @@ describe('WatchEngine', () => {
     expect(fallbackCalls).toEqual([1]);
   });
 
+  it('register: QTY 모드에 amountKrw 같이 전달 시 VALIDATION 거부', () => {
+    const { db, timer } = setup();
+    const engine = new WatchEngine({ db, timer, handlers: { CUSTOM: okHandler } });
+    const r = engine.register(
+      buyInput({ qtyOrAmountMode: 'QTY', qty: 10, amountKrw: 1_000_000 }),
+    );
+    expect(r.isErr()).toBe(true);
+    if (r.isOk()) throw new Error('expected error');
+    expect(r.error.kind).toBe('VALIDATION');
+  });
+
+  it('register: AMOUNT 모드에 qty 같이 전달 시 VALIDATION 거부', () => {
+    const { db, timer } = setup();
+    const engine = new WatchEngine({ db, timer, handlers: { CUSTOM: okHandler } });
+    const r = engine.register(
+      buyInput({ qtyOrAmountMode: 'AMOUNT', qty: 10, amountKrw: 1_000_000 }),
+    );
+    expect(r.isErr()).toBe(true);
+    if (r.isOk()) throw new Error('expected error');
+    expect(r.error.kind).toBe('VALIDATION');
+  });
+
+  it('expireStale: cancel과 race 시 onExpired 호출 안 함', () => {
+    const { db, timer } = setup();
+    const expired: number[] = [];
+    const engine = new WatchEngine({
+      db,
+      timer,
+      expiryCheckMs: 10_000,
+      handlers: { CUSTOM: okHandler },
+      onExpired: (o) => expired.push(o.id),
+    });
+    const r = engine.register(buyInput({ expiresAt: 50_000 }));
+    if (r.isErr()) throw new Error('register failed');
+
+    // cancel 먼저 호출 → status='CANCELLED'
+    const c = engine.cancel(r.value.id);
+    expect(c.isOk()).toBe(true);
+
+    // 그 다음 expire 사이클 진입 → conditional update의 changes=0 → onExpired 호출 안 함
+    engine.startCycle();
+    timer.advance(60_000);
+    expect(expired).toEqual([]); // race 가드 — CANCELLED는 EXPIRED로 덮어쓰지 않음
+  });
+
   it('stop: 이후 onPrice는 무시', async () => {
     const { db, timer } = setup();
     let called = 0;

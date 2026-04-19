@@ -53,9 +53,16 @@ export const WatchOrderInputSchema = z
     /** unix epoch ms (Date 또는 number 모두 허용). undefined면 만료 없음. */
     expiresAt: z.union([z.number().int().positive(), z.date()]).optional(),
   })
-  .refine((v) => (v.qtyOrAmountMode === 'QTY' ? v.qty !== undefined : v.amountKrw !== undefined), {
-    message: 'mode가 QTY면 qty, AMOUNT면 amount_krw가 필요합니다',
-  });
+  .refine(
+    (v) =>
+      v.qtyOrAmountMode === 'QTY'
+        ? v.qty !== undefined && v.amountKrw === undefined
+        : v.amountKrw !== undefined && v.qty === undefined,
+    {
+      message:
+        'mode가 QTY면 qty만, AMOUNT면 amount_krw만 지정하세요 (반대 필드는 비워야 함)',
+    },
+  );
 
 export type WatchOrderInput = z.infer<typeof WatchOrderInputSchema>;
 
@@ -387,20 +394,24 @@ export class WatchEngine {
     for (const [pdno, list] of Array.from(this.queue.entries())) {
       for (const entry of [...list]) {
         if (entry.expiresAt !== null && entry.expiresAt <= now) {
-          const row = this.opts.db
-            .select()
-            .from(watchOrders)
-            .where(eq(watchOrders.id, entry.id))
-            .get();
-          this.opts.db
+          // race 가드: WATCHING 상태일 때만 update. cancel/fire 등으로 이미 다른 상태면
+          // res.changes === 0 → onExpired 호출하지 않음 (잘못된 라이프사이클 콜백 방지).
+          const res = this.opts.db
             .update(watchOrders)
             .set({ status: 'EXPIRED', updatedAt: new Date(now) })
             .where(and(eq(watchOrders.id, entry.id), eq(watchOrders.status, 'WATCHING')))
             .run();
           this.dequeue(entry.id);
-          if (row) {
-            const order = rowToOrder(row);
-            this.opts.onExpired?.({ ...order, status: 'EXPIRED' });
+          if (res.changes > 0) {
+            const row = this.opts.db
+              .select()
+              .from(watchOrders)
+              .where(eq(watchOrders.id, entry.id))
+              .get();
+            if (row) {
+              const order = rowToOrder(row);
+              this.opts.onExpired?.({ ...order, status: 'EXPIRED' });
+            }
           }
         }
       }
