@@ -2,10 +2,12 @@ import type { inferRouterInputs, inferRouterOutputs } from '@trpc/server';
 import { accountRouter } from './routers/account-router';
 import { authRouter } from './routers/auth-router';
 import { backupRouter } from './routers/backup-router';
+import { displayRouter } from './routers/display-router';
 import { feesRouter } from './routers/fees-router';
 import { logsRouter } from './routers/logs-router';
 import { marketRouter } from './routers/market-router';
 import { monitoringRouter } from './routers/monitoring-router';
+import { notificationsRouter } from './routers/notifications-router';
 import { orderRouter } from './routers/order-router';
 import { pendingCancelRouter } from './routers/pending-cancel-router';
 import { priceCorrectionRouter } from './routers/price-correction-router';
@@ -22,14 +24,16 @@ import { router } from './trpc-core';
 export const appRouter = router({
   auth: authRouter,
   account: accountRouter,
+  backup: backupRouter,
+  display: displayRouter,
   fees: feesRouter,
   market: marketRouter,
   safety: safetyRouter,
   logs: logsRouter,
   strategy: strategyRouter,
   monitoring: monitoringRouter,
+  notifications: notificationsRouter,
   reports: reportsRouter,
-  backup: backupRouter,
   realtime: realtimeRouter,
   order: orderRouter,
   watch: watchRouter,
