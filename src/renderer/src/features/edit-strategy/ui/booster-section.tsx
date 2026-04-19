@@ -4,7 +4,7 @@ import type { BoosterSectionRaw } from '../model/use-booster-section';
 
 export interface BoosterSectionProps {
   raw: BoosterSectionRaw;
-  errors: { boosterPct?: string | undefined; boosterAmountKrw?: string | undefined };
+  errors: { boosterPct: string | undefined; boosterAmountKrw: string | undefined };
   disabled?: boolean | undefined;
   onUpdate: (key: keyof BoosterSectionRaw) => (value: string) => void;
 }

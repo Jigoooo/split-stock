@@ -4,7 +4,7 @@ import type { DropBaseline, StageGridRaw } from '../model/use-stage-grid';
 
 export interface StageGridProps {
   raw: StageGridRaw;
-  errors: { dropPct?: string | undefined; profitPct?: string | undefined };
+  errors: { dropPct: string | undefined; profitPct: string | undefined };
   dropBaseline: DropBaseline;
   disabled?: boolean | undefined;
   onUpdate: (key: keyof StageGridRaw) => (value: string) => void;
