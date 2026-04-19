@@ -71,6 +71,8 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   setActiveAccountId: (id: number | null) => void;
   getRealtime: () => RealtimeService | null;
   getActiveAccountId: () => number | null;
+  /** 현재 활성 env. 부트스트랩 외부에서 lazy 로 끌어 쓸 때 사용. */
+  getCurrentEnv: () => AppEnv | null;
 } {
   const { realtimeFactory, initialActiveAccountId, ...deps } = opts;
   let currentEnv: AppEnv | null = null;
@@ -110,5 +112,6 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     setActiveAccountId,
     getRealtime: () => realtime,
     getActiveAccountId: () => activeAccountId,
+    getCurrentEnv: () => currentEnv,
   };
 }

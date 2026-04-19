@@ -45,10 +45,12 @@ import { RealtimeService } from './realtime/realtime-service';
 import { SafetyStateRegistry } from './safety/safety-state';
 import { CredentialsRepo } from './security/credentials-repo';
 import { DailyCandlesRepo } from './trading/daily-candles-repo';
+import { createEnvAwarePricePoller } from './trading/env-aware-price-poller';
 import { LotsRepo } from './trading/lots-repo';
 import { StockMasterRepo } from './trading/stock-master-repo';
 import { StockMasterSyncService } from './trading/stock-master-sync';
 import { StrategyRepo } from './trading/strategy-repo';
+import { RotatingQuoteFeed } from './trading/tiered-quote-feed';
 import { WatchEngine } from './trading/watch-engine';
 import { appRouter } from './trpc/app-router';
 import { createContextFactory } from './trpc/context';
@@ -101,11 +103,10 @@ function bootstrapDeps(userDataDir: string) {
     strategyRepo.migrateLegacyKeys(ensured.value);
   }
   // 통합 자동감시주문 엔진 — booster/prebuy/custom을 단일 큐로 관리.
-  // BOOSTER/PREBUY 핸들러는 어댑터(BoosterWatcher/PrebuyWatcher) 생성 시 주입됨.
+  // BOOSTER/PREBUY 핸들러는 어댑터(BoosterWatcher/PrebuyWatcher) 생성 시 registerHandler로 주입됨.
   const watchEngine = new WatchEngine({
     db,
     timer: realTimer,
-    handlers: {},
   });
   watchEngine.startCycle();
   // 실시간 버스는 env 전환 상관없이 공유, RealtimeService는 env별 lazy 재생성.
@@ -145,6 +146,34 @@ function bootstrapDeps(userDataDir: string) {
       }
       return lastRealtime;
     },
+  });
+
+  /**
+   * REST 회전 폴링 큐. 등록된 종목 가격을 watchEngine.onPrice 로 흘려 보내
+   * BOOSTER/PREBUY/CUSTOM watch_orders 트리거 평가를 가동시킨다.
+   *
+   * Wave 0: 빈 종목 리스트로 부팅 (subscribe 0건). Wave 1 에서 lots-repo / watch_orders 변동
+   * 시 자동 subscribe/unsubscribe hook 으로 살아있는 종목만 회전 폴링하도록 확장.
+   *
+   * 활성 env 가 바뀌어도 본 인스턴스는 동일 — env-aware poller 가 매 fetch 마다 currentEnv 를
+   * lazy 로 끌어와 최신 자격증명/토큰 사용. env 미선택/자격증명 부재 시 NETWORK 에러 → 쿨다운.
+   */
+  const tieredFeed = new RotatingQuoteFeed({
+    timer: realTimer,
+    poller: createEnvAwarePricePoller({
+      getEnv: () => factory.getCurrentEnv(),
+      credentialsRepo,
+      auth,
+      httpByEnv,
+    }),
+    logger: eventLogger,
+  });
+  tieredFeed.on('quote', ({ pdno, price }) => watchEngine.onPrice(pdno, price));
+  eventLogger.log({
+    level: 'INFO',
+    category: 'WS',
+    message: 'rotating-quote-feed.wired',
+    payload: { symbols: tieredFeed.getActiveSymbols().length },
   });
 
   // 저장된 자격증명이 있으면 마지막 활성 환경 복원 — 재시작 후 자동 로그인.
