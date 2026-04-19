@@ -5,6 +5,17 @@ import type { StrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 
+/**
+ * StrategyForm 의 `key` 계산 — initial 이 바뀌면 폼이 재마운트되어 sub-hook 들이
+ * 새 initial 로 useState initializer 를 재실행한다.
+ */
+function presetKey(
+  override: StrategyProfile | null,
+  active: StrategyProfile | null,
+): string {
+  return JSON.stringify(override ?? active ?? {});
+}
+
 export const SettingsPage = (): ReactElement => {
   const strategy = useEditStrategy(null);
   const [selectedPreset, setSelectedPreset] = useState('');
@@ -75,7 +86,13 @@ export const SettingsPage = (): ReactElement => {
         </div>
       </div>
 
+      {/*
+        key prop: initial 변경 시 폼 전체를 재마운트해 sub-hook(useStageGrid/useBoosterSection) 의
+        useState initializer 가 다시 실행되도록 강제. 이 패턴이 가장 안전 (props.initial 변경 시
+        sub-hook 내부 state 가 stale 인 React 19 룰 회피).
+      */}
       <StrategyForm
+        key={presetKey(initialOverride, strategy.active.data?.profile ?? null)}
         initial={initialOverride ?? strategy.active.data?.profile ?? null}
         disabled={strategy.isPending}
         onSubmit={(profile) => {

@@ -79,25 +79,13 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
   // form-level 상태 (totalAmountKrw, maxStages)
   const [base, setBase] = useState<FormBaseRaw>(() => toBaseRaw(props.initial));
 
-  // 초기값 재동기화 — 렌더 중 조건부 setState (useEffect 금지)
-  const initialKey = JSON.stringify({
-    ...toBaseRaw(props.initial),
-    ...toStageRaw(props.initial),
-    ...toBoosterRaw(props.initial),
-  });
-  const [lastInitialKey, setLastInitialKey] = useState(initialKey);
-
-  // sub-hooks: 각각 독립 상태 보유
+  // sub-hooks: 각각 독립 상태 보유.
+  //
+  // 주의: props.initial 이 바뀌어도 sub-hook 의 useState initializer 는 최초 렌더만 실행되어
+  // sub-hook 의 raw 값은 stale 이 된다. 이 컴포넌트는 호출측에서 `key` prop 으로 폼을 재마운트해
+  // sub-hook 들이 새 initial 로 다시 시드되도록 설계되었다 (settings-page 참고).
   const stageGrid = useStageGrid(toStageRaw(props.initial));
   const boosterSection = useBoosterSection(toBoosterRaw(props.initial));
-
-  if (lastInitialKey !== initialKey) {
-    setLastInitialKey(initialKey);
-    setBase(toBaseRaw(props.initial));
-    // sub-hook 재동기화는 각 hook의 initialRaw로 자동 처리됨
-    // (useState initializer는 최초 렌더만 실행 → 여기서 직접 setRaw 호출 필요)
-    // NOTE: sub-hook 내부 state를 직접 리셋할 수 없으므로 key prop 패턴은 Wave 1에서 검토
-  }
 
   const [errors, setErrors] = useState<StrategyFormErrors>({});
   const [presetInput, setPresetInput] = useState('');
