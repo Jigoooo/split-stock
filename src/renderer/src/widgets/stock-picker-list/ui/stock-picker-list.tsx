@@ -24,10 +24,11 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
   const [keyword, setKeyword] = useState('');
   const list = useStockList(keyword);
   const status = trpc.market.getStockMasterStatus.useQuery();
+  const utils = trpc.useUtils();
   const syncMutation = trpc.market.syncStockMaster.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
+      await utils.market.listStock.invalidate();
       status.refetch();
-      list.fetchNextPage();
     },
   });
 
@@ -57,7 +58,10 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
 
   return (
     <div className="panel" style={{ display: 'flex', flexDirection: 'column' }}>
-      <div className="panel__title" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+      <div
+        className="panel__title"
+        style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}
+      >
         <span>종목 목록</span>
         {totalText ? <span className="muted">{totalText}</span> : null}
         <span style={{ flex: 1 }} />
@@ -71,7 +75,10 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
           {syncMutation.isPending ? '동기화 중…' : '다시 동기화'}
         </button>
       </div>
-      <div className="panel__body" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+      <div
+        className="panel__body"
+        style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}
+      >
         <input
           type="text"
           value={keyword}

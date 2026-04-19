@@ -123,25 +123,7 @@ function bootstrapDeps(userDataDir: string) {
       });
       // 로그인 상태에서 24시간 초과 시 백그라운드로 종목 마스터 동기화.
       // 네트워크 실패는 로그만 남기고 부팅 지연 없이 계속 진행.
-      stockMasterSync.syncIfStale().then((r) => {
-        if (r.isErr()) {
-          eventLogger.log({
-            level: 'WARN',
-            category: 'SYS',
-            message: 'stockMaster.sync.failed',
-            payload: { kind: r.error.kind, msg: r.error.msg },
-          });
-          return;
-        }
-        if (r.value) {
-          eventLogger.log({
-            level: 'INFO',
-            category: 'SYS',
-            message: 'stockMaster.sync.ok',
-            payload: { total: r.value.total, kospi: r.value.kospi, kosdaq: r.value.kosdaq },
-          });
-        }
-      });
+      stockMasterSync.syncIfStaleWithLog(eventLogger);
     }
   }
 

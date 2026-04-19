@@ -63,12 +63,7 @@ export class StockMasterRepo {
       ? this.db
           .select()
           .from(stockMaster)
-          .where(
-            or(
-              like(stockMaster.name, `%${trimmed}%`),
-              like(stockMaster.pdno, `%${trimmed}%`),
-            ),
-          )
+          .where(or(like(stockMaster.name, `%${trimmed}%`), like(stockMaster.pdno, `%${trimmed}%`)))
           .orderBy(asc(stockMaster.name))
           .limit(opts.limit)
           .offset(opts.offset)
@@ -94,12 +89,7 @@ export class StockMasterRepo {
       ? this.db
           .select({ n: countRows() })
           .from(stockMaster)
-          .where(
-            or(
-              like(stockMaster.name, `%${trimmed}%`),
-              like(stockMaster.pdno, `%${trimmed}%`),
-            ),
-          )
+          .where(or(like(stockMaster.name, `%${trimmed}%`), like(stockMaster.pdno, `%${trimmed}%`)))
           .all()
       : this.db.select({ n: countRows() }).from(stockMaster).all();
     return rows[0]?.n ?? 0;

@@ -12,6 +12,7 @@ vi.mock('../kis/stock-master-downloader', () => ({
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
 import { SettingsRepo } from '../db/settings-repo';
+import type { EventLogger } from '../logging/event-logger';
 import { StockMasterRepo } from './stock-master-repo';
 import { StockMasterSyncService } from './stock-master-sync';
 
@@ -54,9 +55,7 @@ describe('StockMasterSyncService', () => {
   });
 
   it('sync: 다운로드 실패 시 DOWNLOAD 오류 반환', async () => {
-    mockDownload.mockImplementation(() =>
-      Promise.resolve(err({ kind: 'HTTP', msg: 'HTTP 500' })),
-    );
+    mockDownload.mockImplementation(() => Promise.resolve(err({ kind: 'HTTP', msg: 'HTTP 500' })));
     const { svc } = fresh();
     const r = await svc.sync();
     expect(r.isErr()).toBe(true);
@@ -95,5 +94,52 @@ describe('StockMasterSyncService', () => {
     expect(svc.getLastSyncAt()).toBeNull();
     await svc.sync();
     expect(svc.getLastSyncAt()).toBeInstanceOf(Date);
+  });
+
+  it('sync 동시 호출은 in-flight 하나로 합쳐져 downloader가 1회만 호출됨', async () => {
+    let resolveDownload!: (v: unknown) => void;
+    const pending = new Promise<unknown>((res) => {
+      resolveDownload = res;
+    });
+    mockDownload.mockImplementation(() => pending);
+    const { svc } = fresh();
+    const p1 = svc.sync();
+    const p2 = svc.sync();
+    expect(p1).toBe(p2);
+    resolveDownload(ok([]));
+    await Promise.all([p1, p2]);
+    // KOSPI + KOSDAQ 2회만 호출, 재진입 없음
+    expect(mockDownload).toHaveBeenCalledTimes(2);
+  });
+
+  it('syncIfStaleWithLog: 성공 시 stockMaster.sync.ok 로그', async () => {
+    mockDownload.mockImplementation((_url: string, market: 'KOSPI' | 'KOSDAQ') =>
+      Promise.resolve(ok([{ pdno: '005930', name: '삼성전자', market, groupCode: 'ST' }])),
+    );
+    const { svc } = fresh();
+    const logger = { log: vi.fn() };
+    await svc.syncIfStaleWithLog(logger as unknown as EventLogger);
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'stockMaster.sync.ok', level: 'INFO' }),
+    );
+  });
+
+  it('syncIfStaleWithLog: 실패 시 stockMaster.sync.failed 로그', async () => {
+    mockDownload.mockImplementation(() => Promise.resolve(err({ kind: 'HTTP', msg: 'timeout' })));
+    const { svc } = fresh();
+    const logger = { log: vi.fn() };
+    await svc.syncIfStaleWithLog(logger as unknown as EventLogger);
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'stockMaster.sync.failed', level: 'WARN' }),
+    );
+  });
+
+  it('syncIfStaleWithLog: 최신이면 로그 없이 조용히 끝냄', async () => {
+    const { svc, settings } = fresh();
+    settings.set('stock_master.last_sync_at', String(Date.now()));
+    const logger = { log: vi.fn() };
+    await svc.syncIfStaleWithLog(logger as unknown as EventLogger);
+    expect(logger.log).not.toHaveBeenCalled();
+    expect(mockDownload).not.toHaveBeenCalled();
   });
 });

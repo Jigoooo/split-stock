@@ -41,25 +41,7 @@ export const authRouter = router({
       payload: { from: prev, to: input },
     });
     // 로그인 직후 종목 마스터가 비어있거나 24h 초과면 백그라운드 동기화.
-    ctx.stockMasterSync.syncIfStale().then((r) => {
-      if (r.isErr()) {
-        ctx.logger.log({
-          level: 'WARN',
-          category: 'SYS',
-          message: 'stockMaster.sync.failed',
-          payload: { kind: r.error.kind, msg: r.error.msg },
-        });
-        return;
-      }
-      if (r.value) {
-        ctx.logger.log({
-          level: 'INFO',
-          category: 'SYS',
-          message: 'stockMaster.sync.ok',
-          payload: { total: r.value.total, kospi: r.value.kospi, kosdaq: r.value.kosdaq },
-        });
-      }
-    });
+    void ctx.stockMasterSync.syncIfStaleWithLog(ctx.logger);
     return { env: input };
   }),
 
