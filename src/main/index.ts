@@ -35,7 +35,7 @@ import { AuthService } from './kis/auth';
 import { KIS_BASE_URL } from './kis/endpoints';
 import { KisHttpClient } from './kis/http-client';
 import { TokenStore } from './kis/token-store';
-import type { WsLike } from './kis/ws-client';
+import { realTimer, type WsLike } from './kis/ws-client';
 import { createEventLogger, teeLoggers } from './logging/event-logger';
 import { createFileLogger } from './logging/file-logger';
 import { initSentryFromSettings } from './monitoring/sentry';
@@ -48,6 +48,7 @@ import { LotsRepo } from './trading/lots-repo';
 import { StockMasterRepo } from './trading/stock-master-repo';
 import { StockMasterSyncService } from './trading/stock-master-sync';
 import { StrategyRepo } from './trading/strategy-repo';
+import { WatchEngine } from './trading/watch-engine';
 import { appRouter } from './trpc/app-router';
 import { createContextFactory } from './trpc/context';
 import { initAutoUpdater } from './updater';
@@ -89,6 +90,14 @@ function bootstrapDeps(userDataDir: string) {
   const stockMasterSync = new StockMasterSyncService(stockMasterRepo, settingsRepo);
   const candlesRepo = new DailyCandlesRepo(db);
   const lotsRepo = new LotsRepo(db);
+  // 통합 자동감시주문 엔진 — booster/prebuy/custom을 단일 큐로 관리.
+  // BOOSTER/PREBUY 핸들러는 어댑터(BoosterWatcher/PrebuyWatcher) 생성 시 주입됨.
+  const watchEngine = new WatchEngine({
+    db,
+    timer: realTimer,
+    handlers: {},
+  });
+  watchEngine.startCycle();
   // 실시간 버스는 env 전환 상관없이 공유, RealtimeService는 env별 lazy 재생성.
   const bus = new FeedBus();
   const wsFactory = (url: string): WsLike => new WebSocket(url) as unknown as WsLike;
@@ -106,6 +115,7 @@ function bootstrapDeps(userDataDir: string) {
     stockMasterSync,
     candlesRepo,
     lotsRepo,
+    watchEngine,
     bus,
     realtimeFactory: (env) => {
       if (lastRealtime) {

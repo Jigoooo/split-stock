@@ -13,6 +13,7 @@ import type { LotsRepo } from '../trading/lots-repo';
 import type { StockMasterRepo } from '../trading/stock-master-repo';
 import type { StockMasterSyncService } from '../trading/stock-master-sync';
 import type { StrategyRepo } from '../trading/strategy-repo';
+import type { WatchEngine } from '../trading/watch-engine';
 
 export interface Context {
   db: Db;
@@ -27,6 +28,7 @@ export interface Context {
   stockMasterSync: StockMasterSyncService;
   candlesRepo: DailyCandlesRepo;
   lotsRepo: LotsRepo;
+  watchEngine: WatchEngine | null;
   realtime: RealtimeService | null;
   bus: FeedBus | null;
   currentEnv: AppEnv | null;

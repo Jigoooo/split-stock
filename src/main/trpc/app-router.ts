@@ -10,6 +10,7 @@ import { realtimeRouter } from './routers/realtime-router';
 import { reportsRouter } from './routers/reports-router';
 import { safetyRouter } from './routers/safety-router';
 import { strategyRouter } from './routers/strategy-router';
+import { watchRouter } from './routers/watch-router';
 import { router } from './trpc-core';
 
 export const appRouter = router({
@@ -24,6 +25,7 @@ export const appRouter = router({
   backup: backupRouter,
   realtime: realtimeRouter,
   order: orderRouter,
+  watch: watchRouter,
 });
 
 export type AppRouter = typeof appRouter;
