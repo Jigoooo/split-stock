@@ -105,19 +105,6 @@ export const TradePage = (): ReactElement => {
         {selected ? (
           <span className="chip chip--up">
             {selected.name} ({selected.pdno})
-            <button
-              type="button"
-              className="hts-btn"
-              onClick={() => setSelected(null)}
-              aria-label="선택 해제"
-              style={{
-                marginLeft: '0.6rem',
-                padding: '0.1rem 0.5rem',
-                fontSize: '1rem',
-              }}
-            >
-              ✕
-            </button>
           </span>
         ) : null}
       </div>
