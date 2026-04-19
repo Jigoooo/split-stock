@@ -44,13 +44,14 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
   const { pdno, name, lines } = props;
   const [period, setPeriod] = useState<ChartPeriod>('D');
   const [candles, setCandles] = useState<Candle[]>([]);
-  const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reachedEnd, setReachedEnd] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const loadingRef = useRef<boolean>(false);
+  // 이전 setData 직전의 총 바 개수 — 추가 로드 시 앞쪽에 얼마나 prepend됐는지 계산해 visible range를 같은 DATE로 고정.
+  const prevLengthRef = useRef<number>(0);
 
   const utils = trpc.useUtils();
 
@@ -72,6 +73,7 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     setError(null);
     setCandles([]);
     setReachedEnd(false);
+    prevLengthRef.current = 0;
     (async () => {
       try {
         const first = await loadChunk(period);
@@ -129,7 +131,6 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     if (reachedEnd) return;
     if (candles.length === 0) return;
     loadingRef.current = true;
-    setIsFetchingMore(true);
     try {
       let current = candles;
       // 연속으로 2 chunk 까지 당겨와 충분한 buffer 확보 (각 chunk는 독립적으로 merge)
@@ -160,7 +161,6 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
       }
     } finally {
       loadingRef.current = false;
-      setIsFetchingMore(false);
     }
   }, [candles, loadChunk, period, reachedEnd]);
 
@@ -275,10 +275,19 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
         to: total - 1,
       });
     } else {
-      // prevRange를 그대로 유지하면 앞쪽에 추가된 old bar가 시야로 들어올 수 있음 — offset 보정 없이도
-      // 사용자가 보던 절대 날짜 위치는 유지됨(lightweight-charts는 logical index 기준으로 from/to가 자동 shift).
-      chart.timeScale().setVisibleLogicalRange(prevRange);
+      // 앞쪽에 추가된 바 개수만큼 visible range를 오른쪽으로 shift — 사용자가 보던 실제 날짜 구간이 고정.
+      // (logical index는 항상 배열의 처음부터 증가하므로, 과거 데이터를 prepend하면 같은 DATE의 index가 +added).
+      const added = data.length - prevLengthRef.current;
+      if (added > 0) {
+        chart.timeScale().setVisibleLogicalRange({
+          from: prevRange.from + added,
+          to: prevRange.to + added,
+        });
+      } else {
+        chart.timeScale().setVisibleLogicalRange(prevRange);
+      }
     }
+    prevLengthRef.current = data.length;
   }, [candles, lines]);
 
   return (
@@ -294,7 +303,7 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
           {name} ({pdno})
         </span>
         <span className="muted" style={{ fontSize: '1rem' }}>
-          {candles.length}봉 로드됨{isFetchingMore ? ' · 추가 로드 중…' : ''}
+          {candles.length > 0 ? `${candles.length}봉` : '로드 중…'}
         </span>
         <span style={{ flex: 1 }} />
         <div role="tablist" aria-label="봉 단위" style={{ display: 'flex', gap: '0.3rem' }}>
