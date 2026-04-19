@@ -47,6 +47,7 @@ import { createRateGuardRepo } from './safety/rate-guard';
 import { SafetyStateRegistry } from './safety/safety-state';
 import { createTimeWindowRepo } from './safety/time-window';
 import { CredentialsRepo } from './security/credentials-repo';
+import { BalanceSync } from './trading/balance-sync';
 import { DailyCandlesRepo } from './trading/daily-candles-repo';
 import { createEnvAwarePricePoller } from './trading/env-aware-price-poller';
 import { LotsRepo } from './trading/lots-repo';
@@ -210,7 +211,29 @@ function bootstrapDeps(userDataDir: string) {
     }
   }
 
-  return { factory, safetyRegistry, eventLogger, settingsRepo };
+  /**
+   * 잔고 동기화 — 30초 주기 polling + 체결통보(CNI) 즉시 갱신 진입점.
+   * env/credentials를 매 poll마다 lazy하게 읽으므로 env 전환 후에도 재생성 불필요.
+   *
+   * CNI 체결통보 실시간 트리거(W1-7 Phase B):
+   *   AES-256-CBC 복호화 구현 완료 후 KisWsClient.onCniNotice 콜백에서
+   *   balanceSync.refresh()를 호출하도록 RealtimeService에 연결 예정.
+   */
+  const balanceSync = new BalanceSync({
+    getEnv: () => factory.getCurrentEnv(),
+    getAccountId: () => factory.getActiveAccountId(),
+    credentialsRepo,
+    auth,
+    httpByEnv,
+    lotsRepo,
+    logger: eventLogger,
+  });
+
+  // 자격증명이 복원된 상태에서만 시작 (env 복원 블록 이후에도 start는 유효).
+  // start() 자체는 no-op이므로 env가 없어도 safe.
+  balanceSync.start();
+
+  return { factory, safetyRegistry, eventLogger, settingsRepo, balanceSync };
 }
 
 interface CreateWindowOpts {
@@ -303,7 +326,7 @@ function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
 }
 
 void app.whenReady().then(async () => {
-  const { factory, safetyRegistry, eventLogger, settingsRepo } = bootstrapDeps(
+  const { factory, safetyRegistry, eventLogger, settingsRepo, balanceSync } = bootstrapDeps(
     app.getPath('userData'),
   );
 
@@ -386,6 +409,11 @@ void app.whenReady().then(async () => {
   });
 
   void initAutoUpdater(app.isPackaged, eventLogger);
+
+  // BalanceSync 종료 시 polling 타이머 해제
+  app.once('will-quit', () => {
+    balanceSync.dispose();
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
