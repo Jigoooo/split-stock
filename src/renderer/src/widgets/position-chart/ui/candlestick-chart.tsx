@@ -12,13 +12,20 @@ import {
   LineSeries,
   LineStyle,
 } from 'lightweight-charts';
-import { type ReactElement, useEffect, useEffectEvent, useRef } from 'react';
+import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
+import { type CSSProperties, type ReactElement, useEffect, useEffectEvent, useRef } from 'react';
 import type { Candle } from '../model/use-position-chart';
 
 const DEFAULT_VISIBLE_BARS = 60;
 const MIN_VISIBLE_BARS = 5;
 const ZOOM_IN_FACTOR = 0.7;
 const ZOOM_OUT_FACTOR = 1.4;
+const OVERLAY_BUTTON_STYLE: CSSProperties = {
+  background: 'rgba(255, 255, 255, 0.35)',
+  backdropFilter: 'blur(1px)',
+  WebkitBackdropFilter: 'blur(1px)',
+  borderColor: 'rgba(0, 0, 0, 0.08)',
+};
 
 type PriceLineHandle = ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']>;
 type LineStyleMap = { solid: number; dashed: number; dotted: number };
@@ -350,7 +357,7 @@ export const CandlestickChart = ({
         style={{
           position: 'absolute',
           top: 6,
-          right: 6,
+          left: 6,
           display: 'flex',
           gap: 4,
           zIndex: 2,
@@ -359,23 +366,32 @@ export const CandlestickChart = ({
         <Button
           dense
           iconOnly
-          aria-label="차트 확대"
+          iconLeading={<ZoomIn size={14} />}
           title="확대"
+          style={OVERLAY_BUTTON_STYLE}
           onClick={() => zoom(ZOOM_IN_FACTOR)}
         >
-          ＋
+          차트 확대
         </Button>
         <Button
           dense
           iconOnly
-          aria-label="차트 축소"
+          iconLeading={<ZoomOut size={14} />}
           title="축소"
+          style={OVERLAY_BUTTON_STYLE}
           onClick={() => zoom(ZOOM_OUT_FACTOR)}
         >
-          －
+          차트 축소
         </Button>
-        <Button dense aria-label="차트 보기 초기화" title="맞춤" onClick={handleReset}>
-          맞춤
+        <Button
+          dense
+          iconOnly
+          iconLeading={<Maximize2 size={14} />}
+          title="맞춤"
+          style={OVERLAY_BUTTON_STYLE}
+          onClick={handleReset}
+        >
+          차트 보기 초기화
         </Button>
       </div>
     </div>
