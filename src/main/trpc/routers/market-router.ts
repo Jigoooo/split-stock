@@ -16,6 +16,15 @@ export const marketRouter = router({
     })),
 
   /**
+   * 전체 종목 마스터 반환 — 한글 퍼지/초성 검색을 클라이언트에서 수행하려면 전체 데이터가 필요.
+   * KOSPI+KOSDAQ 보통주 약 4000건 수준, 한 번 받고 캐시.
+   */
+  listAllStock: publicProcedure.query(({ ctx }) => {
+    const entries = ctx.stockMasterRepo.list({ offset: 0, limit: 100_000 });
+    return { entries };
+  }),
+
+  /**
    * 무한스크롤용 페이징 리스트. keyword 생략 시 전체 목록.
    * cursor는 offset 기반 — nextCursor가 null이면 더 이상 페이지 없음.
    * trpc v11 useInfiniteQuery 호환을 위해 필드명을 cursor로 유지.

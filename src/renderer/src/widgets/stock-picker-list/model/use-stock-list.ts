@@ -1,8 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { useEffect, useState } from 'react';
-
-export const DEFAULT_DEBOUNCE_MS = 300;
-export const DEFAULT_PAGE_SIZE = 60;
+import { createKoreanSearchRegex } from '@renderer/shared/lib/search';
+import { useMemo } from 'react';
 
 export interface StockListEntry {
   pdno: string;
@@ -11,60 +9,36 @@ export interface StockListEntry {
 }
 
 export interface UseStockListResult {
-  /** 모든 페이지의 플래튼 결과 */
   entries: StockListEntry[];
-  /** 서버 기준 전체 매칭 개수 (첫 페이지 기준) */
   total: number;
   isLoading: boolean;
-  isFetchingNextPage: boolean;
-  hasNextPage: boolean;
-  fetchNextPage: () => void;
   error: { message: string } | null;
-  /** debounce 후 실제 서버에 보낸 키워드 */
-  debouncedKeyword: string;
 }
 
 /**
- * 종목 마스터 무한스크롤 훅.
- * - keyword 입력 debounce 후 listStock.useInfiniteQuery 호출
- * - keyword가 바뀌면 TanStack Query가 cursor를 리셋해 1페이지부터 다시 로드
+ * 종목 마스터 전체를 한 번 받고 클라이언트에서 한글 퍼지/초성 필터링.
+ * - 대용량이 아니므로(수천 건) staleTime을 길게 잡아 재요청 최소화
+ * - keyword가 바뀌면 regex만 재계산, 네트워크 재요청 없음
  */
-export function useStockList(
-  keyword: string,
-  opts: { debounceMs?: number; pageSize?: number } = {},
-): UseStockListResult {
-  const debounceMs = opts.debounceMs ?? DEFAULT_DEBOUNCE_MS;
-  const pageSize = opts.pageSize ?? DEFAULT_PAGE_SIZE;
-  const [debounced, setDebounced] = useState(keyword);
+export function useStockList(keyword: string): UseStockListResult {
+  const query = trpc.market.listAllStock.useQuery(undefined, {
+    staleTime: 10 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    const handle = setTimeout(() => setDebounced(keyword), debounceMs);
-    return () => clearTimeout(handle);
-  }, [keyword, debounceMs]);
+  const all = query.data?.entries ?? [];
 
-  const trimmed = debounced.trim();
-  const query = trpc.market.listStock.useInfiniteQuery(
-    { keyword: trimmed || undefined, limit: pageSize },
-    {
-      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-      initialCursor: 0,
-    },
-  );
-
-  const pages = query.data?.pages ?? [];
-  const entries = pages.flatMap((p) => p.entries);
-  const total = pages[0]?.total ?? 0;
+  const entries = useMemo(() => {
+    const trimmed = keyword.trim();
+    if (!trimmed) return all;
+    const regex = createKoreanSearchRegex(trimmed);
+    if (!regex.source || regex.source === '(?:)') return all;
+    return all.filter((e) => regex.test(e.name) || e.pdno.includes(trimmed));
+  }, [all, keyword]);
 
   return {
     entries,
-    total,
+    total: all.length,
     isLoading: query.isLoading,
-    isFetchingNextPage: query.isFetchingNextPage,
-    hasNextPage: query.hasNextPage ?? false,
-    fetchNextPage: () => {
-      if (query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage();
-    },
     error: query.error ? { message: query.error.message } : null,
-    debouncedKeyword: trimmed,
   };
 }

@@ -62,6 +62,7 @@
     "electron-updater": "^6.8.3",
     "iconv-lite": "^0.7.2",
     "lightweight-charts": "^5.1.0",
+    "lucide-react": "^1.8.0",
     "neverthrow": "^8.2.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

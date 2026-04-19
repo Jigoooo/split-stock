@@ -258,7 +258,14 @@ void app.whenReady().then(async () => {
 
   // 팝아웃 창: 메인 화면에서 특정 페이지(logs, reports, settings 등)를 별도 창으로 띄움.
   // route별 1개 창만 유지 — 이미 열려 있으면 포커스만 이동, 닫히면 렌더러에 통지해 placeholder 원복.
-  const ALLOWED_POPOUT_ROUTES = new Set(['dashboard', 'trade', 'logs', 'reports', 'settings']);
+  const ALLOWED_POPOUT_ROUTES = new Set([
+    'dashboard',
+    'trade',
+    'logs',
+    'reports',
+    'settings',
+    'stock-picker',
+  ]);
   const popouts = new Map<string, BrowserWindowType>();
   ipcMain.handle('appShell:openPopout', (event, route: unknown): { ok: boolean } => {
     if (typeof route !== 'string' || !ALLOWED_POPOUT_ROUTES.has(route)) {
@@ -282,6 +289,17 @@ void app.whenReady().then(async () => {
       }
     });
     return { ok: true };
+  });
+
+  // 팝아웃(또는 다른 창)에서 종목을 선택하면 송신자 제외 전 창에 브로드캐스트 — 부모/형제 창의 Trade 페이지가 업데이트
+  ipcMain.on('appShell:assignStock', (event, pdno: unknown, name: unknown) => {
+    if (typeof pdno !== 'string' || typeof name !== 'string') return;
+    if (!/^\d{6}$/.test(pdno)) return;
+    for (const target of BrowserWindow.getAllWindows()) {
+      if (target.isDestroyed()) continue;
+      if (target.webContents.id === event.sender.id) continue;
+      target.webContents.send('appShell:stock-assigned', pdno, name);
+    }
   });
 
   void import('electron').then(({ globalShortcut }) => {

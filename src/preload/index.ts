@@ -21,6 +21,14 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:popout-closed', handler);
     return () => ipcRenderer.off('appShell:popout-closed', handler);
   },
+  assignStock: (pdno: string, name: string): void => {
+    ipcRenderer.send('appShell:assignStock', pdno, name);
+  },
+  onStockAssigned: (listener: (pdno: string, name: string) => void): (() => void) => {
+    const handler = (_: unknown, pdno: string, name: string): void => listener(pdno, name);
+    ipcRenderer.on('appShell:stock-assigned', handler);
+    return () => ipcRenderer.off('appShell:stock-assigned', handler);
+  },
 });
 
 export type AppEnvBridge = {
@@ -31,4 +39,6 @@ export type AppEnvBridge = {
 export type AppShellBridge = {
   openPopout: (route: string) => Promise<{ ok: boolean }>;
   onPopoutClosed: (listener: (route: string) => void) => () => void;
+  assignStock: (pdno: string, name: string) => void;
+  onStockAssigned: (listener: (pdno: string, name: string) => void) => () => void;
 };

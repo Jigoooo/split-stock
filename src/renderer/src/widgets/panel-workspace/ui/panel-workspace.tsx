@@ -3,6 +3,7 @@ import { LogsPage } from '@renderer/pages/logs';
 import { ReportsPage } from '@renderer/pages/reports';
 import { SettingsPage } from '@renderer/pages/settings';
 import { TradePage } from '@renderer/pages/trade';
+import { StockPickerList } from '@renderer/widgets/stock-picker-list';
 import type { ReactElement, ReactNode } from 'react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import type { PopoutApi, PopoutRoute } from '../model/use-popout-state';
@@ -128,7 +129,14 @@ export function readPopoutRoute(): PopoutRoute | null {
 }
 
 function isPopoutRoute(v: string): v is PopoutRoute {
-  return v === 'dashboard' || v === 'trade' || v === 'logs' || v === 'reports' || v === 'settings';
+  return (
+    v === 'dashboard' ||
+    v === 'trade' ||
+    v === 'logs' ||
+    v === 'reports' ||
+    v === 'settings' ||
+    v === 'stock-picker'
+  );
 }
 
 export const PopoutPage = ({ route }: { route: PopoutRoute }): ReactElement => {
@@ -142,6 +150,16 @@ export const PopoutPage = ({ route }: { route: PopoutRoute }): ReactElement => {
         <LogsPage />
       ) : route === 'reports' ? (
         <ReportsPage />
+      ) : route === 'stock-picker' ? (
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <StockPickerList
+            hidePopoutButton
+            alwaysOpen
+            onSelect={(entry) => {
+              window.appShell?.assignStock?.(entry.pdno, entry.name);
+            }}
+          />
+        </div>
       ) : (
         <SettingsPage />
       )}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type PopoutRoute = 'dashboard' | 'trade' | 'logs' | 'reports' | 'settings';
+export type PopoutRoute = 'dashboard' | 'trade' | 'logs' | 'reports' | 'settings' | 'stock-picker';
 
 export interface PopoutApi {
   isOpen: (route: PopoutRoute) => boolean;
