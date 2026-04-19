@@ -4,7 +4,7 @@ import { createTestDb } from '../db/client';
 import type { EventLogger } from '../logging/event-logger';
 import { createSafetyState } from '../safety/safety-state';
 import { LotsRepo } from './lots-repo';
-import { planFromCsv, planFromParams } from './respiit-planner';
+import { applyPriceRatio, planFromCsv, planFromParams } from './respiit-planner';
 
 function noopLogger(): EventLogger {
   return { log: () => {} };
@@ -89,6 +89,77 @@ describe('planFromCsv', () => {
 
   it('음수 수량/단가 → Zod 에러', () => {
     expect(() => planFromCsv('005930', '2026-04-18,-5,70000')).toThrow();
+  });
+});
+
+describe('applyPriceRatio', () => {
+  it('선택 차수의 단가에 +10% 적용', () => {
+    const plan = planFromParams({
+      pdno: '005930',
+      stages: 3,
+      intervalDays: 0,
+      priceGapPct: 0,
+      totalQty: 30,
+      anchorPrice: 100_000,
+    });
+    const result = applyPriceRatio(plan, { stages: [1, 2], ratioPct: 10 });
+    expect(result.entries[0]?.buyPrice).toBe(110_000); // 100k * 1.1
+    expect(result.entries[1]?.buyPrice).toBe(110_000); // 100k * 1.1
+    expect(result.entries[2]?.buyPrice).toBe(100_000); // 미지정, 그대로
+  });
+
+  it('모든 차수에 -5% 적용', () => {
+    const plan = planFromParams({
+      pdno: '005930',
+      stages: 2,
+      intervalDays: 0,
+      priceGapPct: 0,
+      totalQty: 20,
+      anchorPrice: 100_000,
+    });
+    const result = applyPriceRatio(plan, { stages: 'all', ratioPct: -5 });
+    expect(result.entries.map((e) => e.buyPrice)).toEqual([95_000, 95_000]);
+  });
+
+  it('ratioPct 범위 벗어남 → 에러', () => {
+    const plan = planFromParams({
+      pdno: '005930',
+      stages: 1,
+      intervalDays: 0,
+      priceGapPct: 0,
+      totalQty: 10,
+      anchorPrice: 100_000,
+    });
+    expect(() => applyPriceRatio(plan, { stages: [1], ratioPct: 150 })).toThrow(
+      'ratioPct는 -100 ~ +100 범위여야 합니다',
+    );
+  });
+
+  it('원본 plan 불변', () => {
+    const plan = planFromParams({
+      pdno: '005930',
+      stages: 2,
+      intervalDays: 0,
+      priceGapPct: 0,
+      totalQty: 20,
+      anchorPrice: 100_000,
+    });
+    const original = plan.entries[0]?.buyPrice;
+    applyPriceRatio(plan, { stages: [1], ratioPct: 50 });
+    expect(plan.entries[0]?.buyPrice).toBe(original);
+  });
+
+  it('가격 최소값 1원 보장', () => {
+    const plan = planFromParams({
+      pdno: '005930',
+      stages: 1,
+      intervalDays: 0,
+      priceGapPct: 0,
+      totalQty: 10,
+      anchorPrice: 10,
+    });
+    const result = applyPriceRatio(plan, { stages: [1], ratioPct: -99 });
+    expect(result.entries[0]?.buyPrice).toBe(1);
   });
 });
 

@@ -28,31 +28,64 @@ function sha256File(path: string): string {
 }
 
 /**
- * DB 파일 내보내기 — destPath로 복사 + SHA-256 해시 반환.
+ * DB 파일 내보내기 — 한 개 또는 두 개 경로에 동시 작성.
+ * 각 파일 SHA-256 일치 검증.
  * 호출측이 dialog.showSaveDialog로 사용자 경로를 받아야 함.
  */
 export function exportDatabase(
   srcPath: string,
-  destPath: string,
+  destPaths: string | string[],
   logger: EventLogger,
-): BackupResult {
+): BackupResult | BackupResult[] {
   if (!existsSync(srcPath)) {
     throw new Error(`source DB not found: ${srcPath}`);
   }
-  copyFileSync(srcPath, destPath);
-  const sha = sha256File(destPath);
-  const bytes = readFileSync(destPath).byteLength;
-  logger.log({
-    level: 'INFO',
-    category: 'SYS',
-    message: 'backup.exported',
-    payload: {
-      destName: basename(destPath),
-      sha256Prefix: sha.slice(0, 12),
-      bytes,
-    },
-  });
-  return { path: destPath, sha256: sha, bytes };
+
+  // 단일 경로 vs 배열 경로 구분
+  const pathArray = Array.isArray(destPaths) ? destPaths : [destPaths];
+  const results: BackupResult[] = [];
+
+  for (const destPath of pathArray) {
+    copyFileSync(srcPath, destPath);
+    const sha = sha256File(destPath);
+    const bytes = readFileSync(destPath).byteLength;
+
+    logger.log({
+      level: 'INFO',
+      category: 'SYS',
+      message: 'backup.exported',
+      payload: {
+        destName: basename(destPath),
+        sha256Prefix: sha.slice(0, 12),
+        bytes,
+      },
+    });
+
+    results.push({ path: destPath, sha256: sha, bytes });
+  }
+
+  // SHA-256 일치 검증 (2개 경로 이상)
+  if (results.length > 1) {
+    const firstSha = results[0]!.sha256;
+    for (let i = 1; i < results.length; i++) {
+      if (results[i]!.sha256 !== firstSha) {
+        throw new Error(
+          `backup verification failed: ${basename(results[0]!.path)} (${firstSha.slice(0, 12)}) ≠ ${basename(results[i]!.path)} (${results[i]!.sha256.slice(0, 12)})`,
+        );
+      }
+    }
+    logger.log({
+      level: 'INFO',
+      category: 'SYS',
+      message: 'backup.duplicate_verified',
+      payload: {
+        paths: results.map((r) => basename(r.path)),
+        sha256Prefix: firstSha.slice(0, 12),
+      },
+    });
+  }
+
+  return Array.isArray(destPaths) ? results : results[0]!;
 }
 
 export interface ImportDatabaseDeps {

@@ -1,12 +1,14 @@
-import { createRequire } from 'node:module';
-import { basename, join } from 'node:path';
+import { createRequire, createRequire } from 'node:module';
+import { basename, existsSync, join } from 'node:path';
 import { TRPCError } from '@trpc/server';
+import { z } from 'zod';
 import {
   clearImportedFlag,
   exportDatabase,
   importDatabase,
   needsCredentialsReentry,
 } from '../../backup/backup';
+import { SETTING_KEYS } from '../../db/settings-repo';
 import { publicProcedure, router } from '../trpc-core';
 
 // Electron dialog — CJS interop 회피용 lazy require
@@ -45,13 +47,24 @@ export const backupRouter = router({
       return { canceled: true as const };
     }
     const srcPath = join(app.getPath('userData'), 'split-stock.db');
-    const backup = exportDatabase(srcPath, result.filePath, ctx.logger);
+
+    // 기본 경로 + 2중 백업 경로 (있으면) 동시 작성
+    const duplicatePath = ctx.settingsRepo.get(SETTING_KEYS.BACKUP_DUPLICATE_PATH);
+    const destPaths = duplicatePath ? [result.filePath, duplicatePath] : result.filePath;
+
+    const backupResult = exportDatabase(srcPath, destPaths, ctx.logger);
+
+    // 단일 경로와 다중 경로 모두 처리
+    const results = Array.isArray(backupResult) ? backupResult : [backupResult];
+    const primaryResult = results[0];
+
     return {
       canceled: false as const,
-      path: backup.path,
-      filename: basename(backup.path),
-      sha256: backup.sha256,
-      bytes: backup.bytes,
+      path: primaryResult.path,
+      filename: basename(primaryResult.path),
+      sha256: primaryResult.sha256,
+      bytes: primaryResult.bytes,
+      duplicateCount: results.length,
     };
   }),
 
@@ -96,5 +109,64 @@ export const backupRouter = router({
       app.exit(0);
     }, 100);
     return { ok: true as const };
+  }),
+
+  /**
+   * 2중 백업 외부 드라이브 경로 조회
+   */
+  getDuplicatePath: publicProcedure.query(({ ctx }) => {
+    const path = ctx.settingsRepo.get(SETTING_KEYS.BACKUP_DUPLICATE_PATH);
+    return { path: path ?? null };
+  }),
+
+  /**
+   * 2중 백업 외부 드라이브 경로 설정
+   */
+  setDuplicatePath: publicProcedure
+    .input(
+      z.object({
+        path: z.string().min(1, '경로는 필수입니다'),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      if (!existsSync(input.path)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `경로가 존재하지 않습니다: ${input.path}`,
+        });
+      }
+      ctx.settingsRepo.set(SETTING_KEYS.BACKUP_DUPLICATE_PATH, input.path);
+      ctx.logger.log({
+        level: 'INFO',
+        category: 'SYS',
+        message: 'backup.duplicate_path.set',
+        payload: { path: input.path },
+      });
+      return { ok: true as const, path: input.path };
+    }),
+
+  /**
+   * 폴더 선택 dialog 표시 후 경로 반환
+   */
+  pickDuplicateFolder: publicProcedure.mutation(async ({ ctx }) => {
+    const dialog = electronDialog();
+    const result = await dialog.showOpenDialog({
+      title: '2중 백업 폴더 선택',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true as const };
+    }
+    const selectedPath = result.filePaths[0];
+    if (!selectedPath) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: '폴더 경로 누락',
+      });
+    }
+    return {
+      canceled: false as const,
+      path: selectedPath,
+    };
   }),
 });

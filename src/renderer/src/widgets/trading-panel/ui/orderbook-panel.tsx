@@ -105,7 +105,6 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
       <div
         className="panel__body"
         style={{
-          fontSize: '1.05rem',
           display: 'flex',
           alignItems: 'center',
           gap: '0.6rem',

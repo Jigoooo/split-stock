@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
+import type { LotSnapshotEntry } from './lots-repo';
 import { LotsRepo } from './lots-repo';
 
 function setupRepo() {
@@ -125,6 +126,119 @@ describe('LotsRepo', () => {
     const snap = repo.snapshot(1, '005930');
     if (snap.isErr()) throw new Error('snap');
     expect(snap.value.lots[0]?.status).toBe('OPEN');
+  });
+
+  describe('saveSnapshot / snapshotByDate / listSnapshotDates', () => {
+    const makeLots = (): LotSnapshotEntry[] => [
+      {
+        nth: 1,
+        buyPrice: 70000,
+        qty: 14,
+        amountKrw: 980_000,
+        status: 'OPEN',
+        boughtAt: Date.now(),
+      },
+      {
+        nth: 2,
+        buyPrice: 67000,
+        qty: 15,
+        amountKrw: 1_005_000,
+        status: 'OPEN',
+        boughtAt: Date.now(),
+      },
+    ];
+
+    it('saveSnapshot → snapshotByDate 라운드트립', () => {
+      const repo = setupRepo();
+      const lots = makeLots();
+      const r = repo.saveSnapshot({
+        accountId: 1,
+        snapshotDate: '2025-04-01',
+        pdno: '005930',
+        name: '삼성전자',
+        currentPrice: 72000,
+        lots,
+      });
+      expect(r.isOk()).toBe(true);
+
+      const snap = repo.snapshotByDate(1, '2025-04-01');
+      expect(snap.isOk()).toBe(true);
+      if (snap.isOk()) {
+        expect(snap.value).toHaveLength(1);
+        expect(snap.value[0]?.pdno).toBe('005930');
+        expect(snap.value[0]?.name).toBe('삼성전자');
+        expect(snap.value[0]?.currentPrice).toBe(72000);
+        expect(snap.value[0]?.lots).toHaveLength(2);
+        expect(snap.value[0]?.lots[0]?.nth).toBe(1);
+      }
+    });
+
+    it('pdno 필터 동작', () => {
+      const repo = setupRepo();
+      const lots = makeLots();
+      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 72000, lots });
+      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '000660', name: 'SK하이닉스', currentPrice: 185000, lots });
+
+      const snap = repo.snapshotByDate(1, '2025-04-01', '000660');
+      expect(snap.isOk()).toBe(true);
+      if (snap.isOk()) {
+        expect(snap.value).toHaveLength(1);
+        expect(snap.value[0]?.pdno).toBe('000660');
+      }
+    });
+
+    it('upsert — 같은 날짜/종목 재저장하면 덮어씀', () => {
+      const repo = setupRepo();
+      const lots = makeLots();
+      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 72000, lots });
+      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 75000, lots: lots.slice(0, 1) });
+
+      const snap = repo.snapshotByDate(1, '2025-04-01');
+      expect(snap.isOk()).toBe(true);
+      if (snap.isOk()) {
+        expect(snap.value).toHaveLength(1);
+        expect(snap.value[0]?.currentPrice).toBe(75000);
+        expect(snap.value[0]?.lots).toHaveLength(1);
+      }
+    });
+
+    it('listSnapshotDates — 최신순 반환', () => {
+      const repo = setupRepo();
+      const lots = makeLots();
+      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 72000, lots });
+      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-03', pdno: '005930', name: '삼성전자', currentPrice: 73000, lots });
+      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-02', pdno: '000660', name: 'SK하이닉스', currentPrice: 185000, lots });
+
+      const dates = repo.listSnapshotDates(1);
+      expect(dates.isOk()).toBe(true);
+      if (dates.isOk()) {
+        expect(dates.value).toEqual(['2025-04-03', '2025-04-02', '2025-04-01']);
+      }
+    });
+
+    it('per-account 격리 — 계좌 A 스냅샷이 계좌 B에 안 나옴', () => {
+      const repo = setupRepo();
+      const lots = makeLots();
+      repo.saveSnapshot({ accountId: 1, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 72000, lots });
+      repo.saveSnapshot({ accountId: 2, snapshotDate: '2025-04-01', pdno: '005930', name: '삼성전자', currentPrice: 60000, lots });
+
+      const snapA = repo.snapshotByDate(1, '2025-04-01');
+      const snapB = repo.snapshotByDate(2, '2025-04-01');
+      expect(snapA.isOk() && snapB.isOk()).toBe(true);
+      if (snapA.isOk() && snapB.isOk()) {
+        expect(snapA.value[0]?.currentPrice).toBe(72000);
+        expect(snapB.value[0]?.currentPrice).toBe(60000);
+      }
+    });
+
+    it('스냅샷 없는 날짜 → 빈 배열', () => {
+      const repo = setupRepo();
+      const snap = repo.snapshotByDate(1, '2099-12-31');
+      expect(snap.isOk()).toBe(true);
+      if (snap.isOk()) {
+        expect(snap.value).toHaveLength(0);
+      }
+    });
   });
 
   describe('per-account 격리 회귀 방지', () => {

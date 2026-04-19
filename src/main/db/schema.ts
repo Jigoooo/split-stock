@@ -180,6 +180,26 @@ export const dailyCandles = sqliteTable(
 );
 
 /**
+ * 잔고(차수) 스냅샷 — 일자별 종목 차수 이력.
+ * 장마감 후 스케줄러가 현재 잔고를 기준으로 upsert.
+ * payload_json: LotSnapshotEntry[] 직렬화.
+ * current_price: 스냅샷 시점 현재가 (원).
+ */
+export const lotsSnapshots = sqliteTable(
+  'lots_snapshots',
+  {
+    accountId: integer('account_id').notNull(),
+    snapshotDate: text('snapshot_date').notNull(), // YYYY-MM-DD (KST)
+    pdno: text('pdno').notNull(),
+    name: text('name').notNull().default(''), // stock_master에서 캡처
+    currentPrice: integer('current_price').notNull().default(0), // 스냅샷 시점 현재가
+    payloadJson: text('payload_json').notNull(), // JSON: LotSnapshotEntry[]
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.snapshotDate, t.pdno] })],
+);
+
+/**
  * 예약 매수 — 잔고에 없는 신규 종목 감시 주문(최대 100건).
  * status: 'PENDING' | 'FILLED' | 'EXPIRED' | 'CANCELLED'.
  */

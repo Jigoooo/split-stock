@@ -110,6 +110,16 @@ const CREATE_STATEMENTS: readonly string[] = [
     fetched_at INTEGER NOT NULL,
     PRIMARY KEY (pdno, period, date)
   )`,
+  `CREATE TABLE IF NOT EXISTS lots_snapshots (
+    account_id INTEGER NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    pdno TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    current_price INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (account_id, snapshot_date, pdno)
+  )`,
   `CREATE TABLE IF NOT EXISTS watch_orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id INTEGER NOT NULL,

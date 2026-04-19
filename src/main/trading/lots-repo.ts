@@ -1,9 +1,40 @@
-import { and, eq, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, ne } from 'drizzle-orm';
 import { err, ok, type Result } from 'neverthrow';
 import type { Db } from '../db/client';
-import { lots as lotsTable } from '../db/schema';
+import { lotsSnapshots, lots as lotsTable } from '../db/schema';
 import type { LotStatus, PositionSnapshot } from './fsm';
 import type { RespiitPlan } from './respiit-planner';
+
+/** lots_snapshots 테이블에 저장되는 차수 항목 */
+export interface LotSnapshotEntry {
+  nth: number;
+  buyPrice: number;
+  qty: number;
+  amountKrw: number;
+  status: LotStatus;
+  boughtAt: number; // ms timestamp
+  soldAt?: number;
+  sellPrice?: number;
+}
+
+/** snapshotByDate() 반환 타입 */
+export interface LotsSnapshot {
+  pdno: string;
+  name: string;
+  currentPrice: number;
+  snapshotDate: string;
+  lots: LotSnapshotEntry[];
+}
+
+/** saveSnapshot() 입력 */
+export interface SaveSnapshotInput {
+  accountId: number;
+  snapshotDate: string; // YYYY-MM-DD
+  pdno: string;
+  name: string;
+  currentPrice: number;
+  lots: LotSnapshotEntry[];
+}
 
 export type LotsRepoError = { kind: 'DB_ERROR'; cause: unknown };
 
@@ -162,6 +193,93 @@ export class LotsRepo {
         return ids;
       });
       return ok({ insertedIds });
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
+   * 특정 일자의 모든 종목 차수 스냅샷 조회.
+   * pdno를 지정하면 해당 종목만 반환.
+   */
+  snapshotByDate(
+    accountId: number,
+    snapshotDate: string,
+    pdno?: string,
+  ): Result<LotsSnapshot[], LotsRepoError> {
+    try {
+      const conditions = [
+        eq(lotsSnapshots.accountId, accountId),
+        eq(lotsSnapshots.snapshotDate, snapshotDate),
+      ];
+      if (pdno !== undefined) {
+        conditions.push(eq(lotsSnapshots.pdno, pdno));
+      }
+      const rows = this.db
+        .select()
+        .from(lotsSnapshots)
+        .where(and(...conditions))
+        .orderBy(asc(lotsSnapshots.pdno))
+        .all();
+      const result: LotsSnapshot[] = rows.map((r) => ({
+        pdno: r.pdno,
+        name: r.name,
+        currentPrice: r.currentPrice,
+        snapshotDate: r.snapshotDate,
+        lots: JSON.parse(r.payloadJson) as LotSnapshotEntry[],
+      }));
+      return ok(result);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
+   * 스냅샷이 존재하는 날짜 목록 조회 (최신순).
+   */
+  listSnapshotDates(accountId: number): Result<string[], LotsRepoError> {
+    try {
+      const rows = this.db
+        .selectDistinct({ snapshotDate: lotsSnapshots.snapshotDate })
+        .from(lotsSnapshots)
+        .where(eq(lotsSnapshots.accountId, accountId))
+        .orderBy(desc(lotsSnapshots.snapshotDate))
+        .all();
+      return ok(rows.map((r) => r.snapshotDate));
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
+   * 차수 스냅샷 저장 (upsert — 같은 날짜/종목이면 덮어씀).
+   * 장마감 스케줄러 또는 수동 트리거에서 호출.
+   */
+  saveSnapshot(input: SaveSnapshotInput): Result<void, LotsRepoError> {
+    try {
+      const now = new Date();
+      this.db
+        .insert(lotsSnapshots)
+        .values({
+          accountId: input.accountId,
+          snapshotDate: input.snapshotDate,
+          pdno: input.pdno,
+          name: input.name,
+          currentPrice: input.currentPrice,
+          payloadJson: JSON.stringify(input.lots),
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: [lotsSnapshots.accountId, lotsSnapshots.snapshotDate, lotsSnapshots.pdno],
+          set: {
+            name: input.name,
+            currentPrice: input.currentPrice,
+            payloadJson: JSON.stringify(input.lots),
+            createdAt: now,
+          },
+        })
+        .run();
+      return ok(undefined);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
     }

@@ -689,14 +689,25 @@ body {
 .orderbook-panel {
   overflow: visible;
 }
+.orderbook-table {
+  /* 호가창은 사용자 rowHeight 설정과 독립적으로 타이트하게 고정 */
+  --hts-row-height: 18px;
+}
 .orderbook-table th,
 .orderbook-table td {
-  padding: 0.15rem 0.4rem;
-  font-size: 1.05rem;
+  padding: 0.05rem 0.35rem;
+  font-size: 1rem;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
 .orderbook-table thead th {
-  padding: 0.2rem 0.4rem;
-  font-size: 1rem;
+  --hts-row-height: 16px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.9rem;
+}
+.orderbook-panel .panel__body {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.95rem;
 }
 
 /* ===== Dashboard ===== */

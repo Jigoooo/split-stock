@@ -95,6 +95,10 @@ export const SETTING_KEYS = {
   // ── 실시간 설정 ─────────────────────────────────────────────────
   /** WS 세션 capacity — KIS 기본 20, 향후 60 확장 시 사용자가 변경 가능 (1~60). */
   REALTIME_WS_CAPACITY: 'realtime.wsCapacity',
+
+  // ── 백업 설정 ───────────────────────────────────────────────────
+  /** 2중 백업 외부 드라이브 경로 */
+  BACKUP_DUPLICATE_PATH: 'backup.duplicatePath',
 } as const;
 
 export const PENDING_CANCEL_DEFAULTS = {

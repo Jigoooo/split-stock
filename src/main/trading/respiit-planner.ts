@@ -100,3 +100,40 @@ export function planFromCsv(pdno: string, text: string): RespiitPlan {
   }
   return { pdno, entries };
 }
+
+/**
+ * 기존 Plan의 선택 차수 매입단가를 % 비율로 증감.
+ * - stages: number[] (차수 번호 배열) 또는 'all' (전체)
+ * - ratioPct: -50 ~ +50 (%), 예: +10 = 10% 인상, -5 = 5% 인하
+ * 반환: 수정된 Plan (원본은 수정 안 함)
+ */
+export function applyPriceRatio(
+  plan: RespiitPlan,
+  options: { stages: number[] | 'all'; ratioPct: number },
+): RespiitPlan {
+  const { stages, ratioPct } = options;
+
+  // 비율 유효성 검사
+  if (ratioPct < -100 || ratioPct > 100) {
+    throw new Error('ratioPct는 -100 ~ +100 범위여야 합니다');
+  }
+
+  const multiplier = 1 + ratioPct / 100;
+  const stagesToUpdate = stages === 'all' ? plan.entries.map((e) => e.nth) : stages;
+  const stageSet = new Set(stagesToUpdate);
+
+  // 새 entries 생성 (원본 불변)
+  const newEntries = plan.entries.map((entry) => {
+    if (!stageSet.has(entry.nth)) {
+      return entry; // 미지정 차수는 그대로
+    }
+    const newPrice = Math.max(1, Math.round(entry.buyPrice * multiplier));
+    return {
+      ...entry,
+      buyPrice: newPrice,
+      amountKrw: newPrice * entry.qty,
+    };
+  });
+
+  return { pdno: plan.pdno, entries: newEntries };
+}
