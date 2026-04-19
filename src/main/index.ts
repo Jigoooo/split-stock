@@ -32,6 +32,7 @@ import { createSafetyState } from './safety/safety-state';
 import { CredentialsRepo } from './security/credentials-repo';
 import { LotsRepo } from './trading/lots-repo';
 import { StockMasterRepo } from './trading/stock-master-repo';
+import { StockMasterSyncService } from './trading/stock-master-sync';
 import { StrategyRepo } from './trading/strategy-repo';
 import { appRouter } from './trpc/app-router';
 import { createContextFactory } from './trpc/context';
@@ -71,6 +72,7 @@ function bootstrapDeps(userDataDir: string) {
   const settingsRepo = new SettingsRepo(db);
   const strategyRepo = new StrategyRepo(settingsRepo, eventLogger);
   const stockMasterRepo = new StockMasterRepo(db);
+  const stockMasterSync = new StockMasterSyncService(stockMasterRepo, settingsRepo);
   const lotsRepo = new LotsRepo(db);
   // 실시간 버스는 env 전환 상관없이 공유, RealtimeService는 env별 lazy 재생성.
   const bus = new FeedBus();
@@ -86,6 +88,7 @@ function bootstrapDeps(userDataDir: string) {
     logger: eventLogger,
     strategyRepo,
     stockMasterRepo,
+    stockMasterSync,
     lotsRepo,
     bus,
     realtimeFactory: (env) => {
@@ -117,6 +120,27 @@ function bootstrapDeps(userDataDir: string) {
         category: 'AUTH',
         message: 'auth.env.restored',
         payload: { env: savedEnv },
+      });
+      // 로그인 상태에서 24시간 초과 시 백그라운드로 종목 마스터 동기화.
+      // 네트워크 실패는 로그만 남기고 부팅 지연 없이 계속 진행.
+      stockMasterSync.syncIfStale().then((r) => {
+        if (r.isErr()) {
+          eventLogger.log({
+            level: 'WARN',
+            category: 'SYS',
+            message: 'stockMaster.sync.failed',
+            payload: { kind: r.error.kind, msg: r.error.msg },
+          });
+          return;
+        }
+        if (r.value) {
+          eventLogger.log({
+            level: 'INFO',
+            category: 'SYS',
+            message: 'stockMaster.sync.ok',
+            payload: { total: r.value.total, kospi: r.value.kospi, kosdaq: r.value.kosdaq },
+          });
+        }
       });
     }
   }

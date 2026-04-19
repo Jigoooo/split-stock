@@ -15,6 +15,58 @@ export const marketRouter = router({
       entries: ctx.stockMasterRepo.search(input.term, input.limit),
     })),
 
+  /**
+   * 무한스크롤용 페이징 리스트. keyword 생략 시 전체 목록.
+   * cursor는 offset 기반 — nextCursor가 null이면 더 이상 페이지 없음.
+   * trpc v11 useInfiniteQuery 호환을 위해 필드명을 cursor로 유지.
+   */
+  listStock: publicProcedure
+    .input(
+      z.object({
+        keyword: z.string().max(32).optional(),
+        cursor: z.number().int().min(0).nullish(),
+        limit: z.number().int().min(1).max(200).default(60),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const offset = input.cursor ?? 0;
+      const entries = ctx.stockMasterRepo.list({
+        offset,
+        limit: input.limit,
+        ...(input.keyword === undefined ? {} : { keyword: input.keyword }),
+      });
+      const total = ctx.stockMasterRepo.countAll(input.keyword);
+      const nextCursor = offset + entries.length < total ? offset + entries.length : null;
+      return { entries, total, nextCursor };
+    }),
+
+  /** 종목 마스터 KIS zip 다운로드 → 로컬 upsert. */
+  syncStockMaster: publicProcedure.mutation(async ({ ctx }) => {
+    const r = await ctx.stockMasterSync.sync();
+    if (r.isErr()) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `종목 마스터 동기화 실패: ${r.error.kind} - ${r.error.msg}`,
+      });
+    }
+    return {
+      total: r.value.total,
+      kospi: r.value.kospi,
+      kosdaq: r.value.kosdaq,
+      syncedAt: r.value.syncedAt.getTime(),
+    };
+  }),
+
+  getStockMasterStatus: publicProcedure.query(({ ctx }) => {
+    const lastSyncAt = ctx.stockMasterSync.getLastSyncAt();
+    const total = ctx.stockMasterRepo.countAll();
+    return {
+      lastSyncAt: lastSyncAt ? lastSyncAt.getTime() : null,
+      total,
+      isStale: ctx.stockMasterSync.isStale(),
+    };
+  }),
+
   getDailyChart: authedProcedure
     .input(
       z.object({

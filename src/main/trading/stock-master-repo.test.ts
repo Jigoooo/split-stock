@@ -56,4 +56,37 @@ describe('StockMasterRepo', () => {
     const repo = fresh();
     expect(repo.find('999999')).toBeNull();
   });
+
+  it('list: 페이징 + 이름 오름차순 정렬', () => {
+    const repo = fresh();
+    repo.upsertMany([
+      { pdno: '005930', name: '삼성전자' },
+      { pdno: '000660', name: 'SK하이닉스' },
+      { pdno: '035720', name: '카카오' },
+      { pdno: '051910', name: 'LG화학' },
+    ]);
+    const page1 = repo.list({ offset: 0, limit: 2 });
+    expect(page1.map((x) => x.name)).toEqual(['LG화학', 'SK하이닉스']);
+    const page2 = repo.list({ offset: 2, limit: 2 });
+    expect(page2.map((x) => x.name)).toEqual(['삼성전자', '카카오']);
+  });
+
+  it('list + countAll: keyword 필터 결과 수 일치', () => {
+    const repo = fresh();
+    repo.upsertMany([
+      { pdno: '005930', name: '삼성전자' },
+      { pdno: '005935', name: '삼성전자우' },
+      { pdno: '000660', name: 'SK하이닉스' },
+    ]);
+    const filtered = repo.list({ offset: 0, limit: 10, keyword: '삼성' });
+    expect(filtered).toHaveLength(2);
+    expect(repo.countAll('삼성')).toBe(2);
+    expect(repo.countAll()).toBe(3);
+  });
+
+  it('countAll: 빈 DB는 0', () => {
+    const repo = fresh();
+    expect(repo.countAll()).toBe(0);
+    expect(repo.countAll('삼성')).toBe(0);
+  });
 });

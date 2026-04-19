@@ -1,4 +1,4 @@
-import { asc, eq, like, or } from 'drizzle-orm';
+import { asc, count as countRows, eq, like, or } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { stockMaster } from '../db/schema';
 
@@ -51,6 +51,58 @@ export class StockMasterRepo {
       sector: r.sector,
       updatedAt: r.updatedAt,
     }));
+  }
+
+  /**
+   * 페이징 + 선택적 키워드 필터. 무한스크롤용.
+   * keyword 미지정 시 전체 목록에서 이름 오름차순.
+   */
+  list(opts: { offset: number; limit: number; keyword?: string }): StockEntry[] {
+    const trimmed = opts.keyword?.trim() ?? '';
+    const rows = trimmed
+      ? this.db
+          .select()
+          .from(stockMaster)
+          .where(
+            or(
+              like(stockMaster.name, `%${trimmed}%`),
+              like(stockMaster.pdno, `%${trimmed}%`),
+            ),
+          )
+          .orderBy(asc(stockMaster.name))
+          .limit(opts.limit)
+          .offset(opts.offset)
+          .all()
+      : this.db
+          .select()
+          .from(stockMaster)
+          .orderBy(asc(stockMaster.name))
+          .limit(opts.limit)
+          .offset(opts.offset)
+          .all();
+    return rows.map((r) => ({
+      pdno: r.pdno,
+      name: r.name,
+      sector: r.sector,
+      updatedAt: r.updatedAt,
+    }));
+  }
+
+  countAll(keyword?: string): number {
+    const trimmed = keyword?.trim() ?? '';
+    const rows = trimmed
+      ? this.db
+          .select({ n: countRows() })
+          .from(stockMaster)
+          .where(
+            or(
+              like(stockMaster.name, `%${trimmed}%`),
+              like(stockMaster.pdno, `%${trimmed}%`),
+            ),
+          )
+          .all()
+      : this.db.select({ n: countRows() }).from(stockMaster).all();
+    return rows[0]?.n ?? 0;
   }
 
   upsertMany(entries: UpsertStockInput[]): number {
