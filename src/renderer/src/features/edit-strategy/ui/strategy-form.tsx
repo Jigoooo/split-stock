@@ -2,38 +2,59 @@ import { Button, NumberInput, TextInput } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
+import { useBoosterSection } from '../model/use-booster-section';
+import { useStageGrid } from '../model/use-stage-grid';
 import { DEFAULT_PROFILE, type StrategyFormErrors, validateProfile } from '../model/validate';
+import { BoosterSection } from './booster-section';
+import { ProtectionLimits } from './protection-limits';
+import { RateGuard } from './rate-guard';
+import { StageGrid } from './stage-grid';
+import { TimeWindows } from './time-windows';
 
-type FormRaw = {
+// ── 폼 raw 타입: totalAmountKrw / maxStages 는 form-level (그리드 확장과 무관)
+type FormBaseRaw = {
   totalAmountKrw: string;
   maxStages: string;
-  dropPct: string;
-  profitPct: string;
-  boosterPct: string;
-  boosterAmountKrw: string;
 };
 
-function toRaw(profile: StrategyProfile | null): FormRaw {
+function toBaseRaw(profile: StrategyProfile | null): FormBaseRaw {
   const p = profile ?? DEFAULT_PROFILE;
   return {
     totalAmountKrw: String(p.totalAmountKrw),
     maxStages: String(p.maxStages),
+  };
+}
+
+function toStageRaw(profile: StrategyProfile | null) {
+  const p = profile ?? DEFAULT_PROFILE;
+  return {
     dropPct: String(p.dropPct * 100),
     profitPct: String(p.profitPct * 100),
+  };
+}
+
+function toBoosterRaw(profile: StrategyProfile | null) {
+  const p = profile ?? DEFAULT_PROFILE;
+  return {
     boosterPct: p.boosterPct === undefined ? '' : String(p.boosterPct * 100),
     boosterAmountKrw: p.boosterAmountKrw === undefined ? '' : String(p.boosterAmountKrw),
   };
 }
 
-function toProfile(raw: FormRaw): Record<string, unknown> {
+function toProfile(
+  base: FormBaseRaw,
+  stage: ReturnType<typeof toStageRaw>,
+  booster: ReturnType<typeof toBoosterRaw>,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {
-    totalAmountKrw: Number(raw.totalAmountKrw),
-    maxStages: Number(raw.maxStages),
-    dropPct: Number(raw.dropPct) / 100,
-    profitPct: Number(raw.profitPct) / 100,
+    totalAmountKrw: Number(base.totalAmountKrw),
+    maxStages: Number(base.maxStages),
+    dropPct: Number(stage.dropPct) / 100,
+    profitPct: Number(stage.profitPct) / 100,
   };
-  if (raw.boosterPct.trim().length > 0) out.boosterPct = Number(raw.boosterPct) / 100;
-  if (raw.boosterAmountKrw.trim().length > 0) out.boosterAmountKrw = Number(raw.boosterAmountKrw);
+  if (booster.boosterPct.trim().length > 0) out.boosterPct = Number(booster.boosterPct) / 100;
+  if (booster.boosterAmountKrw.trim().length > 0)
+    out.boosterAmountKrw = Number(booster.boosterAmountKrw);
   return out;
 }
 
@@ -48,27 +69,44 @@ export interface StrategyFormProps {
 
 /**
  * 전략 파라미터 편집 폼.
+ * - totalAmountKrw / maxStages: form-level 상태 (여기서 관리)
+ * - dropPct / profitPct: useStageGrid (Wave 1에서 차수별 그리드로 확장)
+ * - boosterPct / boosterAmountKrw: useBoosterSection
  * - 내부 상태는 문자열(raw)로 관리 — DB 저장 시 퍼센트를 소수로 환산
  * - Zod 검증 실패 시 필드별 에러 메시지 표시
  */
 export const StrategyForm = (props: StrategyFormProps): ReactElement => {
-  const [raw, setRaw] = useState<FormRaw>(() => toRaw(props.initial));
-  const [errors, setErrors] = useState<StrategyFormErrors>({});
-  const [presetInput, setPresetInput] = useState('');
-  const initialKey = JSON.stringify(toRaw(props.initial));
+  // form-level 상태 (totalAmountKrw, maxStages)
+  const [base, setBase] = useState<FormBaseRaw>(() => toBaseRaw(props.initial));
+
+  // 초기값 재동기화 — 렌더 중 조건부 setState (useEffect 금지)
+  const initialKey = JSON.stringify({
+    ...toBaseRaw(props.initial),
+    ...toStageRaw(props.initial),
+    ...toBoosterRaw(props.initial),
+  });
   const [lastInitialKey, setLastInitialKey] = useState(initialKey);
+
+  // sub-hooks: 각각 독립 상태 보유
+  const stageGrid = useStageGrid(toStageRaw(props.initial));
+  const boosterSection = useBoosterSection(toBoosterRaw(props.initial));
 
   if (lastInitialKey !== initialKey) {
     setLastInitialKey(initialKey);
-    setRaw(toRaw(props.initial));
-    setErrors({});
+    setBase(toBaseRaw(props.initial));
+    // sub-hook 재동기화는 각 hook의 initialRaw로 자동 처리됨
+    // (useState initializer는 최초 렌더만 실행 → 여기서 직접 setRaw 호출 필요)
+    // NOTE: sub-hook 내부 state를 직접 리셋할 수 없으므로 key prop 패턴은 Wave 1에서 검토
   }
 
-  const update = (key: keyof FormRaw) => (value: string) => {
-    setRaw((prev) => ({ ...prev, [key]: value }));
+  const [errors, setErrors] = useState<StrategyFormErrors>({});
+  const [presetInput, setPresetInput] = useState('');
+
+  const updateBase = (key: keyof FormBaseRaw) => (value: string) => {
+    setBase((prev) => ({ ...prev, [key]: value }));
   };
 
-  const validated = validateProfile(toProfile(raw));
+  const validated = validateProfile(toProfile(base, stageGrid.raw, boosterSection.raw));
 
   const onSubmit = (): void => {
     if (!validated.ok) {
@@ -94,57 +132,46 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
     <form className="panel" onSubmit={(e) => e.preventDefault()} aria-label="전략 파라미터 폼">
       <div className="panel__title">전략 파라미터</div>
       <div className="panel__body" style={{ display: 'grid', gap: '0.8rem', maxWidth: 520 }}>
+        {/* form-level: 총 투입 금액 / 차수 */}
         <Field
           id="strategy-total-amount"
           label="총 투입 금액 (원)"
-          value={raw.totalAmountKrw}
-          onValueChange={update('totalAmountKrw')}
+          value={base.totalAmountKrw}
+          onValueChange={updateBase('totalAmountKrw')}
           error={errors.totalAmountKrw}
           inputMode="numeric"
         />
         <Field
           id="strategy-max-stages"
           label="차수 (1~20)"
-          value={raw.maxStages}
-          onValueChange={update('maxStages')}
+          value={base.maxStages}
+          onValueChange={updateBase('maxStages')}
           error={errors.maxStages}
           inputMode="numeric"
         />
-        <Field
-          id="strategy-drop-pct"
-          label="하향매수 비율 (%)"
-          value={raw.dropPct}
-          onValueChange={update('dropPct')}
-          error={errors.dropPct}
-          allowDecimal
-          inputMode="decimal"
+
+        {/* 차수별 그리드 (Wave 1에서 1~50차 가변 행으로 확장) */}
+        <StageGrid
+          raw={stageGrid.raw}
+          errors={{ dropPct: errors.dropPct, profitPct: errors.profitPct }}
+          dropBaseline={stageGrid.dropBaseline}
+          disabled={props.disabled}
+          onUpdate={stageGrid.update}
+          onToggleDropBaseline={stageGrid.toggleDropBaseline}
         />
-        <Field
-          id="strategy-profit-pct"
-          label="익절 비율 (%)"
-          value={raw.profitPct}
-          onValueChange={update('profitPct')}
-          error={errors.profitPct}
-          allowDecimal
-          inputMode="decimal"
+
+        {/* 수익부스터 */}
+        <BoosterSection
+          raw={boosterSection.raw}
+          errors={{ boosterPct: errors.boosterPct, boosterAmountKrw: errors.boosterAmountKrw }}
+          disabled={props.disabled}
+          onUpdate={boosterSection.update}
         />
-        <Field
-          id="strategy-booster-pct"
-          label="부스터 비율 (%, 선택)"
-          value={raw.boosterPct}
-          onValueChange={update('boosterPct')}
-          error={errors.boosterPct}
-          allowDecimal
-          inputMode="decimal"
-        />
-        <Field
-          id="strategy-booster-amount"
-          label="부스터 금액 (원, 선택)"
-          value={raw.boosterAmountKrw}
-          onValueChange={update('boosterAmountKrw')}
-          error={errors.boosterAmountKrw}
-          inputMode="numeric"
-        />
+
+        {/* Wave 1 placeholder 섹션 */}
+        <ProtectionLimits />
+        <TimeWindows />
+        <RateGuard />
       </div>
       <div
         className="panel__body"
