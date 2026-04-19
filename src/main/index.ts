@@ -193,7 +193,7 @@ function resolveWindowBounds(
 function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
   const { popoutRoute, parent } = opts;
   const display = pickTargetDisplay(parent);
-  const bounds = resolveWindowBounds(popoutRoute ? 640 : 960, popoutRoute ? 480 : 600, display);
+  const bounds = resolveWindowBounds(popoutRoute ? 720 : 1280, popoutRoute ? 540 : 800, display);
   const win = new BrowserWindow({
     x: bounds.x,
     y: bounds.y,
