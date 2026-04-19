@@ -46,6 +46,7 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
   const [candles, setCandles] = useState<Candle[]>([]);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reachedEnd, setReachedEnd] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -70,32 +71,47 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     let cancelled = false;
     setError(null);
     setCandles([]);
+    setReachedEnd(false);
     (async () => {
       try {
         const first = await loadChunk(period);
         if (cancelled) return;
         if (first.length === 0) {
           setCandles([]);
+          setReachedEnd(true);
           return;
         }
         let merged = [...first];
         setCandles(merged);
-        // 과거 3 chunk 선제 로드 — 사용자가 스크롤 시작 전에 ~400봉 buffer 확보
+        // 과거 3 chunk 선제 로드 — 사용자가 스크롤 시작 전에 buffer 확보
         let toMs = new Date(first[0]?.date ?? '').getTime() - 86400000;
         for (let i = 0; i < 3; i++) {
           if (cancelled) return;
           if (!Number.isFinite(toMs)) break;
-          const older = await loadChunk(period, toMs);
-          if (cancelled) return;
-          if (older.length === 0) break;
-          const seen = new Set(merged.map((c) => c.date));
-          merged = [...older.filter((c) => !seen.has(c.date)), ...merged].sort((a, b) =>
-            a.date.localeCompare(b.date),
-          );
-          setCandles(merged);
-          const nextOldest = merged[0]?.date;
-          if (!nextOldest) break;
-          toMs = new Date(nextOldest).getTime() - 86400000;
+          try {
+            const older = await loadChunk(period, toMs);
+            if (cancelled) return;
+            if (older.length === 0) {
+              setReachedEnd(true);
+              break;
+            }
+            const seen = new Set(merged.map((c) => c.date));
+            const addedUnique = older.filter((c) => !seen.has(c.date));
+            if (addedUnique.length === 0) {
+              // 서버가 같은 범위를 다시 돌려보낸 경우 → 더 과거 없음
+              setReachedEnd(true);
+              break;
+            }
+            merged = [...addedUnique, ...merged].sort((a, b) => a.date.localeCompare(b.date));
+            setCandles(merged);
+            const nextOldest = merged[0]?.date;
+            if (!nextOldest) break;
+            toMs = new Date(nextOldest).getTime() - 86400000;
+          } catch {
+            // 과거 범위가 상장 이전이라 KIS가 500을 돌려주는 경우 등 — 더 이상 과거 데이터 없음으로 간주
+            setReachedEnd(true);
+            break;
+          }
         }
       } catch (e) {
         if (cancelled) return;
@@ -110,6 +126,7 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
   // 좌측 스크롤 시 더 오래된 chunk 여러 개를 한 번에 추가 (왼쪽 끊김 방지)
   const fetchMore = useCallback(async (): Promise<void> => {
     if (loadingRef.current) return;
+    if (reachedEnd) return;
     if (candles.length === 0) return;
     loadingRef.current = true;
     setIsFetchingMore(true);
@@ -121,21 +138,31 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
         if (!oldest) break;
         const toMs = new Date(oldest.date).getTime() - 24 * 60 * 60 * 1000;
         if (!Number.isFinite(toMs)) break;
-        const older = await loadChunk(period, toMs);
-        if (older.length === 0) break; // 더 이상 과거 없음
-        const seen = new Set(current.map((c) => c.date));
-        current = [...older.filter((c) => !seen.has(c.date)), ...current].sort((a, b) =>
-          a.date.localeCompare(b.date),
-        );
-        setCandles(current);
+        try {
+          const older = await loadChunk(period, toMs);
+          if (older.length === 0) {
+            setReachedEnd(true);
+            break;
+          }
+          const seen = new Set(current.map((c) => c.date));
+          const addedUnique = older.filter((c) => !seen.has(c.date));
+          if (addedUnique.length === 0) {
+            setReachedEnd(true);
+            break;
+          }
+          current = [...addedUnique, ...current].sort((a, b) => a.date.localeCompare(b.date));
+          setCandles(current);
+        } catch {
+          // 상장 이전 구간 등 서버 500 → 더 이상 과거 없음으로 간주 후 조용히 종료
+          setReachedEnd(true);
+          break;
+        }
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
     } finally {
       loadingRef.current = false;
       setIsFetchingMore(false);
     }
-  }, [candles, loadChunk, period]);
+  }, [candles, loadChunk, period, reachedEnd]);
 
   // 차트 인스턴스 생성 (1회)
   useEffect(() => {
@@ -175,6 +202,7 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     if (!chart) return;
     const onRange = (range: { from: number; to: number } | null): void => {
       if (!range) return;
+      if (reachedEnd) return;
       // left edge로부터 50바 이내로 다가오면 미리 prefetch — 사용자가 스크롤하는 동안 끊김 방지
       if (range.from > 50) return;
       void fetchMore();
@@ -187,7 +215,7 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
         // dispose race 무시
       }
     };
-  }, [fetchMore]);
+  }, [fetchMore, reachedEnd]);
 
   // 누적 candles가 바뀔 때 시리즈 갱신 + visible range 보존
   useEffect(() => {
@@ -239,12 +267,16 @@ export const PositionChart = (props: PositionChartProps): ReactElement => {
     }
 
     if (isFirstLoad || !prevRange) {
-      chart.timeScale().fitContent();
+      // 초기 로드: 최근 60봉만 보이게 오른쪽 끝에 정렬 (스크롤 buffer는 왼쪽에 쌓여 있음)
+      const total = data.length;
+      const shown = Math.min(60, total);
+      chart.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, total - shown),
+        to: total - 1,
+      });
     } else {
-      // 앞쪽에 N개의 old bar가 추가됐다면 logical range도 그만큼 오른쪽으로 밀어줘야 사용자 시야가 그대로 유지됨.
-      // 단순히 이전 range를 그대로 쓰면 old bar가 시야로 들어와 데이터 더 추가됨. offset 계산:
-      const added = data.length - (prevRange.to - prevRange.from + 1 > 0 ? 0 : 0);
-      void added;
+      // prevRange를 그대로 유지하면 앞쪽에 추가된 old bar가 시야로 들어올 수 있음 — offset 보정 없이도
+      // 사용자가 보던 절대 날짜 위치는 유지됨(lightweight-charts는 logical index 기준으로 from/to가 자동 shift).
       chart.timeScale().setVisibleLogicalRange(prevRange);
     }
   }, [candles, lines]);
