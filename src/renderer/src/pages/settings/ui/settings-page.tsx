@@ -1,6 +1,7 @@
 import { BackupPanel } from '@renderer/features/backup-restore';
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
 import { ActivePendingList, PendingCancelForm } from '@renderer/features/pending-cancel-settings';
+import { PriceCorrectionForm } from '@renderer/features/price-correction-settings';
 import { Button, Select } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
@@ -104,6 +105,12 @@ export const SettingsPage = (): ReactElement => {
 
       <PendingCancelForm />
       <ActivePendingList />
+      <div className="panel">
+        <div className="panel__title">호가 자동 보정</div>
+        <div className="panel__body">
+          <PriceCorrectionForm />
+        </div>
+      </div>
       <BackupPanel />
     </div>
   );
