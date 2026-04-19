@@ -9,11 +9,24 @@ export interface BoosterTask {
   amountKrw: number;
   /** ms absolute. 넘기면 자동 해제. */
   expiresAt?: number;
+  /**
+   * 1차 매도 시점에 보존하는 strategy 스냅샷.
+   * 부스터 트리거 후 재매수 lot을 동일 차수 정의로 복원하기 위함 (Wave 1 verifier H1).
+   * 타입은 호출자가 결정 — 라우터/테스트가 간단한 형태로 전달 가능하도록 unknown 유지.
+   */
+  strategySnapshot?: unknown;
+}
+
+export interface BoosterTriggerContext {
+  price: number;
+  at: number;
+  /** register 시점에 보존된 strategy 스냅샷 — 부스터 트리거 시 caller가 복원에 사용. */
+  strategySnapshot?: unknown;
 }
 
 export interface BoosterWatcherOptions {
   timer: Timer;
-  onTrigger: (task: BoosterTask, context: { price: number; at: number }) => void;
+  onTrigger: (task: BoosterTask, context: BoosterTriggerContext) => void;
   onExpire?: (task: BoosterTask) => void;
 }
 
@@ -76,7 +89,11 @@ export class BoosterWatcher {
     return async (order: WatchOrder, ctx) => {
       const found = Array.from(this.engineEntries.values()).find((e) => e.watchId === order.id);
       if (found) {
-        this.opts.onTrigger(found.task, { price: ctx.price, at: this.opts.timer.now() });
+        this.opts.onTrigger(found.task, {
+          price: ctx.price,
+          at: this.opts.timer.now(),
+          strategySnapshot: found.task.strategySnapshot,
+        });
         this.engineEntries.delete(found.task.pdno);
       }
       return { ok: true };
@@ -167,7 +184,11 @@ export class BoosterWatcher {
     entry.disposed = true;
     entry.expireHandle?.clear();
     this.legacyEntries.delete(entry.task.pdno);
-    this.opts.onTrigger(entry.task, { price, at: this.opts.timer.now() });
+    this.opts.onTrigger(entry.task, {
+      price,
+      at: this.opts.timer.now(),
+      strategySnapshot: entry.task.strategySnapshot,
+    });
   }
 
   /* ---------------------------- engine mode ----------------------------- */

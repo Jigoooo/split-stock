@@ -88,6 +88,22 @@ describe('BoosterWatcher', () => {
     expect(triggers).toEqual([]);
   });
 
+  it('strategySnapshot: register 시점 보존 → onTrigger context로 복원 (Wave 1 verifier H1)', () => {
+    const triggers: Array<{ pdno: string; snapshot: unknown }> = [];
+    const w = new BoosterWatcher({
+      timer: new FakeTimer(),
+      onTrigger: (t, ctx) => triggers.push({ pdno: t.pdno, snapshot: ctx.strategySnapshot }),
+    });
+    const snapshot = {
+      lots: [{ nth: 1, qty: 10, price: 70_000 }],
+      buyDropPct: 0.025,
+      sellGainPct: 0.03,
+    };
+    w.register(baseTask({ boosterPct: 0.02, strategySnapshot: snapshot }));
+    w.onPrice('005930', 68_500); // threshold = 68_600 → 트리거
+    expect(triggers).toEqual([{ pdno: '005930', snapshot }]);
+  });
+
   it('register 재호출은 새 task로 교체 (expiresAt 갱신)', () => {
     const timer = new FakeTimer();
     const triggers: string[] = [];
