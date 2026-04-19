@@ -126,4 +126,102 @@ describe('LotsRepo', () => {
     if (snap.isErr()) throw new Error('snap');
     expect(snap.value.lots[0]?.status).toBe('OPEN');
   });
+
+  describe('per-account 격리 회귀 방지', () => {
+    it('계좌 A에 등록한 lot 이 계좌 B snapshot 에 안 나옴', () => {
+      const repo = setupRepo();
+      const a = repo.insertLot({
+        accountId: 1,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 70000,
+        qty: 10,
+        amountKrw: 700_000,
+        status: 'OPEN',
+        boughtAt: new Date(),
+      });
+      const b = repo.insertLot({
+        accountId: 2,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 60000,
+        qty: 5,
+        amountKrw: 300_000,
+        status: 'OPEN',
+        boughtAt: new Date(),
+      });
+      expect(a.isOk() && b.isOk()).toBe(true);
+
+      const snapA = repo.snapshot(1, '005930');
+      const snapB = repo.snapshot(2, '005930');
+      if (snapA.isErr() || snapB.isErr()) throw new Error('snap');
+
+      expect(snapA.value.lots).toHaveLength(1);
+      expect(snapA.value.lots[0]?.buyPrice).toBe(70000);
+      expect(snapB.value.lots).toHaveLength(1);
+      expect(snapB.value.lots[0]?.buyPrice).toBe(60000);
+    });
+
+    it('동일 (pdno, nth) 라도 account_id 다르면 중복 거부 안 됨', () => {
+      const repo = setupRepo();
+      const a = repo.insertLot({
+        accountId: 1,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 70000,
+        qty: 10,
+        amountKrw: 700_000,
+        status: 'OPEN',
+        boughtAt: new Date(),
+      });
+      const b = repo.insertLot({
+        accountId: 2,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 60000,
+        qty: 5,
+        amountKrw: 300_000,
+        status: 'OPEN',
+        boughtAt: new Date(),
+      });
+      expect(a.isOk()).toBe(true);
+      expect(b.isOk()).toBe(true); // 다른 계좌면 OK
+    });
+
+    it('계좌 A의 replan 이 계좌 B의 lot 을 건드리지 않음', () => {
+      const repo = setupRepo();
+      repo.insertLot({
+        accountId: 1,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 70000,
+        qty: 10,
+        amountKrw: 700_000,
+        status: 'OPEN',
+        boughtAt: new Date(),
+      });
+      repo.insertLot({
+        accountId: 2,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 60000,
+        qty: 5,
+        amountKrw: 300_000,
+        status: 'OPEN',
+        boughtAt: new Date(),
+      });
+
+      const r = repo.replan(1, {
+        pdno: '005930',
+        entries: [{ nth: 1, buyPrice: 80000, qty: 12, amountKrw: 960_000, boughtAt: new Date() }],
+      });
+      expect(r.isOk()).toBe(true);
+
+      const snapB = repo.snapshot(2, '005930');
+      if (snapB.isErr()) throw new Error('snap');
+      // 계좌 B 의 1차는 버틸어야 한다.
+      expect(snapB.value.lots).toHaveLength(1);
+      expect(snapB.value.lots[0]?.buyPrice).toBe(60000);
+    });
+  });
 });

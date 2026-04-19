@@ -1,8 +1,10 @@
+import { useActiveAccountId } from '@renderer/entities/account';
 import { trpc } from '@renderer/shared/api/trpc';
 import { useState } from 'react';
 
 export function useActiveOrders(pdnoFilter?: string | null) {
   const utils = trpc.useUtils();
+  const { accountId } = useActiveAccountId();
   const query = trpc.order.listActive.useQuery(undefined, { refetchInterval: 2000 });
   const cancelMany = trpc.order.cancelMany.useMutation({
     onSuccess: () => utils.order.listActive.invalidate(),
@@ -24,8 +26,9 @@ export function useActiveOrders(pdnoFilter?: string | null) {
   const cancelSelected = async (): Promise<void> => {
     const odnos = Array.from(selected);
     if (odnos.length === 0) return;
+    if (accountId === null) return;
     if (!window.confirm(`${odnos.length}건 일괄 취소하시겠습니까?`)) return;
-    await cancelMany.mutateAsync({ odnos });
+    await cancelMany.mutateAsync({ odnos, accountId });
     setSelected(new Set());
   };
 
@@ -35,6 +38,7 @@ export function useActiveOrders(pdnoFilter?: string | null) {
     queryPending: query.isPending,
     cancelPending: cancelMany.isPending,
     cancelError: cancelMany.error?.message ?? null,
+    noActiveAccount: accountId === null,
     toggle,
     cancelSelected,
   };

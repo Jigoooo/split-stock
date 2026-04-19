@@ -19,16 +19,21 @@ export type CredentialsRepoError =
   | { kind: 'ENCRYPTION_UNAVAILABLE' }
   | { kind: 'VALIDATION'; msg: string }
   | { kind: 'DECRYPT_FAILED'; cause: unknown }
-  | { kind: 'DB_ERROR'; cause: unknown };
+  | { kind: 'DB_ERROR'; cause: unknown }
+  | { kind: 'NOT_FOUND'; msg: string };
 
 /**
- * 자격증명 저장소 (env별 1행).
+ * 자격증명 저장소 — 계좌(account_id) 단위 1행.
  * 저장 시 JSON.stringify → safeStorage.encryptString → SQLite BLOB.
  * 읽기 시 BLOB → decryptString → JSON.parse → Zod 검증.
  *
  * 보안 불변식:
  * - 평문은 함수 외부에 반환되지만 파일/로그/DB 어디에도 평문 저장 금지.
  * - 로그에 남길 때는 반드시 maskSecret 적용 (호출측 책임).
+ * - account_id 가 명시적으로 전달되어야 한다 — 다른 계좌 자격증명 잘못 사용 방지.
+ *
+ * BC 노트: env 단위 lookup 은 `loadCredentialsByEnv(env)` / `clearCredentialsByEnv(env)` 로
+ * 명시적으로 분리. 새 코드는 가능한 accountId 기반 API 사용.
  */
 export class CredentialsRepo {
   constructor(
@@ -36,7 +41,11 @@ export class CredentialsRepo {
     private readonly safeStorage: SafeStorageLike,
   ) {}
 
-  saveCredentials(value: Credentials): Result<void, CredentialsRepoError> {
+  /**
+   * 계좌별 자격증명 저장.
+   * payload.env 와 호출측 의도가 일치해야 함 (env 컬럼은 payload.env 로 채움).
+   */
+  saveCredentials(accountId: number, value: Credentials): Result<void, CredentialsRepoError> {
     const parsed = CredentialsSchema.safeParse(value);
     if (!parsed.success) {
       return err({ kind: 'VALIDATION', msg: parsed.error.message });
@@ -48,20 +57,20 @@ export class CredentialsRepo {
       const payload = this.safeStorage.encryptString(JSON.stringify(parsed.data));
       const now = new Date();
       const existing = this.db
-        .select()
+        .select({ accountId: credentialsTable.accountId })
         .from(credentialsTable)
-        .where(eq(credentialsTable.env, parsed.data.env))
+        .where(eq(credentialsTable.accountId, accountId))
         .all();
       if (existing.length > 0) {
         this.db
           .update(credentialsTable)
-          .set({ payload, updatedAt: now })
-          .where(eq(credentialsTable.env, parsed.data.env))
+          .set({ env: parsed.data.env, payload, updatedAt: now })
+          .where(eq(credentialsTable.accountId, accountId))
           .run();
       } else {
         this.db
           .insert(credentialsTable)
-          .values({ env: parsed.data.env, payload, updatedAt: now })
+          .values({ accountId, env: parsed.data.env, payload, updatedAt: now })
           .run();
       }
       return ok(undefined);
@@ -70,7 +79,40 @@ export class CredentialsRepo {
     }
   }
 
-  loadCredentials(env: AppEnv): Result<Credentials | null, CredentialsRepoError> {
+  loadCredentials(accountId: number): Result<Credentials | null, CredentialsRepoError> {
+    if (!this.safeStorage.isEncryptionAvailable()) {
+      return err({ kind: 'ENCRYPTION_UNAVAILABLE' });
+    }
+    let rows: Array<typeof credentialsTable.$inferSelect>;
+    try {
+      rows = this.db
+        .select()
+        .from(credentialsTable)
+        .where(eq(credentialsTable.accountId, accountId))
+        .all();
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+    const first = rows[0];
+    if (!first) return ok(null);
+    return this.decodeRow(first);
+  }
+
+  clearCredentials(accountId: number): Result<void, CredentialsRepoError> {
+    try {
+      this.db.delete(credentialsTable).where(eq(credentialsTable.accountId, accountId)).run();
+      return ok(undefined);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
+   * BC 호환: env 로 lookup. credentials.env 에 UNIQUE 인덱스가 있어 결과는 0~1 행.
+   *
+   * 새 코드는 ActiveAccountRepo 로 accountId 를 먼저 얻고 `loadCredentials(accountId)` 사용.
+   */
+  loadCredentialsByEnv(env: AppEnv): Result<Credentials | null, CredentialsRepoError> {
     if (!this.safeStorage.isEncryptionAvailable()) {
       return err({ kind: 'ENCRYPTION_UNAVAILABLE' });
     }
@@ -80,9 +122,57 @@ export class CredentialsRepo {
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
     }
-    if (rows.length === 0) return ok(null);
-    const row = rows[0];
-    if (!row) return ok(null);
+    const first = rows[0];
+    if (!first) return ok(null);
+    return this.decodeRow(first);
+  }
+
+  /**
+   * BC 호환: env 단위 삭제. UNIQUE 인덱스로 한 번에 1행만 삭제됨.
+   */
+  clearCredentialsByEnv(env: AppEnv): Result<void, CredentialsRepoError> {
+    try {
+      this.db.delete(credentialsTable).where(eq(credentialsTable.env, env)).run();
+      return ok(undefined);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
+   * env 로 accountId 역추적 — auth-router 의 setEnv 호환용.
+   */
+  resolveAccountIdByEnv(env: AppEnv): number | null {
+    try {
+      const row = this.db
+        .select({ accountId: credentialsTable.accountId })
+        .from(credentialsTable)
+        .where(eq(credentialsTable.env, env))
+        .all()[0];
+      return row?.accountId ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 저장된 모든 entry — auth.listStored 용 (env, accountId 만).
+   */
+  listEntries(): Array<{ accountId: number; env: AppEnv }> {
+    try {
+      const rows = this.db
+        .select({ accountId: credentialsTable.accountId, env: credentialsTable.env })
+        .from(credentialsTable)
+        .all();
+      return rows.map((r) => ({ accountId: r.accountId, env: r.env as AppEnv }));
+    } catch {
+      return [];
+    }
+  }
+
+  private decodeRow(
+    row: typeof credentialsTable.$inferSelect,
+  ): Result<Credentials, CredentialsRepoError> {
     let plain: string;
     try {
       plain = this.safeStorage.decryptString(row.payload as Buffer);
@@ -94,14 +184,5 @@ export class CredentialsRepo {
       return err({ kind: 'VALIDATION', msg: parsed.error.message });
     }
     return ok(parsed.data);
-  }
-
-  clearCredentials(env: AppEnv): Result<void, CredentialsRepoError> {
-    try {
-      this.db.delete(credentialsTable).where(eq(credentialsTable.env, env)).run();
-      return ok(undefined);
-    } catch (cause) {
-      return err({ kind: 'DB_ERROR', cause });
-    }
   }
 }

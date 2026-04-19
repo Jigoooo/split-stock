@@ -18,7 +18,7 @@ export const realtimeRouter = router({
         message: '실시간 서비스가 초기화되지 않음',
       });
     }
-    const credResult = ctx.credentialsRepo.loadCredentials(env);
+    const credResult = ctx.credentialsRepo.loadCredentialsByEnv(env);
     if (credResult.isErr() || !credResult.value) {
       throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
     }

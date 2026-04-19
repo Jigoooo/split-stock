@@ -30,10 +30,13 @@ export interface CreateSafetyStateOptions {
   now?: () => number;
   /** 초기 상태 — 앱 재시작 후 설정 복원용. */
   initial?: Partial<Pick<SafetySnapshot, 'master' | 'bySymbol'>>;
+  /** 로그 메시지에 포함할 계좌 식별자 (registry 사용 시 자동 주입). */
+  accountId?: number;
 }
 
 export function createSafetyState(opts: CreateSafetyStateOptions): SafetyState {
   const now = opts.now ?? (() => Date.now());
+  const accountId = opts.accountId ?? null;
   let snapshot: SafetySnapshot = {
     master: opts.initial?.master ?? false,
     bySymbol: { ...(opts.initial?.bySymbol ?? {}) },
@@ -48,6 +51,10 @@ export function createSafetyState(opts: CreateSafetyStateOptions): SafetyState {
     return snapshot;
   };
 
+  const logPayload = (extra: Record<string, unknown> = {}): Record<string, unknown> => {
+    return accountId !== null ? { accountId, ...extra } : extra;
+  };
+
   return {
     getSnapshot: () => snapshot,
 
@@ -58,6 +65,7 @@ export function createSafetyState(opts: CreateSafetyStateOptions): SafetyState {
         level: 'INFO',
         category: 'SYS',
         message: `safety.master.${on ? 'on' : 'off'}`,
+        payload: logPayload(),
       });
       return emit();
     },
@@ -71,7 +79,7 @@ export function createSafetyState(opts: CreateSafetyStateOptions): SafetyState {
         level: 'INFO',
         category: 'SYS',
         message: `safety.symbol.${on ? 'on' : 'off'}`,
-        payload: { pdno },
+        payload: logPayload({ pdno }),
       });
       return emit();
     },
@@ -86,7 +94,7 @@ export function createSafetyState(opts: CreateSafetyStateOptions): SafetyState {
         level: 'ERROR',
         category: 'SYS',
         message: 'safety.kill_switch.triggered',
-        payload: { reason },
+        payload: logPayload({ reason }),
       });
       return emit();
     },
@@ -101,7 +109,7 @@ export function createSafetyState(opts: CreateSafetyStateOptions): SafetyState {
         level: 'ERROR',
         category: 'SYS',
         message: 'safety.error_lock.engaged',
-        payload: { reason },
+        payload: logPayload({ reason }),
       });
       return emit();
     },
@@ -116,6 +124,7 @@ export function createSafetyState(opts: CreateSafetyStateOptions): SafetyState {
         level: 'INFO',
         category: 'SYS',
         message: 'safety.error_lock.cleared',
+        payload: logPayload(),
       });
       return emit();
     },
@@ -133,4 +142,89 @@ export function createSafetyState(opts: CreateSafetyStateOptions): SafetyState {
       return () => listeners.delete(listener);
     },
   };
+}
+
+export interface SafetyRegistryListenerEvent {
+  accountId: number;
+  snapshot: SafetySnapshot;
+}
+
+/**
+ * 다계좌 안전 상태 격리 — `Map<accountId, SafetyState>`.
+ *
+ * 보안 불변식:
+ * - 계좌 A의 setMaster(true) 가 계좌 B의 master 에 영향을 주지 않음.
+ * - 계좌 A의 toggleSymbol/errorLock/triggerKillSwitch 도 마찬가지로 계좌별 격리.
+ * - subscribe 콜백은 (accountId, snapshot) 페이로드로 호출되어 어느 계좌 변경인지 식별 가능.
+ *
+ * 호출 패턴:
+ *   const safety = registry.get(accountId);
+ *   if (!safety.canTrade(pdno)) { ... }
+ */
+export class SafetyStateRegistry {
+  private readonly states = new Map<number, SafetyState>();
+  private readonly listeners = new Set<(e: SafetyRegistryListenerEvent) => void>();
+  private readonly innerUnsubscribers = new Map<number, () => void>();
+
+  constructor(
+    private readonly opts: {
+      logger: EventLogger;
+      now?: () => number;
+    },
+  ) {}
+
+  /**
+   * 해당 계좌의 SafetyState — 없으면 lazy 생성.
+   */
+  get(accountId: number): SafetyState {
+    let state = this.states.get(accountId);
+    if (state) return state;
+    state = createSafetyState({
+      logger: this.opts.logger,
+      ...(this.opts.now ? { now: this.opts.now } : {}),
+      accountId,
+    });
+    this.states.set(accountId, state);
+    // inner state 변화를 registry 레벨로 fan-out.
+    const unsub = state.subscribe((snapshot) => {
+      for (const l of Array.from(this.listeners)) l({ accountId, snapshot });
+    });
+    this.innerUnsubscribers.set(accountId, unsub);
+    return state;
+  }
+
+  /**
+   * 모든 계좌에 동시에 킬 스위치 — 글로벌 단축키 등에서 호출.
+   * 등록되지 않은 계좌는 영향 없음 (lazy 생성도 안 함).
+   */
+  triggerKillSwitchAll(reason: string): void {
+    for (const state of this.states.values()) {
+      state.triggerKillSwitch(reason);
+    }
+  }
+
+  /**
+   * 등록된 계좌 ID 목록.
+   */
+  accountIds(): number[] {
+    return Array.from(this.states.keys());
+  }
+
+  /**
+   * 모든 계좌 상태 변화 구독 — (accountId, snapshot) 페이로드.
+   */
+  subscribe(listener: (e: SafetyRegistryListenerEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  /**
+   * 테스트/리셋 용 — 내부 상태 청소.
+   */
+  clear(): void {
+    for (const unsub of this.innerUnsubscribers.values()) unsub();
+    this.innerUnsubscribers.clear();
+    this.states.clear();
+    this.listeners.clear();
+  }
 }

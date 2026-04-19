@@ -5,13 +5,17 @@ import type { Db } from './client';
  * drizzle-kit 생성 마이그레이션이 없을 때 쓰는 raw CREATE.
  * 테스트용 인메모리 DB에서 스키마를 즉시 구축할 때 사용.
  * 운영 DB는 반드시 drizzle-kit 마이그레이션(`pnpm db:generate` → `migrate()`) 사용.
+ *
+ * 중요: schema.ts와 항상 동기화해야 한다. 누락 시 테스트는 통과하나 운영 DB와 어긋남.
  */
 const CREATE_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS credentials (
-    env TEXT PRIMARY KEY,
+    account_id INTEGER PRIMARY KEY,
+    env TEXT NOT NULL,
     payload BLOB NOT NULL,
     updated_at INTEGER NOT NULL
   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS credentials_env_uniq ON credentials(env)`,
   `CREATE TABLE IF NOT EXISTS access_tokens (
     env TEXT PRIMARY KEY,
     token TEXT NOT NULL,
@@ -25,7 +29,9 @@ const CREATE_STATEMENTS: readonly string[] = [
     account_no_8 TEXT NOT NULL,
     account_prod_cd TEXT NOT NULL,
     nickname TEXT NOT NULL DEFAULT '',
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 0,
+    display_name TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS lots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +75,8 @@ const CREATE_STATEMENTS: readonly string[] = [
     level TEXT NOT NULL,
     category TEXT NOT NULL,
     message TEXT NOT NULL,
-    payload_json TEXT
+    payload_json TEXT,
+    audit_payload TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,

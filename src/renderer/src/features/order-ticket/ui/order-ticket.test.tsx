@@ -26,6 +26,14 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       },
       listActive: { invalidate: vi.fn() },
     },
+    account: {
+      getActive: {
+        useQuery: () => ({
+          data: { accountId: 1, account: null },
+          isPending: false,
+        }),
+      },
+    },
     useUtils: () => ({ order: { listActive: { invalidate: vi.fn() } } }),
   },
 }));

@@ -29,6 +29,7 @@ nativeTheme.themeSource = 'light';
 
 import type { AppEnv } from '@shared/contracts';
 import WebSocket from 'ws';
+import { ActiveAccountRepo } from './account/active-account';
 import { defaultDbPath, migrate, openDb } from './db/client';
 import { SETTING_KEYS, SettingsRepo } from './db/settings-repo';
 import { AuthService } from './kis/auth';
@@ -41,7 +42,7 @@ import { createFileLogger } from './logging/file-logger';
 import { initSentryFromSettings } from './monitoring/sentry';
 import { FeedBus } from './realtime/feed-bus';
 import { RealtimeService } from './realtime/realtime-service';
-import { createSafetyState } from './safety/safety-state';
+import { SafetyStateRegistry } from './safety/safety-state';
 import { CredentialsRepo } from './security/credentials-repo';
 import { DailyCandlesRepo } from './trading/daily-candles-repo';
 import { LotsRepo } from './trading/lots-repo';
@@ -83,13 +84,22 @@ function bootstrapDeps(userDataDir: string) {
   // 부팅 시 1회 로테이션 — 40일 경과 파일 정리
   fileLogger.rotate();
   const eventLogger = teeLoggers(dbLogger, fileLogger);
-  const safety = createSafetyState({ logger: eventLogger });
+  // per-account SafetyState 격리 registry. 각 계좌는 자체 master/symbol/errorLock 슬롯.
+  const safetyRegistry = new SafetyStateRegistry({ logger: eventLogger });
   const settingsRepo = new SettingsRepo(db);
   const strategyRepo = new StrategyRepo(settingsRepo, eventLogger);
   const stockMasterRepo = new StockMasterRepo(db);
   const stockMasterSync = new StockMasterSyncService(stockMasterRepo, settingsRepo);
   const candlesRepo = new DailyCandlesRepo(db);
   const lotsRepo = new LotsRepo(db);
+  const activeAccounts = new ActiveAccountRepo(db);
+  // 활성 계좌 보장 — 계좌 0개면 null. 자격증명 저장 시 자동 시드.
+  const ensured = activeAccounts.ensureActive();
+  const initialActiveAccountId = ensured.isOk() ? ensured.value : null;
+  if (ensured.isOk()) {
+    // 단일 계좌 시절 strategy 키를 활성 계좌로 이전 (멱등).
+    strategyRepo.migrateLegacyKeys(ensured.value);
+  }
   // 통합 자동감시주문 엔진 — booster/prebuy/custom을 단일 큐로 관리.
   // BOOSTER/PREBUY 핸들러는 어댑터(BoosterWatcher/PrebuyWatcher) 생성 시 주입됨.
   const watchEngine = new WatchEngine({
@@ -108,15 +118,17 @@ function bootstrapDeps(userDataDir: string) {
     settingsRepo,
     auth,
     httpByEnv,
-    safety,
+    safetyRegistry,
     logger: eventLogger,
     strategyRepo,
     stockMasterRepo,
     stockMasterSync,
     candlesRepo,
     lotsRepo,
+    activeAccounts,
     watchEngine,
     bus,
+    initialActiveAccountId,
     realtimeFactory: (env) => {
       if (lastRealtime) {
         lastRealtime.stop();
@@ -138,14 +150,20 @@ function bootstrapDeps(userDataDir: string) {
   // 저장된 자격증명이 있으면 마지막 활성 환경 복원 — 재시작 후 자동 로그인.
   const savedEnv = settingsRepo.get(SETTING_KEYS.LAST_ACTIVE_ENV);
   if (savedEnv === 'MOCK' || savedEnv === 'PROD') {
-    const cred = credentialsRepo.loadCredentials(savedEnv as AppEnv);
+    const cred = credentialsRepo.loadCredentialsByEnv(savedEnv as AppEnv);
     if (cred.isOk() && cred.value) {
       factory.setEnv(savedEnv as AppEnv);
+      // 해당 env 의 계좌를 활성으로 전환.
+      const accId = credentialsRepo.resolveAccountIdByEnv(savedEnv as AppEnv);
+      if (accId !== null) {
+        activeAccounts.setActiveAccountId(accId);
+        factory.setActiveAccountId(accId);
+      }
       eventLogger.log({
         level: 'INFO',
         category: 'AUTH',
         message: 'auth.env.restored',
-        payload: { env: savedEnv },
+        payload: { env: savedEnv, accountId: accId },
       });
       // 로그인 상태에서 24시간 초과 시 백그라운드로 종목 마스터 동기화.
       // 네트워크 실패는 로그만 남기고 부팅 지연 없이 계속 진행.
@@ -153,7 +171,7 @@ function bootstrapDeps(userDataDir: string) {
     }
   }
 
-  return { factory, safety, eventLogger, settingsRepo };
+  return { factory, safetyRegistry, eventLogger, settingsRepo };
 }
 
 interface CreateWindowOpts {
@@ -246,7 +264,9 @@ function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
 }
 
 void app.whenReady().then(async () => {
-  const { factory, safety, eventLogger, settingsRepo } = bootstrapDeps(app.getPath('userData'));
+  const { factory, safetyRegistry, eventLogger, settingsRepo } = bootstrapDeps(
+    app.getPath('userData'),
+  );
 
   // Sentry opt-in 초기화 (DSN 미지정 시 no-op)
   const sentryResult = await initSentryFromSettings({
@@ -318,7 +338,8 @@ void app.whenReady().then(async () => {
   void import('electron').then(({ globalShortcut }) => {
     const acc = 'CommandOrControl+Shift+K';
     const registered = globalShortcut.register(acc, () => {
-      safety.triggerKillSwitch('글로벌 단축키');
+      // 등록된 모든 계좌의 master OFF + errorLock 활성. 가장 강한 차단.
+      safetyRegistry.triggerKillSwitchAll('글로벌 단축키');
     });
     if (!registered) {
       // 다른 앱이 단축키를 점유 중이면 무시

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { ActiveAccountRepo } from '../account/active-account';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb, type Db } from '../db/client';
 import { CredentialsRepo, type SafeStorageLike } from './credentials-repo';
@@ -33,10 +34,19 @@ function makeMockSafeStorage(options: { available?: boolean } = {}): SafeStorage
 
 describe('CredentialsRepo', () => {
   let db: Db;
+  let accountIdMock: number;
 
   beforeEach(() => {
     db = createTestDb();
     bootstrapSchema(db);
+    const accounts = new ActiveAccountRepo(db);
+    const r = accounts.upsertFromCredentials({
+      env: 'MOCK',
+      accountNo8: '12345678',
+      accountProdCd: '01',
+    });
+    if (!r.isOk()) throw new Error('seed account failed');
+    accountIdMock = r.value;
   });
 
   const validCred = {
@@ -47,12 +57,12 @@ describe('CredentialsRepo', () => {
     accountProdCd: '01',
   };
 
-  it('저장 후 로드하면 원문 복구', () => {
+  it('계좌별 저장 후 로드하면 원문 복구', () => {
     const repo = new CredentialsRepo(db, makeMockSafeStorage());
-    const saved = repo.saveCredentials(validCred);
+    const saved = repo.saveCredentials(accountIdMock, validCred);
     expect(saved.isOk()).toBe(true);
 
-    const loaded = repo.loadCredentials('MOCK');
+    const loaded = repo.loadCredentials(accountIdMock);
     expect(loaded.isOk()).toBe(true);
     if (loaded.isOk()) expect(loaded.value).toEqual(validCred);
   });
@@ -65,32 +75,91 @@ describe('CredentialsRepo', () => {
     expect(safe.decryptString(encrypted)).toBe(plain);
   });
 
-  it('저장되지 않은 env는 null 반환', () => {
+  it('등록되지 않은 계좌는 null 반환', () => {
     const repo = new CredentialsRepo(db, makeMockSafeStorage());
-    const loaded = repo.loadCredentials('PROD');
+    const loaded = repo.loadCredentials(9999);
     expect(loaded.isOk()).toBe(true);
     if (loaded.isOk()) expect(loaded.value).toBeNull();
   });
 
   it('clearCredentials 후 load하면 null', () => {
     const repo = new CredentialsRepo(db, makeMockSafeStorage());
-    repo.saveCredentials(validCred);
-    repo.clearCredentials('MOCK');
-    const loaded = repo.loadCredentials('MOCK');
+    repo.saveCredentials(accountIdMock, validCred);
+    repo.clearCredentials(accountIdMock);
+    const loaded = repo.loadCredentials(accountIdMock);
     if (loaded.isOk()) expect(loaded.value).toBeNull();
   });
 
   it('safeStorage 비활성 시 저장 에러', () => {
     const repo = new CredentialsRepo(db, makeMockSafeStorage({ available: false }));
-    const saved = repo.saveCredentials(validCred);
+    const saved = repo.saveCredentials(accountIdMock, validCred);
     expect(saved.isErr()).toBe(true);
     if (saved.isErr()) expect(saved.error.kind).toBe('ENCRYPTION_UNAVAILABLE');
   });
 
   it('잘못된 입력(계좌번호 형식)은 VALIDATION 에러', () => {
     const repo = new CredentialsRepo(db, makeMockSafeStorage());
-    const saved = repo.saveCredentials({ ...validCred, accountNo8: '123' });
+    const saved = repo.saveCredentials(accountIdMock, { ...validCred, accountNo8: '123' });
     expect(saved.isErr()).toBe(true);
     if (saved.isErr()) expect(saved.error.kind).toBe('VALIDATION');
+  });
+
+  describe('per-account 격리 + BC env API', () => {
+    it('계좌 A의 자격증명은 계좌 B에서 load 불가', () => {
+      const accounts = new ActiveAccountRepo(db);
+      const b = accounts.upsertFromCredentials({
+        env: 'PROD',
+        accountNo8: '99999999',
+        accountProdCd: '01',
+      });
+      if (!b.isOk()) throw new Error('seed B failed');
+      const accountIdProd = b.value;
+      const credProd = { ...validCred, env: 'PROD' as const, accountNo8: '99999999' };
+
+      const repo = new CredentialsRepo(db, makeMockSafeStorage());
+      repo.saveCredentials(accountIdMock, validCred);
+      repo.saveCredentials(accountIdProd, credProd);
+
+      const a = repo.loadCredentials(accountIdMock);
+      const c = repo.loadCredentials(accountIdProd);
+      if (!(a.isOk() && c.isOk())) throw new Error('load failed');
+      expect(a.value?.env).toBe('MOCK');
+      expect(c.value?.env).toBe('PROD');
+      expect(a.value?.accountNo8).toBe('12345678');
+      expect(c.value?.accountNo8).toBe('99999999');
+    });
+
+    it('loadCredentialsByEnv — UNIQUE INDEX 보장으로 단일 결과', () => {
+      const repo = new CredentialsRepo(db, makeMockSafeStorage());
+      repo.saveCredentials(accountIdMock, validCred);
+
+      const r = repo.loadCredentialsByEnv('MOCK');
+      if (!r.isOk()) throw new Error('load failed');
+      expect(r.value).toEqual(validCred);
+    });
+
+    it('clearCredentialsByEnv — env 일괄 삭제', () => {
+      const repo = new CredentialsRepo(db, makeMockSafeStorage());
+      repo.saveCredentials(accountIdMock, validCred);
+      const r = repo.clearCredentialsByEnv('MOCK');
+      expect(r.isOk()).toBe(true);
+      const loaded = repo.loadCredentials(accountIdMock);
+      if (loaded.isOk()) expect(loaded.value).toBeNull();
+    });
+
+    it('resolveAccountIdByEnv — 저장된 env 의 계좌 ID 반환', () => {
+      const repo = new CredentialsRepo(db, makeMockSafeStorage());
+      repo.saveCredentials(accountIdMock, validCred);
+      expect(repo.resolveAccountIdByEnv('MOCK')).toBe(accountIdMock);
+      expect(repo.resolveAccountIdByEnv('PROD')).toBeNull();
+    });
+
+    it('listEntries — 저장된 자격증명 메타 반환', () => {
+      const repo = new CredentialsRepo(db, makeMockSafeStorage());
+      repo.saveCredentials(accountIdMock, validCred);
+      const entries = repo.listEntries();
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toEqual({ accountId: accountIdMock, env: 'MOCK' });
+    });
   });
 });

@@ -1,15 +1,23 @@
-import { blob, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { blob, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
  * 자격증명 — safeStorage로 암호화된 직렬화 결과를 BLOB으로 저장.
  * 원문 평문은 어디에도 남기지 않는다.
- * env별 1행 (MOCK / PROD 각각).
+ * 계좌별 1행 (account_id PK). env는 한 행당 1개만 가능 (UNIQUE INDEX).
+ *
+ * BC 노트: PK가 env→account_id로 변경됨 (마이그레이션 0005에서 데이터 보존).
+ * 기존 호출자(env로 lookup)는 unique index 통한 단일 결과 보장.
  */
-export const credentials = sqliteTable('credentials', {
-  env: text('env').primaryKey(), // 'MOCK' | 'PROD'
-  payload: blob('payload', { mode: 'buffer' }).notNull(), // safeStorage.encryptString(JSON.stringify(Credentials))
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-});
+export const credentials = sqliteTable(
+  'credentials',
+  {
+    accountId: integer('account_id').primaryKey(),
+    env: text('env').notNull(), // 'MOCK' | 'PROD'
+    payload: blob('payload', { mode: 'buffer' }).notNull(), // safeStorage.encryptString(JSON.stringify(Credentials))
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [uniqueIndex('credentials_env_uniq').on(t.env)],
+);
 
 /**
  * 액세스 토큰 캐시 — 만료 6h 이내면 재사용.

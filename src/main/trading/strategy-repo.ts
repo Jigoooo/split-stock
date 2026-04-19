@@ -9,21 +9,37 @@ export type StrategyRepoError =
   | { kind: 'PARSE_FAILED'; cause: unknown };
 
 const ACTIVE_PREFIX = 'strategy.active';
-const PRESET_PREFIX = 'strategy.preset.';
+const PRESET_PREFIX = 'strategy.preset';
+const LEGACY_ACTIVE_PREFIX = 'strategy.active'; // 단일 계좌 시절 키 prefix
+const LEGACY_PRESET_PREFIX = 'strategy.preset.'; // 단일 계좌 시절 키 prefix
 
-function activeKey(pdno: string | null): string {
-  return pdno ? `${ACTIVE_PREFIX}.${pdno}` : ACTIVE_PREFIX;
+function activeKey(accountId: number, pdno: string | null): string {
+  return pdno ? `${ACTIVE_PREFIX}.${accountId}.${pdno}` : `${ACTIVE_PREFIX}.${accountId}`;
 }
 
-function presetKey(name: string): string {
-  return `${PRESET_PREFIX}${name}`;
+function presetKey(accountId: number, name: string): string {
+  return `${PRESET_PREFIX}.${accountId}.${name}`;
+}
+
+function presetPrefixForAccount(accountId: number): string {
+  return `${PRESET_PREFIX}.${accountId}.`;
 }
 
 /**
- * 전략 프로필 저장소 — settings 테이블에 JSON 직렬화하여 저장.
- * - active: 글로벌(pdno=null) 또는 종목별 현재 전략
- * - preset: 이름 붙인 재사용 가능 프로필
- * - 모든 write는 event_logs 'FSM'/'strategy.updated' 기록 (pdno + before/after diff)
+ * 전략 프로필 저장소 — settings 테이블에 JSON 직렬화하여 계좌별 분리 저장.
+ *
+ * 키 스키마:
+ * - active 글로벌:  strategy.active.{accountId}
+ * - active 종목별:  strategy.active.{accountId}.{pdno}
+ * - preset:         strategy.preset.{accountId}.{name}
+ *
+ * 보안 불변식:
+ * - 계좌 A의 setActive 가 계좌 B의 활성 전략에 영향을 주지 않는다.
+ * - 모든 write 는 event_logs 'FSM'/'strategy.updated' 기록 (accountId/pdno + before/after diff).
+ *
+ * Legacy 호환:
+ * - 단일 계좌 시절 키(`strategy.active`, `strategy.active.{pdno}`, `strategy.preset.{name}`)
+ *   는 `migrateLegacyKeys(defaultAccountId)` 가 부팅 시 1회 이전.
  */
 export class StrategyRepo {
   constructor(
@@ -31,22 +47,30 @@ export class StrategyRepo {
     private readonly logger: EventLogger,
   ) {}
 
-  getActive(pdno: string | null): Result<StrategyProfile | null, StrategyRepoError> {
-    return this.readProfile(activeKey(pdno));
+  getActive(
+    accountId: number,
+    pdno: string | null,
+  ): Result<StrategyProfile | null, StrategyRepoError> {
+    return this.readProfile(activeKey(accountId, pdno));
   }
 
-  setActive(pdno: string | null, profile: StrategyProfile): Result<void, StrategyRepoError> {
+  setActive(
+    accountId: number,
+    pdno: string | null,
+    profile: StrategyProfile,
+  ): Result<void, StrategyRepoError> {
     const parsed = StrategyProfileSchema.safeParse(profile);
     if (!parsed.success) {
       return err({ kind: 'VALIDATION', msg: parsed.error.message });
     }
-    const before = this.readProfile(activeKey(pdno));
-    this.settings.set(activeKey(pdno), JSON.stringify(parsed.data));
+    const before = this.readProfile(activeKey(accountId, pdno));
+    this.settings.set(activeKey(accountId, pdno), JSON.stringify(parsed.data));
     this.logger.log({
       level: 'INFO',
       category: 'FSM',
       message: 'strategy.updated',
       payload: {
+        accountId,
         pdno: pdno ?? '__global__',
         before: before.isOk() ? before.value : null,
         after: parsed.data,
@@ -55,25 +79,26 @@ export class StrategyRepo {
     return ok(undefined);
   }
 
-  clearActive(pdno: string | null): void {
-    const before = this.readProfile(activeKey(pdno));
-    this.settings.delete(activeKey(pdno));
+  clearActive(accountId: number, pdno: string | null): void {
+    const before = this.readProfile(activeKey(accountId, pdno));
+    this.settings.delete(activeKey(accountId, pdno));
     if (before.isOk() && before.value !== null) {
       this.logger.log({
         level: 'INFO',
         category: 'FSM',
         message: 'strategy.cleared',
-        payload: { pdno: pdno ?? '__global__', before: before.value },
+        payload: { accountId, pdno: pdno ?? '__global__', before: before.value },
       });
     }
   }
 
-  listPresets(): Array<{ name: string; profile: StrategyProfile }> {
+  listPresets(accountId: number): Array<{ name: string; profile: StrategyProfile }> {
     const all = this.settings.list();
+    const prefix = presetPrefixForAccount(accountId);
     const results: Array<{ name: string; profile: StrategyProfile }> = [];
     for (const row of all) {
-      if (!row.key.startsWith(PRESET_PREFIX)) continue;
-      const name = row.key.slice(PRESET_PREFIX.length);
+      if (!row.key.startsWith(prefix)) continue;
+      const name = row.key.slice(prefix.length);
       try {
         const parsed = StrategyProfileSchema.safeParse(JSON.parse(row.value));
         if (parsed.success) {
@@ -86,7 +111,11 @@ export class StrategyRepo {
     return results.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  savePreset(name: string, profile: StrategyProfile): Result<void, StrategyRepoError> {
+  savePreset(
+    accountId: number,
+    name: string,
+    profile: StrategyProfile,
+  ): Result<void, StrategyRepoError> {
     const parsed = StrategyProfileSchema.safeParse(profile);
     if (!parsed.success) {
       return err({ kind: 'VALIDATION', msg: parsed.error.message });
@@ -94,24 +123,100 @@ export class StrategyRepo {
     if (name.length === 0 || name.length > 50) {
       return err({ kind: 'VALIDATION', msg: '프리셋 이름은 1~50자' });
     }
-    this.settings.set(presetKey(name), JSON.stringify(parsed.data));
+    this.settings.set(presetKey(accountId, name), JSON.stringify(parsed.data));
     this.logger.log({
       level: 'INFO',
       category: 'FSM',
       message: 'strategy.preset.saved',
-      payload: { name, profile: parsed.data },
+      payload: { accountId, name, profile: parsed.data },
     });
     return ok(undefined);
   }
 
-  deletePreset(name: string): void {
-    this.settings.delete(presetKey(name));
+  deletePreset(accountId: number, name: string): void {
+    this.settings.delete(presetKey(accountId, name));
     this.logger.log({
       level: 'INFO',
       category: 'FSM',
       message: 'strategy.preset.deleted',
-      payload: { name },
+      payload: { accountId, name },
     });
+  }
+
+  /**
+   * 단일 계좌 시절 키를 지정된 계좌로 1회성 이전.
+   * - `strategy.active` → `strategy.active.{defaultAccountId}`
+   * - `strategy.active.{pdno}` → `strategy.active.{defaultAccountId}.{pdno}` (pdno 가 6자리 숫자일 때만)
+   * - `strategy.preset.{name}` → `strategy.preset.{defaultAccountId}.{name}` (이미 새 키 prefix 인 것은 skip)
+   *
+   * 멱등 — 이미 이전된 키는 손대지 않음.
+   * 부팅 시 ensureActive 후 1회 호출.
+   */
+  migrateLegacyKeys(defaultAccountId: number): { migrated: number } {
+    const all = this.settings.list();
+    let migrated = 0;
+    for (const row of all) {
+      const key = row.key;
+      // active 글로벌
+      if (key === LEGACY_ACTIVE_PREFIX) {
+        const newKey = activeKey(defaultAccountId, null);
+        if (this.settings.get(newKey) === null) {
+          this.settings.set(newKey, row.value);
+          this.settings.delete(key);
+          migrated++;
+        }
+        continue;
+      }
+      // active 종목별 — strategy.active.{pdno}
+      if (key.startsWith(`${LEGACY_ACTIVE_PREFIX}.`)) {
+        const tail = key.slice(LEGACY_ACTIVE_PREFIX.length + 1);
+        // 형식 구분:
+        //   - 구 종목별: tail 이 정확히 6자리 숫자 (KIS 종목코드)
+        //   - 신 글로벌:  tail 이 1~5자리 또는 7자리+ 숫자 (accountId)
+        //   - 신 종목별:  tail 에 '.' 포함 (accountId.pdno)
+        if (tail.includes('.')) {
+          // 새 형식 (accountId.pdno). skip.
+          continue;
+        }
+        if (/^\d{6}$/.test(tail)) {
+          // 구 종목별 키.
+          const newKey = activeKey(defaultAccountId, tail);
+          if (this.settings.get(newKey) === null) {
+            this.settings.set(newKey, row.value);
+            this.settings.delete(key);
+            migrated++;
+          }
+          continue;
+        }
+        // 그 외 (숫자 1~5자리 또는 7자리+ accountId 단독) → 새 형식 글로벌. skip.
+        continue;
+      }
+      // preset
+      if (key.startsWith(LEGACY_PRESET_PREFIX)) {
+        const tail = key.slice(LEGACY_PRESET_PREFIX.length);
+        // 새 형식: strategy.preset.{accountId}.{name} → tail 의 첫 segment 가 숫자
+        const firstSeg = tail.split('.')[0];
+        if (firstSeg !== undefined && /^\d+$/.test(firstSeg) && tail.includes('.')) {
+          // 이미 새 형식. skip.
+          continue;
+        }
+        const newKey = presetKey(defaultAccountId, tail);
+        if (this.settings.get(newKey) === null) {
+          this.settings.set(newKey, row.value);
+          this.settings.delete(key);
+          migrated++;
+        }
+      }
+    }
+    if (migrated > 0) {
+      this.logger.log({
+        level: 'INFO',
+        category: 'FSM',
+        message: 'strategy.legacy_keys.migrated',
+        payload: { accountId: defaultAccountId, count: migrated },
+      });
+    }
+    return { migrated };
   }
 
   private readProfile(key: string): Result<StrategyProfile | null, StrategyRepoError> {
