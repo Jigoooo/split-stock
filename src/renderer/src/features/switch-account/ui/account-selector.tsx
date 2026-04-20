@@ -36,9 +36,7 @@ export const AccountSelector = (): ReactElement | null => {
     onSuccess: async (data, variables) => {
       await qc.invalidateQueries();
       window.appShell?.broadcastAccountChanged?.(variables.accountId);
-      toast.success(
-        data.loggedOut ? '계좌 삭제 — 로그아웃되었습니다' : '계좌가 삭제되었습니다',
-      );
+      toast.success(data.loggedOut ? '계좌 삭제 — 로그아웃되었습니다' : '계좌가 삭제되었습니다');
     },
     onError: (err) => {
       toast.error(`삭제 실패: ${err.message}`);

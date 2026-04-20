@@ -163,7 +163,7 @@ export const accountRouter = router({
       // 2) 활성 계좌 삭제라면 자동 전환 대상 선택.
       const wasActive = ctx.activeAccountId === input.accountId;
       const nextCandidate = wasActive
-        ? ctx.activeAccounts.list().find((a) => a.id !== input.accountId) ?? null
+        ? (ctx.activeAccounts.list().find((a) => a.id !== input.accountId) ?? null)
         : null;
       if (wasActive && nextCandidate) {
         const switchResult = ctx.activeAccounts.setActiveAccountId(nextCandidate.id);
