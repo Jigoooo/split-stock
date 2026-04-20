@@ -1,3 +1,4 @@
+import { AllTradeHistoryPanel } from '@renderer/widgets/all-trade-history-panel';
 import { type HtsTabItem, HtsTabs } from '@renderer/widgets/hts-tabs';
 import { TradeHistoryPanel } from '@renderer/widgets/trade-history-panel';
 import { type ReactElement, useState, useTransition } from 'react';
@@ -6,23 +7,24 @@ export interface MainTradeHistoryPaneProps {
   accountId: number;
   /** 좌측에서 선택된 종목. null 이면 외부 R1 탭은 "모든 매매내역" 한 개만. */
   selectedPdno: string | null;
+  selectedName?: string | null;
 }
 
 type R1 = 'symbol' | 'all';
 
 /**
- * 우측 매매내역 컨테이너 — 외부(R1) + 내부(R2 5탭 = TradeHistoryPanel) 2-level.
+ * 우측 매매내역 컨테이너 — 외부(R1) + 컨텐츠 분기.
  *
  * R1 외부 탭:
- *   - selectedPdno !== null → ['선택종목 매매내역(pdno)', '모든 매매내역']
+ *   - selectedPdno !== null → ['종목명(pdno) 매매내역', '모든 매매내역']
  *   - selectedPdno === null → ['모든 매매내역'] 한 개
  *
- * 선택된 R1 에 따라 TradeHistoryPanel 의 pdno prop 이 바뀜:
- *   - 'symbol' → selectedPdno
- *   - 'all'    → null (전체 사이클)
+ * 선택된 R1 에 따라 렌더 대상이 바뀐다:
+ *   - 'symbol' → TradeHistoryPanel(selectedPdno)
+ *   - 'all'    → AllTradeHistoryPanel (전용 화면)
  */
 export const MainTradeHistoryPane = (props: MainTradeHistoryPaneProps): ReactElement => {
-  const { accountId, selectedPdno } = props;
+  const { accountId, selectedName = null, selectedPdno } = props;
   const [r1, setR1Raw] = useState<R1>(selectedPdno !== null ? 'symbol' : 'all');
   const [, startTransition] = useTransition();
   const setR1 = (next: R1): void => {
@@ -32,15 +34,20 @@ export const MainTradeHistoryPane = (props: MainTradeHistoryPaneProps): ReactEle
   // selectedPdno 가 null 이면 'symbol' 탭은 의미 없으므로 'all' 강제.
   const effectiveR1: R1 = selectedPdno === null ? 'all' : r1;
 
+  const symbolTradeTabLabel =
+    selectedPdno === null
+      ? null
+      : selectedName !== null && selectedName !== selectedPdno
+        ? `${selectedName}(${selectedPdno}) 매매내역`
+        : `${selectedPdno} 매매내역`;
+
   const tabs: ReadonlyArray<HtsTabItem<R1>> =
     selectedPdno !== null
       ? [
-          { id: 'symbol', label: `선택종목 매매내역 (${selectedPdno})` },
+          { id: 'symbol', label: symbolTradeTabLabel ?? `${selectedPdno} 매매내역` },
           { id: 'all', label: '모든 매매내역' },
         ]
       : [{ id: 'all', label: '모든 매매내역' }];
-
-  const pdnoForPanel = effectiveR1 === 'symbol' ? selectedPdno : null;
 
   return (
     <section
@@ -63,7 +70,11 @@ export const MainTradeHistoryPane = (props: MainTradeHistoryPaneProps): ReactEle
           flexDirection: 'column',
         }}
       >
-        <TradeHistoryPanel accountId={accountId} pdno={pdnoForPanel} />
+        {effectiveR1 === 'all' ? (
+          <AllTradeHistoryPanel accountId={accountId} />
+        ) : (
+          <TradeHistoryPanel accountId={accountId} pdno={selectedPdno} />
+        )}
       </div>
     </section>
   );
