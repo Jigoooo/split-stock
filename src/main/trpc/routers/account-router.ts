@@ -306,54 +306,76 @@ export const accountRouter = router({
         });
       }
       // open/buying lot 조회 (per-account 격리) — 한 번의 select 로 모든 종목 조회 후 group.
-      const lotRows = ctx.db
-        .select()
-        .from(lotsTable)
-        .where(
-          and(eq(lotsTable.accountId, accountId), inArray(lotsTable.status, ['OPEN', 'BUYING'])),
-        )
-        .all();
-      const lotsByPdno: Record<string, LotSnapshotEntry[]> = {};
-      for (const r of lotRows) {
-        const entry: LotSnapshotEntry = {
-          nth: r.nth,
-          buyPrice: r.buyPrice,
-          qty: r.qty,
-          amountKrw: r.amountKrw,
-          status: r.status as LotStatus,
-          boughtAt: r.boughtAt instanceof Date ? r.boughtAt.getTime() : Number(r.boughtAt),
-        };
-        const soldAtMs =
-          r.soldAt === null
-            ? undefined
-            : r.soldAt instanceof Date
-              ? r.soldAt.getTime()
-              : Number(r.soldAt);
-        if (soldAtMs !== undefined) entry.soldAt = soldAtMs;
-        if (r.sellPrice !== null) entry.sellPrice = r.sellPrice;
-        const list = lotsByPdno[r.pdno] ?? [];
-        list.push(entry);
-        lotsByPdno[r.pdno] = list;
+      // DB 조회 실패 시 빈 객체로 fallback — 잔고 표시는 계속.
+      let lotsByPdno: Record<string, LotSnapshotEntry[]> = {};
+      try {
+        const lotRows = ctx.db
+          .select()
+          .from(lotsTable)
+          .where(
+            and(eq(lotsTable.accountId, accountId), inArray(lotsTable.status, ['OPEN', 'BUYING'])),
+          )
+          .all();
+        for (const r of lotRows) {
+          const entry: LotSnapshotEntry = {
+            nth: r.nth,
+            buyPrice: r.buyPrice,
+            qty: r.qty,
+            amountKrw: r.amountKrw,
+            status: r.status as LotStatus,
+            boughtAt: r.boughtAt instanceof Date ? r.boughtAt.getTime() : Number(r.boughtAt),
+          };
+          const soldAtMs =
+            r.soldAt === null
+              ? undefined
+              : r.soldAt instanceof Date
+                ? r.soldAt.getTime()
+                : Number(r.soldAt);
+          if (soldAtMs !== undefined) entry.soldAt = soldAtMs;
+          if (r.sellPrice !== null) entry.sellPrice = r.sellPrice;
+          const list = lotsByPdno[r.pdno] ?? [];
+          list.push(entry);
+          lotsByPdno[r.pdno] = list;
+        }
+      } catch (err) {
+        ctx.logger.log({
+          level: 'ERROR',
+          category: 'SYS',
+          message: 'getBalanceWithLots: lots DB 조회 실패 — 빈 lots 로 fallback',
+          payload: { accountId, err: String(err) },
+        });
+        lotsByPdno = {};
       }
       // 각 pdno 의 active strategy: 종목별 → 글로벌 → 없음. 종목별 maxStages 만 반환.
-      const strategiesByPdno: Record<string, { maxStages: number }> = {};
-      const globalActive = ctx.strategyRepo.getActive(accountId, null);
-      const globalMaxStages =
-        globalActive.isOk() && globalActive.value !== null ? globalActive.value.maxStages : null;
-      // positions + lotsByPdno 의 모든 pdno 합집합 — 잔고는 있으나 lot 없는 종목도 포함.
-      const allPdnos = new Set<string>([
-        ...balance.value.positions.map((p) => p.code),
-        ...Object.keys(lotsByPdno),
-      ]);
-      for (const pdno of allPdnos) {
-        const perSymbol = ctx.strategyRepo.getActive(accountId, pdno);
-        const maxStages =
-          perSymbol.isOk() && perSymbol.value !== null
-            ? perSymbol.value.maxStages
-            : globalMaxStages;
-        if (maxStages !== null) {
-          strategiesByPdno[pdno] = { maxStages };
+      // strategyRepo 오류 시 빈 객체로 fallback — 잔고 표시는 계속.
+      let strategiesByPdno: Record<string, { maxStages: number }> = {};
+      try {
+        const globalActive = ctx.strategyRepo.getActive(accountId, null);
+        const globalMaxStages =
+          globalActive.isOk() && globalActive.value !== null ? globalActive.value.maxStages : null;
+        // positions + lotsByPdno 의 모든 pdno 합집합 — 잔고는 있으나 lot 없는 종목도 포함.
+        const allPdnos = new Set<string>([
+          ...balance.value.positions.map((p) => p.code),
+          ...Object.keys(lotsByPdno),
+        ]);
+        for (const pdno of allPdnos) {
+          const perSymbol = ctx.strategyRepo.getActive(accountId, pdno);
+          const maxStages =
+            perSymbol.isOk() && perSymbol.value !== null
+              ? perSymbol.value.maxStages
+              : globalMaxStages;
+          if (maxStages !== null) {
+            strategiesByPdno[pdno] = { maxStages };
+          }
         }
+      } catch (err) {
+        ctx.logger.log({
+          level: 'ERROR',
+          category: 'SYS',
+          message: 'getBalanceWithLots: strategy 조회 실패 — 빈 strategies 로 fallback',
+          payload: { accountId, err: String(err) },
+        });
+        strategiesByPdno = {};
       }
       return {
         positions: balance.value.positions,
