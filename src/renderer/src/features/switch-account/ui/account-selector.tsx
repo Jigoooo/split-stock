@@ -1,6 +1,7 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { Button } from '@renderer/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
+import { Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -30,6 +31,19 @@ export const AccountSelector = (): ReactElement | null => {
   const { switchAccount, isPending: switching, error: switchError } = useSwitchAccount();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+
+  const deleteMutation = trpc.account.delete.useMutation({
+    onSuccess: async (data, variables) => {
+      await qc.invalidateQueries();
+      window.appShell?.broadcastAccountChanged?.(variables.accountId);
+      toast.success(
+        data.loggedOut ? '계좌 삭제 — 로그아웃되었습니다' : '계좌가 삭제되었습니다',
+      );
+    },
+    onError: (err) => {
+      toast.error(`삭제 실패: ${err.message}`);
+    },
+  });
 
   const onAddAccount = (): void => {
     setOpen(false);
@@ -62,7 +76,6 @@ export const AccountSelector = (): ReactElement | null => {
     isActive: a.isActive,
   }));
   const active = all.find((a) => a.isActive) ?? null;
-  const others = all.filter((a) => !a.isActive);
 
   const onPick = async (id: number): Promise<void> => {
     setOpen(false);
@@ -72,6 +85,16 @@ export const AccountSelector = (): ReactElement | null => {
     } catch {
       // mutation error 는 hook 의 error 로 노출됨.
     }
+  };
+
+  const onDelete = (row: AccountRow): void => {
+    const msg = row.isActive
+      ? all.length === 1
+        ? `${formatAccountLabel(row)}\n\n유일한 계좌입니다. 삭제하면 자동 로그아웃되고 자격증명도 제거됩니다. 계속할까요?`
+        : `${formatAccountLabel(row)}\n\n활성 계좌입니다. 삭제 시 다른 계좌로 자동 전환됩니다. 계속할까요?`
+      : `${formatAccountLabel(row)}\n\n이 계좌와 자격증명을 삭제할까요?`;
+    if (!window.confirm(msg)) return;
+    deleteMutation.mutate({ accountId: row.id });
   };
 
   const label = active ? formatAccountLabel(active) : '계좌 미선택';
@@ -112,41 +135,69 @@ export const AccountSelector = (): ReactElement | null => {
             boxShadow: '0 8px 28px rgba(0, 0, 0, 0.25)',
           }}
         >
-          {others.length === 0 ? (
-            <div className="muted" style={{ padding: '0.4rem 0.6rem' }}>
-              등록된 다른 계좌 없음
-            </div>
-          ) : (
-            others.map((a) => (
+          {all.map((a) => (
+            <div
+              key={a.id}
+              className="account-selector__item"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.3rem 0.35rem 0.3rem 0.6rem',
+                borderRadius: 4,
+              }}
+            >
               <button
-                key={a.id}
                 type="button"
-                role="option"
-                aria-selected={false}
                 onClick={() => {
                   void onPick(a.id);
                 }}
-                disabled={switching}
+                disabled={switching || a.isActive}
                 style={{
+                  flex: 1,
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.5rem',
-                  padding: '0.45rem 0.6rem',
+                  padding: '0.15rem 0',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: a.isActive ? 'default' : 'pointer',
+                  textAlign: 'left',
+                  font: 'inherit',
+                  color: 'inherit',
+                  fontWeight: a.isActive ? 600 : 400,
+                }}
+              >
+                <EnvDot env={a.env} />
+                <span>{formatAccountLabel(a)}</span>
+                {a.isActive ? (
+                  <span className="muted" style={{ fontSize: '1rem' }}>
+                    (현재)
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(a)}
+                disabled={deleteMutation.isPending}
+                aria-label={`${formatAccountLabel(a)} 계좌 삭제`}
+                title="계좌 삭제"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '0.3rem',
                   background: 'transparent',
                   border: 'none',
                   borderRadius: 4,
                   cursor: 'pointer',
-                  textAlign: 'left',
-                  font: 'inherit',
-                  color: 'inherit',
+                  color: 'var(--fg-2, #888)',
                 }}
-                className="account-selector__item"
               >
-                <EnvDot env={a.env} />
-                <span>{formatAccountLabel(a)}</span>
+                <Trash2 size={14} />
               </button>
-            ))
-          )}
+            </div>
+          ))}
           <div aria-hidden style={{ height: 1, background: 'var(--border)', margin: '0.3rem 0' }} />
           <Button type="button" onClick={onAddAccount} dense variant="primary">
             + 계좌 추가

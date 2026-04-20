@@ -133,22 +133,21 @@ export const accountRouter = router({
     }),
 
   /**
-   * 계좌 삭제 — 안전 가드:
-   *   1) 활성 계좌 삭제 금지 (실수 차단).
-   *   2) lots 가 1행이라도 남아있으면 거부 (포지션 데이터 보호).
-   *   3) credentials 도 함께 제거.
+   * 계좌 삭제 — 안전 가드 + 자동 전환/로그아웃:
+   *   - lots(OPEN) 가 1행이라도 남아있으면 거부 (포지션 데이터 보호).
+   *   - 삭제 대상이 활성 계좌인 경우:
+   *       · 다른 계좌가 존재하면 그 중 첫 번째로 활성 전환 (env 도 동기).
+   *       · 유일 계좌였다면 env/active 를 모두 null 로 내려 자동 로그아웃.
+   *   - credentials 는 항상 함께 제거.
    */
   delete: publicProcedure
     .input(z.object({ accountId: z.number().int().positive() }))
     .mutation(({ ctx, input }) => {
-      // 1) 활성 계좌 가드.
-      if (ctx.activeAccountId === input.accountId) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message: '활성 계좌는 삭제할 수 없습니다. 먼저 다른 계좌로 전환하세요.',
-        });
+      const target = ctx.activeAccounts.getById(input.accountId);
+      if (!target) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '대상 계좌를 찾을 수 없습니다' });
       }
-      // 2) lots 가드 — 포지션이 있으면 거부.
+      // 1) lots 가드 — 포지션이 있으면 거부.
       const lotRows = ctx.db
         .select({ id: lotsTable.id })
         .from(lotsTable)
@@ -161,6 +160,21 @@ export const accountRouter = router({
           message: '보유 차수가 남아있어 삭제할 수 없습니다.',
         });
       }
+      // 2) 활성 계좌 삭제라면 자동 전환 대상 선택.
+      const wasActive = ctx.activeAccountId === input.accountId;
+      const nextCandidate = wasActive
+        ? ctx.activeAccounts.list().find((a) => a.id !== input.accountId) ?? null
+        : null;
+      if (wasActive && nextCandidate) {
+        const switchResult = ctx.activeAccounts.setActiveAccountId(nextCandidate.id);
+        if (switchResult.isOk()) {
+          ctx.setActiveAccountId(nextCandidate.id);
+          if (ctx.currentEnv !== nextCandidate.env) {
+            ctx.setCurrentEnv(nextCandidate.env);
+            ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, nextCandidate.env);
+          }
+        }
+      }
       // 3) credentials 우선 정리 (계좌 행이 사라지면 고아 행).
       ctx.credentialsRepo.clearCredentials(input.accountId);
       const r = ctx.activeAccounts.remove(input.accountId);
@@ -170,13 +184,30 @@ export const accountRouter = router({
           message: `계좌 삭제 실패: ${r.error.kind}`,
         });
       }
+      // 4) 유일 계좌였으면 전역 세션 해제 (로그아웃 + LAST_ACTIVE_ENV 제거).
+      const loggedOut = wasActive && !nextCandidate;
+      if (loggedOut) {
+        ctx.setActiveAccountId(null);
+        ctx.setCurrentEnv(null);
+        ctx.settingsRepo.delete(SETTING_KEYS.LAST_ACTIVE_ENV);
+      }
       ctx.logger.log({
         level: 'WARN',
         category: 'AUTH',
         message: 'account.deleted',
-        payload: { accountId: input.accountId },
+        payload: {
+          accountId: input.accountId,
+          wasActive,
+          nextActiveAccountId: nextCandidate?.id ?? null,
+          loggedOut,
+        },
       });
-      return { ok: true as const };
+      return {
+        ok: true as const,
+        wasActive,
+        loggedOut,
+        nextActiveAccountId: nextCandidate?.id ?? null,
+      };
     }),
 
   getBalance: authedProcedure
