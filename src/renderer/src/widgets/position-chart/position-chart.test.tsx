@@ -5,6 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoisted(() => {
   const fetchChartMock = vi.fn();
   const setDataMock = vi.fn();
+  const updateMock = vi.fn();
   const createPriceLineMock = vi.fn();
   const removePriceLineMock = vi.fn();
   const priceScaleApplyOptionsMock = vi.fn();
@@ -17,6 +18,7 @@ const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoi
       _options: { priceFormat: { formatter: (price: number) => string } },
     ) => ({
       setData: setDataMock,
+      update: updateMock,
       createPriceLine: createPriceLineMock,
       removePriceLine: removePriceLineMock,
       // candlestick-chart.tsx 의 series.priceScale().applyOptions() 호출 대응 stub.
@@ -62,6 +64,17 @@ vi.mock('@renderer/shared/api/trpc', () => ({
     display: {
       getSettings: {
         useQuery: () => ({ isPending: false, error: null, data: null }),
+      },
+    },
+    realtime: {
+      watch: {
+        useMutation: () => ({ mutate: vi.fn() }),
+      },
+      unwatch: {
+        useMutation: () => ({ mutate: vi.fn() }),
+      },
+      getLatestTick: {
+        useQuery: () => ({ data: null }),
       },
     },
   },

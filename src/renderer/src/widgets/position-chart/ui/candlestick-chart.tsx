@@ -55,6 +55,7 @@ function computeMa(candles: Candle[], period: MaPeriod): Array<{ time: string; v
 
 export interface CandlestickChartProps {
   candles: Candle[];
+  liveCandle: Candle | null;
   lines: Array<{ kind: 'buy' | 'sell-target'; label: string; price: number }>;
   onFetchMore: () => Promise<void>;
   reachedEnd: boolean;
@@ -63,6 +64,7 @@ export interface CandlestickChartProps {
 
 export const CandlestickChart = ({
   candles,
+  liveCandle,
   lines,
   onFetchMore,
   reachedEnd,
@@ -76,6 +78,32 @@ export const CandlestickChart = ({
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const maSeriesRef = useRef<Partial<Record<MaPeriod, ISeriesApi<'Line'>>>>({});
   const onFetchMoreEvent = useEffectEvent(onFetchMore);
+
+  // ── liveCandle → series.update (오늘 캔들 실시간 갱신) ────────────
+  useEffect(() => {
+    if (!liveCandle) return;
+    const series = seriesRef.current;
+    const volSeries = volumeSeriesRef.current;
+    if (!series) return;
+
+    series.update({
+      time: liveCandle.date,
+      open: liveCandle.open,
+      high: liveCandle.high,
+      low: liveCandle.low,
+      close: liveCandle.close,
+    });
+
+    if (volSeries) {
+      const upColor = displaySettings?.chart.volume.upColor ?? 'rgba(220,38,38,0.5)';
+      const downColor = displaySettings?.chart.volume.downColor ?? 'rgba(37,99,235,0.5)';
+      volSeries.update({
+        time: liveCandle.date,
+        value: liveCandle.volume,
+        color: liveCandle.close >= liveCandle.open ? upColor : downColor,
+      });
+    }
+  }, [liveCandle, displaySettings]);
 
   // ── 차트 인스턴스 생성/정리 ────────────────────────────────────────
   useEffect(() => {

@@ -1,4 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { useLiveTick } from '@renderer/widgets/trading-panel/model/use-live-feed';
 import { useEffect, useRef, useState } from 'react';
 
 export type ChartPeriod = 'D' | 'W' | 'M';
@@ -14,6 +15,7 @@ export interface Candle {
 
 export interface UsePositionChartResult {
   candles: Candle[];
+  liveCandle: Candle | null;
   error: string | null;
   fetchMore: () => Promise<void>;
   isLoading: boolean;
@@ -21,6 +23,16 @@ export interface UsePositionChartResult {
   reachedEnd: boolean;
   retry: () => void;
   setPeriod: (period: ChartPeriod) => void;
+}
+
+/** KST 기준 오늘 날짜를 YYYY-MM-DD 로 반환 */
+function todayKst(): string {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const y = kst.getUTCFullYear();
+  const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(kst.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function getPreviousDayMs(value: string): number {
@@ -54,6 +66,24 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
   const loadingRef = useRef(false);
   const reachedEndRef = useRef(false);
   const utils = trpc.useUtils();
+
+  // 일봉 전용 실시간 tick (period !== 'D' 이면 null 로 처리)
+  const rawTick = useLiveTick(pdno, 1000);
+  const tick = period === 'D' ? rawTick : null;
+
+  // tick → 오늘 캔들 계산
+  // KIS WS tick 에는 당일 세션 open/high/low/accumVolume 이 포함됨
+  const liveCandle: Candle | null =
+    tick !== null
+      ? {
+          date: todayKst(),
+          open: tick.open,
+          high: tick.high,
+          low: tick.low,
+          close: tick.price,
+          volume: tick.accumVolume,
+        }
+      : null;
 
   useEffect(() => {
     candlesRef.current = candles;
@@ -186,6 +216,7 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
 
   return {
     candles,
+    liveCandle,
     error,
     fetchMore,
     isLoading,

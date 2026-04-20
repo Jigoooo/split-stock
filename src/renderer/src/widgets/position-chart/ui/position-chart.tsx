@@ -83,6 +83,7 @@ export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactE
         ) : null}
         <CandlestickChart
           candles={chart.candles}
+          liveCandle={chart.liveCandle}
           lines={lines}
           onFetchMore={chart.fetchMore}
           reachedEnd={chart.reachedEnd}
