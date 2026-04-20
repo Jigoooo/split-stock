@@ -6,10 +6,12 @@ import { useActiveOrders } from '../model/use-active-orders';
 export interface ActiveOrdersPanelProps {
   /** 표시할 종목 필터 (선택). null이면 전체. */
   pdnoFilter?: string | null;
+  /** pdnoFilter에 해당하는 종목명 (선택). 헤더 및 그리드 표시용. */
+  nameFilter?: string | null;
 }
 
 export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement => {
-  const { pdnoFilter } = props;
+  const { pdnoFilter, nameFilter } = props;
   const { cancelError, cancelPending, cancelSelected, orders, selected, toggle } =
     useActiveOrders(pdnoFilter);
 
@@ -25,7 +27,10 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
       }}
     >
       <div className="panel__title" style={{ flexShrink: 0 }}>
-        미체결 주문 ({thousandSeparator(orders.length)}건){pdnoFilter ? ` · ${pdnoFilter}` : ''}
+        미체결 주문 ({thousandSeparator(orders.length)}건)
+        {pdnoFilter
+          ? ` · ${nameFilter ? `${nameFilter} (${pdnoFilter})` : pdnoFilter}`
+          : ''}
       </div>
       <div
         className="panel__body"
@@ -108,7 +113,9 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
                       dense
                     />
                   </td>
-                  <td className="num">{o.pdno}</td>
+                  <td className="num">
+                    {nameFilter && o.pdno === pdnoFilter ? nameFilter : o.pdno}
+                  </td>
                   <td>
                     <span className={o.side === 'BUY' ? 'num-up' : 'num-down'}>
                       {o.side} · {o.division}

@@ -241,7 +241,7 @@ const FeedTabs = ({
           {tab === 'feed' ? (
             <TradeFeedPanel feed={feed} name={name} pdno={pdno} />
           ) : (
-            <ActiveOrdersPanel pdnoFilter={pdno} />
+            <ActiveOrdersPanel pdnoFilter={pdno} nameFilter={name} />
           )}
         </motion.div>
       </AnimatePresence>
