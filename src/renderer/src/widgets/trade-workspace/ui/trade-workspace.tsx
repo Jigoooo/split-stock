@@ -77,7 +77,12 @@ export const TradeWorkspace = ({
           }}
         >
           <div style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <PositionChart pdno={selected.pdno} name={selected.name} lines={overlay.lines} />
+            <PositionChart
+              pdno={selected.pdno}
+              name={selected.name}
+              lines={overlay.lines}
+              enableDrawingTools={false}
+            />
           </div>
           <div
             style={{

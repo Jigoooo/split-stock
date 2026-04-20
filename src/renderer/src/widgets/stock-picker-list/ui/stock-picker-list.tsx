@@ -9,16 +9,20 @@ import type { StockListEntry } from '../model/use-stock-list';
 import { useStockList } from '../model/use-stock-list';
 import { useStockMasterSync } from '../model/use-stock-master-sync';
 
-const ROW_HEIGHT_PX = 34;
 const MAX_VISIBLE = 40;
 
 export interface StockPickerListProps {
   selectedPdno?: string;
   onSelect: (entry: StockListEntry) => void;
+  placeholder?: string;
+  inputAriaLabel?: string;
+  dense?: boolean;
+  hideSyncButton?: boolean;
   /** true면 ExternalLink(팝아웃) 버튼 숨김 — 팝아웃 창 내부 사용 등 */
   hidePopoutButton?: boolean;
   /** true면 펼친 목록 모드 (팝아웃 창 전용) — 포커스와 무관하게 항상 목록 표시 */
   alwaysOpen?: boolean;
+  maxVisible?: number;
   onOpenPopout?: (() => Promise<void> | void) | undefined;
   isPopoutOpen?: boolean | undefined;
 }
@@ -30,7 +34,17 @@ export interface StockPickerListProps {
  * - 한글 초성/퍼지/띄어쓰기 검색 (createKoreanSearchRegex) + 매칭 하이라이트
  */
 export const StockPickerList = (props: StockPickerListProps): ReactElement => {
-  const { selectedPdno, onSelect, hidePopoutButton = false, alwaysOpen = false } = props;
+  const {
+    selectedPdno,
+    onSelect,
+    placeholder = '종목을 검색하세요',
+    inputAriaLabel = '종목 검색',
+    dense = true,
+    hideSyncButton = false,
+    hidePopoutButton = false,
+    alwaysOpen = false,
+    maxVisible = MAX_VISIBLE,
+  } = props;
   const { onOpenPopout, isPopoutOpen = false } = props;
   const [keyword, setKeyword] = useState('');
   const [focused, setFocused] = useState(false);
@@ -38,6 +52,7 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
   const list = useStockList(keyword);
   const { isEmpty, sync, syncError, syncPending } = useStockMasterSync();
   const containerRef = useRef<HTMLDivElement>(null);
+  const rowHeightPx = dense ? 34 : 40;
 
   // 문서 다른 곳 클릭 시 드롭다운 닫힘
   useEffect(() => {
@@ -50,7 +65,7 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
     return () => document.removeEventListener('mousedown', onDoc);
   }, [alwaysOpen]);
 
-  const visible = alwaysOpen ? list.entries : list.entries.slice(0, MAX_VISIBLE);
+  const visible = alwaysOpen ? list.entries : list.entries.slice(0, maxVisible);
   const open = alwaysOpen || (focused && keyword.trim().length > 0);
   const dropdownMotionProps = alwaysOpen
     ? {}
@@ -101,24 +116,26 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
           }}
           onFocus={() => setFocused(true)}
           onKeyDown={onKey}
-          placeholder="종목을 검색하세요"
-          aria-label="종목 검색"
+          placeholder={placeholder}
+          aria-label={inputAriaLabel}
           autoComplete="off"
           iconLeading={<Search size={14} />}
-          dense
+          dense={dense}
           style={{ width: '100%' }}
         />
-        <Button
-          disabled={syncPending}
-          onClick={sync}
-          aria-label="종목 마스터 재동기화"
-          title="KIS 마스터 파일 다시 다운로드"
-          iconOnly
-          dense
-          iconLeading={<RefreshCw size={14} />}
-        >
-          종목 마스터 재동기화
-        </Button>
+        {!hideSyncButton ? (
+          <Button
+            disabled={syncPending}
+            onClick={sync}
+            aria-label="종목 마스터 재동기화"
+            title="KIS 마스터 파일 다시 다운로드"
+            iconOnly
+            dense={dense}
+            iconLeading={<RefreshCw size={14} />}
+          >
+            종목 마스터 재동기화
+          </Button>
+        ) : null}
         {!hidePopoutButton && onOpenPopout ? (
           <Button
             onClick={() => {
@@ -128,7 +145,7 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
             aria-label="종목 선택 팝아웃 창"
             title={isPopoutOpen ? '별도 창에서 검색/할당 중' : '별도 창에서 검색/할당'}
             iconOnly
-            dense
+            dense={dense}
             iconLeading={<ExternalLink size={14} />}
             variant={isPopoutOpen ? 'primary' : 'default'}
           >
@@ -190,13 +207,13 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
                     className={isActive ? 'hts-btn hts-btn--primary' : 'hts-btn'}
                     style={{
                       width: '100%',
-                      height: ROW_HEIGHT_PX,
+                      height: rowHeightPx,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'flex-start',
                       gap: '0.8rem',
                       borderRadius: 0,
-                      padding: '0 0.8rem',
+                      padding: dense ? '0 0.8rem' : '0 1rem',
                       textAlign: 'left',
                       background: isSelected && !isActive ? 'var(--up-soft)' : undefined,
                     }}
