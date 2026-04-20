@@ -4,6 +4,20 @@ export type { CheckboxProps } from './checkbox';
 export { Checkbox } from './checkbox';
 export type { DateInputProps } from './date-input';
 export { DateInput } from './date-input';
+export {
+  type DialogActions,
+  type DialogActionsRenderer,
+  type DialogConfig,
+  type DialogOpenPayload,
+  DialogProvider,
+  type DialogStates,
+  type DialogStore,
+  DialogType,
+  type DialogTypePayload,
+  type DialogTypeValue,
+  dialog,
+  useDialogStore,
+} from './dialog';
 export type { ErrorBoundaryProps } from './error-boundary';
 export { ErrorBoundary, withSectionBoundary } from './error-boundary';
 export type { NumberInputProps } from './number-input';
