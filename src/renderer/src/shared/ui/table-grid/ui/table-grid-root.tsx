@@ -86,15 +86,16 @@ export function TableGridRoot(props: RootProps): ReactElement {
         }}
       >
         {horizontalScroll ? (
-          // 가로 스크롤 wrapper — Header + Body 를 함께 감싸 컬럼 정렬 유지
+          // 가로+세로 스크롤 wrapper — Header + Body 를 함께 감싸 sync 유지
+          // overflow: auto (양방향) → Header sticky top 이 wrapper 기준으로 고정되면서
+          // 가로 스크롤 시 Header 도 자연히 같이 이동 (별도 JS sync 불필요)
           <div
             ref={hScrollRef}
             className="table-grid-hscroll-wrapper"
             style={{
               flex: 1,
               minHeight: 0,
-              overflowX: 'auto',
-              overflowY: 'hidden',
+              overflow: 'auto',
               display: 'flex',
               flexDirection: 'column',
               // 브라우저 기본 스크롤바 숨김 (OverlayScrollbar 사용)
@@ -102,8 +103,6 @@ export function TableGridRoot(props: RootProps): ReactElement {
             }}
           >
             {children}
-            {/* 세로 스크롤바 — Body 에 부착 */}
-            {overlayScrollbar ? <OverlayScrollbar containerRef={bodyRef} /> : null}
           </div>
         ) : (
           <>
@@ -111,9 +110,12 @@ export function TableGridRoot(props: RootProps): ReactElement {
             {overlayScrollbar ? <OverlayScrollbar containerRef={bodyRef} /> : null}
           </>
         )}
-        {/* 가로 스크롤바 — hScrollRef wrapper 에 부착 */}
+        {/* horizontalScroll=true 시: wrapper 가 세로+가로 모두 담당 → 두 방향 모두 부착 */}
         {horizontalScroll && overlayScrollbar ? (
-          <OverlayScrollbar containerRef={hScrollRef} orientation="horizontal" />
+          <>
+            <OverlayScrollbar containerRef={hScrollRef} />
+            <OverlayScrollbar containerRef={hScrollRef} orientation="horizontal" />
+          </>
         ) : null}
       </div>
     </TableGridContext.Provider>

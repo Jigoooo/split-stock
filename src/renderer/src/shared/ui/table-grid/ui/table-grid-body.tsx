@@ -41,8 +41,9 @@ export function TableGridBody(props: TableGridBodyProps): ReactElement {
         flexDirection: 'column',
         flex: 1,
         minHeight: 0,
-        overflowY: 'auto',
-        // horizontalScroll=true 이면 wrapper 가 가로 스크롤 담당 → body 는 overflow visible
+        // horizontalScroll=true 이면 wrapper(hScrollRef)가 양방향 스크롤 담당
+        // → body 는 overflow visible (overflow: visible + visible = visible)
+        overflowY: horizontalScroll ? 'visible' : 'auto',
         overflowX: horizontalScroll ? 'visible' : 'hidden',
         ...style,
       }}

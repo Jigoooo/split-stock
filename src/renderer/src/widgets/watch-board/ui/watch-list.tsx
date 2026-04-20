@@ -3,7 +3,7 @@ import type { WatchOrderFormPrefill } from '@renderer/features/add-watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Checkbox, TableGrid } from '@renderer/shared/ui';
-import { type CSSProperties, type ReactElement, useEffectEvent, useState } from 'react';
+import { type ReactElement, useEffectEvent, useState } from 'react';
 
 export interface WatchListProps {
   orders: WatchOrder[];
@@ -86,15 +86,6 @@ export const WatchList = (props: WatchListProps): ReactElement => {
     });
   });
 
-  const onDeleteRow = useEffectEvent(async (id: number) => {
-    try {
-      await cancelMutation.mutateAsync({ id });
-    } catch {
-      // 무시 — invalidate 후 갱신
-    }
-    await utils.watch.list.invalidate();
-  });
-
   return (
     <div
       style={{
@@ -158,7 +149,6 @@ export const WatchList = (props: WatchListProps): ReactElement => {
           <TableGrid.Cell width={120} className="muted">
             실패사유
           </TableGrid.Cell>
-          {allowMutations && <TableGrid.Cell width={88} sticky="right" />}
         </TableGrid.Header>
         <TableGrid.Body>
           {isPending ? (
@@ -179,6 +169,7 @@ export const WatchList = (props: WatchListProps): ReactElement => {
                 key={o.id}
                 selected={selected.has(o.id)}
                 onContextMenu={(e) => onContextMenu(e, o.id)}
+                style={{ position: 'relative' }}
               >
                 <TableGrid.Cell width={42}>
                   <Checkbox
@@ -213,28 +204,40 @@ export const WatchList = (props: WatchListProps): ReactElement => {
                   {o.lastFailureReason ?? ''}
                 </TableGrid.Cell>
                 {allowMutations && (
-                  <TableGrid.Cell width={88} sticky="right" style={{ whiteSpace: 'nowrap' }}>
-                    <button
-                      type="button"
-                      onClick={() => onEditRow(o)}
-                      disabled={cancelMutation.isPending}
-                      className="hts-btn hts-btn--xs"
-                      style={inlineActionStyle}
-                      aria-label={`수정 ${o.id}`}
-                    >
-                      수정
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void onDeleteRow(o.id)}
-                      disabled={cancelMutation.isPending}
-                      className="hts-btn hts-btn--xs hts-btn--danger"
-                      style={{ ...inlineActionStyle, color: 'var(--hts-sell, #e03)' }}
-                      aria-label={`삭제 ${o.id}`}
-                    >
-                      삭제
-                    </button>
-                  </TableGrid.Cell>
+                  <button
+                    type="button"
+                    className="watch-list-more-btn"
+                    aria-label={`더보기 ${o.id}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onContextMenu(e, o.id);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: 4,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'var(--hts-bg, #1a1a2e)',
+                      border: '1px solid var(--hts-line, rgba(255,255,255,0.15))',
+                      borderRadius: 3,
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      fontSize: '1rem',
+                      lineHeight: 1,
+                      padding: '0.2rem 0.5rem',
+                      opacity: 0,
+                      transition: 'opacity 0.1s',
+                      zIndex: 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.opacity = '1';
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.opacity = '0';
+                    }}
+                  >
+                    ···
+                  </button>
                 )}
               </TableGrid.Row>
             ))
@@ -266,6 +269,17 @@ export const WatchList = (props: WatchListProps): ReactElement => {
             label={`중지 (${menu.ids.length}건)`}
             onSelect={() => void onCancelSelected(menu.ids)}
           />
+          {allowMutations && menu.ids.length === 1 ? (
+            <MenuItem
+              disabled={cancelMutation.isPending}
+              label="수정"
+              onSelect={() => {
+                const target = orders.find((o) => o.id === menu.ids[0]);
+                if (target) onEditRow(target);
+                closeMenu();
+              }}
+            />
+          ) : null}
           <MenuItem
             disabled={!allowMutations || cancelMutation.isPending}
             label={`삭제 (${menu.ids.length}건)`}
@@ -275,17 +289,6 @@ export const WatchList = (props: WatchListProps): ReactElement => {
       ) : null}
     </div>
   );
-};
-
-const inlineActionStyle: CSSProperties = {
-  background: 'transparent',
-  border: '1px solid currentColor',
-  borderRadius: '3px',
-  cursor: 'pointer',
-  fontSize: '1rem',
-  padding: '0.4rem 1rem',
-  color: 'inherit',
-  marginRight: '0.2rem',
 };
 
 interface MenuItemProps {
