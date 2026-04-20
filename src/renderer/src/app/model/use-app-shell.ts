@@ -1,5 +1,6 @@
 import { useKillSwitchHotkey } from '@renderer/features/safety-switch';
 import { trpc } from '@renderer/shared/api/trpc';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 type EnvValue = 'MOCK' | 'PROD';
@@ -19,6 +20,7 @@ interface UseAppShellReturn {
 
 export function useAppShell(): UseAppShellReturn {
   const utils = trpc.useUtils();
+  const queryClient = useQueryClient();
   const envQuery = trpc.auth.getEnv.useQuery();
   const storedQuery = trpc.auth.listStored.useQuery();
   const env = envQuery.data?.env ?? null;
@@ -27,9 +29,18 @@ export function useAppShell(): UseAppShellReturn {
   useKillSwitchHotkey();
 
   const setEnv = trpc.auth.setEnv.useMutation({
+    // 전환 시작 직전 인플라이트 쿼리 전부 취소 — 이전 env 의 accountId 를 담은
+    // 쿼리가 KIS 에 도달해 "교차 토큰" 에러 유발하는 레이스 방지.
+    onMutate: async () => {
+      await queryClient.cancelQueries();
+    },
+    // 전환 성공 후 모든 쿼리 invalidate — UI 전체가 새 env 기준으로 재조회.
     onSuccess: async () => {
+      await utils.invalidate();
+    },
+    // 실패해도 env 상태 revalidation 은 필요 (서버가 일부 상태만 바꿨을 수 있음).
+    onError: async () => {
       await utils.auth.getEnv.invalidate();
-      await utils.account.getBalance.invalidate();
     },
   });
   const logoutMutation = trpc.auth.logout.useMutation({

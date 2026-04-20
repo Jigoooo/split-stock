@@ -89,6 +89,20 @@ const AppShell = ({ popout }: { popout: PopoutApi }): ReactElement => {
         onConfirm={shell.confirmEnvSwitch}
         onCancel={shell.cancelEnvSwitch}
       />
+      {shell.isSwitchingEnv ? (
+        <div
+          className="env-switch-overlay"
+          role="status"
+          aria-live="polite"
+          aria-label="환경 전환 중"
+        >
+          <div className="env-switch-overlay__panel">
+            <div className="env-switch-overlay__spinner" aria-hidden />
+            <div className="env-switch-overlay__label">환경 전환 중…</div>
+            <div className="env-switch-overlay__hint muted">잠시만 기다려주세요.</div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
