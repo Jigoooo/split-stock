@@ -1,5 +1,23 @@
+import type { AppEnv } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import type { Context } from './context';
+
+/**
+ * env 전환 직후 프론트의 inflight/cached useQuery 가 이전 env 의 accountId 를
+ * input 으로 담고 도달하는 레이스 방어. 그 accountId 로 load 한 cred 의 env 가
+ * 현재 env 와 어긋나면 KIS 에 교차 호출을 내보내기 전에 친화 메시지로 차단.
+ *
+ * 이 가드가 발동하면 프론트의 refetch 파이프라인이 새 env 기준으로 재발행 된
+ * 뒤 자연 복구된다. 실제 자격증명/토큰 문제와 구분되는 PRECONDITION_FAILED 사용.
+ */
+export function assertCredMatchesEnv(cred: { env: AppEnv }, currentEnv: AppEnv): void {
+  if (cred.env !== currentEnv) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: '환경 전환 중입니다. 잠시 후 다시 시도해주세요.',
+    });
+  }
+}
 
 /**
  * 라우터 입력의 accountId 를 활성 계좌로 fallback.

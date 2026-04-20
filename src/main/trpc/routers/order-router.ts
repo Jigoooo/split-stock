@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { orders } from '../../db/schema';
 import { readPendingCancelConfig } from '../../db/settings-repo';
 import { cancelOrRevise, orderCash } from '../../kis/order';
-import { requireAccountId, resolveAccountId } from '../router-helpers';
+import { assertCredMatchesEnv, requireAccountId, resolveAccountId } from '../router-helpers';
 import { authedProcedure, router } from '../trpc-core';
 
 const AccountIdField = z.number().int().positive();
@@ -29,6 +29,8 @@ export const orderRouter = router({
         throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
       }
       const cred = credResult.value;
+      // env 전환 직후 stale accountId 유입 방어: cred.env !== currentEnv 이면 KIS 호출 전 차단.
+      assertCredMatchesEnv(cred, env);
       const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
       if (tokenResult.isErr()) {
         throw new TRPCError({
@@ -122,6 +124,8 @@ export const orderRouter = router({
         throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
       }
       const cred = credResult.value;
+      // env 전환 직후 stale accountId 유입 방어: cred.env !== currentEnv 이면 KIS 호출 전 차단.
+      assertCredMatchesEnv(cred, env);
       const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
       if (tokenResult.isErr()) {
         throw new TRPCError({
@@ -207,6 +211,8 @@ export const orderRouter = router({
         throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
       }
       const cred = credResult.value;
+      // env 전환 직후 stale accountId 유입 방어: cred.env !== currentEnv 이면 KIS 호출 전 차단.
+      assertCredMatchesEnv(cred, env);
       const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
       if (tokenResult.isErr()) {
         throw new TRPCError({

@@ -9,7 +9,7 @@ import { SETTING_KEYS } from '../../db/settings-repo';
 import { inquireBalance } from '../../kis/domestic-stock';
 import type { LotStatus } from '../../trading/fsm';
 import type { LotSnapshotEntry } from '../../trading/lots-repo';
-import { resolveAccountId } from '../router-helpers';
+import { assertCredMatchesEnv, resolveAccountId } from '../router-helpers';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 /**
@@ -292,6 +292,8 @@ export const accountRouter = router({
         });
       }
       const cred = credResult.value;
+      // env 전환 직후 stale accountId 유입 방어: cred.env !== currentEnv 이면 KIS 호출 전 차단.
+      assertCredMatchesEnv(cred, env);
       const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
       if (tokenResult.isErr()) {
         throw new TRPCError({
@@ -379,6 +381,8 @@ export const accountRouter = router({
         });
       }
       const cred = credResult.value;
+      // env 전환 직후 stale accountId 유입 방어: cred.env !== currentEnv 이면 KIS 호출 전 차단.
+      assertCredMatchesEnv(cred, env);
       const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
       if (tokenResult.isErr()) {
         throw new TRPCError({
