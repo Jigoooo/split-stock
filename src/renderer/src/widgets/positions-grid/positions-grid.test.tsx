@@ -23,6 +23,33 @@ vi.mock('./model/use-positions-grid', () => ({
   usePositionsGrid: () => mockUsePositionsGrid(),
 }));
 
+const toggleSymbolMutate = vi.fn();
+const getStateInvalidate = vi.fn();
+
+vi.mock('@renderer/shared/api/trpc', () => ({
+  trpc: {
+    safety: {
+      getState: {
+        useQuery: () => ({ data: { bySymbol: {} } }),
+      },
+      toggleSymbol: {
+        useMutation: ({ onSuccess }: { onSuccess: () => void }) => ({
+          mutate: (args: unknown) => {
+            toggleSymbolMutate(args);
+            onSuccess();
+          },
+          isPending: false,
+        }),
+      },
+    },
+    useUtils: () => ({
+      safety: {
+        getState: { invalidate: getStateInvalidate },
+      },
+    }),
+  },
+}));
+
 const makeRow = (code: string, name: string) => ({
   position: {
     code,
@@ -114,5 +141,30 @@ describe('PositionsGrid', () => {
 
     // 정리
     Object.defineProperty(window, 'appShell', { value: undefined, configurable: true });
+  });
+
+  it('자동 칩 클릭 → toggleSymbol mutation 호출, onSelect 미호출', () => {
+    mockUsePositionsGrid.mockReturnValue({
+      isPending: false,
+      error: null,
+      rows: [makeRow('005930', '삼성전자')],
+      gridMaxStages: 2,
+    });
+
+    toggleSymbolMutate.mockClear();
+
+    const onSelect = vi.fn();
+    render(<PositionsGrid accountId={1} onSelect={onSelect} />);
+
+    // autoOn=null(미지정) → 버튼 텍스트 "ON", 클릭 시 on=false 로 토글
+    const autoBtn = screen.getByRole('button', { name: '삼성전자 자동매매 ON' });
+    fireEvent.click(autoBtn);
+
+    expect(toggleSymbolMutate).toHaveBeenCalledWith({
+      accountId: 1,
+      pdno: '005930',
+      on: false,
+    });
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

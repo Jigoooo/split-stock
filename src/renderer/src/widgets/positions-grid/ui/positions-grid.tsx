@@ -1,3 +1,4 @@
+import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { type ReactElement, useRef, useState } from 'react';
@@ -26,6 +27,12 @@ export interface PositionsGridProps {
 export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
   const { onSelect, selectedPdno = null } = props;
   const { error, gridMaxStages, isPending, rows } = usePositionsGrid();
+
+  // 종목별 자동매매 상태 — grid 레벨 1회 조회
+  const safetyState = trpc.safety.getState.useQuery(
+    { accountId: props.accountId },
+    { refetchInterval: 3000 },
+  );
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -158,6 +165,8 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
                     onToggleExpand={handleToggleExpand}
                     onSelect={handleSelect}
                     onChartPopout={handleChartPopout}
+                    accountId={props.accountId}
+                    autoOn={safetyState.data?.bySymbol[row.position.code] ?? null}
                   />
                 </div>
               );

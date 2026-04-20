@@ -1,4 +1,5 @@
 import type { LotEntry } from '@renderer/entities/account';
+import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { LineChart } from 'lucide-react';
 import { type CSSProperties, type ReactElement, useTransition } from 'react';
@@ -21,6 +22,15 @@ export interface PositionRowProps {
   onChartPopout?: (pdno: string, name: string) => void;
   /** 가상화 스타일 (absolute positioning). */
   style?: CSSProperties;
+  /** 활성 계좌 ID — toggleSymbol mutation 에 필요. */
+  accountId: number;
+  /**
+   * 종목별 자동매매 상태.
+   * - true: 명시적 ON
+   * - false: 명시적 OFF
+   * - null: 미지정 (기본값 — master ON 이면 거래 가능)
+   */
+  autoOn: boolean | null;
 }
 
 /**
@@ -29,6 +39,8 @@ export interface PositionRowProps {
  */
 export const PositionRow = (props: PositionRowProps): ReactElement => {
   const {
+    accountId,
+    autoOn,
     expanded,
     gridMaxStages,
     onChartPopout,
@@ -39,7 +51,12 @@ export const PositionRow = (props: PositionRowProps): ReactElement => {
     style,
   } = props;
   const [isPending, startTransition] = useTransition();
-  const { lots, position, rowMaxStages } = row;
+
+  const utils = trpc.useUtils();
+  const toggleSymbol = trpc.safety.toggleSymbol.useMutation({
+    onSuccess: () => utils.safety.getState.invalidate({ accountId }),
+  });
+  const { lots, position } = row;
   const isSelected = selectedPdno === position.code;
 
   const sign = position.pnlAmount === 0 ? 'flat' : position.pnlAmount > 0 ? 'up' : 'down';
@@ -112,8 +129,35 @@ export const PositionRow = (props: PositionRowProps): ReactElement => {
             <td className={`num ${pnlColorClass}`}>{position.pnlRate.toFixed(2)}%</td>
             <td className="num">{thousandSeparator(Math.round(buyAmount))}</td>
             <td className="num">{thousandSeparator(Math.round(position.evalAmount))}</td>
-            <td className="num muted" title={`전략 maxStages=${rowMaxStages}`}>
-              {rowMaxStages > 0 ? 'ON' : 'OFF'}
+            <td>
+              <button
+                type="button"
+                aria-label={`${position.name} 자동매매 ${autoOn === false ? 'OFF' : 'ON'}`}
+                aria-pressed={autoOn !== false}
+                disabled={toggleSymbol.isPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleSymbol.mutate({
+                    accountId,
+                    pdno: position.code,
+                    on: autoOn === false,
+                  });
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  cursor: toggleSymbol.isPending ? 'wait' : 'pointer',
+                  fontWeight: 600,
+                  fontSize: '1rem',
+                  color:
+                    autoOn === false
+                      ? 'var(--hts-down, #e53935)'
+                      : 'var(--hts-up, #1976d2)',
+                }}
+              >
+                {autoOn === false ? 'OFF' : 'ON'}
+              </button>
             </td>
             <LotStageCells lots={lots} gridMaxStages={gridMaxStages} />
             <td>
