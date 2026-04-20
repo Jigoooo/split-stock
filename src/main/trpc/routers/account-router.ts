@@ -6,8 +6,8 @@ import { z } from 'zod';
 import { lots as lotsTable } from '../../db/schema';
 import { SETTING_KEYS } from '../../db/settings-repo';
 import { inquireBalance } from '../../kis/domestic-stock';
-import type { LotSnapshotEntry } from '../../trading/lots-repo';
 import type { LotStatus } from '../../trading/fsm';
+import type { LotSnapshotEntry } from '../../trading/lots-repo';
 import { resolveAccountId } from '../router-helpers';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
 

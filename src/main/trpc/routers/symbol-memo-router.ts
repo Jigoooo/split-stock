@@ -18,25 +18,19 @@ const PdnoSchema = z.string().regex(/^\d{6}$/, '종목코드는 6자리 숫자�
 const ContentSchema = z.string().max(10_000, '메모는 최대 10,000자까지 가능합니다');
 
 export const symbolMemoRouter = router({
-  get: authedProcedure
-    .input(z.object({ pdno: PdnoSchema }))
-    .query(({ ctx, input }) => {
-      try {
-        const rows = ctx.db
-          .select()
-          .from(symbolMemos)
-          .where(eq(symbolMemos.pdno, input.pdno))
-          .all();
-        const row = rows[0];
-        if (!row) return null;
-        return { content: row.content, updatedAt: row.updatedAt };
-      } catch (cause) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `메모 조회 실패: ${String(cause)}`,
-        });
-      }
-    }),
+  get: authedProcedure.input(z.object({ pdno: PdnoSchema })).query(({ ctx, input }) => {
+    try {
+      const rows = ctx.db.select().from(symbolMemos).where(eq(symbolMemos.pdno, input.pdno)).all();
+      const row = rows[0];
+      if (!row) return null;
+      return { content: row.content, updatedAt: row.updatedAt };
+    } catch (cause) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `메모 조회 실패: ${String(cause)}`,
+      });
+    }
+  }),
 
   set: authedProcedure
     .input(z.object({ pdno: PdnoSchema, content: ContentSchema }))

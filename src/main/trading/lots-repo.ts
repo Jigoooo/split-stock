@@ -759,8 +759,7 @@ export class LotsRepo {
             : r.soldAt instanceof Date
               ? r.soldAt.getTime()
               : Number(r.soldAt);
-        const boughtAtMs =
-          r.boughtAt instanceof Date ? r.boughtAt.getTime() : Number(r.boughtAt);
+        const boughtAtMs = r.boughtAt instanceof Date ? r.boughtAt.getTime() : Number(r.boughtAt);
         const cycle: TradeCycle = {
           id: r.id,
           nth: r.nth,
