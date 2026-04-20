@@ -1,9 +1,10 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { Button } from '@renderer/shared/ui';
+import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { useSwitchAccount } from '../model/use-switch-account';
-import { AddAccountDialog } from './add-account-dialog';
 
 interface AccountRow {
   id: number;
@@ -27,8 +28,24 @@ export const AccountSelector = (): ReactElement | null => {
     staleTime: 30_000,
   });
   const { switchAccount, isPending: switching, error: switchError } = useSwitchAccount();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [addOpen, setAddOpen] = useState(false);
+
+  const onAddAccount = (): void => {
+    setOpen(false);
+    void window.appShell?.openPopout('add-account');
+  };
+
+  // 팝아웃의 tRPC client 와 메인 창 client 는 별도 인스턴스 → invalidate 전파 안 됨.
+  // add-account 팝아웃이 `broadcastAccountChanged` 로 성공을 통지하면 메인이 갱신 + 토스트.
+  useEffect(() => {
+    const shell = window.appShell;
+    if (!shell) return;
+    return shell.onAccountChanged(() => {
+      void qc.invalidateQueries();
+      toast.success('계좌가 추가되었습니다');
+    });
+  }, [qc]);
 
   if (accountsQ.isPending) {
     return <span className="muted">계좌 로드 중…</span>;
@@ -131,15 +148,7 @@ export const AccountSelector = (): ReactElement | null => {
             ))
           )}
           <div aria-hidden style={{ height: 1, background: 'var(--border)', margin: '0.3rem 0' }} />
-          <Button
-            type="button"
-            onClick={() => {
-              setOpen(false);
-              setAddOpen(true);
-            }}
-            dense
-            variant="primary"
-          >
+          <Button type="button" onClick={onAddAccount} dense variant="primary">
             + 계좌 추가
           </Button>
         </div>
@@ -150,8 +159,6 @@ export const AccountSelector = (): ReactElement | null => {
           {switchError.message}
         </span>
       ) : null}
-
-      <AddAccountDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );
 };

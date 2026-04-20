@@ -1,4 +1,5 @@
 import { ProfitCalculatorPage } from '@renderer/features/profit-calculator';
+import { AddAccountPage } from '@renderer/features/switch-account';
 import { DashboardPage } from '@renderer/pages/dashboard';
 import { LogsPage } from '@renderer/pages/logs';
 import { LotsLogPage } from '@renderer/pages/lots-log';
@@ -47,6 +48,8 @@ export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => 
         </div>
       ) : route === 'profit-calculator' ? (
         <ProfitCalculatorPage />
+      ) : route === 'add-account' ? (
+        <AddAccountPage />
       ) : (
         <SettingsPage />
       )}
