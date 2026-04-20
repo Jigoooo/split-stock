@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { orders } from '../../db/schema';
+import { readPendingCancelConfig } from '../../db/settings-repo';
 import { cancelOrRevise, orderCash } from '../../kis/order';
 import { requireAccountId, resolveAccountId } from '../router-helpers';
 import { authedProcedure, router } from '../trpc-core';
@@ -80,6 +81,30 @@ export const orderRouter = router({
           placedAt: now,
         })
         .run();
+
+      // NM-001: 미체결 자동취소 감시 등록.
+      // - 설정 enabled=false이면 스킵.
+      // - LIMIT 주문만 대상 (MARKET은 즉시 체결되므로 PENDING 지속 안 함).
+      // - orgNo가 없으면 KIS cancel API 호출이 불가 — 감시 등록 생략.
+      const pendingCfg = readPendingCancelConfig(ctx.settingsRepo);
+      if (
+        pendingCfg.enabled &&
+        input.division === 'LIMIT' &&
+        result.value.orgNo &&
+        ctx.pendingOrderWatcher
+      ) {
+        ctx.pendingOrderWatcher.register({
+          pdno: input.pdno,
+          side: input.side,
+          // nth: 매직스플릿 차수 개념이나 수동 주문에서는 (pdno, side) 중복 등록 방지용 키로만 사용.
+          // odno 기반 숫자 파싱이 안정적이지 않아 타임스탬프 기반 유사-유일 값 사용.
+          nth: Date.now() % 1_000_000,
+          odno: result.value.odno,
+          orgNo: result.value.orgNo,
+          qty: input.qty,
+          accountId,
+        });
+      }
       return result.value;
     }),
 
@@ -130,6 +155,19 @@ export const orderRouter = router({
           .set({ status: 'CANCELLED' })
           .where(and(eq(orders.odno, input.orgOdno), eq(orders.accountId, accountId)))
           .run();
+        // NM-001: 수동 취소된 주문은 자동취소 감시에서도 제거 — 불필요한 재시도 방지.
+        if (ctx.pendingOrderWatcher) {
+          const active = ctx.pendingOrderWatcher.listActive();
+          for (const entry of active) {
+            if (entry.odno === input.orgOdno) {
+              ctx.pendingOrderWatcher.cancel({
+                pdno: entry.pdno,
+                side: entry.side,
+                nth: entry.nth,
+              });
+            }
+          }
+        }
       }
       return result.value;
     }),
@@ -213,6 +251,19 @@ export const orderRouter = router({
             .set({ status: 'CANCELLED' })
             .where(and(eq(orders.odno, row.odno), eq(orders.accountId, accountId)))
             .run();
+          // NM-001: 수동 일괄 취소된 주문은 자동취소 감시에서도 제거.
+          if (ctx.pendingOrderWatcher) {
+            const active = ctx.pendingOrderWatcher.listActive();
+            for (const entry of active) {
+              if (entry.odno === row.odno) {
+                ctx.pendingOrderWatcher.cancel({
+                  pdno: entry.pdno,
+                  side: entry.side,
+                  nth: entry.nth,
+                });
+              }
+            }
+          }
           results.push({ odno: row.odno, ok: true });
         } else {
           results.push({ odno: row.odno, ok: false, reason: r.error.msg });

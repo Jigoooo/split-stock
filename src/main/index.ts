@@ -28,14 +28,22 @@ const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, screen, shell } =
 nativeTheme.themeSource = 'light';
 
 import type { AppEnv } from '@shared/contracts';
+import { and, eq } from 'drizzle-orm';
 import WebSocket from 'ws';
 import { ActiveAccountRepo } from './account/active-account';
 import { BackupScheduler } from './backup/scheduler';
 import { defaultDbPath, migrate, openDb } from './db/client';
-import { readRealtimeConfig, SETTING_KEYS, SettingsRepo } from './db/settings-repo';
+import { orders } from './db/schema';
+import {
+  readPendingCancelConfig,
+  readRealtimeConfig,
+  SETTING_KEYS,
+  SettingsRepo,
+} from './db/settings-repo';
 import { AuthService } from './kis/auth';
 import { KIS_BASE_URL } from './kis/endpoints';
 import { KisHttpClient } from './kis/http-client';
+import { cancelOrRevise } from './kis/order';
 import { TokenStore } from './kis/token-store';
 import { realTimer, type WsLike } from './kis/ws-client';
 import { createEventLogger, teeLoggers } from './logging/event-logger';
@@ -52,6 +60,7 @@ import { BalanceSync } from './trading/balance-sync';
 import { DailyCandlesRepo } from './trading/daily-candles-repo';
 import { createEnvAwarePricePoller } from './trading/env-aware-price-poller';
 import { LotsRepo } from './trading/lots-repo';
+import { PendingOrderWatcher } from './trading/pending-order-watcher';
 import { StockMasterRepo } from './trading/stock-master-repo';
 import { StockMasterSyncService } from './trading/stock-master-sync';
 import { StrategyRepo } from './trading/strategy-repo';
@@ -168,6 +177,113 @@ function bootstrapDeps(userDataDir: string) {
   // factory 참조를 closure 로 빼는 래퍼 — RealtimeService 초기화 시점이 factory 생성 전이라 필요.
   const factoryRef: { factory: ReturnType<typeof createContextFactory> | null } = { factory: null };
   let lastRealtime: RealtimeService | null = null;
+
+  // NM-001: 미체결 자동취소 — 타임아웃 시 KIS cancel 호출.
+  // onExpire 이후 성공 시 cancel(entry) 로 감시 해제, 실패 시 rearm() 으로 다음 사이클 대기.
+  // reorderMode='NONE' 고정 — 재주문은 이번 범위 밖(사용자가 시세 보고 직접 재주문).
+  const pendingCancelCfg = readPendingCancelConfig(settingsRepo);
+  const pendingOrderWatcher: PendingOrderWatcher = new PendingOrderWatcher({
+    timer: realTimer,
+    timeoutMs: pendingCancelCfg.timeoutMs,
+    maxRetries: pendingCancelCfg.maxRetries,
+    reorderMode: 'NONE',
+    onExpire: async (entry, attempt) => {
+      const env = factoryRef.factory?.getCurrentEnv() ?? null;
+      const accountId = entry.accountId ?? factoryRef.factory?.getActiveAccountId() ?? null;
+      if (!env || !accountId) {
+        eventLogger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'pending-cancel.skip',
+          payload: { reason: 'env_or_account_missing', odno: entry.odno, attempt },
+        });
+        return;
+      }
+      if (!entry.orgNo) {
+        eventLogger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'pending-cancel.skip',
+          payload: { reason: 'orgNo_missing', odno: entry.odno, attempt },
+        });
+        pendingOrderWatcher.cancel({ pdno: entry.pdno, side: entry.side, nth: entry.nth });
+        return;
+      }
+      const credResult = credentialsRepo.loadCredentials(accountId);
+      if (credResult.isErr() || !credResult.value) {
+        eventLogger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'pending-cancel.skip',
+          payload: { reason: 'credentials_missing', odno: entry.odno, accountId, attempt },
+        });
+        return;
+      }
+      const cred = credResult.value;
+      const tokenResult = await auth.getValidToken(env, cred.appKey, cred.appSecret);
+      if (tokenResult.isErr()) {
+        eventLogger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'pending-cancel.skip',
+          payload: { reason: 'token_failed', odno: entry.odno, attempt },
+        });
+        pendingOrderWatcher.rearm({ pdno: entry.pdno, side: entry.side, nth: entry.nth });
+        return;
+      }
+      const r = await cancelOrRevise(
+        {
+          http: httpByEnv[env],
+          env,
+          token: tokenResult.value.token,
+          appKey: cred.appKey,
+          appSecret: cred.appSecret,
+          accountNo8: cred.accountNo8,
+          accountProdCd: cred.accountProdCd,
+          logger: eventLogger,
+        },
+        {
+          action: 'cancel',
+          orgOrgNo: entry.orgNo,
+          orgOdno: entry.odno,
+          division: 'LIMIT',
+          qty: entry.qty ?? 0,
+          price: 0,
+          qtyAllOrder: true,
+        },
+      );
+      if (r.isOk()) {
+        db.update(orders)
+          .set({ status: 'CANCELLED' })
+          .where(and(eq(orders.odno, entry.odno), eq(orders.accountId, accountId)))
+          .run();
+        eventLogger.log({
+          level: 'INFO',
+          category: 'ORDER',
+          message: 'pending-cancel.success',
+          payload: { odno: entry.odno, pdno: entry.pdno, side: entry.side, attempt },
+        });
+        pendingOrderWatcher.cancel({ pdno: entry.pdno, side: entry.side, nth: entry.nth });
+      } else {
+        eventLogger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'pending-cancel.failed',
+          payload: { odno: entry.odno, kind: r.error.kind, msg: r.error.msg, attempt },
+        });
+        pendingOrderWatcher.rearm({ pdno: entry.pdno, side: entry.side, nth: entry.nth });
+      }
+    },
+    onLimitReached: (entry) => {
+      eventLogger.log({
+        level: 'ERROR',
+        category: 'ORDER',
+        message: 'pending-cancel.limit-reached',
+        payload: { odno: entry.odno, pdno: entry.pdno, side: entry.side, nth: entry.nth },
+      });
+    },
+  });
+
   const factory = createContextFactory({
     db,
     credentialsRepo,
@@ -186,7 +302,7 @@ function bootstrapDeps(userDataDir: string) {
     rateGuardRepo,
     protectionLimitsRepo,
     watchEngine,
-    pendingOrderWatcher: null,
+    pendingOrderWatcher,
     bus,
     initialActiveAccountId,
     realtimeFactory: (env) => {
@@ -325,7 +441,7 @@ function resolveWindowBounds(
 function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
   const { popoutRoute, parent } = opts;
   const display = pickTargetDisplay(parent);
-  // profit-calculator는 작은 창 (380x420), add-account는 폼 전용 (520x620), add-watch-order는 폼 전용 (780x700)
+  // profit-calculator는 작은 창 (380x420), add-account는 폼 전용 (520x620), add-watch-order는 폼 전용 (620x580)
   const isProfitCalc = popoutRoute === 'profit-calculator';
   const isAddAccount = popoutRoute === 'add-account';
   const isAddWatchOrder = popoutRoute === 'add-watch-order';
@@ -334,7 +450,7 @@ function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
     : isAddAccount
       ? 520
       : isAddWatchOrder
-        ? 780
+        ? 620
         : popoutRoute
           ? 720
           : 1440;
@@ -343,7 +459,7 @@ function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
     : isAddAccount
       ? 620
       : isAddWatchOrder
-        ? 700
+        ? 580
         : popoutRoute
           ? 540
           : 900;
