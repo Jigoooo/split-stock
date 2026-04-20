@@ -17,6 +17,10 @@ vi.mock('@renderer/entities/account', () => ({
   useActiveAccountId: () => mockUseActiveAccountId(),
 }));
 
+vi.mock('../model/use-main-realtime', () => ({
+  useMainRealtime: () => undefined,
+}));
+
 vi.mock('@renderer/widgets/main-positions-pane', () => ({
   MainPositionsPane: ({
     accountId,
