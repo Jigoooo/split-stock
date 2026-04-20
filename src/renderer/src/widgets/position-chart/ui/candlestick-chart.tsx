@@ -11,6 +11,8 @@ import {
   type ISeriesApi,
   LineSeries,
   LineStyle,
+  TickMarkType,
+  type Time,
 } from 'lightweight-charts';
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
 import { type CSSProperties, type ReactElement, useEffect, useEffectEvent, useRef } from 'react';
@@ -37,6 +39,60 @@ const LINE_STYLE_MAP: LineStyleMap = {
 };
 
 const MA_PERIODS_CONST = MA_PERIODS as MaPeriod[];
+
+/**
+ * lightweight-charts Time → Date.
+ * setData 가 string 'YYYY-MM-DD' 로 들어오므로 대부분 string 경로. BusinessDay
+ * /UTCTimestamp 도 안전 폴백.
+ */
+const timeToDate = (time: Time): Date | null => {
+  if (typeof time === 'string') {
+    // 로컬 타임존 기준 해석이라 틱 경계가 어긋나지 않음
+    return new Date(`${time}T00:00:00`);
+  }
+  if (typeof time === 'number') {
+    return new Date(time * 1000);
+  }
+  if (time && typeof time === 'object' && 'year' in time) {
+    return new Date(time.year, time.month - 1, time.day);
+  }
+  return null;
+};
+
+/**
+ * X축 tick 라벨을 한국식으로. 줌 레벨에 따라 라이브러리가 tickType 을 바꿔 호출.
+ *  - Year        : '2026'
+ *  - Month       : '4월'
+ *  - DayOfMonth  : '20'
+ *  - Time 계열  : 'HH:mm' (분봉/체결 차트로 확장 대비)
+ */
+const formatTickKr = (time: Time, tickType: TickMarkType): string => {
+  const d = timeToDate(time);
+  if (!d) return '';
+  switch (tickType) {
+    case TickMarkType.Year:
+      return `${d.getFullYear()}`;
+    case TickMarkType.Month:
+      return `${d.getMonth() + 1}월`;
+    case TickMarkType.DayOfMonth:
+      return `${d.getDate()}`;
+    case TickMarkType.Time:
+    case TickMarkType.TimeWithSeconds:
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    default:
+      return '';
+  }
+};
+
+/** 크로스헤어 hover 날짜 tooltip 포맷 — 항상 풀 날짜. */
+const formatCrosshairDateKr = (time: Time): string => {
+  const d = timeToDate(time);
+  if (!d) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+};
 
 function computeMa(candles: Candle[], period: MaPeriod): Array<{ time: string; value: number }> {
   const result: Array<{ time: string; value: number }> = [];
@@ -119,10 +175,15 @@ export const CandlestickChart = ({
         horzLines: { color: '#f0f0f0' },
       },
       rightPriceScale: { borderColor: '#cccccc' },
-      timeScale: { borderColor: '#cccccc' },
+      timeScale: {
+        borderColor: '#cccccc',
+        tickMarkFormatter: formatTickKr,
+      },
       localization: {
+        locale: 'ko-KR',
         priceFormatter: (price: number): string =>
           thousandSeparator(Math.round(price), { allowNegative: true, allowDecimal: false }),
+        timeFormatter: formatCrosshairDateKr,
       },
     });
     chartRef.current = chart;
