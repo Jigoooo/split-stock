@@ -34,13 +34,30 @@ export const LogsPage = (): ReactElement => {
   };
 
   return (
-    <div className="panel">
-      <div className="panel__title">이벤트 로그 (실시간 tail)</div>
+    <div
+      className="panel"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
+      <div className="panel__title" style={{ flexShrink: 0 }}>
+        이벤트 로그 (실시간 tail)
+      </div>
 
       {/* 필터 행 1: 레벨, 날짜 범위 */}
       <div
         className="panel__body"
-        style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}
+        style={{
+          display: 'flex',
+          gap: '0.8rem',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          flexShrink: 0,
+        }}
       >
         <label htmlFor="logs-level" style={{ display: 'grid', gap: '0.25rem' }}>
           <span className="muted">레벨</span>
@@ -109,7 +126,13 @@ export const LogsPage = (): ReactElement => {
       {/* 필터 행 2: 카테고리 multi-select */}
       <div
         className="panel__body"
-        style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}
+        style={{
+          display: 'flex',
+          gap: '0.4rem',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          flexShrink: 0,
+        }}
       >
         <span className="muted">카테고리:</span>
         {LOG_CATEGORIES.filter((c) => c !== '').map((cat) => (
@@ -138,55 +161,65 @@ export const LogsPage = (): ReactElement => {
         ))}
       </div>
 
-      {/* 로그 테이블 */}
-      <div className="panel__body" style={{ padding: 0 }}>
-        <table className="hts-table">
-          <thead>
-            <tr>
-              <th style={{ width: '12rem' }}>시각</th>
-              <th style={{ width: '5rem' }}>레벨</th>
-              <th style={{ width: '6rem' }}>카테고리</th>
-              <th>메시지</th>
-              <th>payload</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isPending || isPending_ ? (
+      {/* 로그 테이블 컨테이너 — flex: 1 + overflow-y */}
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <div className="panel__body" style={{ padding: 0 }}>
+          <table className="hts-table">
+            <thead>
               <tr>
-                <td colSpan={5} className="muted" style={{ textAlign: 'center' }}>
-                  로드 중…
-                </td>
+                <th style={{ width: '12rem' }}>시각</th>
+                <th style={{ width: '5rem' }}>레벨</th>
+                <th style={{ width: '6rem' }}>카테고리</th>
+                <th>메시지</th>
+                <th>payload</th>
               </tr>
-            ) : null}
-            {error ? (
-              <tr>
-                <td colSpan={5}>
-                  <span className="chip chip--down">{error.message}</span>
-                </td>
-              </tr>
-            ) : null}
-            {entries.length === 0 && (
-              <tr>
-                <td colSpan={5} className="muted" style={{ textAlign: 'center' }}>
-                  기록된 로그가 없습니다.
-                </td>
-              </tr>
-            )}
-            {entries.map((e) => (
-              <tr key={e.id}>
-                <td className="num">{formatTs(e.ts)}</td>
-                <td>
-                  <span className={levelClass(e.level)}>{e.level}</span>
-                </td>
-                <td>{e.category}</td>
-                <td>{e.message}</td>
-                <td className="muted" style={{ fontFamily: 'monospace', fontSize: '1.05rem' }}>
-                  {e.payloadJson ?? ''}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {isPending || isPending_ ? (
+                <tr>
+                  <td colSpan={5} className="muted" style={{ textAlign: 'center' }}>
+                    로드 중…
+                  </td>
+                </tr>
+              ) : null}
+              {error ? (
+                <tr>
+                  <td colSpan={5}>
+                    <span className="chip chip--down">{error.message}</span>
+                  </td>
+                </tr>
+              ) : null}
+              {entries.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="muted" style={{ textAlign: 'center' }}>
+                    기록된 로그가 없습니다.
+                  </td>
+                </tr>
+              )}
+              {entries.map((e) => (
+                <tr key={e.id}>
+                  <td className="num">{formatTs(e.ts)}</td>
+                  <td>
+                    <span className={levelClass(e.level)}>{e.level}</span>
+                  </td>
+                  <td>{e.category}</td>
+                  <td>{e.message}</td>
+                  <td className="muted" style={{ fontFamily: 'monospace', fontSize: '1.05rem' }}>
+                    {e.payloadJson ?? ''}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
