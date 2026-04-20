@@ -1,0 +1,40 @@
+// @vitest-environment jsdom
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { WatchBoard } from './ui/watch-board';
+
+vi.mock('@renderer/entities/watch-order', () => ({
+  useWatchOrders: () => ({
+    orders: [],
+    isPending: false,
+    error: null,
+  }),
+}));
+
+vi.mock('@renderer/shared/api/trpc', () => ({
+  trpc: {
+    useUtils: () => ({
+      watch: {
+        list: { invalidate: vi.fn() },
+      },
+    }),
+    watch: {
+      cancel: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      cancelAll: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
+  },
+}));
+
+describe('WatchBoard', () => {
+  it('4탭 렌더링 (현황/실행내역/실패/히스토리)', () => {
+    render(<WatchBoard accountId={1} />);
+
+    expect(screen.getByRole('tab', { name: '현황' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '실행내역' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '실패' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '히스토리' })).toBeInTheDocument();
+
+    // 초기 탭은 '현황' active
+    expect(screen.getByRole('tab', { name: '현황' })).toHaveAttribute('aria-selected', 'true');
+  });
+});
