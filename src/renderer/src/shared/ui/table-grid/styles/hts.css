@@ -1,0 +1,84 @@
+/* ============================================================
+ * TableGrid — HTS variant
+ * .hts-table 의 시각 동등 + Compound flex 컨테이너에 맞춘 cell 스타일.
+ * 의존: app.css 의 --bg-3 / --fg-2 / --border / --border-strong /
+ *       --hts-row-height / --table-row-zebra / --table-row-hover /
+ *       --table-row-selected / --mono / --flash-up-bg / --flash-down-bg
+ * ============================================================ */
+
+.table-grid-root[data-variant="hts"] {
+  font-size: 1.2rem;
+  font-family: inherit;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-header {
+  background: var(--bg-3);
+  color: var(--fg-2);
+  font-weight: 500;
+  border-bottom: 0.1rem solid var(--border-strong);
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-header .table-grid-cell {
+  height: var(--hts-row-height);
+  display: flex;
+  align-items: center;
+  padding: 0 0.6rem;
+  border-bottom: none;
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-row {
+  min-height: var(--hts-row-height);
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-row .table-grid-cell {
+  height: var(--hts-row-height);
+  display: flex;
+  align-items: center;
+  padding: 0 0.6rem;
+  border-bottom: 0.1rem solid var(--border);
+}
+
+.table-grid-root[data-variant="hts"][data-zebra="true"]
+  .table-grid-body
+  .table-grid-row:nth-child(even):not([data-expanded="true"]):not([data-selected="true"]) {
+  background: var(--table-row-zebra);
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-body .table-grid-row:hover {
+  background: var(--table-row-hover);
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-body .table-grid-row[data-selected="true"] {
+  background: var(--table-row-selected);
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-cell--num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* overflow scroll 모드 — 셀 내부 가로 스크롤 시 스크롤바 숨김 */
+.table-grid-cell--ovf-scroll {
+  scrollbar-width: none;
+}
+.table-grid-cell--ovf-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* flash 애니메이션 — app.css 의 flash-up/flash-down keyframes 재사용 */
+.table-grid-root[data-variant="hts"] .table-grid-row[data-flash="up"] {
+  animation: flash-up 500ms ease-out 1;
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-row[data-flash="down"] {
+  animation: flash-down 500ms ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .table-grid-root[data-variant="hts"] .table-grid-row[data-flash="up"],
+  .table-grid-root[data-variant="hts"] .table-grid-row[data-flash="down"] {
+    animation: none;
+  }
+}

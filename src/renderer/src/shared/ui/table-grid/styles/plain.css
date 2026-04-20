@@ -1,0 +1,20 @@
+/* ============================================================
+ * TableGrid — plain variant (헤드리스 base)
+ * 최소 reset 만 — 다른 디자인 시스템 base 로 활용 가능.
+ * ============================================================ */
+
+.table-grid-root[data-variant="plain"] {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+}
+
+.table-grid-root[data-variant="plain"] .table-grid-header,
+.table-grid-root[data-variant="plain"] .table-grid-row {
+  background: transparent;
+}
+
+.table-grid-root[data-variant="plain"] .table-grid-cell {
+  padding: 0;
+  border: none;
+}
