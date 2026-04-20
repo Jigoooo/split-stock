@@ -36,9 +36,22 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       getBalanceWithLots: {
         useQuery: (_params: unknown, _opts: unknown) => ({
           data: {
-            positions: [],
-            deposit: 0,
-            totalEval: 0,
+            // 매수 상한(deposit/price) · 매도 상한(positions.qty) UI 가드 테스트용 시드.
+            // 테스트에서 qty 12,345 / price 70,000 주문을 검증하므로 deposit 은 여유롭게 확보.
+            positions: [
+              {
+                code: '005930',
+                name: '삼성전자',
+                qty: 100_000,
+                avgPrice: 69000,
+                currentPrice: 70000,
+                evalAmount: 7_000_000_000,
+                pnlAmount: 100_000_000,
+                pnlRate: 1.45,
+              },
+            ],
+            deposit: 10_000_000_000,
+            totalEval: 17_000_000_000,
             lotsByPdno: {
               '005930': [
                 {

@@ -1,5 +1,4 @@
 import { useBalanceWithLots } from '@renderer/entities/account';
-import { SearchStockInput } from '@renderer/features/search-stock';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, dialog, NumberInput, Select } from '@renderer/shared/ui';
@@ -21,11 +20,6 @@ export interface OrderTicketProps {
   isProd: boolean;
   /** 사용자가 원터치(확인 모달 생략) 설정을 켰는지. PROD에서는 무시됨. */
   oneClick: boolean;
-  /**
-   * 주문 대상 종목을 티켓 내부에서 바꿀 때 호출. 제공 시 상단에 자동완성 검색창이 노출된다.
-   * 제공하지 않으면 종목 검색 UI는 숨겨진다(기존 동작 유지).
-   */
-  onSelectionChange?: (next: { pdno: string; name: string }) => void;
   onPlaced?: (result: { odno: string; side: 'BUY' | 'SELL' }) => void;
 }
 
@@ -33,13 +27,13 @@ type Division = 'LIMIT' | 'MARKET';
 
 /**
  * 수동 매수/매도 주문 폼.
- * - 종목/가격/수량/구분 입력, 매수/매도 버튼 분리
+ * - 종목은 상위 페이지의 검색/선택으로만 변경 — 티켓 내부에는 종목 변경 UI 없음
  * - selection.suggestedPrice 변경 시 price 필드 자동 업데이트(prefill)
  * - 확인이 필요한 상황(PROD 또는 oneClick=false)에서는 dialog.openAsync + renderActions로 확인 모달
- * - onSelectionChange 제공 시 상단에 종목 검색 자동완성 입력창
+ * - 매수: 예수금/가격 → maxBuyQty, 매도: 보유수량 → holdingQty. 초과 시 버튼 disable + 안내.
  */
 export const OrderTicket = (props: OrderTicketProps): ReactElement => {
-  const { selection, isProd, oneClick, onSelectionChange } = props;
+  const { selection, isProd, oneClick } = props;
   const [side, setSide] = useState<'BUY' | 'SELL'>(selection.suggestedSide ?? 'BUY');
   const [division, setDivision] = useState<Division>('LIMIT');
   const [qtyStr, setQtyStr] = useState('1');
@@ -49,7 +43,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const suggestionKey = `${selection.pdno}:${selection.suggestedPrice ?? ''}:${selection.suggestedSide ?? ''}`;
   const [appliedSuggestionKey, setAppliedSuggestionKey] = useState(suggestionKey);
   const actions = useOrderActions();
-  const { lotsByPdno } = useBalanceWithLots();
+  const { lotsByPdno, positions, deposit } = useBalanceWithLots();
   const safetyQuery = trpc.safety.getState.useQuery(undefined, { staleTime: 0 });
 
   const lots = lotsByPdno[selection.pdno] ?? [];
@@ -68,7 +62,20 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const price = division === 'MARKET' ? 0 : Number(priceStr);
   const validQty = Number.isInteger(qty) && qty > 0;
   const validPrice = division === 'MARKET' || (Number.isInteger(price) && price > 0);
-  const canSubmit = validQty && validPrice && !actions.isPending;
+
+  // 매수 상한 — 지정가일 때만 계산 가능. 시장가는 가격이 확정되지 않으므로 UI 상한 미적용.
+  const maxBuyQty =
+    division === 'LIMIT' && price > 0 && deposit > 0 ? Math.floor(deposit / price) : null;
+  // 매도 상한 — 현재 활성 계좌의 해당 종목 보유수량.
+  //   (ord_psbl_qty 가 이상적이나 현 잔고 응답에서 별도 노출되지 않아 hldg_qty 로 근사.)
+  const holdingQty = positions.find((p) => p.code === selection.pdno)?.qty ?? 0;
+
+  const overBuyCap = maxBuyQty !== null && validQty && qty > maxBuyQty;
+  const overSellCap = validQty && qty > holdingQty;
+
+  const canSubmitBase = validQty && validPrice && !actions.isPending;
+  const canBuy = canSubmitBase && !overBuyCap;
+  const canSell = canSubmitBase && !overSellCap && holdingQty > 0;
 
   const executeOrder = async (params: {
     side: 'BUY' | 'SELL';
@@ -78,9 +85,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   }): Promise<void> => {
     const sideLabel = params.side === 'BUY' ? '매수' : '매도';
     const priceLabel =
-      params.division === 'MARKET'
-        ? '시장가'
-        : `${thousandSeparator(String(params.price))}원`;
+      params.division === 'MARKET' ? '시장가' : `${thousandSeparator(String(params.price))}원`;
     try {
       const result = await actions.place({
         pdno: selection.pdno,
@@ -105,7 +110,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   };
 
   const submit = async (chosenSide: 'BUY' | 'SELL'): Promise<void> => {
-    if (!canSubmit) return;
+    if (!(chosenSide === 'BUY' ? canBuy : canSell)) return;
 
     // safety 사전 체크 — 서버 가드 전에 즉시 안내
     const snap = safetyQuery.data;
@@ -127,7 +132,8 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
       if (snap.errorLock.active) {
         dialog.error({
           title: '에러 잠금',
-          message: snap.errorLock.reason ?? '에러 잠금 상태입니다. 잠금을 해제한 후 다시 시도하세요.',
+          message:
+            snap.errorLock.reason ?? '에러 잠금 상태입니다. 잠금을 해제한 후 다시 시도하세요.',
         });
         return;
       }
@@ -142,8 +148,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
 
     const sideLabel = chosenSide === 'BUY' ? '매수' : '매도';
     const divisionLabel = division === 'MARKET' ? '시장가' : '지정가';
-    const priceLabel =
-      division === 'MARKET' ? '시장가' : `${thousandSeparator(String(price))}원`;
+    const priceLabel = division === 'MARKET' ? '시장가' : `${thousandSeparator(String(price))}원`;
 
     const confirmed = await dialog.openAsync({
       type: isProd ? 'WARNING' : 'INFO',
@@ -200,14 +205,6 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
         즉시 주문 — {selection.name} ({selection.pdno})
       </div>
       <div className="order-ticket-form__scroll">
-        {onSelectionChange ? (
-          <div className="panel__body" style={{ maxWidth: 360 }}>
-            <SearchStockInput
-              placeholder="종목 변경 (종목명/코드)"
-              onSelect={(hit) => onSelectionChange({ pdno: hit.pdno, name: hit.name })}
-            />
-          </div>
-        ) : null}
         <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
             <span className="muted" style={{ fontSize: '0.9rem' }}>
@@ -238,7 +235,25 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
               onValueChange={setQtyStr}
               aria-label="주문 수량"
               dense
+              aria-invalid={overBuyCap || overSellCap}
             />
+            <span
+              className="muted"
+              style={{ fontSize: '0.95rem', display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}
+            >
+              <span>
+                매수가능{' '}
+                <span className={overBuyCap ? 'num-down' : 'num'}>
+                  {maxBuyQty === null ? '—' : `${thousandSeparator(maxBuyQty)}주`}
+                </span>
+              </span>
+              <span>
+                보유{' '}
+                <span className={overSellCap ? 'num-down' : 'num'}>
+                  {thousandSeparator(holdingQty)}주
+                </span>
+              </span>
+            </span>
           </label>
           <label htmlFor="order-price" style={{ display: 'grid', gap: '0.25rem' }}>
             <span className="muted">가격</span>
@@ -258,7 +273,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
           style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
         >
           <Button
-            disabled={!canSubmit}
+            disabled={!canBuy}
             variant="danger"
             dense
             onClick={() => {
@@ -266,12 +281,17 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
               void submit('BUY');
             }}
             aria-label="매수 주문"
+            title={
+              overBuyCap
+                ? `매수가능 수량 초과 — 최대 ${maxBuyQty === null ? '—' : thousandSeparator(maxBuyQty)}주`
+                : undefined
+            }
           >
             매수
             <kbd className="kbd">F3</kbd>
           </Button>
           <Button
-            disabled={!canSubmit}
+            disabled={!canSell}
             className="hts-btn--down"
             dense
             onClick={() => {
@@ -279,6 +299,13 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
               void submit('SELL');
             }}
             aria-label="매도 주문"
+            title={
+              holdingQty === 0
+                ? '보유 수량 없음'
+                : overSellCap
+                  ? `보유 수량 초과 — 최대 ${thousandSeparator(holdingQty)}주`
+                  : undefined
+            }
           >
             매도
             <kbd className="kbd">F4</kbd>
@@ -289,6 +316,17 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
           {qtyStr ? thousandSeparator(qtyStr) : '0'}주
           {division === 'LIMIT' && priceStr ? ` · ${thousandSeparator(priceStr)}원` : ''}
           {oneClick && !isProd ? ' · 원터치 ON' : ''}
+          {overBuyCap ? (
+            <div className="num-down">
+              매수 불가 — 예수금 부족 (최대{' '}
+              {maxBuyQty === null ? '—' : thousandSeparator(maxBuyQty)}주)
+            </div>
+          ) : null}
+          {overSellCap ? (
+            <div className="num-down">
+              매도 불가 — 보유 수량 초과 (보유 {thousandSeparator(holdingQty)}주)
+            </div>
+          ) : null}
         </div>
       </div>
     </form>
