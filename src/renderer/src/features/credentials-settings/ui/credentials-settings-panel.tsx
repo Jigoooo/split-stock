@@ -1,5 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button } from '@renderer/shared/ui';
+import { Button, TableGrid } from '@renderer/shared/ui';
 import { dialog } from '@renderer/shared/ui/dialog';
 import type { ReactElement } from 'react';
 
@@ -19,10 +19,7 @@ export const CredentialsSettingsPanel = (): ReactElement => {
   const stored = trpc.auth.listStored.useQuery();
   const clearCredentials = trpc.auth.clearCredentials.useMutation({
     onSuccess: async () => {
-      await Promise.all([
-        utils.auth.listStored.invalidate(),
-        utils.auth.getEnv.invalidate(),
-      ]);
+      await Promise.all([utils.auth.listStored.invalidate(), utils.auth.getEnv.invalidate()]);
     },
   });
   const logout = trpc.auth.logout.useMutation({
@@ -112,36 +109,34 @@ export const CredentialsSettingsPanel = (): ReactElement => {
         ) : entries.length === 0 ? (
           <div className="muted">저장된 자격증명이 없습니다.</div>
         ) : (
-          <table
-            className="hts-table"
+          <TableGrid.Root
+            variant="hts"
+            stickyHeader={false}
+            overlayScrollbar={false}
             aria-label="저장된 자격증명 목록"
-            style={{ tableLayout: 'fixed' }}
+            style={{ height: 'auto' }}
           >
-            <colgroup>
-              <col style={{ width: '24%' }} />
-              <col />
-              <col style={{ width: '20%' }} />
-              <col style={{ width: '18%' }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>환경</th>
-                <th>계좌번호</th>
-                <th>현재 활성</th>
-                <th>작업</th>
-              </tr>
-            </thead>
-            <tbody>
+            <TableGrid.Header>
+              <TableGrid.Cell width={140}>환경</TableGrid.Cell>
+              <TableGrid.Cell flex={1}>계좌번호</TableGrid.Cell>
+              <TableGrid.Cell width={120}>현재 활성</TableGrid.Cell>
+              <TableGrid.Cell width={108}>작업</TableGrid.Cell>
+            </TableGrid.Header>
+            <TableGrid.Body>
               {entries.map((e) => (
-                <tr key={e.env}>
-                  <td>
+                <TableGrid.Row key={e.env}>
+                  <TableGrid.Cell width={140}>
                     <span className={`chip ${e.env === 'PROD' ? 'chip--down' : ''}`}>
                       {ENV_LABEL[e.env]}
                     </span>
-                  </td>
-                  <td className="num">{e.accountNo8}</td>
-                  <td>{currentEnv === e.env ? <span className="chip chip--up">활성</span> : '-'}</td>
-                  <td>
+                  </TableGrid.Cell>
+                  <TableGrid.Cell flex={1} numeric>
+                    {e.accountNo8}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={120}>
+                    {currentEnv === e.env ? <span className="chip chip--up">활성</span> : '-'}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={108}>
                     <Button
                       variant="danger"
                       dense
@@ -152,11 +147,11 @@ export const CredentialsSettingsPanel = (): ReactElement => {
                     >
                       삭제
                     </Button>
-                  </td>
-                </tr>
+                  </TableGrid.Cell>
+                </TableGrid.Row>
               ))}
-            </tbody>
-          </table>
+            </TableGrid.Body>
+          </TableGrid.Root>
         )}
         {entries.length > 0 ? (
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
