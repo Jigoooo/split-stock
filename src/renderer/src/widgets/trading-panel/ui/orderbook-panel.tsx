@@ -108,13 +108,13 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
           display: 'flex',
           alignItems: 'center',
           gap: '0.6rem',
+          overflow: 'hidden',
         }}
       >
-        <span className="muted">
+        <span className="muted" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
           총 매도 {thousandSeparator(orderbook.totalAskQty)} · 총 매수{' '}
           {thousandSeparator(orderbook.totalBidQty)}
         </span>
-        <span style={{ flex: 1 }} />
         {routingMode ? <RoutingIndicator mode={routingMode} /> : null}
       </div>
     </div>
