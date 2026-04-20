@@ -1,4 +1,6 @@
 import { useGetDisplaySettings } from '@renderer/entities/display-settings';
+import { trpc } from '@renderer/shared/api/trpc';
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import type { LotOverlayLine } from '@shared/trading/lot-overlay';
 import type { ReactElement } from 'react';
@@ -17,6 +19,58 @@ export interface PositionChartProps {
   lines: LotOverlayLine[];
 }
 
+const formatKrw = (value: number): string => (value > 0 ? thousandSeparator(value) : '—');
+
+const PriceChips = ({ pdno }: { pdno: string }): ReactElement => {
+  // 상한가/하한가/고가/저가 는 KIS inquire-price REST 응답에서만 제공 — WS tick 에는 없음.
+  // 15초 주기로 refresh: 헤더 칩은 실시간성 크리티컬하지 않고, API 쿼터를 아끼는 편이 낫다.
+  const q = trpc.market.getPrice.useQuery({ code: pdno }, { refetchInterval: 15_000 });
+  const data = q.data;
+  const changeClass =
+    !data || data.dayChange === 0 ? 'num' : data.dayChange > 0 ? 'num-up' : 'num-down';
+  const changeSign = data && data.dayChange > 0 ? '+' : '';
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: '0.8rem',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        fontSize: '1rem',
+      }}
+    >
+      <span>
+        <span className="muted">현재가</span>{' '}
+        <span className={`num ${changeClass}`}>{data ? formatKrw(data.price) : '—'}</span>
+      </span>
+      <span>
+        <span className="muted">전일대비</span>{' '}
+        <span className={`num ${changeClass}`}>
+          {data
+            ? `${changeSign}${thousandSeparator(data.dayChange)} (${changeSign}${data.dayChangeRate.toFixed(2)}%)`
+            : '—'}
+        </span>
+      </span>
+      <span>
+        <span className="muted">고</span>{' '}
+        <span className="num num-up">{data ? formatKrw(data.high) : '—'}</span>
+      </span>
+      <span>
+        <span className="muted">저</span>{' '}
+        <span className="num num-down">{data ? formatKrw(data.low) : '—'}</span>
+      </span>
+      <span>
+        <span className="muted">상한</span>{' '}
+        <span className="num num-up">{data ? formatKrw(data.upperLimit) : '—'}</span>
+      </span>
+      <span>
+        <span className="muted">하한</span>{' '}
+        <span className="num num-down">{data ? formatKrw(data.lowerLimit) : '—'}</span>
+      </span>
+    </div>
+  );
+};
+
 export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactElement => {
   const chart = usePositionChart(pdno);
   const { settings: displaySettings } = useGetDisplaySettings();
@@ -28,11 +82,12 @@ export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactE
     >
       <div
         className="panel__title"
-        style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}
+        style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}
       >
         <span>
           {name} ({pdno})
         </span>
+        <PriceChips pdno={pdno} />
         {chart.isLoading ? (
           <span className="muted" style={{ fontSize: '1rem' }}>
             로드 중…

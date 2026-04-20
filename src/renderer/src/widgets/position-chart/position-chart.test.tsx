@@ -71,6 +71,11 @@ vi.mock('@renderer/shared/api/trpc', () => ({
         useQuery: () => ({ isPending: false, error: null, data: null }),
       },
     },
+    market: {
+      getPrice: {
+        useQuery: () => ({ data: undefined, isPending: false, error: null }),
+      },
+    },
     realtime: {
       watch: {
         useMutation: () => ({ mutate: vi.fn() }),

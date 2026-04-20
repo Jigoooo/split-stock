@@ -137,6 +137,44 @@ describe('inquirePrice', () => {
       expect(v.price).toBe(70000);
       expect(v.dayChangeRate).toBe(1.45);
       expect(v.accumVolume).toBe(15_000_000);
+      // 미응답 필드는 0 으로 정규화 — 차트 헤더에서 0 이면 '—' 로 노출.
+      expect(v.upperLimit).toBe(0);
+      expect(v.lowerLimit).toBe(0);
+      expect(v.high).toBe(0);
+      expect(v.low).toBe(0);
+    }
+  });
+
+  it('시가/고가/저가/상한가/하한가/기준가까지 정규화', async () => {
+    const pool = agent.get(BASE);
+    pool.intercept({ path: /inquire-price/, method: 'GET' }).reply(200, {
+      rt_cd: '0',
+      msg_cd: 'OK',
+      msg1: 'success',
+      output: {
+        stck_prpr: '70000',
+        prdy_vrss: '1000',
+        prdy_ctrt: '1.45',
+        acml_vol: '15000000',
+        stck_oprc: '69500',
+        stck_hgpr: '70500',
+        stck_lwpr: '69000',
+        stck_mxpr: '89700',
+        stck_llam: '48300',
+        stck_sdpr: '69000',
+      },
+    });
+
+    const r = await inquirePrice(baseDeps(agent), '005930');
+    expect(r.isOk()).toBe(true);
+    if (r.isOk()) {
+      const v = r.value;
+      expect(v.open).toBe(69_500);
+      expect(v.high).toBe(70_500);
+      expect(v.low).toBe(69_000);
+      expect(v.upperLimit).toBe(89_700);
+      expect(v.lowerLimit).toBe(48_300);
+      expect(v.prevClose).toBe(69_000);
     }
   });
 });

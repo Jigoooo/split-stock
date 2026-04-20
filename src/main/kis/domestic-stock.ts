@@ -32,6 +32,18 @@ export interface QuoteResult {
   dayChange: number;
   dayChangeRate: number;
   accumVolume: number;
+  /** 시가. 응답 미제공 시 0. */
+  open: number;
+  /** 당일 고가. 응답 미제공 시 0. */
+  high: number;
+  /** 당일 저가. 응답 미제공 시 0. */
+  low: number;
+  /** 상한가. 응답 미제공 시 0. */
+  upperLimit: number;
+  /** 하한가. 응답 미제공 시 0. */
+  lowerLimit: number;
+  /** 기준가(전일 종가). 응답 미제공 시 0. */
+  prevClose: number;
 }
 
 export interface DailyCandle {
@@ -159,12 +171,19 @@ export async function inquirePrice(
   }
   const bizErr = interpretRtCd(parsed.data.rt_cd, parsed.data.msg_cd, parsed.data.msg1);
   if (bizErr) return err(bizErr);
+  const out = parsed.data.output;
   return ok({
     code,
-    price: parseNum(parsed.data.output.stck_prpr),
-    dayChange: parseNum(parsed.data.output.prdy_vrss),
-    dayChangeRate: parseNum(parsed.data.output.prdy_ctrt),
-    accumVolume: parseNum(parsed.data.output.acml_vol),
+    price: parseNum(out.stck_prpr),
+    dayChange: parseNum(out.prdy_vrss),
+    dayChangeRate: parseNum(out.prdy_ctrt),
+    accumVolume: parseNum(out.acml_vol),
+    open: parseNum(out.stck_oprc),
+    high: parseNum(out.stck_hgpr),
+    low: parseNum(out.stck_lwpr),
+    upperLimit: parseNum(out.stck_mxpr),
+    lowerLimit: parseNum(out.stck_llam),
+    prevClose: parseNum(out.stck_sdpr),
   });
 }
 

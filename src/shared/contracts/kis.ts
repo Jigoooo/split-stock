@@ -73,6 +73,12 @@ export const KisPriceResponseSchema = z.object({
     prdy_ctrt: z.string(), // 전일대비율
     acml_vol: z.string(), // 누적거래량
     acml_tr_pbmn: z.string().optional(), // 누적거래대금
+    stck_oprc: z.string().optional(), // 시가
+    stck_hgpr: z.string().optional(), // 당일 고가
+    stck_lwpr: z.string().optional(), // 당일 저가
+    stck_mxpr: z.string().optional(), // 상한가
+    stck_llam: z.string().optional(), // 하한가
+    stck_sdpr: z.string().optional(), // 기준가(전일 종가)
   }),
 });
 export type KisPriceResponse = z.infer<typeof KisPriceResponseSchema>;
