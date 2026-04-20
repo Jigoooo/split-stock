@@ -28,9 +28,7 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
     >
       <div className="panel__title" style={{ flexShrink: 0 }}>
         미체결 주문 ({thousandSeparator(orders.length)}건)
-        {pdnoFilter
-          ? ` · ${nameFilter ? `${nameFilter} (${pdnoFilter})` : pdnoFilter}`
-          : ''}
+        {pdnoFilter ? ` · ${nameFilter ? `${nameFilter} (${pdnoFilter})` : pdnoFilter}` : ''}
       </div>
       <div
         className="panel__body"
