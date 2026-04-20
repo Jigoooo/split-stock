@@ -6,6 +6,7 @@ const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoi
   const fetchChartMock = vi.fn();
   const setDataMock = vi.fn();
   const updateMock = vi.fn();
+  const applyOptionsMock = vi.fn();
   const createPriceLineMock = vi.fn();
   const removePriceLineMock = vi.fn();
   const priceScaleApplyOptionsMock = vi.fn();
@@ -19,6 +20,7 @@ const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoi
     ) => ({
       setData: setDataMock,
       update: updateMock,
+      applyOptions: applyOptionsMock,
       createPriceLine: createPriceLineMock,
       removePriceLine: removePriceLineMock,
       // candlestick-chart.tsx 의 series.priceScale().applyOptions() 호출 대응 stub.
@@ -58,6 +60,25 @@ const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoi
   };
 });
 
+const { createLineToolsPluginMock, lineToolsPluginMock } = vi.hoisted(() => {
+  const lineToolsPluginMock = {
+    addLineTool: vi.fn(() => 'tool-1'),
+    exportLineTools: vi.fn(() => '[]'),
+    getSelectedLineTools: vi.fn(() => '[]'),
+    importLineTools: vi.fn(() => true),
+    registerLineTool: vi.fn(),
+    removeAllLineTools: vi.fn(),
+    removeSelectedLineTools: vi.fn(),
+    subscribeLineToolsAfterEdit: vi.fn(),
+    unsubscribeLineToolsAfterEdit: vi.fn(),
+  };
+
+  return {
+    createLineToolsPluginMock: vi.fn(() => lineToolsPluginMock),
+    lineToolsPluginMock,
+  };
+});
+
 vi.mock('@renderer/shared/api/trpc', () => ({
   trpc: {
     useUtils: () => trpcUtilsMock,
@@ -92,13 +113,32 @@ vi.mock('@renderer/shared/api/trpc', () => ({
 
 vi.mock('lightweight-charts', () => ({
   CandlestickSeries: Symbol('CandlestickSeries'),
+  CrosshairMode: {
+    Magnet: 0,
+    Normal: 1,
+  },
   HistogramSeries: Symbol('HistogramSeries'),
   LineSeries: Symbol('LineSeries'),
   LineStyle: {
     Solid: 0,
     Dashed: 1,
+    Dotted: 2,
   },
   createChart: createChartMock,
+}));
+
+vi.mock('lightweight-charts-line-tools-core', () => ({
+  createLineToolsPlugin: createLineToolsPluginMock,
+}));
+
+vi.mock('lightweight-charts-line-tools-lines', () => ({
+  LineToolHorizontalLine: class {},
+  LineToolTrendLine: class {},
+  LineToolVerticalLine: class {},
+}));
+
+vi.mock('lightweight-charts-line-tools-rectangle', () => ({
+  LineToolRectangle: class {},
 }));
 
 import { PositionChart } from './ui/position-chart';
@@ -116,6 +156,16 @@ beforeEach(() => {
   fetchChartMock.mockReset();
   createChartMock.mockClear();
   addSeriesMock.mockClear();
+  createLineToolsPluginMock.mockClear();
+  lineToolsPluginMock.addLineTool.mockClear();
+  lineToolsPluginMock.exportLineTools.mockClear();
+  lineToolsPluginMock.getSelectedLineTools.mockClear();
+  lineToolsPluginMock.importLineTools.mockClear();
+  lineToolsPluginMock.registerLineTool.mockClear();
+  lineToolsPluginMock.removeAllLineTools.mockClear();
+  lineToolsPluginMock.removeSelectedLineTools.mockClear();
+  lineToolsPluginMock.subscribeLineToolsAfterEdit.mockClear();
+  lineToolsPluginMock.unsubscribeLineToolsAfterEdit.mockClear();
 });
 
 describe('PositionChart', () => {
@@ -179,5 +229,37 @@ describe('PositionChart', () => {
 
     expect(chartOptions.localization.priceFormatter(12345)).toBe('12,345');
     expect(seriesOptions.priceFormat.formatter(12345)).toBe('12,345');
+  });
+
+  it('전체 삭제 버튼은 차트 remount 없이 플러그인 removeAllLineTools 를 호출하고 저장본을 비운다', async () => {
+    fetchChartMock.mockResolvedValueOnce({
+      candles: [
+        {
+          date: '2026-04-18',
+          open: 10000,
+          high: 12345,
+          low: 9800,
+          close: 12000,
+          volume: 123456,
+        },
+      ],
+      toMs: Date.UTC(2026, 3, 19),
+    });
+
+    window.localStorage.setItem('split-stock.chart.drawings.005930', '[{"id":"draw-1"}]');
+
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+
+    await waitFor(() => expect(createChartMock.mock.calls.length).toBeGreaterThan(0));
+    await waitFor(() => expect(createLineToolsPluginMock.mock.calls.length).toBeGreaterThan(0));
+    const initialChartCallCount = createChartMock.mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: '전체 삭제' }));
+
+    await waitFor(() => expect(lineToolsPluginMock.removeAllLineTools).toHaveBeenCalledTimes(1));
+    // 차트 인스턴스는 재생성되지 않아야 한다 — Electron 이 IOSurface 를 반복 할당하다
+    // 1x1 크기로 실패해 GPU state invalid 로 멈추는 회귀를 방지한다.
+    expect(createChartMock.mock.calls.length).toBe(initialChartCallCount);
+    expect(window.localStorage.getItem('split-stock.chart.drawings.005930')).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import { Button } from '@renderer/shared/ui';
 import {
   type CandlestickData,
   CandlestickSeries,
+  CrosshairMode,
   createChart,
   HistogramSeries,
   type IChartApi,
@@ -16,7 +17,9 @@ import {
 } from 'lightweight-charts';
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
 import { type CSSProperties, type ReactElement, useEffect, useEffectEvent, useRef } from 'react';
+import { useDrawingTools } from '../model/use-drawing-tools';
 import type { Candle } from '../model/use-position-chart';
+import { DrawingToolbar } from './drawing-toolbar';
 
 const DEFAULT_VISIBLE_BARS = 60;
 const MIN_VISIBLE_BARS = 5;
@@ -114,15 +117,27 @@ export interface CandlestickChartProps {
   liveCandle: Candle | null;
   lines: Array<{ kind: 'buy' | 'sell-target'; label: string; price: number }>;
   onFetchMore: () => Promise<void>;
+  pdno: string;
   reachedEnd: boolean;
   displaySettings?: DisplaySettings | null;
 }
+
+const resolveCrosshairOptions = (displaySettings?: DisplaySettings | null) => {
+  const crosshair = displaySettings?.chart.crosshair;
+  const labelVisible = crosshair?.labelVisible ?? true;
+  return {
+    mode: crosshair?.mode === 'Normal' ? CrosshairMode.Normal : CrosshairMode.Magnet,
+    vertLine: { labelVisible },
+    horzLine: { labelVisible },
+  };
+};
 
 export const CandlestickChart = ({
   candles,
   liveCandle,
   lines,
   onFetchMore,
+  pdno,
   reachedEnd,
   displaySettings,
 }: CandlestickChartProps): ReactElement => {
@@ -134,6 +149,16 @@ export const CandlestickChart = ({
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const maSeriesRef = useRef<Partial<Record<MaPeriod, ISeriesApi<'Line'>>>>({});
   const onFetchMoreEvent = useEffectEvent(onFetchMore);
+  const drawingTools = useDrawingTools(pdno);
+  const connectDrawingHost = drawingTools.connectHost;
+  const disconnectDrawingHost = drawingTools.disconnectHost;
+
+  // 드로잉 삭제는 플러그인 native API 로 처리 — 과거엔 차트 전체를 remount 해서
+  // localStorage 를 싸이클 시켰으나, Electron 이 IOSurface(WebGL 서피스)를 반복
+  // 할당하다 1x1 크기에서 allocate 실패 → "GPU state invalid" 로 UI 가 멈춰버림.
+  // plugin.removeAll/Selected 는 canvas 를 그대로 두고 내부 drawing state 만 비운다.
+  const handleRemoveAllDrawings = drawingTools.removeAll;
+  const handleRemoveSelectedDrawings = drawingTools.removeSelected;
 
   // ── liveCandle → series.update (오늘 캔들 실시간 갱신) ────────────
   useEffect(() => {
@@ -170,6 +195,7 @@ export const CandlestickChart = ({
       width: element.clientWidth,
       height: element.clientHeight || 340,
       layout: { background: { color: '#ffffff' }, textColor: '#222' },
+      crosshair: resolveCrosshairOptions(),
       grid: {
         vertLines: { color: '#f0f0f0' },
         horzLines: { color: '#f0f0f0' },
@@ -199,6 +225,8 @@ export const CandlestickChart = ({
     return () => {
       window.removeEventListener('resize', handleResize);
       observer.disconnect();
+      // 차트를 버리기 전에 현재 드로잉을 반드시 저장 → 종목 전환/새 키로 복원 시 유실 방지.
+      disconnectDrawingHost(true);
       chart.remove();
       chartRef.current = null;
       priceLinesRef.current = [];
@@ -206,7 +234,15 @@ export const CandlestickChart = ({
       volumeSeriesRef.current = null;
       maSeriesRef.current = {};
     };
-  }, []);
+  }, [disconnectDrawingHost]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.applyOptions({
+      crosshair: resolveCrosshairOptions(displaySettings),
+    });
+  }, [displaySettings]);
 
   // ── range change → fetch more ─────────────────────────────────────
   useEffect(() => {
@@ -231,28 +267,21 @@ export const CandlestickChart = ({
     if (!chart) return;
 
     if (candles.length === 0) {
-      if (seriesRef.current) {
-        chart.removeSeries(seriesRef.current);
-        seriesRef.current = null;
-      }
-      if (volumeSeriesRef.current) {
-        chart.removeSeries(volumeSeriesRef.current);
-        volumeSeriesRef.current = null;
-      }
+      seriesRef.current?.setData([]);
+      volumeSeriesRef.current?.setData([]);
       for (const period of MA_PERIODS_CONST) {
-        const maSeries = maSeriesRef.current[period];
-        if (maSeries) {
-          chart.removeSeries(maSeries);
-        }
+        maSeriesRef.current[period]?.setData([]);
       }
-      maSeriesRef.current = {};
+      for (const priceLine of priceLinesRef.current) {
+        seriesRef.current?.removePriceLine(priceLine);
+      }
       priceLinesRef.current = [];
       prevLengthRef.current = 0;
       return;
     }
 
     const prevRange = chart.timeScale().getVisibleLogicalRange();
-    const isFirstLoad = seriesRef.current === null;
+    const isFirstLoad = seriesRef.current === null || prevLengthRef.current === 0;
 
     // ── 볼륨 스케일 마진 계산 ─────────────────────────────────────
     const volSettings = displaySettings?.chart.volume;
@@ -368,6 +397,8 @@ export const CandlestickChart = ({
       maSeries.setData(computeMa(candles, period));
     }
 
+    connectDrawingHost(chart, series);
+
     // ── 매수/익절 라인 ────────────────────────────────────────────
     for (const priceLine of priceLinesRef.current) {
       series.removePriceLine(priceLine);
@@ -404,7 +435,7 @@ export const CandlestickChart = ({
     }
 
     prevLengthRef.current = data.length;
-  }, [candles, lines, displaySettings]);
+  }, [candles, lines, displaySettings, connectDrawingHost]);
 
   const zoom = (factor: number): void => {
     const chart = chartRef.current;
@@ -447,6 +478,22 @@ export const CandlestickChart = ({
           position: 'absolute',
           top: 6,
           left: 6,
+          zIndex: 2,
+        }}
+      >
+        <DrawingToolbar
+          activeTool={drawingTools.activeTool}
+          disabled={!drawingTools.isReady}
+          onStartDraw={drawingTools.startDraw}
+          onRemoveSelected={handleRemoveSelectedDrawings}
+          onRemoveAll={handleRemoveAllDrawings}
+        />
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
           display: 'flex',
           gap: 4,
           zIndex: 2,
