@@ -105,4 +105,19 @@ describe('OrderbookPanel', () => {
     );
     expect(screen.getByTestId('orderbook-routing-polling')).toBeInTheDocument();
   });
+
+  it('큰 숫자일 때 열 최소 너비를 넉넉히 잡아 가운데 호가가 잘리지 않게 한다', () => {
+    const orderbook = mkOrderbook();
+    orderbook.asks[0] = { price: 1234567, quantity: 9876543 };
+
+    render(<OrderbookPanel orderbook={orderbook} currentPrice={70400} onClickPrice={vi.fn()} />);
+
+    const priceCell = screen.getByText(/^1,234,567$/).closest('[data-grid-role="cell"]');
+    const qtyCell = screen.getByText(/^9,876,543$/).closest('[data-grid-role="cell"]');
+
+    expect(priceCell).not.toBeNull();
+    expect(qtyCell).not.toBeNull();
+    expect((priceCell as HTMLElement).style.minWidth).toBe('calc(9ch + 1rem)');
+    expect((qtyCell as HTMLElement).style.minWidth).toBe('calc(9ch + 1rem)');
+  });
 });

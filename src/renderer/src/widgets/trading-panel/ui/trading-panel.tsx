@@ -178,7 +178,7 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(180px, 220px) minmax(180px, 210px) minmax(0, 1fr)',
+          gridTemplateColumns: 'fit-content(280px) minmax(180px, 210px) minmax(0, 1fr)',
           gap: '0.6rem',
           alignItems: 'stretch',
           flex: 1,

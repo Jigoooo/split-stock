@@ -1,6 +1,6 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import type { LiveOrderbook, WsRoutingMode } from '../model/use-live-feed';
 
 export interface OrderbookPanelProps {
@@ -32,6 +32,39 @@ const RoutingIndicator = ({ mode }: { mode: WsRoutingMode }): ReactElement | nul
   return null;
 };
 
+const ORDERBOOK_QTY_MIN_CHARS = 7;
+const ORDERBOOK_PRICE_MIN_CHARS = 7;
+const ORDERBOOK_CELL_EXTRA_WIDTH_REM = 1;
+
+const getLongestFormattedLength = (values: number[], minChars: number): number =>
+  values.reduce((max, value) => Math.max(max, thousandSeparator(value).length), minChars);
+
+const toColumnMinWidth = (chars: number): string =>
+  `calc(${chars}ch + ${ORDERBOOK_CELL_EXTRA_WIDTH_REM}rem)`;
+
+const getOrderbookLayoutStyles = (
+  orderbook: LiveOrderbook,
+): {
+  qtyCellStyle: CSSProperties;
+  priceCellStyle: CSSProperties;
+  gridMinWidth: string;
+} => {
+  const qtyChars = getLongestFormattedLength(
+    [...orderbook.asks, ...orderbook.bids].map((level) => level.quantity),
+    ORDERBOOK_QTY_MIN_CHARS,
+  );
+  const priceChars = getLongestFormattedLength(
+    [...orderbook.asks, ...orderbook.bids].map((level) => level.price),
+    ORDERBOOK_PRICE_MIN_CHARS,
+  );
+
+  return {
+    qtyCellStyle: { minWidth: toColumnMinWidth(qtyChars) },
+    priceCellStyle: { minWidth: toColumnMinWidth(priceChars) },
+    gridMinWidth: `calc(${qtyChars * 2 + priceChars}ch + ${ORDERBOOK_CELL_EXTRA_WIDTH_REM * 3}rem)`,
+  };
+};
+
 /**
  * 10단 호가창 — 매도(상단 10단) + 현재가 + 매수(하단 10단).
  * - 각 행 클릭 시 onClickPrice(price, side) 호출 → order-ticket prefill
@@ -61,25 +94,36 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
   );
   // 매도는 10→1로 내려오게 역순 표시 (HTS 관례: 매도 위/매수 아래, 매도 1단이 아래에 붙음)
   const asksReversed = [...orderbook.asks].reverse();
+  const { qtyCellStyle, priceCellStyle, gridMinWidth } = getOrderbookLayoutStyles(orderbook);
 
   return (
     <div className="panel orderbook-panel">
       <div className="orderbook-panel__scroll">
         <TableGrid.Root
           variant="hts"
+          className="orderbook-grid"
           stickyHeader
+          horizontalScroll
           zebra={false}
           aria-label="호가 10단"
-          style={{ '--hts-row-height': '18px' } as React.CSSProperties}
+          style={{ '--hts-row-height': '18px', minWidth: gridMinWidth } as CSSProperties}
         >
           <TableGrid.Header>
-            <TableGrid.Cell flex={2} numeric>
+            <TableGrid.Cell
+              flex={2}
+              numeric
+              style={{ ...qtyCellStyle, justifyContent: 'flex-end' }}
+            >
               매도잔량
             </TableGrid.Cell>
-            <TableGrid.Cell flex={1} numeric>
+            <TableGrid.Cell
+              flex={1}
+              numeric
+              style={{ ...priceCellStyle, justifyContent: 'center' }}
+            >
               호가
             </TableGrid.Cell>
-            <TableGrid.Cell flex={2} numeric>
+            <TableGrid.Cell flex={2} numeric style={qtyCellStyle}>
               매수잔량
             </TableGrid.Cell>
           </TableGrid.Header>
@@ -92,6 +136,8 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
                 rightQty={0}
                 price={l.price}
                 maxQty={maxQty}
+                qtyCellStyle={qtyCellStyle}
+                priceCellStyle={priceCellStyle}
                 side="SELL"
                 current={l.price === currentPrice}
                 onClick={() => onClickPrice(l.price, 'BUY')}
@@ -105,6 +151,8 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
                 rightQty={l.quantity}
                 price={l.price}
                 maxQty={maxQty}
+                qtyCellStyle={qtyCellStyle}
+                priceCellStyle={priceCellStyle}
                 side="BUY"
                 current={l.price === currentPrice}
                 onClick={() => onClickPrice(l.price, 'SELL')}
@@ -140,6 +188,8 @@ interface RowProps {
   rightQty: number;
   price: number;
   maxQty: number;
+  qtyCellStyle: CSSProperties;
+  priceCellStyle: CSSProperties;
   side: 'BUY' | 'SELL';
   current: boolean;
   onClick: () => void;
@@ -150,6 +200,8 @@ const OrderbookRow = ({
   rightQty,
   price,
   maxQty,
+  qtyCellStyle,
+  priceCellStyle,
   side,
   current,
   onClick,
@@ -163,7 +215,11 @@ const OrderbookRow = ({
       style={{ background: current ? 'rgba(45, 79, 202, 0.12)' : undefined }}
     >
       {/* 매도잔량 — bar 오른쪽 정렬 */}
-      <TableGrid.Cell flex={2} numeric style={{ position: 'relative' }}>
+      <TableGrid.Cell
+        flex={2}
+        numeric
+        style={{ ...qtyCellStyle, position: 'relative', justifyContent: 'flex-end' }}
+      >
         {leftQty > 0 ? (
           <>
             <span
@@ -185,12 +241,12 @@ const OrderbookRow = ({
         flex={1}
         numeric
         className={priceColorClass}
-        style={{ fontWeight: current ? 700 : 500, textAlign: 'center' }}
+        style={{ ...priceCellStyle, fontWeight: current ? 700 : 500, justifyContent: 'center' }}
       >
         {thousandSeparator(price)}
       </TableGrid.Cell>
       {/* 매수잔량 — bar 왼쪽 정렬 */}
-      <TableGrid.Cell flex={2} numeric style={{ position: 'relative' }}>
+      <TableGrid.Cell flex={2} numeric style={{ ...qtyCellStyle, position: 'relative' }}>
         {rightQty > 0 ? (
           <>
             <span
