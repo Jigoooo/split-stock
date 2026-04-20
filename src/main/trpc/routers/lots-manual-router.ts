@@ -268,16 +268,17 @@ export const lotsManualRouter = router({
           break;
         }
         case 'update': {
-          const idx = next.findIndex((x) => x.id === input.action.lotId);
+          const action = input.action;
+          const idx = next.findIndex((x) => x.id === action.lotId);
           if (idx < 0) {
             throw new TRPCError({
               code: 'NOT_FOUND',
-              message: `lot 없음 (id=${input.action.lotId})`,
+              message: `lot 없음 (id=${action.lotId})`,
             });
           }
           const target = next[idx];
           if (!target) break;
-          const c = input.action.changes;
+          const c = action.changes;
           next[idx] = {
             ...target,
             buyPrice: c.buyPrice ?? target.buyPrice,
