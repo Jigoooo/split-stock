@@ -2,13 +2,22 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoisted(() => {
+const {
+  fetchChartMock,
+  addSeriesMock,
+  createChartMock,
+  removePriceLineMock,
+  detachPrimitiveMock,
+  trpcUtilsMock,
+} = vi.hoisted(() => {
   const fetchChartMock = vi.fn();
   const setDataMock = vi.fn();
   const updateMock = vi.fn();
   const applyOptionsMock = vi.fn();
-  const createPriceLineMock = vi.fn();
+  const createPriceLineMock = vi.fn((opts: { price: number }) => ({ __priceLine: opts.price }));
   const removePriceLineMock = vi.fn();
+  const attachPrimitiveMock = vi.fn();
+  const detachPrimitiveMock = vi.fn();
   const priceScaleApplyOptionsMock = vi.fn();
   const priceScaleMock = vi.fn(() => ({
     applyOptions: priceScaleApplyOptionsMock,
@@ -23,6 +32,10 @@ const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoi
       applyOptions: applyOptionsMock,
       createPriceLine: createPriceLineMock,
       removePriceLine: removePriceLineMock,
+      attachPrimitive: attachPrimitiveMock,
+      detachPrimitive: detachPrimitiveMock,
+      coordinateToPrice: (y: number) => 10_000 - y,
+      priceToCoordinate: (price: number) => 10_000 - price,
       // candlestick-chart.tsx 의 series.priceScale().applyOptions() 호출 대응 stub.
       priceScale: priceScaleMock,
     }),
@@ -36,11 +49,14 @@ const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoi
       remove: vi.fn(),
       addSeries: addSeriesMock,
       removeSeries: vi.fn(),
+      subscribeClick: vi.fn(),
+      unsubscribeClick: vi.fn(),
       timeScale: () => ({
         subscribeVisibleLogicalRangeChange: vi.fn(),
         unsubscribeVisibleLogicalRangeChange: vi.fn(),
         getVisibleLogicalRange: () => null,
         setVisibleLogicalRange: vi.fn(),
+        timeToCoordinate: () => 0,
       }),
     }),
   );
@@ -56,28 +72,12 @@ const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoi
     fetchChartMock,
     addSeriesMock,
     createChartMock,
+    removePriceLineMock,
+    detachPrimitiveMock,
     trpcUtilsMock,
   };
 });
 
-const { createLineToolsPluginMock, lineToolsPluginMock } = vi.hoisted(() => {
-  const lineToolsPluginMock = {
-    addLineTool: vi.fn(() => 'tool-1'),
-    exportLineTools: vi.fn(() => '[]'),
-    getSelectedLineTools: vi.fn(() => '[]'),
-    importLineTools: vi.fn(() => true),
-    registerLineTool: vi.fn(),
-    removeAllLineTools: vi.fn(),
-    removeSelectedLineTools: vi.fn(),
-    subscribeLineToolsAfterEdit: vi.fn(),
-    unsubscribeLineToolsAfterEdit: vi.fn(),
-  };
-
-  return {
-    createLineToolsPluginMock: vi.fn(() => lineToolsPluginMock),
-    lineToolsPluginMock,
-  };
-});
 
 vi.mock('@renderer/shared/api/trpc', () => ({
   trpc: {
@@ -127,20 +127,6 @@ vi.mock('lightweight-charts', () => ({
   createChart: createChartMock,
 }));
 
-vi.mock('lightweight-charts-line-tools-core', () => ({
-  createLineToolsPlugin: createLineToolsPluginMock,
-}));
-
-vi.mock('lightweight-charts-line-tools-lines', () => ({
-  LineToolHorizontalLine: class {},
-  LineToolTrendLine: class {},
-  LineToolVerticalLine: class {},
-}));
-
-vi.mock('lightweight-charts-line-tools-rectangle', () => ({
-  LineToolRectangle: class {},
-}));
-
 import { PositionChart } from './ui/position-chart';
 
 beforeAll(() => {
@@ -156,16 +142,7 @@ beforeEach(() => {
   fetchChartMock.mockReset();
   createChartMock.mockClear();
   addSeriesMock.mockClear();
-  createLineToolsPluginMock.mockClear();
-  lineToolsPluginMock.addLineTool.mockClear();
-  lineToolsPluginMock.exportLineTools.mockClear();
-  lineToolsPluginMock.getSelectedLineTools.mockClear();
-  lineToolsPluginMock.importLineTools.mockClear();
-  lineToolsPluginMock.registerLineTool.mockClear();
-  lineToolsPluginMock.removeAllLineTools.mockClear();
-  lineToolsPluginMock.removeSelectedLineTools.mockClear();
-  lineToolsPluginMock.subscribeLineToolsAfterEdit.mockClear();
-  lineToolsPluginMock.unsubscribeLineToolsAfterEdit.mockClear();
+  window.localStorage.clear();
 });
 
 describe('PositionChart', () => {
@@ -246,17 +223,27 @@ describe('PositionChart', () => {
       toMs: Date.UTC(2026, 3, 19),
     });
 
-    window.localStorage.setItem('split-stock.chart.drawings.005930', '[{"id":"draw-1"}]');
+    window.localStorage.setItem(
+      'split-stock.chart.drawings.005930',
+      JSON.stringify([
+        { id: 'h-1', tool: 'HorizontalLine', price: 70000 },
+        { id: 'v-1', tool: 'VerticalLine', time: '2026-04-05' },
+      ]),
+    );
 
     render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
 
     await waitFor(() => expect(createChartMock.mock.calls.length).toBeGreaterThan(0));
-    await waitFor(() => expect(createLineToolsPluginMock.mock.calls.length).toBeGreaterThan(0));
+    await waitFor(() => expect(addSeriesMock.mock.calls.length).toBeGreaterThan(0));
     const initialChartCallCount = createChartMock.mock.calls.length;
+    removePriceLineMock.mockClear();
+    detachPrimitiveMock.mockClear();
 
     fireEvent.click(screen.getByRole('button', { name: '전체 삭제' }));
 
-    await waitFor(() => expect(lineToolsPluginMock.removeAllLineTools).toHaveBeenCalledTimes(1));
+    // HorizontalLine 은 removePriceLine 으로, 그 외는 detachPrimitive 로 해제되어야 한다.
+    await waitFor(() => expect(removePriceLineMock).toHaveBeenCalledTimes(1));
+    expect(detachPrimitiveMock).toHaveBeenCalledTimes(1);
     // 차트 인스턴스는 재생성되지 않아야 한다 — Electron 이 IOSurface 를 반복 할당하다
     // 1x1 크기로 실패해 GPU state invalid 로 멈추는 회귀를 방지한다.
     expect(createChartMock.mock.calls.length).toBe(initialChartCallCount);

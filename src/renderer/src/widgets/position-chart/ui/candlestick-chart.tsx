@@ -153,12 +153,13 @@ export const CandlestickChart = ({
   const connectDrawingHost = drawingTools.connectHost;
   const disconnectDrawingHost = drawingTools.disconnectHost;
 
-  // 드로잉 삭제는 플러그인 native API 로 처리 — 과거엔 차트 전체를 remount 해서
-  // localStorage 를 싸이클 시켰으나, Electron 이 IOSurface(WebGL 서피스)를 반복
-  // 할당하다 1x1 크기에서 allocate 실패 → "GPU state invalid" 로 UI 가 멈춰버림.
-  // plugin.removeAll/Selected 는 canvas 를 그대로 두고 내부 drawing state 만 비운다.
+  // 드로잉 삭제는 자체 primitive detach + priceLine remove 로 처리 — 과거엔 차트
+  // 전체를 remount 해서 localStorage 를 싸이클 시켰으나, Electron 이 IOSurface
+  // 를 반복 할당하다 1x1 크기에서 실패 → "GPU state invalid" 로 UI 가 멈춰버림.
+  // 현재는 series.removePriceLine / series.detachPrimitive 만 호출해 canvas 를
+  // 그대로 두고 drawing state 만 비운다.
   const handleRemoveAllDrawings = drawingTools.removeAll;
-  const handleRemoveSelectedDrawings = drawingTools.removeSelected;
+  const handleRemoveLastDrawing = drawingTools.removeLast;
 
   // ── liveCandle → series.update (오늘 캔들 실시간 갱신) ────────────
   useEffect(() => {
@@ -225,8 +226,8 @@ export const CandlestickChart = ({
     return () => {
       window.removeEventListener('resize', handleResize);
       observer.disconnect();
-      // 차트를 버리기 전에 현재 드로잉을 반드시 저장 → 종목 전환/새 키로 복원 시 유실 방지.
-      disconnectDrawingHost(true);
+      // 차트를 버리기 전에 drawing host 연결 해제 — primitive/priceLine 도 함께 detach.
+      disconnectDrawingHost();
       chart.remove();
       chartRef.current = null;
       priceLinesRef.current = [];
@@ -485,7 +486,7 @@ export const CandlestickChart = ({
           activeTool={drawingTools.activeTool}
           disabled={!drawingTools.isReady}
           onStartDraw={drawingTools.startDraw}
-          onRemoveSelected={handleRemoveSelectedDrawings}
+          onRemoveLast={handleRemoveLastDrawing}
           onRemoveAll={handleRemoveAllDrawings}
         />
       </div>

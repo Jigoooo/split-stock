@@ -153,10 +153,12 @@ export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactE
           </div>
         ) : null}
         <CandlestickChart
+          key={`${pdno}:${chart.period}`}
           candles={chart.candles}
           liveCandle={chart.liveCandle}
           lines={lines}
           onFetchMore={chart.fetchMore}
+          pdno={pdno}
           reachedEnd={chart.reachedEnd}
           displaySettings={displaySettings}
         />
