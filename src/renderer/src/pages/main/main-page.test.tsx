@@ -89,12 +89,7 @@ vi.mock('@renderer/widgets/trade-workspace', () => ({
     selected: { pdno: string; name: string } | null;
     onSelect: (entry: { pdno: string; name: string }) => void;
     isProd: boolean;
-  }) => (
-    <div
-      data-testid="trade-workspace"
-      data-selected-pdno={selected?.pdno ?? ''}
-    />
-  ),
+  }) => <div data-testid="trade-workspace" data-selected-pdno={selected?.pdno ?? ''} />,
 }));
 
 describe('MainPage', () => {

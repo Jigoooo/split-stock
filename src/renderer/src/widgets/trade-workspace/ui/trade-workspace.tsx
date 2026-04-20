@@ -12,6 +12,8 @@ export interface TradeWorkspaceProps {
   /** 팝아웃 창에서 StockPicker 팝아웃 버튼 표시용. 없으면 버튼 미표시. */
   onOpenStockPickerPopout?: (() => Promise<void> | void) | undefined;
   isStockPickerPopoutOpen?: boolean | undefined;
+  /** 종목 선택바(TradeSelectionBar) 숨김 여부. 메인 페이지 하단 마운트 시 중복 제거용. */
+  hideSelectionBar?: boolean;
 }
 
 /**
@@ -26,6 +28,7 @@ export const TradeWorkspace = ({
   isProd,
   onOpenStockPickerPopout,
   isStockPickerPopoutOpen = false,
+  hideSelectionBar = false,
 }: TradeWorkspaceProps): ReactElement => {
   const overlay = usePositionOverlay(selected?.pdno ?? null, { includeSold: true });
 
@@ -39,12 +42,14 @@ export const TradeWorkspace = ({
         minHeight: 0,
       }}
     >
-      <TradeSelectionBar
-        isStockPickerPopoutOpen={isStockPickerPopoutOpen}
-        onOpenStockPickerPopout={onOpenStockPickerPopout}
-        selected={selected}
-        onSelect={onSelect}
-      />
+      {!hideSelectionBar && (
+        <TradeSelectionBar
+          isStockPickerPopoutOpen={isStockPickerPopoutOpen}
+          onOpenStockPickerPopout={onOpenStockPickerPopout}
+          selected={selected}
+          onSelect={onSelect}
+        />
+      )}
 
       {selected ? (
         <div
