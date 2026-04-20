@@ -41,8 +41,22 @@ vi.mock('@renderer/shared/api/trpc', () => ({
             totalEval: 0,
             lotsByPdno: {
               '005930': [
-                { nth: 1, buyPrice: 70000, qty: 10, amountKrw: 700000, status: 'OPEN', boughtAt: 0 },
-                { nth: 2, buyPrice: 68000, qty: 10, amountKrw: 680000, status: 'BUYING', boughtAt: 0 },
+                {
+                  nth: 1,
+                  buyPrice: 70000,
+                  qty: 10,
+                  amountKrw: 700000,
+                  status: 'OPEN',
+                  boughtAt: 0,
+                },
+                {
+                  nth: 2,
+                  buyPrice: 68000,
+                  qty: 10,
+                  amountKrw: 680000,
+                  status: 'BUYING',
+                  boughtAt: 0,
+                },
               ],
             },
             strategiesByPdno: {},

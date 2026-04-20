@@ -95,8 +95,12 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
       <div className="order-ticket-form__scroll">
         <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span className="muted" style={{ fontSize: '0.9rem' }}>매수 차수</span>
-            <span className="chip" style={{ fontSize: '0.9rem' }}>{nextNth}차</span>
+            <span className="muted" style={{ fontSize: '0.9rem' }}>
+              매수 차수
+            </span>
+            <span className="chip" style={{ fontSize: '0.9rem' }}>
+              {nextNth}차
+            </span>
           </div>
           <label htmlFor="order-division" style={{ display: 'grid', gap: '0.25rem' }}>
             <span className="muted">구분</span>
