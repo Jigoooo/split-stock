@@ -66,11 +66,19 @@ export function exportDatabase(
 
   // SHA-256 일치 검증 (2개 경로 이상)
   if (results.length > 1) {
-    const firstSha = results[0]!.sha256;
+    const firstResult = results[0];
+    if (!firstResult) {
+      throw new Error('backup results unexpectedly empty');
+    }
+    const firstSha = firstResult.sha256;
     for (let i = 1; i < results.length; i++) {
-      if (results[i]!.sha256 !== firstSha) {
+      const currentResult = results[i];
+      if (!currentResult) {
+        throw new Error(`backup result at index ${i} is missing`);
+      }
+      if (currentResult.sha256 !== firstSha) {
         throw new Error(
-          `backup verification failed: ${basename(results[0]!.path)} (${firstSha.slice(0, 12)}) ≠ ${basename(results[i]!.path)} (${results[i]!.sha256.slice(0, 12)})`,
+          `backup verification failed: ${basename(firstResult.path)} (${firstSha.slice(0, 12)}) ≠ ${basename(currentResult.path)} (${currentResult.sha256.slice(0, 12)})`,
         );
       }
     }
@@ -85,7 +93,14 @@ export function exportDatabase(
     });
   }
 
-  return Array.isArray(destPaths) ? results : results[0]!;
+  if (!Array.isArray(destPaths)) {
+    const singleResult = results[0];
+    if (!singleResult) {
+      throw new Error('backup result is missing');
+    }
+    return singleResult;
+  }
+  return results;
 }
 
 export interface ImportDatabaseDeps {
