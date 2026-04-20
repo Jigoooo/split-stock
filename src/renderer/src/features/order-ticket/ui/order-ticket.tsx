@@ -1,5 +1,4 @@
 import { useBalanceWithLots } from '@renderer/entities/account';
-import { OrderConfirmDialog } from '@renderer/features/order-confirm-dialog';
 import { SearchStockInput } from '@renderer/features/search-stock';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, dialog, NumberInput, Select } from '@renderer/shared/ui';
@@ -31,18 +30,11 @@ export interface OrderTicketProps {
 
 type Division = 'LIMIT' | 'MARKET';
 
-interface PendingConfirm {
-  side: 'BUY' | 'SELL';
-  qty: number;
-  price: number;
-  division: Division;
-}
-
 /**
  * 수동 매수/매도 주문 폼.
  * - 종목/가격/수량/구분 입력, 매수/매도 버튼 분리
  * - selection.suggestedPrice 변경 시 price 필드 자동 업데이트(prefill)
- * - 확인이 필요한 상황(PROD 또는 oneClick=false)에서는 OrderConfirmDialog 로 2단계 없는 단일 확인 모달
+ * - 확인이 필요한 상황(PROD 또는 oneClick=false)에서는 dialog.openAsync + renderActions로 확인 모달
  * - onSelectionChange 제공 시 상단에 종목 검색 자동완성 입력창
  */
 export const OrderTicket = (props: OrderTicketProps): ReactElement => {
@@ -53,7 +45,6 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const [priceStr, setPriceStr] = useState(
     selection.suggestedPrice ? String(selection.suggestedPrice) : '',
   );
-  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null);
   const suggestionKey = `${selection.pdno}:${selection.suggestedPrice ?? ''}:${selection.suggestedSide ?? ''}`;
   const [appliedSuggestionKey, setAppliedSuggestionKey] = useState(suggestionKey);
   const actions = useOrderActions();
@@ -77,26 +68,31 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const validPrice = division === 'MARKET' || (Number.isInteger(price) && price > 0);
   const canSubmit = validQty && validPrice && !actions.isPending;
 
-  const executeOrder = async (confirmed: PendingConfirm): Promise<void> => {
-    const sideLabel = confirmed.side === 'BUY' ? '매수' : '매도';
+  const executeOrder = async (params: {
+    side: 'BUY' | 'SELL';
+    qty: number;
+    price: number;
+    division: Division;
+  }): Promise<void> => {
+    const sideLabel = params.side === 'BUY' ? '매수' : '매도';
     const priceLabel =
-      confirmed.division === 'MARKET'
+      params.division === 'MARKET'
         ? '시장가'
-        : `${thousandSeparator(String(confirmed.price))}원`;
+        : `${thousandSeparator(String(params.price))}원`;
     try {
       const result = await actions.place({
         pdno: selection.pdno,
-        side: confirmed.side,
-        qty: confirmed.qty,
-        price: confirmed.price,
-        division: confirmed.division,
+        side: params.side,
+        qty: params.qty,
+        price: params.price,
+        division: params.division,
       });
       const r = result as { odno?: string } | undefined;
       dialog.success({
         title: '주문 완료',
-        message: `${nextNth}차 ${sideLabel} 주문 완료 — ${selection.name} ${thousandSeparator(String(confirmed.qty))}주 @ ${priceLabel}`,
+        message: `${nextNth}차 ${sideLabel} 주문 완료 — ${selection.name} ${thousandSeparator(String(params.qty))}주 @ ${priceLabel}`,
       });
-      if (r?.odno) props.onPlaced?.({ odno: r.odno, side: confirmed.side });
+      if (r?.odno) props.onPlaced?.({ odno: r.odno, side: params.side });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       dialog.error({
@@ -106,138 +102,166 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
     }
   };
 
-  const submit = (chosenSide: 'BUY' | 'SELL'): void => {
+  const submit = async (chosenSide: 'BUY' | 'SELL'): Promise<void> => {
     if (!canSubmit) return;
-    const params: PendingConfirm = { side: chosenSide, qty, price, division };
+    const params = { side: chosenSide, qty, price, division };
     const mustConfirm = isProd || !oneClick;
-    if (mustConfirm) {
-      setPendingConfirm(params);
+    if (!mustConfirm) {
+      void executeOrder(params);
       return;
     }
-    void executeOrder(params);
+
+    const sideLabel = chosenSide === 'BUY' ? '매수' : '매도';
+    const divisionLabel = division === 'MARKET' ? '시장가' : '지정가';
+    const priceLabel =
+      division === 'MARKET' ? '시장가' : `${thousandSeparator(String(price))}원`;
+
+    const confirmed = await dialog.openAsync({
+      type: isProd ? 'WARNING' : 'INFO',
+      title: '주문 확인',
+      confirmText: `${sideLabel} 확정`,
+      cancelText: '취소',
+      isCancelWith: true,
+      isOverlayPressClose: true,
+      message: (
+        <div className="order-confirm-summary">
+          <dl className="order-confirm-summary__dl">
+            <dt>종목</dt>
+            <dd>
+              <span className="num">{selection.pdno}</span> {selection.name}
+            </dd>
+            <dt>구분</dt>
+            <dd>
+              <span className={chosenSide === 'BUY' ? 'num-up' : 'num-down'}>{sideLabel}</span>
+              {' · '}
+              {divisionLabel}
+              {chosenSide === 'BUY' ? (
+                <>
+                  {' · '}
+                  <span className="chip">{nextNth}차</span>
+                </>
+              ) : null}
+            </dd>
+            <dt>수량</dt>
+            <dd className="num">{thousandSeparator(String(qty))}주</dd>
+            <dt>가격</dt>
+            <dd className="num">{priceLabel}</dd>
+          </dl>
+          {isProd ? (
+            <p className="order-confirm-summary__warning">
+              실전 계좌로 실제 주문이 체결됩니다. 종목·수량·가격을 다시 확인하세요.
+            </p>
+          ) : null}
+        </div>
+      ),
+    });
+
+    if (confirmed) {
+      void executeOrder(params);
+    }
   };
 
   return (
-    <>
-      <form
-        className="panel order-ticket-form"
-        onSubmit={(e) => e.preventDefault()}
-        aria-label="즉시 주문 티켓"
-      >
-        <div className="panel__title">
-          즉시 주문 — {selection.name} ({selection.pdno})
-        </div>
-        <div className="order-ticket-form__scroll">
-          {onSelectionChange ? (
-            <div className="panel__body" style={{ maxWidth: 360 }}>
-              <SearchStockInput
-                placeholder="종목 변경 (종목명/코드)"
-                onSelect={(hit) => onSelectionChange({ pdno: hit.pdno, name: hit.name })}
-              />
-            </div>
-          ) : null}
-          <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <span className="muted" style={{ fontSize: '0.9rem' }}>
-                매수 차수
-              </span>
-              <span className="chip" style={{ fontSize: '0.9rem' }}>
-                {nextNth}차
-              </span>
-            </div>
-            <label htmlFor="order-division" style={{ display: 'grid', gap: '0.25rem' }}>
-              <span className="muted">구분</span>
-              <Select
-                id="order-division"
-                value={division}
-                onChange={(e) => setDivision(e.target.value as Division)}
-                aria-label="주문 구분"
-                dense
-              >
-                <option value="LIMIT">지정가</option>
-                <option value="MARKET">시장가</option>
-              </Select>
-            </label>
-            <label htmlFor="order-qty" style={{ display: 'grid', gap: '0.25rem' }}>
-              <span className="muted">수량</span>
-              <NumberInput
-                id="order-qty"
-                value={qtyStr}
-                onValueChange={setQtyStr}
-                aria-label="주문 수량"
-                dense
-              />
-            </label>
-            <label htmlFor="order-price" style={{ display: 'grid', gap: '0.25rem' }}>
-              <span className="muted">가격</span>
-              <NumberInput
-                id="order-price"
-                value={division === 'MARKET' ? '' : priceStr}
-                disabled={division === 'MARKET'}
-                emptyDisplay="시장가"
-                onValueChange={setPriceStr}
-                aria-label="주문 가격"
-                dense
-              />
-            </label>
+    <form
+      className="panel order-ticket-form"
+      onSubmit={(e) => e.preventDefault()}
+      aria-label="즉시 주문 티켓"
+    >
+      <div className="panel__title">
+        즉시 주문 — {selection.name} ({selection.pdno})
+      </div>
+      <div className="order-ticket-form__scroll">
+        {onSelectionChange ? (
+          <div className="panel__body" style={{ maxWidth: 360 }}>
+            <SearchStockInput
+              placeholder="종목 변경 (종목명/코드)"
+              onSelect={(hit) => onSelectionChange({ pdno: hit.pdno, name: hit.name })}
+            />
           </div>
-          <div
-            className="panel__body"
-            style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
+        ) : null}
+        <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span className="muted" style={{ fontSize: '0.9rem' }}>
+              매수 차수
+            </span>
+            <span className="chip" style={{ fontSize: '0.9rem' }}>
+              {nextNth}차
+            </span>
+          </div>
+          <label htmlFor="order-division" style={{ display: 'grid', gap: '0.25rem' }}>
+            <span className="muted">구분</span>
+            <Select
+              id="order-division"
+              value={division}
+              onChange={(e) => setDivision(e.target.value as Division)}
+              aria-label="주문 구분"
+              dense
+            >
+              <option value="LIMIT">지정가</option>
+              <option value="MARKET">시장가</option>
+            </Select>
+          </label>
+          <label htmlFor="order-qty" style={{ display: 'grid', gap: '0.25rem' }}>
+            <span className="muted">수량</span>
+            <NumberInput
+              id="order-qty"
+              value={qtyStr}
+              onValueChange={setQtyStr}
+              aria-label="주문 수량"
+              dense
+            />
+          </label>
+          <label htmlFor="order-price" style={{ display: 'grid', gap: '0.25rem' }}>
+            <span className="muted">가격</span>
+            <NumberInput
+              id="order-price"
+              value={division === 'MARKET' ? '' : priceStr}
+              disabled={division === 'MARKET'}
+              emptyDisplay="시장가"
+              onValueChange={setPriceStr}
+              aria-label="주문 가격"
+              dense
+            />
+          </label>
+        </div>
+        <div
+          className="panel__body"
+          style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
+        >
+          <Button
+            disabled={!canSubmit}
+            variant="danger"
+            dense
+            onClick={() => {
+              setSide('BUY');
+              void submit('BUY');
+            }}
+            aria-label="매수 주문"
           >
-            <Button
-              disabled={!canSubmit}
-              variant="danger"
-              dense
-              onClick={() => {
-                setSide('BUY');
-                submit('BUY');
-              }}
-              aria-label="매수 주문"
-            >
-              매수
-              <kbd className="kbd">F3</kbd>
-            </Button>
-            <Button
-              disabled={!canSubmit}
-              className="hts-btn--down"
-              dense
-              onClick={() => {
-                setSide('SELL');
-                submit('SELL');
-              }}
-              aria-label="매도 주문"
-            >
-              매도
-              <kbd className="kbd">F4</kbd>
-            </Button>
-          </div>
-          <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
-            현재 선택: {side} · {division === 'MARKET' ? '시장가' : '지정가'} ·{' '}
-            {qtyStr ? thousandSeparator(qtyStr) : '0'}주
-            {division === 'LIMIT' && priceStr ? ` · ${thousandSeparator(priceStr)}원` : ''}
-            {oneClick && !isProd ? ' · 원터치 ON' : ''}
-          </div>
+            매수
+            <kbd className="kbd">F3</kbd>
+          </Button>
+          <Button
+            disabled={!canSubmit}
+            className="hts-btn--down"
+            dense
+            onClick={() => {
+              setSide('SELL');
+              void submit('SELL');
+            }}
+            aria-label="매도 주문"
+          >
+            매도
+            <kbd className="kbd">F4</kbd>
+          </Button>
         </div>
-      </form>
-      <OrderConfirmDialog
-        open={pendingConfirm !== null}
-        isProd={isProd}
-        pdno={selection.pdno}
-        name={selection.name}
-        side={pendingConfirm?.side ?? 'BUY'}
-        qty={pendingConfirm?.qty ?? 0}
-        price={pendingConfirm?.price ?? 0}
-        division={pendingConfirm?.division ?? 'LIMIT'}
-        nextNth={nextNth}
-        onConfirm={() => {
-          if (!pendingConfirm) return;
-          const params = pendingConfirm;
-          setPendingConfirm(null);
-          void executeOrder(params);
-        }}
-        onCancel={() => setPendingConfirm(null)}
-      />
-    </>
+        <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
+          현재 선택: {side} · {division === 'MARKET' ? '시장가' : '지정가'} ·{' '}
+          {qtyStr ? thousandSeparator(qtyStr) : '0'}주
+          {division === 'LIMIT' && priceStr ? ` · ${thousandSeparator(priceStr)}원` : ''}
+          {oneClick && !isProd ? ' · 원터치 ON' : ''}
+        </div>
+      </div>
+    </form>
   );
 };

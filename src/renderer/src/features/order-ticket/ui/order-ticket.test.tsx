@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -70,12 +70,16 @@ vi.mock('@renderer/shared/api/trpc', () => ({
   },
 }));
 
+import { DialogProvider } from '@renderer/shared/ui/dialog';
 import { OrderTicket } from './order-ticket';
 
 function wrap(ui: ReactElement): ReactElement {
   const client = new QueryClient();
   const Provider = ({ children }: { children: ReactNode }): ReactElement => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <DialogProvider />
+      {children}
+    </QueryClientProvider>
   );
   return <Provider>{ui}</Provider>;
 }
@@ -104,15 +108,17 @@ describe('OrderTicket', () => {
     const dialog = screen.getByRole('dialog', { name: '주문 확인' });
     expect(dialog).toBeInTheDocument();
     // 확인 확정 버튼 클릭 시 place mutation 호출
-    fireEvent.click(screen.getByRole('button', { name: '매수 주문 확정' }));
-    expect(placeMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        pdno: '005930',
-        side: 'BUY',
-        qty: 12345,
-        price: 70000,
-        division: 'LIMIT',
-      }),
+    fireEvent.click(screen.getByRole('button', { name: '매수 확정' }));
+    await waitFor(() =>
+      expect(placeMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pdno: '005930',
+          side: 'BUY',
+          qty: 12345,
+          price: 70000,
+          division: 'LIMIT',
+        }),
+      ),
     );
   });
 
