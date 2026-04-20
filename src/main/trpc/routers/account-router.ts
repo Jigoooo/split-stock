@@ -1,11 +1,13 @@
 import { CredentialsSchema } from '@shared/contracts';
 import { buildLotOverlay, type LotOverlaySnapshot } from '@shared/trading/lot-overlay';
 import { TRPCError } from '@trpc/server';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { lots as lotsTable } from '../../db/schema';
 import { SETTING_KEYS } from '../../db/settings-repo';
 import { inquireBalance } from '../../kis/domestic-stock';
+import type { LotSnapshotEntry } from '../../trading/lots-repo';
+import type { LotStatus } from '../../trading/fsm';
 import { resolveAccountId } from '../router-helpers';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
@@ -250,6 +252,116 @@ export const accountRouter = router({
         });
       }
       return r.value;
+    }),
+
+  /**
+   * 잔고 + 차수(lots) + 종목별 전략 메타를 1-roundtrip 으로 합성.
+   *
+   * 반환:
+   *   - positions: 기존 getBalance 와 동일 (KIS inquire-balance)
+   *   - deposit, totalEval: 동일
+   *   - lotsByPdno: Record<pdno, LotSnapshotEntry[]> — open/buying lot 만 (실시간 차수)
+   *   - strategiesByPdno: Record<pdno, { maxStages: number }> — 종목별 또는 글로벌 active strategy의 maxStages
+   *
+   * 호출측은 KIS HTTP 1회 + DB 조회 N회를 분산 호출하지 않고 단일 요청으로 끝낼 수 있다.
+   * 기존 getBalance 는 호환성 유지(별도 procedure).
+   */
+  getBalanceWithLots: authedProcedure
+    .input(z.object({ accountId: z.number().int().positive().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const env = ctx.currentEnv;
+      if (!env) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
+      }
+      const accountId = resolveAccountId(ctx, input ?? {});
+      const credResult = ctx.credentialsRepo.loadCredentials(accountId);
+      if (credResult.isErr() || !credResult.value) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: '자격증명 없음 — 로그인 필요',
+        });
+      }
+      const cred = credResult.value;
+      const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
+      if (tokenResult.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `토큰 발급 실패: ${tokenResult.error.kind}`,
+        });
+      }
+      const http = ctx.httpByEnv[env];
+      const balance = await inquireBalance({
+        http,
+        env,
+        token: tokenResult.value.token,
+        appKey: cred.appKey,
+        appSecret: cred.appSecret,
+        accountNo8: cred.accountNo8,
+        accountProdCd: cred.accountProdCd,
+      });
+      if (balance.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `잔고조회 실패: ${balance.error.kind} - ${balance.error.msg}`,
+        });
+      }
+      // open/buying lot 조회 (per-account 격리) — 한 번의 select 로 모든 종목 조회 후 group.
+      const lotRows = ctx.db
+        .select()
+        .from(lotsTable)
+        .where(
+          and(eq(lotsTable.accountId, accountId), inArray(lotsTable.status, ['OPEN', 'BUYING'])),
+        )
+        .all();
+      const lotsByPdno: Record<string, LotSnapshotEntry[]> = {};
+      for (const r of lotRows) {
+        const entry: LotSnapshotEntry = {
+          nth: r.nth,
+          buyPrice: r.buyPrice,
+          qty: r.qty,
+          amountKrw: r.amountKrw,
+          status: r.status as LotStatus,
+          boughtAt: r.boughtAt instanceof Date ? r.boughtAt.getTime() : Number(r.boughtAt),
+        };
+        const soldAtMs =
+          r.soldAt === null
+            ? undefined
+            : r.soldAt instanceof Date
+              ? r.soldAt.getTime()
+              : Number(r.soldAt);
+        if (soldAtMs !== undefined) entry.soldAt = soldAtMs;
+        if (r.sellPrice !== null) entry.sellPrice = r.sellPrice;
+        const list = lotsByPdno[r.pdno] ?? [];
+        list.push(entry);
+        lotsByPdno[r.pdno] = list;
+      }
+      // 각 pdno 의 active strategy: 종목별 → 글로벌 → 없음. 종목별 maxStages 만 반환.
+      const strategiesByPdno: Record<string, { maxStages: number }> = {};
+      const globalActive = ctx.strategyRepo.getActive(accountId, null);
+      const globalMaxStages =
+        globalActive.isOk() && globalActive.value !== null ? globalActive.value.maxStages : null;
+      // positions + lotsByPdno 의 모든 pdno 합집합 — 잔고는 있으나 lot 없는 종목도 포함.
+      const allPdnos = new Set<string>([
+        ...balance.value.positions.map((p) => p.code),
+        ...Object.keys(lotsByPdno),
+      ]);
+      for (const pdno of allPdnos) {
+        const perSymbol = ctx.strategyRepo.getActive(accountId, pdno);
+        const maxStages =
+          perSymbol.isOk() && perSymbol.value !== null
+            ? perSymbol.value.maxStages
+            : globalMaxStages;
+        if (maxStages !== null) {
+          strategiesByPdno[pdno] = { maxStages };
+        }
+      }
+      return {
+        positions: balance.value.positions,
+        deposit: balance.value.deposit,
+        totalEval: balance.value.totalEval,
+        lotsByPdno,
+        strategiesByPdno,
+      };
     }),
 
   getPositionOverlay: authedProcedure
