@@ -45,10 +45,15 @@ const SIDE_ITEMS: ReadonlyArray<{ value: WatchSide; label: string }> = [
   { value: 'SELL', label: '매도' },
 ];
 
-const COMPARATOR_ITEMS: ReadonlyArray<{ value: WatchComparator; label: string }> = [
-  { value: 'LTE', label: '이하 (≤)' },
-  { value: 'GTE', label: '이상 (≥)' },
+const COMPARATOR_ITEMS: ReadonlyArray<{ value: WatchComparator; label: string; hint: string }> = [
+  { value: 'LTE', label: '↓ 이하 도달', hint: '현재가가 감시가 이하로 내려가면 트리거' },
+  { value: 'GTE', label: '↑ 이상 도달', hint: '현재가가 감시가 이상으로 올라가면 트리거' },
 ];
+
+/** side 변경 시 자연스러운 comparator 기본값. */
+function defaultComparatorForSide(s: WatchSide): WatchComparator {
+  return s === 'BUY' ? 'LTE' : 'GTE';
+}
 
 const ORDER_TYPE_ITEMS: ReadonlyArray<{ value: WatchOrderType; label: string }> = [
   { value: 'LIMIT', label: '지정가' },
@@ -81,6 +86,25 @@ function toIntOrNull(raw: string): number | null {
   const n = Number(raw);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
   return n;
+}
+
+/**
+ * 금액 → 주식 수 환산 미리보기.
+ * qty = floor(amountKrw / targetPrice), 잔여 = amountKrw - qty * targetPrice
+ * targetPrice 또는 amountKrw 미입력 시 null 반환.
+ */
+function calcAmountPreview(
+  amountKrwRaw: string,
+  targetPriceRaw: string,
+): { qty: number; filled: number; remainder: number; isHighRemainder: boolean } | null {
+  const amount = toIntOrNull(amountKrwRaw);
+  const price = toIntOrNull(targetPriceRaw);
+  if (amount === null || price === null) return null;
+  const qty = Math.floor(amount / price);
+  if (qty <= 0) return null;
+  const filled = qty * price;
+  const remainder = amount - filled;
+  return { qty, filled, remainder, isHighRemainder: remainder >= amount * 0.5 };
 }
 
 function toIsoDateLocal(d: Date): string {
@@ -144,7 +168,9 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
   const [pdno, setPdno] = useState<string>(prefill?.pdno ?? '');
   const [pdName, setPdName] = useState<string>(prefill?.pdName ?? '');
   const [side, setSide] = useState<WatchSide>(prefill?.side ?? 'BUY');
-  const [comparator, setComparator] = useState<WatchComparator>(prefill?.comparator ?? 'LTE');
+  const [comparator, setComparator] = useState<WatchComparator>(
+    prefill?.comparator ?? defaultComparatorForSide(prefill?.side ?? 'BUY'),
+  );
   const [targetPriceRaw, setTargetPriceRaw] = useState<string>(
     prefill?.targetPrice !== undefined ? String(prefill.targetPrice) : '',
   );
@@ -273,23 +299,26 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
       aria-modal="true"
       aria-label={isEdit ? '자동감시 수정' : '자동감시 추가'}
     >
-      <div className="modal panel" style={{ minWidth: '720px', maxWidth: '880px' }}>
-        <div className="panel__title">{isEdit ? '자동감시 수정' : '자동감시 추가'}</div>
+      <div className="modal panel" style={{ minWidth: '600px', maxWidth: '720px', width: '600px' }}>
+        <div className="panel__title" style={{ padding: '0.35rem 0.6rem', fontSize: '1rem' }}>
+          {isEdit ? '자동감시 수정' : '자동감시 추가'}
+        </div>
 
         {/* 기본정보 — 등록일/구분 메타 */}
         <div
           className="panel__body"
           style={{
             display: 'grid',
-            gridTemplateColumns: '6rem 1fr 6rem 1fr',
-            gap: '0.4rem 0.8rem',
+            gridTemplateColumns: '5rem 1fr 5rem 1fr',
+            gap: '0.25rem 0.6rem',
             alignItems: 'center',
+            padding: '0.35rem 0.6rem',
           }}
         >
           <span className="muted">등록일</span>
           <span className="num">{todayIso}</span>
           <span className="muted">구분</span>
-          <span>수동추가 (CUSTOM)</span>
+          <span>수동추가</span>
         </div>
 
         {/* 좌(감시조건) / 우(실행조건) 2 컬럼 */}
@@ -298,16 +327,17 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
-            gap: '0.8rem 1.2rem',
+            gap: '0.5rem 0.8rem',
             alignItems: 'start',
+            padding: '0.4rem 0.6rem',
           }}
         >
           {/* 감시조건 */}
           <section
             aria-label="감시조건"
-            style={{ display: 'grid', gap: '0.6rem', alignContent: 'start' }}
+            style={{ display: 'grid', gap: '0.4rem', alignContent: 'start' }}
           >
-            <div className="panel__title" style={{ padding: 0 }}>
+            <div className="panel__title" style={{ padding: 0, fontSize: '0.9rem' }}>
               감시조건
             </div>
 
@@ -342,14 +372,19 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
             </FormRow>
 
             <FormRow label="비교">
-              <RadioGroup
-                name="watch-comparator"
-                value={comparator}
-                onChange={setComparator}
-                items={[...COMPARATOR_ITEMS]}
-                ariaLabel="비교"
-                dense
-              />
+              <div style={{ display: 'grid', gap: '0.2rem' }}>
+                <RadioGroup
+                  name="watch-comparator"
+                  value={comparator}
+                  onChange={setComparator}
+                  items={COMPARATOR_ITEMS.map((it) => ({ value: it.value, label: it.label }))}
+                  ariaLabel="비교"
+                  dense
+                />
+                <div className="muted" style={{ fontSize: '0.8rem' }}>
+                  {COMPARATOR_ITEMS.find((it) => it.value === comparator)?.hint}
+                </div>
+              </div>
             </FormRow>
 
             <FormRow label="유효일">
@@ -392,9 +427,9 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
           {/* 실행조건 */}
           <section
             aria-label="실행조건"
-            style={{ display: 'grid', gap: '0.6rem', alignContent: 'start' }}
+            style={{ display: 'grid', gap: '0.4rem', alignContent: 'start' }}
           >
-            <div className="panel__title" style={{ padding: 0 }}>
+            <div className="panel__title" style={{ padding: 0, fontSize: '0.9rem' }}>
               실행조건
             </div>
 
@@ -402,7 +437,11 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
               <Select
                 dense
                 value={side}
-                onChange={(e) => setSide(e.target.value as WatchSide)}
+                onChange={(e) => {
+                  const next = e.target.value as WatchSide;
+                  setSide(next);
+                  setComparator(defaultComparatorForSide(next));
+                }}
                 aria-label="주문구분"
                 disabled={isPending}
               >
@@ -489,6 +528,36 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
                       초기화
                     </Button>
                   </div>
+                  {/* 환산 미리보기 */}
+                  {(() => {
+                    const preview = calcAmountPreview(amountKrwRaw, targetPriceRaw);
+                    if (preview === null) return null;
+                    return (
+                      <div
+                        style={{
+                          fontSize: '0.8rem',
+                          padding: '0.25rem 0.4rem',
+                          borderRadius: '4px',
+                          background: preview.isHighRemainder
+                            ? 'var(--color-danger-bg, rgba(255,80,80,0.12))'
+                            : 'var(--color-muted-bg, rgba(255,255,255,0.06))',
+                          display: 'grid',
+                          gap: '0.1rem',
+                        }}
+                      >
+                        <span>
+                          환산: <strong>{preview.qty.toLocaleString()}주</strong> 매수
+                          {' ('}체결 {preview.filled.toLocaleString()}원{', '}잔여{' '}
+                          {preview.remainder.toLocaleString()}원{')'}
+                        </span>
+                        {preview.isHighRemainder ? (
+                          <span style={{ color: 'var(--color-danger, #f05050)' }}>
+                            잔여금액이 50% 이상 — 감시가격을 조정하거나 금액을 변경하세요.
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                 </div>
               </FormRow>
             )}
@@ -497,9 +566,12 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
 
         {/* 메시지/알림 */}
         {(isEdit || error) && (
-          <div className="panel__body" style={{ display: 'grid', gap: '0.4rem' }}>
+          <div
+            className="panel__body"
+            style={{ display: 'grid', gap: '0.3rem', padding: '0.3rem 0.6rem' }}
+          >
             {isEdit ? (
-              <div className="muted" style={{ fontSize: '0.9rem' }}>
+              <div className="muted" style={{ fontSize: '0.8rem' }}>
                 ※ 수정은 기존 항목 취소 후 새 항목으로 등록됩니다 (id/등록시각 갱신).
               </div>
             ) : null}
@@ -514,7 +586,12 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
         {/* 액션 */}
         <div
           className="panel__body"
-          style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
+          style={{
+            display: 'flex',
+            gap: '0.5rem',
+            justifyContent: 'flex-end',
+            padding: '0.4rem 0.6rem',
+          }}
         >
           <Button onClick={onClose} disabled={isPending} dense>
             취소
