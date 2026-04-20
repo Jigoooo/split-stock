@@ -98,7 +98,8 @@ function bootstrapDeps(userDataDir: string) {
   const stockMasterRepo = new StockMasterRepo(db);
   const stockMasterSync = new StockMasterSyncService(stockMasterRepo, settingsRepo);
   const candlesRepo = new DailyCandlesRepo(db);
-  const lotsRepo = new LotsRepo(db);
+  // stockMasterRepo 주입 — cyclesByPdno 의 종목명(name) 필드를 stock_master 에서 lookup.
+  const lotsRepo = new LotsRepo(db, stockMasterRepo);
   const activeAccounts = new ActiveAccountRepo(db);
   const timeWindowRepo = createTimeWindowRepo(db);
   const rateGuardRepo = createRateGuardRepo(db);
