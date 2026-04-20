@@ -1,3 +1,4 @@
+import type { KisError } from '@shared/contracts';
 import { CredentialsSchema } from '@shared/contracts';
 import { buildLotOverlay, type LotOverlaySnapshot } from '@shared/trading/lot-overlay';
 import { TRPCError } from '@trpc/server';
@@ -10,6 +11,36 @@ import type { LotStatus } from '../../trading/fsm';
 import type { LotSnapshotEntry } from '../../trading/lots-repo';
 import { resolveAccountId } from '../router-helpers';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
+
+/**
+ * KIS error.cause 는 unknown — http-client 가 { status, body } 객체나 Error 를 그대로 전달.
+ * 로그 payload 에 안전하게 직렬화 (Error 는 message 만, 그 외는 원형 유지).
+ */
+function serializeCause(cause: unknown): unknown {
+  if (cause instanceof Error) return { name: cause.name, message: cause.message };
+  return cause;
+}
+
+/**
+ * KIS 잔고조회 실패 → 사용자 친화 한국어 메시지로 변환.
+ * 원인 정보(rt_cd / msg / status)는 호출측에서 ctx.logger 로 전체 dump (운영 디버깅용).
+ */
+function balanceErrorMessage(e: KisError): string {
+  switch (e.kind) {
+    case 'NETWORK':
+      return '잔고 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해주세요.';
+    case 'RATE_LIMITED':
+      return '잔고조회 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+    case 'AUTH_FAILED':
+      return '토큰이 만료되었거나 자격증명이 잘못되었습니다. 다시 로그인 해주세요.';
+    case 'VALIDATION':
+      return '잔고 응답 형식이 예상과 다릅니다. KIS 공지를 확인해주세요.';
+    case 'API_BUSINESS':
+      return e.msg || '잔고조회 중 오류가 발생했습니다.';
+    default:
+      return '잔고조회에 실패했습니다.';
+  }
+}
 
 /**
  * 계좌/잔고 조회 라우터.
@@ -246,9 +277,24 @@ export const accountRouter = router({
         accountProdCd: cred.accountProdCd,
       });
       if (r.isErr()) {
+        // 원인(status, body, rt_cd, msg_cd 등)은 운영 로그에만 기록 — 사용자에게는 친화 메시지.
+        ctx.logger.log({
+          level: 'ERROR',
+          category: 'SYS',
+          message: 'account.getBalance.failed',
+          payload: {
+            accountId,
+            env,
+            kind: r.error.kind,
+            kisMsg: r.error.msg,
+            rt_cd: r.error.rt_cd,
+            msg_cd: r.error.msg_cd,
+            cause: serializeCause(r.error.cause),
+          },
+        });
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `잔고조회 실패: ${r.error.kind} - ${r.error.msg}`,
+          code: r.error.kind === 'AUTH_FAILED' ? 'UNAUTHORIZED' : 'INTERNAL_SERVER_ERROR',
+          message: balanceErrorMessage(r.error),
         });
       }
       return r.value;
@@ -300,9 +346,23 @@ export const accountRouter = router({
         accountProdCd: cred.accountProdCd,
       });
       if (balance.isErr()) {
+        ctx.logger.log({
+          level: 'ERROR',
+          category: 'SYS',
+          message: 'account.getBalanceWithLots.failed',
+          payload: {
+            accountId,
+            env,
+            kind: balance.error.kind,
+            kisMsg: balance.error.msg,
+            rt_cd: balance.error.rt_cd,
+            msg_cd: balance.error.msg_cd,
+            cause: serializeCause(balance.error.cause),
+          },
+        });
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `잔고조회 실패: ${balance.error.kind} - ${balance.error.msg}`,
+          code: balance.error.kind === 'AUTH_FAILED' ? 'UNAUTHORIZED' : 'INTERNAL_SERVER_ERROR',
+          message: balanceErrorMessage(balance.error),
         });
       }
       // open/buying lot 조회 (per-account 격리) — 한 번의 select 로 모든 종목 조회 후 group.

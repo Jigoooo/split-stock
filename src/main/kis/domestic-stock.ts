@@ -6,7 +6,7 @@ import {
 } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import { KIS_PATH, trId } from './endpoints';
-import { interpretRtCd, makeKisError } from './errors';
+import { interpretRtCd, isRetryable, makeKisError } from './errors';
 import type { KisHttpClient } from './http-client';
 
 export interface Position {
@@ -72,6 +72,9 @@ function parseNum(x: string | undefined): number {
 /**
  * 국내주식 잔고조회 — inquire-balance.
  * 응답 output1(보유종목)과 output2(계좌 요약)를 Position[]와 예수금/총평가로 정규화.
+ *
+ * KIS 잔고 API는 일시적으로 5xx/타임아웃을 뱉을 때가 있어 retryable 에러는
+ * 짧은 백오프로 1회 재시도한다 (총 2회 시도). 비즈니스 에러(rt_cd != 0)는 재시도하지 않는다.
  */
 export async function inquireBalance(
   deps: DomesticStockDeps,
@@ -90,7 +93,11 @@ export async function inquireBalance(
     CTX_AREA_FK100: '',
     CTX_AREA_NK100: '',
   };
-  const res = await deps.http.get<unknown>(KIS_PATH.INQUIRE_BALANCE, params, headers);
+  let res = await deps.http.get<unknown>(KIS_PATH.INQUIRE_BALANCE, params, headers);
+  if (res.isErr() && isRetryable(res.error)) {
+    await new Promise((r) => setTimeout(r, 300));
+    res = await deps.http.get<unknown>(KIS_PATH.INQUIRE_BALANCE, params, headers);
+  }
   if (res.isErr()) return err(res.error);
   const parsed = KisBalanceResponseSchema.safeParse(res.value.body);
   if (!parsed.success) {
