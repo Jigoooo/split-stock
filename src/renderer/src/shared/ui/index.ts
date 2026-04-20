@@ -30,5 +30,19 @@ export type { SegmentedToggleProps } from './segmented-toggle';
 export { SegmentedToggle } from './segmented-toggle';
 export type { SelectProps } from './select';
 export { Select } from './select';
+export type {
+  Align as TableGridAlign,
+  BodyProps as TableGridBodyProps,
+  CellProps as TableGridCellProps,
+  FlashDirection as TableGridFlashDirection,
+  HeaderProps as TableGridHeaderProps,
+  OverflowMode as TableGridOverflowMode,
+  RootProps as TableGridRootProps,
+  RowProps as TableGridRowProps,
+  UseTableGridVirtualOptions,
+  UseTableGridVirtualResult,
+  Variant as TableGridVariant,
+} from './table-grid';
+export { TableGrid, useTableGridVirtual } from './table-grid';
 export type { TextInputProps } from './text-input';
 export { TextInput } from './text-input';
