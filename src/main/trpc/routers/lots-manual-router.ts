@@ -8,7 +8,7 @@ import {
   type ManualEditResult,
 } from '../../trading/lots-repo';
 import { requireAccountId } from '../router-helpers';
-import { publicProcedure, router } from '../trpc-core';
+import { authedProcedure, router } from '../trpc-core';
 
 /**
  * 차수 수동편집(A7) 라우터.
@@ -178,7 +178,7 @@ export const lotsManualRouter = router({
    * 서버측 상태는 보관하지 않음 (UI 로컬 모드 플래그).
    * 수행: master safety OFF 검증 + audit log 기록.
    */
-  enterMode: publicProcedure
+  enterMode: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -201,7 +201,7 @@ export const lotsManualRouter = router({
    * 미리보기 — DB 변경 없이 변경 결과를 가상 적용한 lots 를 반환.
    * UI 가 평가손익/수익률 차이를 표시할 수 있도록.
    */
-  preview: publicProcedure
+  preview: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -345,7 +345,7 @@ export const lotsManualRouter = router({
   /**
    * 신규 차수 추가.
    */
-  insert: publicProcedure
+  insert: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -383,7 +383,7 @@ export const lotsManualRouter = router({
   /**
    * 차수 수정.
    */
-  update: publicProcedure
+  update: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -421,7 +421,7 @@ export const lotsManualRouter = router({
    * 차수 삭제.
    * UI 는 "장부상만 변경, KIS 잔고와 불일치 가능" 경고 표시 책임.
    */
-  delete: publicProcedure
+  delete: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -444,7 +444,7 @@ export const lotsManualRouter = router({
   /**
    * 차수 번호 변경.
    */
-  move: publicProcedure
+  move: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -469,7 +469,7 @@ export const lotsManualRouter = router({
   /**
    * 액면분할 일괄 보정 — (accountId, pdno) 의 모든 차수 buyPrice 에 ratio 곱.
    */
-  applyStockSplitRatio: publicProcedure
+  applyStockSplitRatio: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -506,7 +506,7 @@ export const lotsManualRouter = router({
   /**
    * Undo — 직전 변경 1회 취소 (계좌+종목 단위).
    */
-  undo: publicProcedure
+  undo: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -543,7 +543,7 @@ export const lotsManualRouter = router({
   /**
    * Undo 가능 여부 + 직전 변경 메타 조회 — UI 버튼 활성/비활성 결정용.
    */
-  canUndo: publicProcedure
+  canUndo: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -565,7 +565,7 @@ export const lotsManualRouter = router({
   /**
    * CSV 미리보기 — 파싱만 (DB 변경 없음).
    */
-  importCsvPreview: publicProcedure
+  importCsvPreview: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -587,7 +587,7 @@ export const lotsManualRouter = router({
    * CSV 적용 — 파싱 → 트랜잭션 일괄 manualInsert.
    * 하나라도 충돌(중복 nth 등)이면 전체 rollback.
    */
-  importCsvApply: publicProcedure
+  importCsvApply: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
@@ -648,7 +648,7 @@ export const lotsManualRouter = router({
   /**
    * CSV 익스포트 — pdno 미지정 시 전체.
    */
-  exportCsv: publicProcedure
+  exportCsv: authedProcedure
     .input(
       z.object({
         accountId: z.number().int().positive(),
