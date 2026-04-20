@@ -269,7 +269,7 @@ const inlineActionStyle: CSSProperties = {
   borderRadius: '3px',
   cursor: 'pointer',
   fontSize: '0.85rem',
-  padding: '0.25rem 0.55rem',
+  padding: '0.3rem 1rem',
   color: 'inherit',
   marginRight: '0.2rem',
 };
