@@ -491,10 +491,12 @@ export const CandlestickChart = ({
         />
       </div>
       <div
+        // 우측 Y축(가격 라벨) 영역을 가리지 않도록 오른쪽 inset 을 Y축 너비만큼 확보.
+        // 7자리 원화 라벨 기준 ~60~72px. zIndex 2 로 드로잉보다 위에 뜨게 둔다.
         style={{
           position: 'absolute',
           top: 6,
-          right: 6,
+          right: 72,
           display: 'flex',
           gap: 4,
           zIndex: 2,

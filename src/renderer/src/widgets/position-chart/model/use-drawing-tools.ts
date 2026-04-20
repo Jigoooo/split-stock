@@ -35,7 +35,12 @@ import {
  * (subscribeClick) 콜백에서는 경고를 띄우거나 동작이 불안정할 수 있다.
  */
 
-const DEBUG = false;
+/**
+ * 드로잉 플로우 진단 로그 — 안정화 전까지 기본 ON.
+ * 콘솔 필터에서 [drawing-tools] 로 걸러보면 startDraw → click → commit 흐름이 보인다.
+ * 안정화되면 false 로 바꾼다.
+ */
+const DEBUG = true;
 const log = (...args: unknown[]): void => {
   if (DEBUG) {
     console.debug('[drawing-tools]', ...args);
@@ -357,14 +362,12 @@ export function useDrawingTools(pdno: string): UseDrawingToolsResult {
   }, []);
 
   const startDraw = (tool: DrawingToolKind): void => {
-    if (!seriesRef.current) {
-      log('startDraw ignored — series not ready');
-      return;
-    }
+    // series 가 아직 없어도 활성 상태는 즉시 반영 — 사용자 입장에서 버튼이 "먹지도"
+    // 않는 듯 보이는 것을 피한다. chart 준비 이후의 첫 클릭이 포인트 수집을 시작한다.
     pendingToolRef.current = tool;
     pendingPointsRef.current = [];
     setActiveTool(tool);
-    log('startDraw', tool);
+    log('startDraw', tool, { seriesReady: !!seriesRef.current });
   };
 
   const removeAll = (): void => {

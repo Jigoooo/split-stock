@@ -55,11 +55,12 @@ export const DrawingToolbar = ({
       }}
     >
       {TOOL_BUTTONS.map((item) => (
+        // 도구 선택은 chart 준비 전에도 허용 — startDraw 가 graceful 하게 처리한다.
+        // disabled 로 막으면 data 로드 타이밍에 따라 버튼이 먹지 않는 증상이 생긴다.
         <Button
           key={item.tool}
           dense
           iconOnly
-          disabled={disabled}
           active={activeTool === item.tool}
           aria-pressed={activeTool === item.tool}
           aria-label={item.label}
