@@ -1,5 +1,4 @@
 export type PopoutRoute =
-  | 'dashboard'
   | 'trade'
   | 'logs'
   | 'lots-log'
@@ -11,7 +10,6 @@ export type PopoutRoute =
 
 export function isPopoutRoute(value: string): value is PopoutRoute {
   return (
-    value === 'dashboard' ||
     value === 'trade' ||
     value === 'logs' ||
     value === 'lots-log' ||

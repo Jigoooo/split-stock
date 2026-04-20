@@ -1,6 +1,5 @@
 import { ProfitCalculatorPage } from '@renderer/features/profit-calculator';
 import { AddAccountPage } from '@renderer/features/switch-account';
-import { DashboardPage } from '@renderer/pages/dashboard';
 import { LogsPage } from '@renderer/pages/logs';
 import { LotsLogPage } from '@renderer/pages/lots-log';
 import { ReportsPage } from '@renderer/pages/reports';
@@ -19,9 +18,7 @@ export interface PopoutPageProps {
 export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => {
   return (
     <div style={{ padding: '1rem', height: '100vh', overflow: 'auto' }}>
-      {route === 'dashboard' ? (
-        <DashboardPage />
-      ) : route === 'trade' ? (
+      {route === 'trade' ? (
         <TradePage
           isStockPickerPopoutOpen={popout.isOpen('stock-picker')}
           onOpenStockPickerPopout={() => popout.popout('stock-picker')}

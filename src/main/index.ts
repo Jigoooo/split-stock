@@ -407,7 +407,6 @@ void app.whenReady().then(async () => {
   // 팝아웃 창: 메인 화면에서 특정 페이지(logs, reports, settings 등)를 별도 창으로 띄움.
   // route별 1개 창만 유지 — 이미 열려 있으면 포커스만 이동, 닫히면 렌더러에 통지해 placeholder 원복.
   const ALLOWED_POPOUT_ROUTES = new Set([
-    'dashboard',
     'trade',
     'logs',
     'lots-log',
