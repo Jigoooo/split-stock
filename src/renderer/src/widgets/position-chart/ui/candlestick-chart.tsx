@@ -16,7 +16,14 @@ import {
   type Time,
 } from 'lightweight-charts';
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
-import { type CSSProperties, type ReactElement, useEffect, useEffectEvent, useRef } from 'react';
+import {
+  type CSSProperties,
+  type ReactElement,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from 'react';
 import { useDrawingTools } from '../model/use-drawing-tools';
 import type { Candle } from '../model/use-position-chart';
 import { DrawingToolbar } from './drawing-toolbar';
@@ -149,6 +156,8 @@ export const CandlestickChart = ({
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const maSeriesRef = useRef<Partial<Record<MaPeriod, ISeriesApi<'Line'>>>>({});
   const onFetchMoreEvent = useEffectEvent(onFetchMore);
+  // 우측 Y축 실제 너비(px) + 8px 여백. 가격 자릿수에 따라 달라지므로 실시간 측정.
+  const [axisRightInset, setAxisRightInset] = useState(72);
   const drawingTools = useDrawingTools(pdno);
   const connectDrawingHost = drawingTools.connectHost;
   const disconnectDrawingHost = drawingTools.disconnectHost;
@@ -223,9 +232,34 @@ export const CandlestickChart = ({
     const observer = new ResizeObserver(handleResize);
     observer.observe(element);
 
+    // ── Y축 실제 너비 측정 → zoom 버튼 right inset 동기화 ──────────────
+    let axisRaf: number | null = null;
+    const measureAxis = (): void => {
+      if (axisRaf !== null) return;
+      axisRaf = requestAnimationFrame(() => {
+        axisRaf = null;
+        try {
+          const w = chart.priceScale('right').width();
+          const next = Math.max(24, Math.ceil(w) + 8);
+          // React 는 동일 값 setState 를 skip 하므로 별도 diff 체크 불필요.
+          setAxisRightInset(next);
+        } catch {
+          // chart 가 막 파괴된 경우 무시
+        }
+      });
+    };
+    measureAxis();
+    chart.timeScale().subscribeVisibleLogicalRangeChange(measureAxis);
+
     return () => {
       window.removeEventListener('resize', handleResize);
       observer.disconnect();
+      if (axisRaf !== null) cancelAnimationFrame(axisRaf);
+      try {
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(measureAxis);
+      } catch {
+        // ignore
+      }
       // 차트를 버리기 전에 drawing host 연결 해제 — primitive/priceLine 도 함께 detach.
       disconnectDrawingHost();
       chart.remove();
@@ -244,6 +278,24 @@ export const CandlestickChart = ({
       crosshair: resolveCrosshairOptions(displaySettings),
     });
   }, [displaySettings]);
+
+  // ── candles 변경 후 Y축 너비 재측정 ────────────────────────────────
+  // subscribeVisibleLogicalRangeChange 로 대부분 잡히지만 데이터 자릿수가 갑자기
+  // 바뀌는 종목 전환 케이스를 보강 — setData 후 paint 끝나는 다음 frame 에 측정.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: candles 는 측정 trigger 로만 쓰고 본문에서 읽지 않음
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const id = requestAnimationFrame(() => {
+      try {
+        const w = chart.priceScale('right').width();
+        setAxisRightInset(Math.max(24, Math.ceil(w) + 8));
+      } catch {
+        // chart 가 파괴된 경우 무시
+      }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [candles]);
 
   // ── range change → fetch more ─────────────────────────────────────
   useEffect(() => {
@@ -496,7 +548,7 @@ export const CandlestickChart = ({
         style={{
           position: 'absolute',
           top: 6,
-          right: 72,
+          right: axisRightInset,
           display: 'flex',
           gap: 4,
           zIndex: 2,
