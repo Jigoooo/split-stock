@@ -15,10 +15,25 @@ const mockUseActiveAccountId = vi.fn();
 
 vi.mock('@renderer/entities/account', () => ({
   useActiveAccountId: () => mockUseActiveAccountId(),
+  useBalanceWithLots: () => ({
+    positions: [],
+    deposit: 0,
+    totalEval: 0,
+    lotsByPdno: {},
+    strategiesByPdno: {},
+    isPending: false,
+    error: null,
+  }),
 }));
 
 vi.mock('@renderer/pages/main/model/use-main-realtime', () => ({
   useMainRealtime: () => undefined,
+}));
+
+vi.mock('@renderer/widgets/trading-panel', () => ({
+  TradingPanel: ({ pdno, name }: { pdno: string; name: string }) => (
+    <div data-testid="trading-panel" data-pdno={pdno} data-name={name} />
+  ),
 }));
 
 vi.mock('@renderer/shared/api/trpc', () => ({
@@ -26,6 +41,9 @@ vi.mock('@renderer/shared/api/trpc', () => ({
     realtime: {
       start: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       getStatus: { useQuery: () => ({ data: { started: false }, isPending: false }) },
+    },
+    auth: {
+      getEnv: { useQuery: () => ({ data: { env: 'MOCK' } }) },
     },
     useUtils: () => ({}),
   },
