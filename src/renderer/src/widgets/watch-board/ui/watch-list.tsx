@@ -78,6 +78,11 @@ export const WatchList = (props: WatchListProps): ReactElement => {
       qtyOrAmountMode: o.qtyOrAmountMode,
       ...(o.qty != null ? { qty: o.qty } : {}),
       ...(o.amountKrw != null ? { amountKrw: o.amountKrw } : {}),
+      ...(o.expiresAt != null
+        ? {
+            expiresAtMs: o.expiresAt instanceof Date ? o.expiresAt.getTime() : Number(o.expiresAt),
+          }
+        : {}),
     });
   });
 

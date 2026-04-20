@@ -5,8 +5,9 @@ import type {
   WatchQtyMode,
   WatchSide,
 } from '@renderer/entities/watch-order';
+import { SearchStockInput, type StockHit } from '@renderer/features/search-stock';
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, NumberInput, RadioGroup, TextInput } from '@renderer/shared/ui';
+import { Button, NumberInput, RadioGroup, Select, TextInput } from '@renderer/shared/ui';
 import { type ReactElement, useState } from 'react';
 
 /**
@@ -18,6 +19,7 @@ import { type ReactElement, useState } from 'react';
 export interface WatchOrderFormPrefill {
   existingId?: number;
   pdno?: string;
+  pdName?: string;
   side?: WatchSide;
   comparator?: WatchComparator;
   targetPrice?: number;
@@ -25,6 +27,8 @@ export interface WatchOrderFormPrefill {
   qtyOrAmountMode?: WatchQtyMode;
   qty?: number;
   amountKrw?: number;
+  /** ms epoch — 만료일. */
+  expiresAtMs?: number;
 }
 
 export interface AddWatchOrderDialogProps {
@@ -36,24 +40,40 @@ export interface AddWatchOrderDialogProps {
   onSaved?: (order: WatchOrder) => void;
 }
 
-const SIDE_ITEMS = [
-  { value: 'BUY' as const, label: '매수' },
-  { value: 'SELL' as const, label: '매도' },
+const SIDE_ITEMS: ReadonlyArray<{ value: WatchSide; label: string }> = [
+  { value: 'BUY', label: '매수' },
+  { value: 'SELL', label: '매도' },
 ];
 
-const COMPARATOR_ITEMS = [
-  { value: 'LTE' as const, label: '이하 (≤)' },
-  { value: 'GTE' as const, label: '이상 (≥)' },
+const COMPARATOR_ITEMS: ReadonlyArray<{ value: WatchComparator; label: string }> = [
+  { value: 'LTE', label: '이하 (≤)' },
+  { value: 'GTE', label: '이상 (≥)' },
 ];
 
-const ORDER_TYPE_ITEMS = [
-  { value: 'LIMIT' as const, label: '지정가' },
-  { value: 'MARKET' as const, label: '시장가' },
+const ORDER_TYPE_ITEMS: ReadonlyArray<{ value: WatchOrderType; label: string }> = [
+  { value: 'LIMIT', label: '지정가' },
+  { value: 'MARKET', label: '시장가' },
 ];
 
-const QTY_MODE_ITEMS = [
-  { value: 'QTY' as const, label: '수량' },
-  { value: 'AMOUNT' as const, label: '금액(원)' },
+const QTY_MODE_ITEMS: ReadonlyArray<{ value: WatchQtyMode; label: string }> = [
+  { value: 'QTY', label: '수량' },
+  { value: 'AMOUNT', label: '금액' },
+];
+
+/** 빠른선택 — 유효일 (개월 수). */
+const EXPIRY_QUICK: ReadonlyArray<{ months: number; label: string }> = [
+  { months: 1, label: '1개월' },
+  { months: 3, label: '3개월' },
+  { months: 12, label: '1년' },
+];
+
+/** 빠른입력 — 주문금액 (원). */
+const AMOUNT_QUICK: ReadonlyArray<{ delta: number; label: string }> = [
+  { delta: 100_000, label: '+10만' },
+  { delta: 500_000, label: '+50만' },
+  { delta: 1_000_000, label: '+100만' },
+  { delta: 5_000_000, label: '+500만' },
+  { delta: 10_000_000, label: '+1000만' },
 ];
 
 function toIntOrNull(raw: string): number | null {
@@ -61,6 +81,23 @@ function toIntOrNull(raw: string): number | null {
   const n = Number(raw);
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null;
   return n;
+}
+
+function toIsoDateLocal(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function todayIsoLocal(): string {
+  return toIsoDateLocal(new Date());
+}
+
+function addMonthsIso(months: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + months);
+  return toIsoDateLocal(d);
 }
 
 /**
@@ -105,49 +142,96 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
   const isEdit = prefill?.existingId !== undefined;
 
   const [pdno, setPdno] = useState<string>(prefill?.pdno ?? '');
+  const [pdName, setPdName] = useState<string>(prefill?.pdName ?? '');
   const [side, setSide] = useState<WatchSide>(prefill?.side ?? 'BUY');
   const [comparator, setComparator] = useState<WatchComparator>(prefill?.comparator ?? 'LTE');
   const [targetPriceRaw, setTargetPriceRaw] = useState<string>(
     prefill?.targetPrice !== undefined ? String(prefill.targetPrice) : '',
   );
-  const [orderType, setOrderType] = useState<WatchOrderType>(prefill?.orderType ?? 'LIMIT');
-  const [qtyMode, setQtyMode] = useState<WatchQtyMode>(prefill?.qtyOrAmountMode ?? 'QTY');
+  const [orderType, setOrderType] = useState<WatchOrderType>(prefill?.orderType ?? 'MARKET');
+  const [qtyMode, setQtyMode] = useState<WatchQtyMode>(prefill?.qtyOrAmountMode ?? 'AMOUNT');
   const [qtyRaw, setQtyRaw] = useState<string>(
     prefill?.qty !== undefined ? String(prefill.qty) : '',
   );
   const [amountKrwRaw, setAmountKrwRaw] = useState<string>(
     prefill?.amountKrw !== undefined ? String(prefill.amountKrw) : '',
   );
+  const [expiresAtIso, setExpiresAtIso] = useState<string>(
+    prefill?.expiresAtMs !== undefined ? toIsoDateLocal(new Date(prefill.expiresAtMs)) : '',
+  );
   const [error, setError] = useState<string | null>(null);
+  const todayIso = todayIsoLocal();
+
+  const onPickStock = (hit: StockHit): void => {
+    setPdno(hit.pdno);
+    setPdName(hit.name);
+    setError(null);
+  };
+
+  const onPickExpiry = (months: number): void => {
+    setExpiresAtIso(addMonthsIso(months));
+  };
+
+  const onAmountQuick = (delta: number): void => {
+    const cur = toIntOrNull(amountKrwRaw) ?? 0;
+    setAmountKrwRaw(String(cur + delta));
+  };
+
+  const onAmountReset = (): void => {
+    setAmountKrwRaw('');
+  };
 
   const validate = (): {
     targetPrice: number;
     qty?: number;
     amountKrw?: number;
+    expiresAt?: number;
   } | null => {
     if (!/^\d{6}$/.test(pdno)) {
-      setError('종목코드는 6자리 숫자여야 합니다.');
+      setError('종목을 검색해서 선택해주세요.');
       return null;
     }
     const targetPrice = toIntOrNull(targetPriceRaw);
     if (targetPrice === null) {
-      setError('목표가를 양의 정수로 입력하세요.');
+      setError('감시가격(목표가)을 양의 정수로 입력하세요.');
       return null;
     }
+    let qty: number | undefined;
+    let amountKrw: number | undefined;
     if (qtyMode === 'QTY') {
-      const qty = toIntOrNull(qtyRaw);
-      if (qty === null) {
+      const v = toIntOrNull(qtyRaw);
+      if (v === null) {
         setError('수량을 양의 정수로 입력하세요.');
         return null;
       }
-      return { qty, targetPrice };
+      qty = v;
+    } else {
+      const v = toIntOrNull(amountKrwRaw);
+      if (v === null) {
+        setError('주문금액을 양의 정수로 입력하세요.');
+        return null;
+      }
+      amountKrw = v;
     }
-    const amountKrw = toIntOrNull(amountKrwRaw);
-    if (amountKrw === null) {
-      setError('금액(원)을 양의 정수로 입력하세요.');
-      return null;
+    let expiresAt: number | undefined;
+    if (expiresAtIso.trim() !== '') {
+      const ts = Date.parse(`${expiresAtIso}T23:59:59`);
+      if (!Number.isFinite(ts) || ts <= Date.now()) {
+        setError('유효일은 오늘 이후 날짜를 선택하세요.');
+        return null;
+      }
+      expiresAt = ts;
     }
-    return { amountKrw, targetPrice };
+    const result: {
+      targetPrice: number;
+      qty?: number;
+      amountKrw?: number;
+      expiresAt?: number;
+    } = { targetPrice };
+    if (qty !== undefined) result.qty = qty;
+    if (amountKrw !== undefined) result.amountKrw = amountKrw;
+    if (expiresAt !== undefined) result.expiresAt = expiresAt;
+    return result;
   };
 
   const onSubmit = async (): Promise<void> => {
@@ -170,6 +254,7 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
         orderType,
         qtyOrAmountMode: qtyMode,
         ...(qtyMode === 'QTY' ? { qty: v.qty as number } : { amountKrw: v.amountKrw as number }),
+        ...(v.expiresAt !== undefined ? { expiresAt: v.expiresAt } : {}),
       });
       await utils.watch.list.invalidate();
       onSaved?.(result.order as unknown as WatchOrder);
@@ -188,113 +273,245 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
       aria-modal="true"
       aria-label={isEdit ? '자동감시 수정' : '자동감시 추가'}
     >
-      <div className="modal panel" style={{ minWidth: '320px', maxWidth: '480px' }}>
+      <div className="modal panel" style={{ minWidth: '720px', maxWidth: '880px' }}>
         <div className="panel__title">{isEdit ? '자동감시 수정' : '자동감시 추가'}</div>
-        <div className="panel__body" style={{ display: 'grid', gap: '0.8rem' }}>
-          <div style={{ display: 'grid', gap: '0.3rem' }}>
-            <span>종목코드 (6자리)</span>
-            <TextInput
-              type="text"
-              value={pdno}
-              onChange={(e) => setPdno(e.target.value.trim())}
-              placeholder="005930"
-              maxLength={6}
-              aria-label="종목코드"
-              dense
-              disabled={isPending}
-            />
-          </div>
-          <div style={{ display: 'grid', gap: '0.3rem' }}>
-            <span>방향</span>
-            <RadioGroup
-              name="watch-side"
-              value={side}
-              onChange={setSide}
-              items={SIDE_ITEMS}
-              ariaLabel="방향"
-              dense
-            />
-          </div>
-          <div style={{ display: 'grid', gap: '0.3rem' }}>
-            <span>비교</span>
-            <RadioGroup
-              name="watch-comparator"
-              value={comparator}
-              onChange={setComparator}
-              items={COMPARATOR_ITEMS}
-              ariaLabel="비교"
-              dense
-            />
-          </div>
-          <div style={{ display: 'grid', gap: '0.3rem' }}>
-            <span>목표가</span>
-            <NumberInput
-              value={targetPriceRaw}
-              onValueChange={setTargetPriceRaw}
-              placeholder="0"
-              aria-label="목표가"
-              dense
-              disabled={isPending}
-            />
-          </div>
-          <div style={{ display: 'grid', gap: '0.3rem' }}>
-            <span>주문 유형</span>
-            <RadioGroup
-              name="watch-order-type"
-              value={orderType}
-              onChange={setOrderType}
-              items={ORDER_TYPE_ITEMS}
-              ariaLabel="주문 유형"
-              dense
-            />
-          </div>
-          <div style={{ display: 'grid', gap: '0.3rem' }}>
-            <span>수량/금액 모드</span>
-            <RadioGroup
-              name="watch-qty-mode"
-              value={qtyMode}
-              onChange={setQtyMode}
-              items={QTY_MODE_ITEMS}
-              ariaLabel="수량/금액 모드"
-              dense
-            />
-          </div>
-          {qtyMode === 'QTY' ? (
-            <div style={{ display: 'grid', gap: '0.3rem' }}>
-              <span>수량</span>
-              <NumberInput
-                value={qtyRaw}
-                onValueChange={setQtyRaw}
-                placeholder="0"
-                aria-label="수량"
-                dense
-                disabled={isPending}
-              />
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gap: '0.3rem' }}>
-              <span>금액(원)</span>
-              <NumberInput
-                value={amountKrwRaw}
-                onValueChange={setAmountKrwRaw}
-                placeholder="0"
-                aria-label="금액(원)"
-                dense
-                disabled={isPending}
-              />
-            </div>
-          )}
-          {isEdit ? (
-            <div className="muted" style={{ fontSize: '0.9rem' }}>
-              ※ 수정은 기존 항목 취소 후 새 항목으로 등록됩니다 (id/등록시각 갱신).
-            </div>
-          ) : null}
-          {error ? (
-            <div className="chip chip--down" role="alert">
-              {error}
-            </div>
-          ) : null}
+
+        {/* 기본정보 — 등록일/구분 메타 */}
+        <div
+          className="panel__body"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '6rem 1fr 6rem 1fr',
+            gap: '0.4rem 0.8rem',
+            alignItems: 'center',
+          }}
+        >
+          <span className="muted">등록일</span>
+          <span className="num">{todayIso}</span>
+          <span className="muted">구분</span>
+          <span>수동추가 (CUSTOM)</span>
         </div>
+
+        {/* 좌(감시조건) / 우(실행조건) 2 컬럼 */}
+        <div
+          className="panel__body"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '0.8rem 1.2rem',
+            alignItems: 'start',
+          }}
+        >
+          {/* 감시조건 */}
+          <section
+            aria-label="감시조건"
+            style={{ display: 'grid', gap: '0.6rem', alignContent: 'start' }}
+          >
+            <div className="panel__title" style={{ padding: 0 }}>
+              감시조건
+            </div>
+
+            <FormRow label="종목명">
+              <SearchStockInput onSelect={onPickStock} placeholder="종목명 또는 코드 검색" />
+              <div
+                className="muted"
+                style={{ fontSize: '0.85rem', marginTop: '0.25rem', minHeight: '1.1rem' }}
+              >
+                {pdno ? `${pdName || '(이름 미상)'} · ${pdno}` : '검색해서 종목을 선택하세요.'}
+              </div>
+            </FormRow>
+
+            <FormRow label="감시타입">
+              <Select dense disabled value="PRICE" onChange={() => undefined}>
+                <option value="PRICE">가격 감시</option>
+              </Select>
+            </FormRow>
+
+            <FormRow label="감시가격">
+              <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                <NumberInput
+                  value={targetPriceRaw}
+                  onValueChange={setTargetPriceRaw}
+                  placeholder="0"
+                  aria-label="감시가격"
+                  dense
+                  disabled={isPending}
+                />
+                <span className="muted">원</span>
+              </div>
+            </FormRow>
+
+            <FormRow label="비교">
+              <RadioGroup
+                name="watch-comparator"
+                value={comparator}
+                onChange={setComparator}
+                items={[...COMPARATOR_ITEMS]}
+                ariaLabel="비교"
+                dense
+              />
+            </FormRow>
+
+            <FormRow label="유효일">
+              <div style={{ display: 'grid', gap: '0.3rem' }}>
+                <TextInput
+                  type="date"
+                  value={expiresAtIso}
+                  onChange={(e) => setExpiresAtIso(e.target.value)}
+                  min={todayIso}
+                  aria-label="유효일"
+                  dense
+                  disabled={isPending}
+                />
+                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                  {EXPIRY_QUICK.map((q) => (
+                    <Button
+                      key={q.months}
+                      onClick={() => onPickExpiry(q.months)}
+                      disabled={isPending}
+                      dense
+                    >
+                      {q.label}
+                    </Button>
+                  ))}
+                  {expiresAtIso ? (
+                    <Button
+                      onClick={() => setExpiresAtIso('')}
+                      disabled={isPending}
+                      dense
+                      variant="danger"
+                    >
+                      만료없음
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </FormRow>
+          </section>
+
+          {/* 실행조건 */}
+          <section
+            aria-label="실행조건"
+            style={{ display: 'grid', gap: '0.6rem', alignContent: 'start' }}
+          >
+            <div className="panel__title" style={{ padding: 0 }}>
+              실행조건
+            </div>
+
+            <FormRow label="주문구분">
+              <Select
+                dense
+                value={side}
+                onChange={(e) => setSide(e.target.value as WatchSide)}
+                aria-label="주문구분"
+                disabled={isPending}
+              >
+                {SIDE_ITEMS.map((it) => (
+                  <option key={it.value} value={it.value}>
+                    {it.label}
+                  </option>
+                ))}
+              </Select>
+            </FormRow>
+
+            <FormRow label="주문타입">
+              <Select
+                dense
+                value={orderType}
+                onChange={(e) => setOrderType(e.target.value as WatchOrderType)}
+                aria-label="주문타입"
+                disabled={isPending}
+              >
+                {ORDER_TYPE_ITEMS.map((it) => (
+                  <option key={it.value} value={it.value}>
+                    {it.label}
+                  </option>
+                ))}
+              </Select>
+            </FormRow>
+
+            <FormRow label="금액/수량">
+              <Select
+                dense
+                value={qtyMode}
+                onChange={(e) => setQtyMode(e.target.value as WatchQtyMode)}
+                aria-label="금액/수량"
+                disabled={isPending}
+              >
+                {QTY_MODE_ITEMS.map((it) => (
+                  <option key={it.value} value={it.value}>
+                    {it.label}
+                  </option>
+                ))}
+              </Select>
+            </FormRow>
+
+            {qtyMode === 'QTY' ? (
+              <FormRow label="수량">
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                  <NumberInput
+                    value={qtyRaw}
+                    onValueChange={setQtyRaw}
+                    placeholder="0"
+                    aria-label="수량"
+                    dense
+                    disabled={isPending}
+                  />
+                  <span className="muted">주</span>
+                </div>
+              </FormRow>
+            ) : (
+              <FormRow label="주문금액">
+                <div style={{ display: 'grid', gap: '0.3rem' }}>
+                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                    <NumberInput
+                      value={amountKrwRaw}
+                      onValueChange={setAmountKrwRaw}
+                      placeholder="0"
+                      aria-label="주문금액"
+                      dense
+                      disabled={isPending}
+                    />
+                    <span className="muted">원</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                    {AMOUNT_QUICK.map((q) => (
+                      <Button
+                        key={q.delta}
+                        onClick={() => onAmountQuick(q.delta)}
+                        disabled={isPending}
+                        dense
+                      >
+                        {q.label}
+                      </Button>
+                    ))}
+                    <Button onClick={onAmountReset} disabled={isPending} dense variant="danger">
+                      초기화
+                    </Button>
+                  </div>
+                </div>
+              </FormRow>
+            )}
+          </section>
+        </div>
+
+        {/* 메시지/알림 */}
+        {(isEdit || error) && (
+          <div className="panel__body" style={{ display: 'grid', gap: '0.4rem' }}>
+            {isEdit ? (
+              <div className="muted" style={{ fontSize: '0.9rem' }}>
+                ※ 수정은 기존 항목 취소 후 새 항목으로 등록됩니다 (id/등록시각 갱신).
+              </div>
+            ) : null}
+            {error ? (
+              <div className="chip chip--down" role="alert">
+                {error}
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {/* 액션 */}
         <div
           className="panel__body"
           style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
@@ -317,3 +534,24 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
     </div>
   );
 };
+
+interface FormRowProps {
+  label: string;
+  children: ReactElement | ReactElement[];
+}
+
+const FormRow = ({ label, children }: FormRowProps): ReactElement => (
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: '5.5rem 1fr',
+      gap: '0.4rem',
+      alignItems: 'start',
+    }}
+  >
+    <span className="muted" style={{ paddingTop: '0.25rem' }}>
+      {label}
+    </span>
+    <div>{children}</div>
+  </div>
+);
