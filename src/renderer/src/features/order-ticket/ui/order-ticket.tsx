@@ -5,6 +5,7 @@ import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, NumberInput, Select } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useOrderActions } from '../model/use-order-actions';
 
 export interface OrderTicketSelection {
@@ -78,15 +79,26 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const canSubmit = validQty && validPrice && !actions.isPending;
 
   const executeOrder = async (confirmed: PendingConfirm): Promise<void> => {
-    const result = await actions.place({
-      pdno: selection.pdno,
-      side: confirmed.side,
-      qty: confirmed.qty,
-      price: confirmed.price,
-      division: confirmed.division,
-    });
-    const r = result as { odno?: string } | undefined;
-    if (r?.odno) props.onPlaced?.({ odno: r.odno, side: confirmed.side });
+    const sideLabel = confirmed.side === 'BUY' ? '매수' : '매도';
+    const priceLabel =
+      confirmed.division === 'MARKET' ? '시장가' : `${thousandSeparator(String(confirmed.price))}원`;
+    try {
+      const result = await actions.place({
+        pdno: selection.pdno,
+        side: confirmed.side,
+        qty: confirmed.qty,
+        price: confirmed.price,
+        division: confirmed.division,
+      });
+      const r = result as { odno?: string } | undefined;
+      toast.success(
+        `${nextNth}차 ${sideLabel} 주문 완료 — ${selection.name} ${thousandSeparator(String(confirmed.qty))}주 @ ${priceLabel}`,
+      );
+      if (r?.odno) props.onPlaced?.({ odno: r.odno, side: confirmed.side });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`주문 실패: ${msg}`, { duration: 6000 });
+    }
   };
 
   const submit = (chosenSide: 'BUY' | 'SELL'): void => {
@@ -195,13 +207,6 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
               <kbd className="kbd">F4</kbd>
             </Button>
           </div>
-          {actions.lastError ? (
-            <div className="panel__body">
-              <span className="chip chip--down" role="alert">
-                {actions.lastError}
-              </span>
-            </div>
-          ) : null}
           <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
             현재 선택: {side} · {division === 'MARKET' ? '시장가' : '지정가'} ·{' '}
             {qtyStr ? thousandSeparator(qtyStr) : '0'}주
