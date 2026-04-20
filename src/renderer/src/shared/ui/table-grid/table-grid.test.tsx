@@ -200,6 +200,53 @@ describe('TableGrid', () => {
     });
   });
 
+  describe('columnDividers', () => {
+    it('variant="hts" 기본값은 data-column-dividers="true"', () => {
+      render(
+        <TableGrid.Root variant="hts">
+          <TableGrid.Body>
+            <TableGrid.Row>
+              <TableGrid.Cell>A</TableGrid.Cell>
+            </TableGrid.Row>
+          </TableGrid.Body>
+        </TableGrid.Root>,
+      );
+
+      const root = document.querySelector('.table-grid-root');
+      expect(root).toHaveAttribute('data-column-dividers', 'true');
+    });
+
+    it('variant="plain" 기본값은 data-column-dividers="false"', () => {
+      render(
+        <TableGrid.Root variant="plain">
+          <TableGrid.Body>
+            <TableGrid.Row>
+              <TableGrid.Cell>A</TableGrid.Cell>
+            </TableGrid.Row>
+          </TableGrid.Body>
+        </TableGrid.Root>,
+      );
+
+      const root = document.querySelector('.table-grid-root');
+      expect(root).toHaveAttribute('data-column-dividers', 'false');
+    });
+
+    it('columnDividers=false 로 명시하면 hts 에서도 수직선 비활성화', () => {
+      render(
+        <TableGrid.Root variant="hts" columnDividers={false}>
+          <TableGrid.Body>
+            <TableGrid.Row>
+              <TableGrid.Cell>A</TableGrid.Cell>
+            </TableGrid.Row>
+          </TableGrid.Body>
+        </TableGrid.Root>,
+      );
+
+      const root = document.querySelector('.table-grid-root');
+      expect(root).toHaveAttribute('data-column-dividers', 'false');
+    });
+  });
+
   describe('Header sticky', () => {
     it('stickyHeader=true (default) 일 때 position sticky 가 적용된다', () => {
       render(

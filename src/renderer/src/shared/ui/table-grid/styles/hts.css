@@ -59,6 +59,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 컬럼 수직선 — data-column-dividers="true" 시 헤더·바디 셀 우측 border */
+.table-grid-root[data-column-dividers="true"] .table-grid-header .table-grid-cell:not(:last-child),
+.table-grid-root[data-column-dividers="true"] .table-grid-row .table-grid-cell:not(:last-child) {
+  border-right: 0.1rem solid var(--border);
+}
+
 /* overflow scroll 모드 — 셀 내부 가로 스크롤 시 스크롤바 숨김 */
 .table-grid-cell--ovf-scroll {
   scrollbar-width: none;

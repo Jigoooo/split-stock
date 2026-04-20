@@ -6,6 +6,7 @@ interface TableGridContextValue {
   variant: Variant;
   stickyHeader: boolean;
   zebra: boolean;
+  columnDividers: boolean;
   overlayScrollbar: boolean;
   /** Body 가 등록한 scroll container ref — Root 가 OverlayScrollbar 에 전달 */
   bodyRef: React.RefObject<HTMLDivElement | null>;
@@ -39,11 +40,13 @@ export function TableGridRoot(props: RootProps): ReactElement {
     children,
   } = props;
 
+  const columnDividers = props.columnDividers ?? variant === 'hts';
+
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
   const ctx = useMemo<TableGridContextValue>(
-    () => ({ variant, stickyHeader, zebra, overlayScrollbar, bodyRef }),
-    [variant, stickyHeader, zebra, overlayScrollbar],
+    () => ({ variant, stickyHeader, zebra, columnDividers, overlayScrollbar, bodyRef }),
+    [variant, stickyHeader, zebra, columnDividers, overlayScrollbar],
   );
 
   return (
@@ -53,6 +56,7 @@ export function TableGridRoot(props: RootProps): ReactElement {
         data-variant={variant}
         data-sticky-header={stickyHeader}
         data-zebra={zebra}
+        data-column-dividers={columnDividers}
         role={ariaLabel ? 'region' : undefined}
         aria-label={ariaLabel}
         className={['table-grid-root', className ?? ''].filter(Boolean).join(' ')}

@@ -53,6 +53,8 @@ export interface RootProps {
   stickyHeader?: boolean;
   /** zebra 행 (variant=hts 에서만 효과 — default true) */
   zebra?: boolean;
+  /** 컬럼 수직선 (variant=hts 에서 default true, plain 은 default false) */
+  columnDividers?: boolean;
   /** OverlayScrollbar 자동 마운트 (default true) */
   overlayScrollbar?: boolean;
   /** 접근성 레이블 */
