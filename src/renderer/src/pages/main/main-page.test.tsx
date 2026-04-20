@@ -17,8 +17,18 @@ vi.mock('@renderer/entities/account', () => ({
   useActiveAccountId: () => mockUseActiveAccountId(),
 }));
 
-vi.mock('../model/use-main-realtime', () => ({
+vi.mock('@renderer/pages/main/model/use-main-realtime', () => ({
   useMainRealtime: () => undefined,
+}));
+
+vi.mock('@renderer/shared/api/trpc', () => ({
+  trpc: {
+    realtime: {
+      start: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      getStatus: { useQuery: () => ({ data: { started: false }, isPending: false }) },
+    },
+    useUtils: () => ({}),
+  },
 }));
 
 vi.mock('@renderer/widgets/main-positions-pane', () => ({

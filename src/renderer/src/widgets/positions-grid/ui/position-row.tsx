@@ -150,10 +150,7 @@ export const PositionRow = (props: PositionRowProps): ReactElement => {
                   cursor: toggleSymbol.isPending ? 'wait' : 'pointer',
                   fontWeight: 600,
                   fontSize: '1rem',
-                  color:
-                    autoOn === false
-                      ? 'var(--hts-down, #e53935)'
-                      : 'var(--hts-up, #1976d2)',
+                  color: autoOn === false ? 'var(--hts-down, #e53935)' : 'var(--hts-up, #1976d2)',
                 }}
               >
                 {autoOn === false ? 'OFF' : 'ON'}
