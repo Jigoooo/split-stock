@@ -156,7 +156,7 @@ export const backupRouter = router({
   /**
    * 폴더 선택 dialog 표시 후 경로 반환
    */
-  pickDuplicateFolder: publicProcedure.mutation(async ({ ctx }) => {
+  pickDuplicateFolder: publicProcedure.mutation(async ({ ctx: _ctx }) => {
     const dialog = electronDialog();
     const result = await dialog.showOpenDialog({
       title: '2중 백업 폴더 선택',
