@@ -4,6 +4,8 @@ export type { CheckboxProps } from './checkbox';
 export { Checkbox } from './checkbox';
 export type { DateInputProps } from './date-input';
 export { DateInput } from './date-input';
+export type { ErrorBoundaryProps } from './error-boundary';
+export { ErrorBoundary, withSectionBoundary } from './error-boundary';
 export type { NumberInputProps } from './number-input';
 export { NumberInput } from './number-input';
 export type { RadioGroupItem, RadioGroupProps } from './radio-group';
