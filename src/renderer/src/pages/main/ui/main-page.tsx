@@ -3,6 +3,7 @@ import { MainPositionsPane } from '@renderer/widgets/main-positions-pane';
 import { MainTradeHistoryPane } from '@renderer/widgets/main-trade-history-pane';
 import type { ReactElement } from 'react';
 import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
+import { useMainRealtime } from '../model/use-main-realtime';
 import { useMainSelection } from '../model/use-main-selection';
 
 const HORIZONTAL_SEPARATOR: ReactElement = (
@@ -28,6 +29,8 @@ const panelStyle = { overflow: 'hidden' } as const;
  * - activeAccountId 없으면 안내 패널만 표시 (login 화면을 따로 두지 않고 shell 레벨).
  */
 export const MainPage = (): ReactElement => {
+  useMainRealtime();
+
   const { accountId, isPending: isAccountPending } = useActiveAccountId();
   const { selectedPdno, setSelectedPdno } = useMainSelection();
 
