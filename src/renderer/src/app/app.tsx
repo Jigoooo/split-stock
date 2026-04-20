@@ -48,14 +48,6 @@ const AppShell = ({ popout }: { popout: PopoutApi }): ReactElement => {
               <Button onClick={() => shell.logout(false)} disabled={shell.isLoggingOut} dense>
                 로그아웃
               </Button>
-              <Button
-                onClick={() => shell.logout(true)}
-                disabled={shell.isLoggingOut}
-                title="저장된 자격증명까지 삭제"
-                dense
-              >
-                자격증명 삭제
-              </Button>
             </nav>
           </>
         ) : null}

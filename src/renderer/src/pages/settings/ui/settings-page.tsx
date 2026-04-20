@@ -1,4 +1,5 @@
 import { BackupPanel } from '@renderer/features/backup-restore';
+import { CredentialsSettingsPanel } from '@renderer/features/credentials-settings';
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
 import { ActivePendingList, PendingCancelForm } from '@renderer/features/pending-cancel-settings';
 import { PriceCorrectionForm } from '@renderer/features/price-correction-settings';
@@ -34,6 +35,9 @@ export const SettingsPage = (): ReactElement => {
       </Section>
       <Section name="백업/복원">
         <BackupPanel />
+      </Section>
+      <Section name="보안 · 자격증명">
+        <CredentialsSettingsPanel />
       </Section>
     </div>
   );
