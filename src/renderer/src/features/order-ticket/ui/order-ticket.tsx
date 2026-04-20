@@ -153,6 +153,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
             aria-label="매수 주문"
           >
             매수
+            <kbd className="kbd">F3</kbd>
           </Button>
           <Button
             disabled={!canSubmit}
@@ -165,6 +166,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
             aria-label="매도 주문"
           >
             매도
+            <kbd className="kbd">F4</kbd>
           </Button>
         </div>
         {actions.lastError ? (

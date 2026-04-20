@@ -3,6 +3,7 @@ import { SwitchEnvDialog } from '@renderer/features/switch-env';
 import { LoginPage } from '@renderer/pages/login';
 import { Button } from '@renderer/shared/ui';
 import { AccountBar } from '@renderer/widgets/account-bar';
+import { ConnectionStatusDot } from '@renderer/widgets/connection-status-dot';
 import type { ReactElement } from 'react';
 import { readPopoutRoute } from './model/popout-route';
 import { useAppShell } from './model/use-app-shell';
@@ -23,6 +24,7 @@ const AppShell = ({ popout }: { popout: PopoutApi }): ReactElement => {
         <AccountBar env={shell.env} />
         {shell.env ? (
           <>
+            <ConnectionStatusDot />
             <div
               style={{
                 display: 'flex',

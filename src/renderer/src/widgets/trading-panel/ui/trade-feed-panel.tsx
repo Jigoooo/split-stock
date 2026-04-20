@@ -1,6 +1,13 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { useFlashOnNew } from '@renderer/shared/lib/use-flash-on-new';
 import type { ReactElement } from 'react';
 import type { LiveTick } from '../model/use-live-feed';
+
+function flashKindFromTick(direction: LiveTick['tickDirection']): 'up' | 'down' | undefined {
+  if (direction === 'UP' || direction === 'UPPER_LIMIT') return 'up';
+  if (direction === 'DOWN' || direction === 'LOWER_LIMIT') return 'down';
+  return undefined;
+}
 
 export interface TradeFeedPanelProps {
   feed: LiveTick[];
@@ -15,6 +22,7 @@ export interface TradeFeedPanelProps {
 export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
   const { feed, name, pdno } = props;
   const headerSuffix = name && pdno ? ` — ${name} (${pdno})` : '';
+  const flashSet = useFlashOnNew(feed, (t) => `${t.time}-${t.accumVolume}`);
   if (feed.length === 0) {
     return (
       <div className="panel">
@@ -88,8 +96,12 @@ export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
                     : t.tickDirection === 'DOWN' || t.tickDirection === 'LOWER_LIMIT'
                       ? 'num-down'
                       : 'num-flat';
+                const key = `${t.time}-${t.accumVolume}`;
+                const flashKind = flashSet.has(key)
+                  ? flashKindFromTick(t.tickDirection)
+                  : undefined;
                 return (
-                  <tr key={`${t.time}-${t.accumVolume}`}>
+                  <tr key={key} data-flash={flashKind}>
                     <td className="num">{formatTime(t.time)}</td>
                     <td className={`num ${color}`}>{thousandSeparator(t.price)}</td>
                     <td className="num">{thousandSeparator(t.volume)}</td>

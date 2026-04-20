@@ -2,6 +2,28 @@
  * Base: 1rem = 10px (반응형 clamp 8.5~10.5px)
  * 전반적 HTS 스타일 — 밀도 높고, 숫자 고정폭, 라인 타이트.
  */
+
+/* ===== 웹폰트 선언 ===== */
+@font-face {
+  font-family: "Pretendard Variable";
+  font-style: normal;
+  font-weight: 45 920;
+  font-display: swap;
+  src: url("/fonts/PretendardVariable.woff2") format("woff2-variations");
+  unicode-range:
+    U+AC00-D7A3, U+1100-11FF, U+3130-318F, U+A960-A97F, U+D7B0-D7FF, U+0020-007E, U+00A0-00FF;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  /* CSS-level subsetting: 숫자 + 라틴 + HTS 관련 기호만 로드 (한글은 Pretendard) */
+  unicode-range: U+0020-007E, U+00A0-00FF, U+2010-2012, U+2212, U+2033;
+}
+
 :root {
   /* HTS 감성: 좁은 화면 8.5px, 큰 화면 10.5px */
   font-size: clamp(53.125%, 0.25vw + 52%, 65.625%);
@@ -84,8 +106,8 @@ html {
 html,
 body {
   font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR",
-    "Malgun Gothic", sans-serif;
+    "Pretendard Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+    "Noto Sans KR", "Malgun Gothic", sans-serif;
   font-size: 1.2rem; /* 기본 12px 상당 — HTS 밀도 */
   line-height: 1.35;
   margin: 0;
@@ -107,6 +129,17 @@ body {
 body {
   background: var(--bg-2);
   color: var(--fg);
+}
+
+/* ===== 접근성: 키보드 포커스 링 ===== */
+*:focus-visible {
+  outline: 0.2rem solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+  border-radius: 0.2rem;
+}
+
+*:focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* ===== 앱 셸 ===== */
@@ -276,7 +309,6 @@ body {
   font-size: 1.2rem;
   font-family: inherit;
   line-height: 1.35;
-  outline: none;
   min-height: 3rem;
   box-sizing: border-box;
   width: 100%;
@@ -286,9 +318,11 @@ body {
     background-color var(--motion-fast) var(--motion-crisp);
 }
 
-.hts-input:focus,
-.hts-select:focus,
-.hts-date-input:focus {
+/* 폼 컨트롤은 box-shadow 링이 이미 있어 global outline을 중복 방지 */
+.hts-input:focus-visible,
+.hts-select:focus-visible,
+.hts-date-input:focus-visible {
+  outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 0.2rem var(--accent-ring);
 }
@@ -333,6 +367,7 @@ body {
 }
 
 .hts-input-shell:focus-within {
+  outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 0.2rem var(--accent-ring);
 }
@@ -817,12 +852,11 @@ body {
   padding: 0.9rem 1rem;
   border: 0.1rem solid var(--border);
   border-radius: 0.45rem;
-  background:
-    linear-gradient(180deg, rgba(2, 132, 199, 0.04) 0%, rgba(2, 132, 199, 0) 100%), var(--bg);
+  background: var(--bg);
 }
 
 .dashboard-summary-card--primary {
-  border-color: rgba(2, 132, 199, 0.22);
+  border-color: var(--accent-tint-22);
 }
 
 .dashboard-summary-label {
@@ -858,7 +892,7 @@ body {
 }
 
 .dashboard-positions-table tbody tr[data-selected="true"] {
-  background: rgba(2, 132, 199, 0.08);
+  background: var(--accent-tint-8);
   box-shadow: inset 0.2rem 0 0 0 var(--accent);
 }
 
@@ -898,4 +932,121 @@ body {
 .dashboard-realtime-panel__body {
   display: grid;
   gap: 0.8rem;
+}
+
+/* ===== kbd 단축키 배지 ===== */
+.kbd {
+  display: inline-block;
+  min-width: 1.8rem;
+  padding: 0.1rem 0.4rem;
+  font-family: var(--mono);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--fg-2);
+  background: var(--bg-2);
+  border: 0.1rem solid var(--border);
+  border-radius: 0.3rem;
+  text-align: center;
+  vertical-align: baseline;
+  box-shadow: inset 0 -0.1rem 0 var(--border-strong);
+}
+
+.hts-btn .kbd {
+  margin-left: 0.6rem;
+  /* primary/danger/down 등 색상 버튼의 kbd는 흰색 계열로 */
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: none;
+}
+
+.hts-btn:not(.hts-btn--primary):not(.hts-btn--danger):not(.hts-btn--down):not(.hts-btn--active)
+  .kbd {
+  /* 기본 회색 버튼에서는 다시 본 색 */
+  color: var(--fg-2);
+  background: var(--bg-2);
+  border-color: var(--border);
+  box-shadow: inset 0 -0.1rem 0 var(--border-strong);
+}
+
+/* ===== 연결 상태 도트 (상단 헤더) ===== */
+.status-dot {
+  position: relative;
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.status-dot--connected {
+  background: var(--status-connected);
+}
+
+.status-dot--stale {
+  background: var(--status-stale);
+}
+
+.status-dot--disconnected {
+  background: var(--status-disconnected);
+}
+
+.status-dot__pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.status-dot--connected .status-dot__pulse {
+  background: var(--status-connected);
+  animation: status-pulse 1.6s ease-out infinite;
+}
+
+@keyframes status-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* ===== 체결 flash 피드백 (TradeFeedPanel / FilledPane) ===== */
+@keyframes flash-up {
+  0% {
+    background: var(--flash-up-bg);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+@keyframes flash-down {
+  0% {
+    background: var(--flash-down-bg);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.hts-table tbody tr[data-flash="up"] {
+  animation: flash-up 500ms ease-out 1;
+}
+
+.hts-table tbody tr[data-flash="down"] {
+  animation: flash-down 500ms ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot__pulse,
+  .hts-table tbody tr[data-flash="up"],
+  .hts-table tbody tr[data-flash="down"] {
+    animation: none;
+  }
 }
