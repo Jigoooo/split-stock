@@ -60,18 +60,29 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
       }}
       aria-label={`자동감시 보드 (계좌 ${accountId})`}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          minHeight: '2.6rem',
+          padding: '0.3rem 0',
+          flexShrink: 0,
+        }}
+      >
         <HtsTabs tabs={TABS} active={tab} onChange={setTab} ariaLabel="자동감시 4탭" />
-        {tab === 'watching' && (
-          <Button
-            onClick={dialog.openCreate}
-            variant="primary"
-            dense
-            style={{ marginLeft: 'auto', marginRight: '0.5rem', whiteSpace: 'nowrap' }}
-          >
-            + 추가
-          </Button>
-        )}
+        <div style={{ marginLeft: 'auto', marginRight: '0.5rem', minWidth: '5rem' }}>
+          {tab === 'watching' && (
+            <Button
+              onClick={dialog.openCreate}
+              variant="primary"
+              dense
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              + 추가
+            </Button>
+          )}
+        </div>
       </div>
       <WatchList
         orders={visible}

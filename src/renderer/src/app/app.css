@@ -34,9 +34,46 @@
   /* 그리드 행 높이 — GridDensityForm에서 document.documentElement.style.setProperty로 덮어씀 */
   --hts-row-height: 26px;
 
-  --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, "D2Coding", monospace;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, "D2Coding", monospace;
   --motion-fast: 100ms;
   --motion-crisp: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ===== 상태 기반 토큰 (HTS 모더나이제이션 1차) ===== */
+  /* Interactive state — primary */
+  --accent-hover: #0369a1;
+  --accent-active: #075985;
+  --accent-ring: rgba(2, 132, 199, 0.25);
+  --accent-tint-4: rgba(2, 132, 199, 0.04);
+  --accent-tint-6: rgba(2, 132, 199, 0.06);
+  --accent-tint-8: rgba(2, 132, 199, 0.08);
+  --accent-tint-10: rgba(2, 132, 199, 0.1);
+  --accent-tint-12: rgba(2, 132, 199, 0.12);
+  --accent-tint-18: rgba(2, 132, 199, 0.18);
+  --accent-tint-22: rgba(2, 132, 199, 0.22);
+
+  /* Interactive state — up/down (한국식 상/하향) */
+  --up-hover: #b91c1c;
+  --down-hover: #1d4ed8;
+
+  /* Surface lightening (중립 hover — accent tint 대체) */
+  --surface-hover: rgba(15, 23, 42, 0.04);
+  --surface-active: rgba(15, 23, 42, 0.08);
+  --table-row-hover: var(--surface-hover);
+  --table-row-zebra: #fafbfc;
+  --table-row-selected: var(--accent-tint-8);
+
+  /* Focus ring */
+  --focus-ring: var(--accent);
+  --focus-ring-offset: 2px;
+
+  /* Flash feedback (체결 side 기반) */
+  --flash-up-bg: rgba(220, 38, 38, 0.22);
+  --flash-down-bg: rgba(37, 99, 235, 0.22);
+
+  /* Connection status dot */
+  --status-connected: #10b981;
+  --status-stale: #eab308;
+  --status-disconnected: #dc2626;
 }
 
 html {
@@ -208,8 +245,16 @@ body {
   z-index: 1;
 }
 
+.hts-table tbody tr:nth-child(even):not([data-expanded="true"]):not([data-selected="true"]) {
+  background: var(--table-row-zebra);
+}
+
 .hts-table tbody tr:hover {
-  background: rgba(56, 189, 248, 0.06);
+  background: var(--table-row-hover);
+}
+
+.hts-table tbody tr[data-selected="true"] {
+  background: var(--table-row-selected);
 }
 
 .hts-table td.num,
@@ -245,7 +290,7 @@ body {
 .hts-select:focus,
 .hts-date-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 0.2rem rgba(56, 189, 248, 0.2);
+  box-shadow: 0 0 0 0.2rem var(--accent-ring);
 }
 
 .hts-input:disabled,
@@ -289,7 +334,7 @@ body {
 
 .hts-input-shell:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 0.2rem rgba(56, 189, 248, 0.2);
+  box-shadow: 0 0 0 0.2rem var(--accent-ring);
 }
 
 .hts-input-shell--dense {
@@ -349,7 +394,7 @@ body {
   border-color: var(--accent);
   color: var(--accent);
   background: #ffffff;
-  box-shadow: 0 0 0 0.1rem rgba(2, 132, 199, 0.12);
+  box-shadow: 0 0 0 0.1rem var(--accent-tint-12);
 }
 
 .hts-btn:disabled {
@@ -396,13 +441,13 @@ body {
 }
 
 .hts-btn--primary:hover {
-  background: #0369a1;
-  border-color: #0369a1;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .hts-btn--danger:hover {
-  background: #b91c1c;
-  border-color: #b91c1c;
+  background: var(--up-hover);
+  border-color: var(--up-hover);
 }
 
 .hts-btn--down {
@@ -412,9 +457,9 @@ body {
 }
 
 .hts-btn--down:hover {
-  background: #1d4ed8;
+  background: var(--down-hover);
   color: #fff;
-  border-color: #1d4ed8;
+  border-color: var(--down-hover);
   box-shadow: none;
 }
 
@@ -461,7 +506,7 @@ body {
 .hts-segmented__item:hover {
   border-color: var(--accent);
   color: var(--accent);
-  box-shadow: 0 0 0 0.1rem rgba(2, 132, 199, 0.1);
+  box-shadow: 0 0 0 0.1rem var(--accent-tint-10);
 }
 
 .hts-segmented__item--active {
@@ -524,12 +569,12 @@ body {
 
 .hts-choice:hover {
   border-color: var(--accent);
-  background: rgba(2, 132, 199, 0.04);
+  background: var(--accent-tint-4);
 }
 
 .hts-choice--active {
   border-color: var(--accent);
-  box-shadow: 0 0 0 0.1rem rgba(2, 132, 199, 0.18);
+  box-shadow: 0 0 0 0.1rem var(--accent-tint-18);
 }
 
 .hts-choice--disabled {
