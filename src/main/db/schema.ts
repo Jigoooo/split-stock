@@ -214,6 +214,16 @@ export const prebuyOrders = sqliteTable('prebuy_orders', {
 });
 
 /**
+ * 종목 메모 — 글로벌 종목별 단일 메모(여러 계좌 공유).
+ * pdno 가 PK. 향후 per-account 가 필요해지면 (account_id, pdno) 복합 PK로 확장 가능.
+ */
+export const symbolMemos = sqliteTable('symbol_memos', {
+  pdno: text('pdno').primaryKey(), // 종목코드 6자리
+  content: text('content').notNull().default(''), // 메모 본문
+  updatedAt: integer('updated_at').notNull(), // unix epoch (ms)
+});
+
+/**
  * 통합 자동감시주문 큐 — booster/prebuy/custom을 단일 큐로 일원화.
  *
  * source:

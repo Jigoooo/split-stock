@@ -151,6 +151,11 @@ const CREATE_STATEMENTS: readonly string[] = [
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS symbol_memos (
+    pdno TEXT PRIMARY KEY,
+    content TEXT NOT NULL DEFAULT '',
+    updated_at INTEGER NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS protection_limits (
     account_id INTEGER PRIMARY KEY,
     per_symbol_daily_max_buys INTEGER,
