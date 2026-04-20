@@ -65,8 +65,13 @@ export function useLiveOrderbook(pdno: string, pollMs = 500): LiveOrderbook | nu
 /**
  * 사용자가 보고 있는 종목을 priority=100 으로 끌어올리고, 종목 변경 시 이전 종목은 자동 강등.
  * 같은 pdno 가 자동매매/예약매수 등 다른 경로로도 watch 중이라면 unmount 후에도 watch 자체는 살아 있음.
+ *
+ * env 를 deps 에 포함 — 계좌 전환으로 env 가 바뀌면 서버가 realtime 인스턴스를 재생성하므로
+ * (context.ts `setCurrentEnv` → 새 RealtimeService), 새 인스턴스에 focus 를 다시 보내야 한다.
  */
 export function useFocusedSubscription(pdno: string): void {
+  const envQuery = trpc.auth.getEnv.useQuery();
+  const env = envQuery.data?.env ?? null;
   const focusMutation = trpc.realtime.focus.useMutation();
   const blurMutation = trpc.realtime.blur.useMutation();
   const focus = useEffectEvent((next: string) => {
@@ -77,11 +82,12 @@ export function useFocusedSubscription(pdno: string): void {
   });
 
   useEffect(() => {
+    if (env === null) return;
     focus(pdno);
     return () => {
       blur(pdno);
     };
-  }, [pdno]);
+  }, [pdno, env]);
 }
 
 /**
@@ -119,7 +125,14 @@ export function useTradeFeed(pdno: string, capacity = 200): LiveTick[] {
   return feed;
 }
 
+/**
+ * env 를 deps 에 포함 — 계좌 전환으로 env 가 바뀌면 서버가 realtime 인스턴스를 재생성하므로
+ * (context.ts `setCurrentEnv` → 새 RealtimeService, 이전 watches 는 소실), 새 인스턴스에
+ * watch 를 다시 보내야 호가/체결 피드가 재개된다.
+ */
 function useWatch(pdno: string, topic: Topic): void {
+  const envQuery = trpc.auth.getEnv.useQuery();
+  const env = envQuery.data?.env ?? null;
   const watchMutation = trpc.realtime.watch.useMutation();
   const unwatchMutation = trpc.realtime.unwatch.useMutation();
   const watch = useEffectEvent((nextPdno: string, nextTopic: Topic) => {
@@ -130,9 +143,10 @@ function useWatch(pdno: string, topic: Topic): void {
   });
 
   useEffect(() => {
+    if (env === null) return;
     watch(pdno, topic);
     return () => {
       unwatch(pdno, topic);
     };
-  }, [pdno, topic]);
+  }, [pdno, topic, env]);
 }

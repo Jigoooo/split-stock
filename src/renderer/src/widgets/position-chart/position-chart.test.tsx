@@ -61,6 +61,11 @@ const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoi
 vi.mock('@renderer/shared/api/trpc', () => ({
   trpc: {
     useUtils: () => trpcUtilsMock,
+    auth: {
+      getEnv: {
+        useQuery: () => ({ data: { env: 'MOCK', accountId: 1 } }),
+      },
+    },
     display: {
       getSettings: {
         useQuery: () => ({ isPending: false, error: null, data: null }),
