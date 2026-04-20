@@ -2,6 +2,7 @@ import { useActiveAccountId, useBalanceWithLots } from '@renderer/entities/accou
 import { trpc } from '@renderer/shared/api/trpc';
 import { MainPositionsPane } from '@renderer/widgets/main-positions-pane';
 import { MainTradeHistoryPane } from '@renderer/widgets/main-trade-history-pane';
+import { useStockList } from '@renderer/widgets/stock-picker-list';
 import { TradeWorkspace } from '@renderer/widgets/trade-workspace';
 import type { ReactElement } from 'react';
 import { Group, type Layout, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
@@ -58,16 +59,21 @@ export const MainPage = (): ReactElement => {
     storage: localStorage,
   });
 
-  // 하단 TradeWorkspace 의 isProd / 종목명 조회 — 좌측에서 선택된 pdno 의 name 을
-  // useBalanceWithLots.positions 에서 lookup, 미발견 시 pdno 자체로 fallback.
+  // 하단 TradeWorkspace 의 isProd / 종목명 조회.
+  // 우선순위: 잔고 positions(보유) → 종목 마스터(stock_master) → pdno 자체(최종 폴백).
+  // stock_master 는 useStockList 로 이미 다른 UI에서 캐시 로드되므로 네트워크 재요청 없음(10분 staleTime).
   const envQuery = trpc.auth.getEnv.useQuery();
   const isProd = envQuery.data?.env === 'PROD';
   const balance = useBalanceWithLots();
+  const stockList = useStockList('');
   const selectedEntry =
     selectedPdno !== null
       ? {
           pdno: selectedPdno,
-          name: balance.positions.find((p) => p.code === selectedPdno)?.name ?? selectedPdno,
+          name:
+            balance.positions.find((p) => p.code === selectedPdno)?.name ??
+            stockList.entries.find((e) => e.pdno === selectedPdno)?.name ??
+            selectedPdno,
         }
       : null;
 
