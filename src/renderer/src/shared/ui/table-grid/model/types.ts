@@ -37,6 +37,8 @@ export interface RowProps {
   expanded?: boolean;
   flash?: FlashDirection | null;
   onClick?: (e: MouseEvent<HTMLDivElement>) => void;
+  /** 우클릭 컨텍스트 메뉴 핸들러 */
+  onContextMenu?: (e: MouseEvent<HTMLDivElement>) => void;
   className?: string;
   style?: CSSProperties;
   /** 가상화 시 react key 보조 — DOM data-key */
@@ -53,6 +55,8 @@ export interface RootProps {
   zebra?: boolean;
   /** OverlayScrollbar 자동 마운트 (default true) */
   overlayScrollbar?: boolean;
+  /** 접근성 레이블 */
+  'aria-label'?: string;
   className?: string;
   style?: CSSProperties;
   children?: ReactNode;

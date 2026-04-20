@@ -33,6 +33,7 @@ export function TableGridRoot(props: RootProps): ReactElement {
     stickyHeader = true,
     zebra = true,
     overlayScrollbar = true,
+    'aria-label': ariaLabel,
     className,
     style,
     children,
@@ -47,10 +48,13 @@ export function TableGridRoot(props: RootProps): ReactElement {
 
   return (
     <TableGridContext.Provider value={ctx}>
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: role=region supports aria-label */}
       <div
         data-variant={variant}
         data-sticky-header={stickyHeader}
         data-zebra={zebra}
+        role={ariaLabel ? 'region' : undefined}
+        aria-label={ariaLabel}
         className={['table-grid-root', className ?? ''].filter(Boolean).join(' ')}
         style={{
           display: 'flex',

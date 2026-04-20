@@ -1,5 +1,6 @@
 import { useTradeCycles } from '@renderer/entities/trade-cycle';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
 export interface PastTradesPaneProps {
@@ -90,88 +91,60 @@ export const PastTradesPane = ({ accountId, onSelect }: PastTradesPaneProps): Re
       <div className="panel__title" style={{ flexShrink: 0 }}>
         과거 거래 종목 ({thousandSeparator(groups.length)}종목)
       </div>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          flex: 1,
-          minHeight: 0,
-          overflow: 'hidden',
-        }}
+      <TableGrid.Root
+        variant="hts"
+        stickyHeader
+        aria-label="과거 거래 종목"
+        style={{ flex: 1, minHeight: 0 }}
       >
-        <table
-          className="hts-table"
-          aria-label="과거 거래 종목"
-          style={{ tableLayout: 'fixed', width: '100%' }}
-        >
-          <colgroup>
-            <col style={{ width: '20%' }} />
-            <col style={{ width: '20%' }} />
-            <col />
-            <col />
-            <col style={{ width: '14%' }} />
-          </colgroup>
-          <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-            <tr>
-              <th>종목명</th>
-              <th>마지막 거래일</th>
-              <th className="num">총 매수금액</th>
-              <th className="num">총 매도금액</th>
-              <th className="num">수익률</th>
-            </tr>
-          </thead>
-        </table>
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          <table
-            className="hts-table"
-            aria-label="과거 거래 종목 바디"
-            style={{ tableLayout: 'fixed', width: '100%' }}
-          >
-            <colgroup>
-              <col style={{ width: '20%' }} />
-              <col style={{ width: '20%' }} />
-              <col />
-              <col />
-              <col style={{ width: '14%' }} />
-            </colgroup>
-            <tbody>
-              {groups.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="muted" style={{ textAlign: 'center' }}>
-                    과거 거래 없음
-                  </td>
-                </tr>
-              ) : null}
-              {groups.map((g) => {
-                const rateClass =
-                  g.pnlRate > 0 ? 'num-up' : g.pnlRate < 0 ? 'num-down' : 'num-flat';
-                return (
-                  <tr
-                    key={g.pdno}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => onSelect(g.pdno)}
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') onSelect(g.pdno);
-                    }}
-                  >
-                    <td>
-                      {g.name}{' '}
-                      <span className="muted" style={{ fontSize: '0.9em' }}>
-                        {g.pdno}
-                      </span>
-                    </td>
-                    <td className="muted num">{formatDate(g.lastTradedAt)}</td>
-                    <td className="num">{thousandSeparator(Math.round(g.totalBuyKrw))}</td>
-                    <td className="num">{thousandSeparator(Math.round(g.totalSellKrw))}</td>
-                    <td className={`num ${rateClass}`}>{g.pnlRate.toFixed(2)}%</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <TableGrid.Header>
+          <TableGrid.Cell flex={1}>종목명</TableGrid.Cell>
+          <TableGrid.Cell flex={1}>마지막 거래일</TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            총 매수금액
+          </TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            총 매도금액
+          </TableGrid.Cell>
+          <TableGrid.Cell width={80} numeric>
+            수익률
+          </TableGrid.Cell>
+        </TableGrid.Header>
+        <TableGrid.Body>
+          {groups.length === 0 ? (
+            <TableGrid.Row>
+              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
+                과거 거래 없음
+              </TableGrid.Cell>
+            </TableGrid.Row>
+          ) : null}
+          {groups.map((g) => {
+            const rateClass = g.pnlRate > 0 ? 'num-up' : g.pnlRate < 0 ? 'num-down' : 'num-flat';
+            return (
+              <TableGrid.Row key={g.pdno} onClick={() => onSelect(g.pdno)}>
+                <TableGrid.Cell flex={1}>
+                  {g.name}{' '}
+                  <span className="muted" style={{ fontSize: '0.9em' }}>
+                    {g.pdno}
+                  </span>
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric className="muted">
+                  {formatDate(g.lastTradedAt)}
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric>
+                  {thousandSeparator(Math.round(g.totalBuyKrw))}
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric>
+                  {thousandSeparator(Math.round(g.totalSellKrw))}
+                </TableGrid.Cell>
+                <TableGrid.Cell width={80} numeric className={rateClass}>
+                  {g.pnlRate.toFixed(2)}%
+                </TableGrid.Cell>
+              </TableGrid.Row>
+            );
+          })}
+        </TableGrid.Body>
+      </TableGrid.Root>
     </div>
   );
 };

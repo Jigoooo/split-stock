@@ -2,7 +2,7 @@ import type { WatchOrder } from '@renderer/entities/watch-order';
 import type { WatchOrderFormPrefill } from '@renderer/features/add-watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { Checkbox } from '@renderer/shared/ui';
+import { Checkbox, TableGrid } from '@renderer/shared/ui';
 import { type CSSProperties, type ReactElement, useEffectEvent, useState } from 'react';
 
 export interface WatchListProps {
@@ -131,102 +131,115 @@ export const WatchList = (props: WatchListProps): ReactElement => {
           {error.message}
         </div>
       ) : null}
-      <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-        <table className="hts-table" style={{ width: '100%' }} aria-label="자동감시 리스트">
-          <thead>
-            <tr>
-              <th style={{ width: '2.6rem' }} />
-              <th>종목</th>
-              <th>구분</th>
-              <th>방향</th>
-              <th className="num">목표가</th>
-              <th className="num">수량</th>
-              <th>비교</th>
-              <th>주문</th>
-              <th>상태</th>
-              <th className="muted">등록</th>
-              <th className="muted">실패사유</th>
-              {allowMutations && <th style={{ width: '5.5rem' }} />}
-            </tr>
-          </thead>
-          <tbody>
-            {isPending ? (
-              <tr>
-                <td
-                  colSpan={allowMutations ? 12 : 11}
-                  className="muted"
-                  style={{ textAlign: 'center' }}
-                >
-                  로드 중…
-                </td>
-              </tr>
-            ) : orders.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={allowMutations ? 12 : 11}
-                  className="muted"
-                  style={{ textAlign: 'center' }}
-                >
-                  없음
-                </td>
-              </tr>
-            ) : (
-              orders.map((o) => (
-                <tr key={o.id} onContextMenu={(e) => onContextMenu(e, o.id)}>
-                  <td>
-                    <Checkbox
-                      checked={selected.has(o.id)}
-                      onChange={() => toggle(o.id)}
-                      aria-label={`선택 ${o.id}`}
-                      dense
-                    />
-                  </td>
-                  <td className="num">{o.pdno}</td>
-                  <td>{o.source}</td>
-                  <td>
-                    <span className={o.side === 'BUY' ? 'num-up' : 'num-down'}>{o.side}</span>
-                  </td>
-                  <td className="num">{thousandSeparator(o.targetPrice)}</td>
-                  <td className="num">
-                    {o.qtyOrAmountMode === 'QTY'
-                      ? thousandSeparator(o.qty ?? 0)
-                      : `${thousandSeparator(o.amountKrw ?? 0)}원`}
-                  </td>
-                  <td>{o.comparator === 'LTE' ? '≤' : '≥'}</td>
-                  <td>{o.orderType}</td>
-                  <td>{o.status}</td>
-                  <td className="muted">{formatDate(o.createdAt)}</td>
-                  <td className="muted">{o.lastFailureReason ?? ''}</td>
-                  {allowMutations && (
-                    <td style={{ whiteSpace: 'nowrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => onEditRow(o)}
-                        disabled={cancelMutation.isPending}
-                        className="hts-btn hts-btn--xs"
-                        style={inlineActionStyle}
-                        aria-label={`수정 ${o.id}`}
-                      >
-                        수정
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void onDeleteRow(o.id)}
-                        disabled={cancelMutation.isPending}
-                        className="hts-btn hts-btn--xs hts-btn--danger"
-                        style={{ ...inlineActionStyle, color: 'var(--hts-sell, #e03)' }}
-                        aria-label={`삭제 ${o.id}`}
-                      >
-                        삭제
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <TableGrid.Root
+        variant="hts"
+        stickyHeader
+        aria-label="자동감시 리스트"
+        style={{ flex: 1, minHeight: 0 }}
+      >
+        <TableGrid.Header>
+          <TableGrid.Cell width={42} />
+          <TableGrid.Cell flex={1}>종목</TableGrid.Cell>
+          <TableGrid.Cell flex={1}>구분</TableGrid.Cell>
+          <TableGrid.Cell flex={1}>방향</TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            목표가
+          </TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            수량
+          </TableGrid.Cell>
+          <TableGrid.Cell width={40}>비교</TableGrid.Cell>
+          <TableGrid.Cell flex={1}>주문</TableGrid.Cell>
+          <TableGrid.Cell flex={1}>상태</TableGrid.Cell>
+          <TableGrid.Cell flex={1} className="muted">
+            등록
+          </TableGrid.Cell>
+          <TableGrid.Cell flex={1} className="muted">
+            실패사유
+          </TableGrid.Cell>
+          {allowMutations && <TableGrid.Cell width={88} />}
+        </TableGrid.Header>
+        <TableGrid.Body>
+          {isPending ? (
+            <TableGrid.Row>
+              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
+                로드 중…
+              </TableGrid.Cell>
+            </TableGrid.Row>
+          ) : orders.length === 0 ? (
+            <TableGrid.Row>
+              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
+                없음
+              </TableGrid.Cell>
+            </TableGrid.Row>
+          ) : (
+            orders.map((o) => (
+              <TableGrid.Row
+                key={o.id}
+                selected={selected.has(o.id)}
+                onContextMenu={(e) => onContextMenu(e, o.id)}
+              >
+                <TableGrid.Cell width={42}>
+                  <Checkbox
+                    checked={selected.has(o.id)}
+                    onChange={() => toggle(o.id)}
+                    aria-label={`선택 ${o.id}`}
+                    dense
+                  />
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric>
+                  {o.pdno}
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1}>{o.source}</TableGrid.Cell>
+                <TableGrid.Cell flex={1}>
+                  <span className={o.side === 'BUY' ? 'num-up' : 'num-down'}>{o.side}</span>
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric>
+                  {thousandSeparator(o.targetPrice)}
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric>
+                  {o.qtyOrAmountMode === 'QTY'
+                    ? thousandSeparator(o.qty ?? 0)
+                    : `${thousandSeparator(o.amountKrw ?? 0)}원`}
+                </TableGrid.Cell>
+                <TableGrid.Cell width={40}>{o.comparator === 'LTE' ? '≤' : '≥'}</TableGrid.Cell>
+                <TableGrid.Cell flex={1}>{o.orderType}</TableGrid.Cell>
+                <TableGrid.Cell flex={1}>{o.status}</TableGrid.Cell>
+                <TableGrid.Cell flex={1} className="muted">
+                  {formatDate(o.createdAt)}
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} className="muted">
+                  {o.lastFailureReason ?? ''}
+                </TableGrid.Cell>
+                {allowMutations && (
+                  <TableGrid.Cell width={88} style={{ whiteSpace: 'nowrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => onEditRow(o)}
+                      disabled={cancelMutation.isPending}
+                      className="hts-btn hts-btn--xs"
+                      style={inlineActionStyle}
+                      aria-label={`수정 ${o.id}`}
+                    >
+                      수정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onDeleteRow(o.id)}
+                      disabled={cancelMutation.isPending}
+                      className="hts-btn hts-btn--xs hts-btn--danger"
+                      style={{ ...inlineActionStyle, color: 'var(--hts-sell, #e03)' }}
+                      aria-label={`삭제 ${o.id}`}
+                    >
+                      삭제
+                    </button>
+                  </TableGrid.Cell>
+                )}
+              </TableGrid.Row>
+            ))
+          )}
+        </TableGrid.Body>
+      </TableGrid.Root>
 
       {menu ? (
         <div

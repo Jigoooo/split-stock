@@ -16,17 +16,21 @@ export const TableGridRow = forwardRef<HTMLDivElement, RowProps>(
       expanded = false,
       flash = null,
       onClick,
+      onContextMenu,
       className,
       style,
       children,
       ...rest
     } = props;
 
+    const hasInteraction = Boolean(onClick || onContextMenu);
+
     const interactiveProps = onClick
       ? {
           role: 'button' as const,
           tabIndex: 0,
           onClick,
+          onContextMenu,
           onKeyDown: (e: KeyboardEvent<HTMLDivElement>): void => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
@@ -34,7 +38,9 @@ export const TableGridRow = forwardRef<HTMLDivElement, RowProps>(
             }
           },
         }
-      : {};
+      : onContextMenu
+        ? { role: 'row' as const, onContextMenu }
+        : {};
 
     return (
       <div
@@ -51,7 +57,7 @@ export const TableGridRow = forwardRef<HTMLDivElement, RowProps>(
           flexDirection: 'row',
           flexShrink: 0,
           boxSizing: 'border-box',
-          cursor: onClick ? 'pointer' : 'default',
+          cursor: hasInteraction ? 'pointer' : 'default',
           ...style,
         }}
       >

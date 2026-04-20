@@ -1,5 +1,6 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { useFlashOnNew } from '@renderer/shared/lib/use-flash-on-new';
+import { TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import type { LiveTick } from '../model/use-live-feed';
 
@@ -47,72 +48,53 @@ export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
       <div className="panel__title" style={{ flexShrink: 0 }}>
         실시간 체결{headerSuffix} (최근 {thousandSeparator(feed.length)}건)
       </div>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          flex: 1,
-          minHeight: 0,
-          overflow: 'hidden',
-        }}
+      <TableGrid.Root
+        variant="hts"
+        stickyHeader
+        aria-label="실시간 체결"
+        style={{ flex: 1, minHeight: 0 }}
       >
-        <table
-          className="hts-table"
-          aria-label="실시간 체결"
-          style={{ tableLayout: 'fixed', width: '100%' }}
-        >
-          <colgroup>
-            <col style={{ width: '24%' }} />
-            <col />
-            <col />
-            <col />
-          </colgroup>
-          <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
-            <tr>
-              <th>시각</th>
-              <th className="num">체결가</th>
-              <th className="num">수량</th>
-              <th className="num">누적</th>
-            </tr>
-          </thead>
-        </table>
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          <table
-            className="hts-table"
-            aria-label="실시간 체결 바디"
-            style={{ tableLayout: 'fixed', width: '100%' }}
-          >
-            <colgroup>
-              <col style={{ width: '24%' }} />
-              <col />
-              <col />
-              <col />
-            </colgroup>
-            <tbody>
-              {feed.map((t) => {
-                const color =
-                  t.tickDirection === 'UP' || t.tickDirection === 'UPPER_LIMIT'
-                    ? 'num-up'
-                    : t.tickDirection === 'DOWN' || t.tickDirection === 'LOWER_LIMIT'
-                      ? 'num-down'
-                      : 'num-flat';
-                const key = `${t.time}-${t.accumVolume}`;
-                const flashKind = flashSet.has(key)
-                  ? flashKindFromTick(t.tickDirection)
-                  : undefined;
-                return (
-                  <tr key={key} data-flash={flashKind}>
-                    <td className="num">{formatTime(t.time)}</td>
-                    <td className={`num ${color}`}>{thousandSeparator(t.price)}</td>
-                    <td className="num">{thousandSeparator(t.volume)}</td>
-                    <td className="num muted">{thousandSeparator(t.accumVolume)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <TableGrid.Header>
+          <TableGrid.Cell width={70}>시각</TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            체결가
+          </TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            수량
+          </TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            누적
+          </TableGrid.Cell>
+        </TableGrid.Header>
+        <TableGrid.Body>
+          {feed.map((t) => {
+            const colorClass =
+              t.tickDirection === 'UP' || t.tickDirection === 'UPPER_LIMIT'
+                ? 'num-up'
+                : t.tickDirection === 'DOWN' || t.tickDirection === 'LOWER_LIMIT'
+                  ? 'num-down'
+                  : 'num-flat';
+            const key = `${t.time}-${t.accumVolume}`;
+            const flashKind = flashSet.has(key) ? flashKindFromTick(t.tickDirection) : null;
+            return (
+              <TableGrid.Row key={key} flash={flashKind ?? null}>
+                <TableGrid.Cell width={70} numeric>
+                  {formatTime(t.time)}
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric className={colorClass}>
+                  {thousandSeparator(t.price)}
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric>
+                  {thousandSeparator(t.volume)}
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric className="muted">
+                  {thousandSeparator(t.accumVolume)}
+                </TableGrid.Cell>
+              </TableGrid.Row>
+            );
+          })}
+        </TableGrid.Body>
+      </TableGrid.Root>
     </div>
   );
 };

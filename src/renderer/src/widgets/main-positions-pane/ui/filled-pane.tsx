@@ -1,5 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
 export interface FilledPaneProps {
@@ -56,55 +57,54 @@ export const FilledPane = ({ selectedPdno }: FilledPaneProps): ReactElement => {
           {selectedPdno ? '해당 종목의 체결 내역이 없습니다' : '체결 내역이 없습니다'}
         </div>
       ) : (
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          <table
-            className="hts-table"
-            aria-label="내 체결 목록"
-            style={{ tableLayout: 'fixed', width: '100%' }}
-          >
-            <colgroup>
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '10%' }} />
-              <col />
-              <col />
-              <col style={{ width: '12%' }} />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>시각</th>
-                <th>종목</th>
-                <th>구분</th>
-                <th className="num">수량</th>
-                <th className="num">가격</th>
-                <th>상태</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const sideClass = row.side === 'BUY' ? 'num-up' : 'num-down';
-                const t = row.filledAt ?? row.placedAt;
-                const time = t ? new Date(t).toLocaleTimeString('ko-KR', { hour12: false }) : '-';
-                return (
-                  <tr key={row.id}>
-                    <td className="num">{time}</td>
-                    <td>{row.pdno}</td>
-                    <td className={sideClass}>{row.side === 'BUY' ? '매수' : '매도'}</td>
-                    <td className="num">{thousandSeparator(row.qty)}</td>
-                    <td className="num">
-                      {row.division === 'MARKET' ? '시장가' : thousandSeparator(row.price)}
-                    </td>
-                    <td>
-                      <span className={`chip ${row.status === 'FILLED' ? 'chip--up' : ''}`}>
-                        {row.status === 'FILLED' ? '체결' : '부분체결'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <TableGrid.Root
+          variant="hts"
+          stickyHeader
+          aria-label="내 체결 목록"
+          style={{ flex: 1, minHeight: 0 }}
+        >
+          <TableGrid.Header>
+            <TableGrid.Cell width={80}>시각</TableGrid.Cell>
+            <TableGrid.Cell width={80}>종목</TableGrid.Cell>
+            <TableGrid.Cell width={48}>구분</TableGrid.Cell>
+            <TableGrid.Cell flex={1} numeric>
+              수량
+            </TableGrid.Cell>
+            <TableGrid.Cell flex={1} numeric>
+              가격
+            </TableGrid.Cell>
+            <TableGrid.Cell width={56}>상태</TableGrid.Cell>
+          </TableGrid.Header>
+          <TableGrid.Body>
+            {rows.map((row) => {
+              const sideClass = row.side === 'BUY' ? 'num-up' : 'num-down';
+              const t = row.filledAt ?? row.placedAt;
+              const time = t ? new Date(t).toLocaleTimeString('ko-KR', { hour12: false }) : '-';
+              return (
+                <TableGrid.Row key={row.id}>
+                  <TableGrid.Cell width={80} numeric>
+                    {time}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={80}>{row.pdno}</TableGrid.Cell>
+                  <TableGrid.Cell width={48} className={sideClass}>
+                    {row.side === 'BUY' ? '매수' : '매도'}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell flex={1} numeric>
+                    {thousandSeparator(row.qty)}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell flex={1} numeric>
+                    {row.division === 'MARKET' ? '시장가' : thousandSeparator(row.price)}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={56}>
+                    <span className={`chip ${row.status === 'FILLED' ? 'chip--up' : ''}`}>
+                      {row.status === 'FILLED' ? '체결' : '부분체결'}
+                    </span>
+                  </TableGrid.Cell>
+                </TableGrid.Row>
+              );
+            })}
+          </TableGrid.Body>
+        </TableGrid.Root>
       )}
     </div>
   );
