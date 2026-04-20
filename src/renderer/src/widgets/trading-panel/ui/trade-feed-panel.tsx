@@ -26,38 +26,81 @@ export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
     );
   }
   return (
-    <div className="panel">
-      <div className="panel__title">
+    <div
+      className="panel"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
+      <div className="panel__title" style={{ flexShrink: 0 }}>
         실시간 체결{headerSuffix} (최근 {thousandSeparator(feed.length)}건)
       </div>
-      <table className="hts-table" aria-label="실시간 체결">
-        <thead>
-          <tr>
-            <th style={{ width: '24%' }}>시각</th>
-            <th className="num">체결가</th>
-            <th className="num">수량</th>
-            <th className="num">누적</th>
-          </tr>
-        </thead>
-        <tbody>
-          {feed.map((t) => {
-            const color =
-              t.tickDirection === 'UP' || t.tickDirection === 'UPPER_LIMIT'
-                ? 'num-up'
-                : t.tickDirection === 'DOWN' || t.tickDirection === 'LOWER_LIMIT'
-                  ? 'num-down'
-                  : 'num-flat';
-            return (
-              <tr key={`${t.time}-${t.accumVolume}`}>
-                <td className="num">{formatTime(t.time)}</td>
-                <td className={`num ${color}`}>{thousandSeparator(t.price)}</td>
-                <td className="num">{thousandSeparator(t.volume)}</td>
-                <td className="num muted">{thousandSeparator(t.accumVolume)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1,
+          minHeight: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <table
+          className="hts-table"
+          aria-label="실시간 체결"
+          style={{ tableLayout: 'fixed', width: '100%' }}
+        >
+          <colgroup>
+            <col style={{ width: '24%' }} />
+            <col />
+            <col />
+            <col />
+          </colgroup>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+            <tr>
+              <th>시각</th>
+              <th className="num">체결가</th>
+              <th className="num">수량</th>
+              <th className="num">누적</th>
+            </tr>
+          </thead>
+        </table>
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          <table
+            className="hts-table"
+            aria-label="실시간 체결 바디"
+            style={{ tableLayout: 'fixed', width: '100%' }}
+          >
+            <colgroup>
+              <col style={{ width: '24%' }} />
+              <col />
+              <col />
+              <col />
+            </colgroup>
+            <tbody>
+              {feed.map((t) => {
+                const color =
+                  t.tickDirection === 'UP' || t.tickDirection === 'UPPER_LIMIT'
+                    ? 'num-up'
+                    : t.tickDirection === 'DOWN' || t.tickDirection === 'LOWER_LIMIT'
+                      ? 'num-down'
+                      : 'num-flat';
+                return (
+                  <tr key={`${t.time}-${t.accumVolume}`}>
+                    <td className="num">{formatTime(t.time)}</td>
+                    <td className={`num ${color}`}>{thousandSeparator(t.price)}</td>
+                    <td className="num">{thousandSeparator(t.volume)}</td>
+                    <td className="num muted">{thousandSeparator(t.accumVolume)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

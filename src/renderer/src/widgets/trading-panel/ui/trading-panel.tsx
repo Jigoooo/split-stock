@@ -16,6 +16,11 @@ import { ActiveOrdersPanel } from './active-orders-panel';
 import { OrderbookPanel } from './orderbook-panel';
 import { TradeFeedPanel } from './trade-feed-panel';
 
+function formatTime(hhmmss: string): string {
+  if (hhmmss.length !== 6) return hhmmss;
+  return `${hhmmss.slice(0, 2)}:${hhmmss.slice(2, 4)}:${hhmmss.slice(4, 6)}`;
+}
+
 export interface TradingPanelProps {
   pdno: string;
   name: string;
@@ -60,8 +65,8 @@ const RealtimeStatusBar = ({
       ) : started ? (
         <span className="muted">구독 대기 중…</span>
       ) : null}
-      {tickTime ? <span className="muted">체결 {tickTime}</span> : null}
-      {orderbookTime ? <span className="muted">호가 {orderbookTime}</span> : null}
+      {tickTime ? <span className="muted">체결 {formatTime(tickTime)}</span> : null}
+      {orderbookTime ? <span className="muted">호가 {formatTime(orderbookTime)}</span> : null}
       <span style={{ flex: 1 }} />
       {!started ? (
         <Button disabled={reconnectPending} onClick={reconnect} variant="primary" dense>
@@ -113,7 +118,7 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
           display: 'grid',
           gridTemplateColumns: 'minmax(180px, 220px) minmax(180px, 210px) minmax(240px, 1fr)',
           gap: '0.6rem',
-          alignItems: 'start',
+          alignItems: 'stretch',
         }}
       >
         <OrderbookPanel
@@ -142,7 +147,15 @@ const FeedTabs = ({
 }): ReactElement => {
   const [tab, setTab] = useState<FeedTab>('feed');
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.4rem',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
       <SegmentedToggle
         value={tab}
         onChange={setTab}
@@ -160,6 +173,13 @@ const FeedTabs = ({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -3 }}
           transition={{ duration: 0.1 }}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
         >
           {tab === 'feed' ? (
             <TradeFeedPanel feed={feed} name={name} pdno={pdno} />
