@@ -3,13 +3,13 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MainTradeHistoryPane } from './ui/main-trade-history-pane';
 
-vi.mock('@renderer/widgets/all-trade-history-panel', () => ({
+vi.mock('./ui/all-trade-history-panel', () => ({
   AllTradeHistoryPanel: ({ accountId }: { accountId: number }) => (
     <div data-testid="all-trade-history-panel" data-account-id={accountId} />
   ),
 }));
 
-vi.mock('@renderer/widgets/trade-history-panel', () => ({
+vi.mock('./ui/trade-history-panel', () => ({
   TradeHistoryPanel: ({ accountId, pdno }: { accountId: number; pdno: string | null }) => (
     <div data-testid="trade-history-panel" data-account-id={accountId} data-pdno={pdno ?? ''} />
   ),

@@ -1,5 +1,6 @@
-import { type StockListEntry, StockPickerList } from '@renderer/widgets/stock-picker-list';
 import type { ReactElement } from 'react';
+import type { StockListEntry } from '../model/use-stock-list';
+import { StockPickerList } from './stock-picker-list';
 
 export interface TradeSelectionBarProps {
   selected: { pdno: string; name: string } | null;

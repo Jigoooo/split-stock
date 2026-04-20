@@ -1,5 +1,5 @@
 import { useState, useTransition } from 'react';
-import type { WatchOrderFormPrefill } from '../ui/add-watch-order-dialog';
+import type { WatchOrderFormPrefill } from './types';
 
 export interface UseAddWatchOrderDialogResult {
   open: boolean;

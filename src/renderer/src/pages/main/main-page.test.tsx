@@ -24,6 +24,9 @@ vi.mock('@renderer/entities/account', () => ({
     isPending: false,
     error: null,
   }),
+  usePositionOverlay: () => ({
+    lines: [],
+  }),
 }));
 
 vi.mock('@renderer/pages/main/model/use-main-realtime', () => ({
@@ -33,6 +36,12 @@ vi.mock('@renderer/pages/main/model/use-main-realtime', () => ({
 vi.mock('@renderer/widgets/trading-panel', () => ({
   TradingPanel: ({ pdno, name }: { pdno: string; name: string }) => (
     <div data-testid="trading-panel" data-pdno={pdno} data-name={name} />
+  ),
+}));
+
+vi.mock('@renderer/widgets/position-chart', () => ({
+  PositionChart: ({ pdno, name }: { pdno: string; name: string }) => (
+    <div data-testid="position-chart" data-pdno={pdno} data-name={name} />
   ),
 }));
 
@@ -49,7 +58,7 @@ vi.mock('@renderer/shared/api/trpc', () => ({
   },
 }));
 
-vi.mock('@renderer/widgets/main-positions-pane', () => ({
+vi.mock('./ui/main-positions-pane', () => ({
   MainPositionsPane: ({
     accountId,
     onSelect,
@@ -66,7 +75,7 @@ vi.mock('@renderer/widgets/main-positions-pane', () => ({
   ),
 }));
 
-vi.mock('@renderer/widgets/main-trade-history-pane', () => ({
+vi.mock('./ui/main-trade-history-pane', () => ({
   MainTradeHistoryPane: ({
     accountId,
     selectedName,
@@ -85,7 +94,7 @@ vi.mock('@renderer/widgets/main-trade-history-pane', () => ({
   ),
 }));
 
-vi.mock('@renderer/widgets/stock-picker-list', () => ({
+vi.mock('@renderer/entities/stock', () => ({
   useStockList: () => ({
     entries: [{ pdno: '005930', name: '삼성전자', sector: '전기전자' }],
     total: 1,
@@ -93,16 +102,7 @@ vi.mock('@renderer/widgets/stock-picker-list', () => ({
     error: null,
   }),
   StockPickerList: () => null,
-}));
-
-vi.mock('@renderer/widgets/trade-workspace', () => ({
-  TradeWorkspace: ({
-    selected,
-  }: {
-    selected: { pdno: string; name: string } | null;
-    onSelect: (entry: { pdno: string; name: string }) => void;
-    isProd: boolean;
-  }) => <div data-testid="trade-workspace" data-selected-pdno={selected?.pdno ?? ''} />,
+  TradeSelectionBar: () => <div data-testid="trade-selection-bar" />,
 }));
 
 describe('MainPage', () => {

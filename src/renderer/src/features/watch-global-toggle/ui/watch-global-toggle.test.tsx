@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { WatchGlobalToggle } from './ui/watch-global-toggle';
+import { WatchGlobalToggle } from './watch-global-toggle';
 
 vi.mock('@renderer/entities/account', () => ({
   useActiveAccountId: () => ({ accountId: 1, isPending: false }),

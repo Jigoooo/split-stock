@@ -1,6 +1,8 @@
+import { StockPickerList } from '@renderer/entities/stock';
 import {
   AddWatchOrderDialog,
-  type WatchOrderFormPrefill,
+  type AddWatchOrderPrefillPayload,
+  consumeAddWatchOrderPrefill,
 } from '@renderer/features/add-watch-order';
 import { ProfitCalculatorPage } from '@renderer/features/profit-calculator';
 import { AddAccountPage } from '@renderer/features/switch-account';
@@ -9,19 +11,10 @@ import { LotsLogPage } from '@renderer/pages/lots-log';
 import { ReportsPage } from '@renderer/pages/reports';
 import { SettingsPage } from '@renderer/pages/settings';
 import { TradePage } from '@renderer/pages/trade';
-import { StockPickerList } from '@renderer/widgets/stock-picker-list';
 import { getPopoutWindowTitle } from '@shared/popout';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { PopoutRoute } from '../model/popout-route';
 import type { PopoutApi } from '../model/use-popout-state';
-
-/** localStorage key for add-watch-order popout prefill handoff. */
-export const WATCH_ORDER_PREFILL_KEY = 'split-stock:add-watch-order-prefill';
-
-export interface WatchOrderPrefillPayload {
-  accountId: number;
-  prefill: WatchOrderFormPrefill | null;
-}
 
 /**
  * 자동감시 추가/수정 팝아웃 페이지.
@@ -30,19 +23,15 @@ export interface WatchOrderPrefillPayload {
  */
 const AddWatchOrderPage = (): ReactElement => {
   const contentRef = useRef<HTMLDivElement>(null);
-  const [payload, setPayload] = useState<WatchOrderPrefillPayload | null>(null);
+  const [payload, setPayload] = useState<AddWatchOrderPrefillPayload | null>(null);
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const isEdit = payload?.prefill?.existingId !== undefined;
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(WATCH_ORDER_PREFILL_KEY);
-      if (raw) {
-        localStorage.removeItem(WATCH_ORDER_PREFILL_KEY);
-        const parsed = JSON.parse(raw) as WatchOrderPrefillPayload;
-        setPayload(parsed);
-      }
+      const parsed = consumeAddWatchOrderPrefill();
+      if (parsed) setPayload(parsed);
     } catch {
       // 파싱 실패 시 빈 신규 폼으로 진행
     }

@@ -1,5 +1,5 @@
+import { useLiveTick } from '@renderer/entities/realtime';
 import { trpc } from '@renderer/shared/api/trpc';
-import { useLiveTick } from '@renderer/widgets/trading-panel/model/use-live-feed';
 import { useEffect, useRef, useState } from 'react';
 
 export type ChartPeriod = 'D' | 'W' | 'M';

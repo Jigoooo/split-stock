@@ -1,6 +1,6 @@
 import { SafetySwitchHeader } from '@renderer/features/safety-switch';
 import { AccountSelector } from '@renderer/features/switch-account';
-import { WatchGlobalToggle } from '@renderer/widgets/watch-global-toggle';
+import { WatchGlobalToggle } from '@renderer/features/watch-global-toggle';
 import type { AppEnv } from '@shared/contracts';
 import type { ReactElement } from 'react';
 

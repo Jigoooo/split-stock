@@ -1,6 +1,6 @@
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
 import { SymbolMemoForm } from '@renderer/features/symbol-memo';
-import { type HtsTabItem, HtsTabs } from '@renderer/widgets/hts-tabs';
+import { type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { type TradeHistoryTabKey, useTradeHistoryTabs } from '../model/use-trade-history-tabs';
 import { TradeHistoryList } from './trade-history-list';

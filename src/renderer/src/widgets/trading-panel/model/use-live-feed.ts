@@ -1,25 +1,13 @@
+import { type LiveTick, useLiveTick } from '@renderer/entities/realtime';
 import { trpc } from '@renderer/shared/api/trpc';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
+
+export type { LiveTick } from '@renderer/entities/realtime';
+export { useLiveTick } from '@renderer/entities/realtime';
 
 type Topic = 'tick' | 'orderbook';
 
 export type WsRoutingMode = 'WS' | 'POLLING' | 'UNKNOWN';
-
-export interface LiveTick {
-  pdno: string;
-  time: string;
-  price: number;
-  dayChange: number;
-  dayChangeRate: number;
-  tickDirection: 'UP' | 'DOWN' | 'FLAT' | 'UPPER_LIMIT' | 'LOWER_LIMIT';
-  volume: number;
-  accumVolume: number;
-  open: number;
-  high: number;
-  low: number;
-  bestAsk: number;
-  bestBid: number;
-}
 
 export interface LiveOrderbookLevel {
   price: number;
@@ -35,18 +23,6 @@ export interface LiveOrderbook {
   totalBidQty: number;
   expectedPrice: number;
   expectedQty: number;
-}
-
-/**
- * 종목 실시간 구독 라이프사이클 훅.
- * - mount 시 watch(pdno, topic) 호출하여 main process에서 KIS WS 구독 등록 (priority=60 기본)
- * - unmount 시 unwatch
- * - 최신 스냅샷은 주기적으로 polling (1초 default)
- */
-export function useLiveTick(pdno: string, pollMs = 1000): LiveTick | null {
-  useWatch(pdno, 'tick');
-  const q = trpc.realtime.getLatestTick.useQuery({ pdno }, { refetchInterval: pollMs });
-  return (q.data?.tick ?? null) as LiveTick | null;
 }
 
 export function useLiveOrderbook(pdno: string, pollMs = 500): LiveOrderbook | null {

@@ -1,7 +1,7 @@
-import { AllTradeHistoryPanel } from '@renderer/widgets/all-trade-history-panel';
-import { type HtsTabItem, HtsTabs } from '@renderer/widgets/hts-tabs';
-import { TradeHistoryPanel } from '@renderer/widgets/trade-history-panel';
+import { type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
 import { type ReactElement, useState, useTransition } from 'react';
+import { AllTradeHistoryPanel } from './all-trade-history-panel';
+import { TradeHistoryPanel } from './trade-history-panel';
 
 export interface MainTradeHistoryPaneProps {
   accountId: number;

@@ -20,6 +20,8 @@ export {
 } from './dialog';
 export type { ErrorBoundaryProps } from './error-boundary';
 export { ErrorBoundary, withSectionBoundary } from './error-boundary';
+export type { HtsTabItem, HtsTabsProps } from './hts-tabs';
+export { HtsTabs } from './hts-tabs';
 export type { NumberInputProps } from './number-input';
 export { NumberInput } from './number-input';
 export type { OverlayScrollbarProps } from './overlay-scrollbar';

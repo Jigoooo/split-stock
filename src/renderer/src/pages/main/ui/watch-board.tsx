@@ -1,16 +1,15 @@
 import {
-  WATCH_ORDER_PREFILL_KEY,
-  type WatchOrderPrefillPayload,
-} from '@renderer/app/ui/popout-page';
-import {
   useWatchOrders,
   type WatchOrder,
   type WatchStatus,
   type WatchTabKey,
 } from '@renderer/entities/watch-order';
-import type { WatchOrderFormPrefill } from '@renderer/features/add-watch-order';
-import { Button } from '@renderer/shared/ui';
-import { type HtsTabItem, HtsTabs } from '@renderer/widgets/hts-tabs';
+import {
+  type AddWatchOrderPrefillPayload,
+  storeAddWatchOrderPrefill,
+  type WatchOrderFormPrefill,
+} from '@renderer/features/add-watch-order';
+import { Button, type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useWatchTabs } from '../model/use-watch-tabs';
 import { WatchList } from './watch-list';
@@ -47,8 +46,8 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
   const visible = filterByTab(tab, query.orders);
 
   const openAddWatchOrderPopout = (prefill: WatchOrderFormPrefill | null): void => {
-    const payload: WatchOrderPrefillPayload = { accountId, prefill };
-    localStorage.setItem(WATCH_ORDER_PREFILL_KEY, JSON.stringify(payload));
+    const payload: AddWatchOrderPrefillPayload = { accountId, prefill };
+    storeAddWatchOrderPrefill(payload);
     void window.appShell?.openPopout('add-watch-order');
   };
 

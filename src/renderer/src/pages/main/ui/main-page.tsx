@@ -1,13 +1,18 @@
-import { useActiveAccountId, useBalanceWithLots } from '@renderer/entities/account';
+import {
+  useActiveAccountId,
+  useBalanceWithLots,
+  usePositionOverlay,
+} from '@renderer/entities/account';
+import { TradeSelectionBar, useStockList } from '@renderer/entities/stock';
 import { trpc } from '@renderer/shared/api/trpc';
-import { MainPositionsPane } from '@renderer/widgets/main-positions-pane';
-import { MainTradeHistoryPane } from '@renderer/widgets/main-trade-history-pane';
-import { useStockList } from '@renderer/widgets/stock-picker-list';
-import { TradeWorkspace } from '@renderer/widgets/trade-workspace';
+import { PositionChart } from '@renderer/widgets/position-chart';
+import { TradingPanel } from '@renderer/widgets/trading-panel';
 import type { ReactElement } from 'react';
 import { Group, type Layout, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 import { useMainRealtime } from '../model/use-main-realtime';
 import { useMainSelection } from '../model/use-main-selection';
+import { MainPositionsPane } from './main-positions-pane';
+import { MainTradeHistoryPane } from './main-trade-history-pane';
 
 const HORIZONTAL_SEPARATOR: ReactElement = (
   <Separator
@@ -39,9 +44,7 @@ const panelStyle = { overflow: 'hidden' } as const;
  * - 상단 70% (min 35%) :
  *     - 좌측 60% (min 35%) : MainPositionsGridPane
  *     - 우측 40% (min 25%) : MainTradeHistoryPane
- * - 하단 30% (min 25%) : TradeWorkspace (종목선택바 + 차트 + 호가/주문/체결/미체결)
- *   - selectedPdno source-of-truth: useMainSelection (잔고 그리드 클릭 → 하단 자동 반영)
- *   - TradeWorkspace 내 StockPicker에서 직접 선택도 가능
+ * - 하단 30% (min 25%) : 선택 종목 기준 차트 + 주문 패널
  * - activeAccountId 없으면 안내 패널만 표시 (login 화면을 따로 두지 않고 shell 레벨).
  */
 export const MainPage = (): ReactElement => {
@@ -59,7 +62,7 @@ export const MainPage = (): ReactElement => {
     storage: localStorage,
   });
 
-  // 하단 TradeWorkspace 의 isProd / 종목명 조회.
+  // 하단 차트/주문 패널의 isProd / 종목명 조회.
   // 우선순위: 잔고 positions(보유) → 종목 마스터(stock_master) → pdno 자체(최종 폴백).
   // stock_master 는 useStockList 로 이미 다른 UI에서 캐시 로드되므로 네트워크 재요청 없음(10분 staleTime).
   const envQuery = trpc.auth.getEnv.useQuery();
@@ -76,6 +79,7 @@ export const MainPage = (): ReactElement => {
             selectedPdno,
         }
       : null;
+  const overlay = usePositionOverlay(selectedEntry?.pdno ?? null, { includeSold: true });
 
   if (isAccountPending) {
     return (
@@ -151,12 +155,55 @@ export const MainPage = (): ReactElement => {
         </Panel>
         {VERTICAL_SEPARATOR}
         <Panel id="main-bottom" defaultSize={30} minSize={20} style={panelStyle}>
-          <div style={{ height: '100%', padding: '0.8rem', boxSizing: 'border-box' }}>
-            <TradeWorkspace
+          <div
+            style={{
+              height: '100%',
+              padding: '0.8rem',
+              boxSizing: 'border-box',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1.2rem',
+            }}
+          >
+            <TradeSelectionBar
               selected={selectedEntry}
               onSelect={(entry) => setSelectedPdno(entry.pdno)}
-              isProd={isProd}
             />
+            {selectedEntry ? (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'minmax(360px, 1fr) minmax(640px, 760px)',
+                  gap: '1.2rem',
+                  flex: 1,
+                  minHeight: 0,
+                }}
+              >
+                <div style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                  <PositionChart
+                    pdno={selectedEntry.pdno}
+                    name={selectedEntry.name}
+                    lines={overlay.lines}
+                    enableDrawingTools={false}
+                  />
+                </div>
+                <div
+                  style={{
+                    minHeight: 0,
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <TradingPanel
+                    pdno={selectedEntry.pdno}
+                    name={selectedEntry.name}
+                    isProd={isProd}
+                  />
+                </div>
+              </div>
+            ) : null}
           </div>
         </Panel>
       </Group>

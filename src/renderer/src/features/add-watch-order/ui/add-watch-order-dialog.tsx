@@ -1,3 +1,4 @@
+import { type StockListEntry, StockPickerList } from '@renderer/entities/stock';
 import type {
   WatchComparator,
   WatchOrder,
@@ -7,30 +8,9 @@ import type {
 } from '@renderer/entities/watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
 import { Button, NumberInput, RadioGroup, Select, TextInput } from '@renderer/shared/ui';
-import { type StockListEntry, StockPickerList } from '@renderer/widgets/stock-picker-list';
 import type { CSSProperties, ReactElement } from 'react';
 import { useState } from 'react';
-
-/**
- * 폼 prefill — edit 모드에서 사용. 신규는 null.
- *
- * `existingId` 가 주어지면 다이얼로그는 "수정" 모드로 동작 — 저장 시 cancel(existingId) + create
- * 조합으로 처리한다 (서버에 update mutation 부재). 이 경우 새 row 의 id/createdAt 은 갱신된다.
- */
-export interface WatchOrderFormPrefill {
-  existingId?: number;
-  pdno?: string;
-  pdName?: string;
-  side?: WatchSide;
-  comparator?: WatchComparator;
-  targetPrice?: number;
-  orderType?: WatchOrderType;
-  qtyOrAmountMode?: WatchQtyMode;
-  qty?: number;
-  amountKrw?: number;
-  /** ms epoch — 만료일. */
-  expiresAtMs?: number;
-}
+import type { WatchOrderFormPrefill } from '../model/types';
 
 export interface AddWatchOrderDialogProps {
   open: boolean;
