@@ -6,13 +6,19 @@ const defaultSnapshot: ScrollSnapshot = Object.freeze({
   scrollTop: 0,
   scrollHeight: 0,
   clientHeight: 0,
+  scrollLeft: 0,
+  scrollWidth: 0,
+  clientWidth: 0,
 });
 
 function snapshotEquals(a: ScrollSnapshot, b: ScrollSnapshot) {
   return (
     a.scrollTop === b.scrollTop &&
     a.scrollHeight === b.scrollHeight &&
-    a.clientHeight === b.clientHeight
+    a.clientHeight === b.clientHeight &&
+    a.scrollLeft === b.scrollLeft &&
+    a.scrollWidth === b.scrollWidth &&
+    a.clientWidth === b.clientWidth
   );
 }
 
@@ -31,6 +37,9 @@ export function useScrollState(containerRef: RefObject<HTMLDivElement | null>): 
           scrollTop: el.scrollTop,
           scrollHeight: el.scrollHeight,
           clientHeight: el.clientHeight,
+          scrollLeft: el.scrollLeft,
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
         };
 
         if (!snapshotEquals(snapshotRef.current, next)) {

@@ -134,30 +134,31 @@ export const WatchList = (props: WatchListProps): ReactElement => {
       <TableGrid.Root
         variant="hts"
         stickyHeader
+        horizontalScroll
         aria-label="자동감시 리스트"
         style={{ flex: 1, minHeight: 0 }}
       >
         <TableGrid.Header>
           <TableGrid.Cell width={42} />
-          <TableGrid.Cell flex={1}>종목</TableGrid.Cell>
-          <TableGrid.Cell flex={1}>구분</TableGrid.Cell>
-          <TableGrid.Cell flex={1}>방향</TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
+          <TableGrid.Cell width={80}>종목</TableGrid.Cell>
+          <TableGrid.Cell width={72}>구분</TableGrid.Cell>
+          <TableGrid.Cell width={60}>방향</TableGrid.Cell>
+          <TableGrid.Cell width={90} numeric>
             목표가
           </TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
+          <TableGrid.Cell width={90} numeric>
             수량
           </TableGrid.Cell>
           <TableGrid.Cell width={40}>비교</TableGrid.Cell>
-          <TableGrid.Cell flex={1}>주문</TableGrid.Cell>
-          <TableGrid.Cell flex={1}>상태</TableGrid.Cell>
-          <TableGrid.Cell flex={1} className="muted">
+          <TableGrid.Cell width={72}>주문</TableGrid.Cell>
+          <TableGrid.Cell width={72}>상태</TableGrid.Cell>
+          <TableGrid.Cell width={148} className="muted">
             등록
           </TableGrid.Cell>
-          <TableGrid.Cell flex={1} className="muted">
+          <TableGrid.Cell width={120} className="muted">
             실패사유
           </TableGrid.Cell>
-          {allowMutations && <TableGrid.Cell width={88} />}
+          {allowMutations && <TableGrid.Cell width={88} sticky="right" />}
         </TableGrid.Header>
         <TableGrid.Body>
           {isPending ? (
@@ -187,32 +188,32 @@ export const WatchList = (props: WatchListProps): ReactElement => {
                     dense
                   />
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric>
+                <TableGrid.Cell width={80} numeric>
                   {o.pdno}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1}>{o.source}</TableGrid.Cell>
-                <TableGrid.Cell flex={1}>
+                <TableGrid.Cell width={72}>{o.source}</TableGrid.Cell>
+                <TableGrid.Cell width={60}>
                   <span className={o.side === 'BUY' ? 'num-up' : 'num-down'}>{o.side}</span>
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric>
+                <TableGrid.Cell width={90} numeric>
                   {thousandSeparator(o.targetPrice)}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric>
+                <TableGrid.Cell width={90} numeric>
                   {o.qtyOrAmountMode === 'QTY'
                     ? thousandSeparator(o.qty ?? 0)
                     : `${thousandSeparator(o.amountKrw ?? 0)}원`}
                 </TableGrid.Cell>
                 <TableGrid.Cell width={40}>{o.comparator === 'LTE' ? '≤' : '≥'}</TableGrid.Cell>
-                <TableGrid.Cell flex={1}>{o.orderType}</TableGrid.Cell>
-                <TableGrid.Cell flex={1}>{o.status}</TableGrid.Cell>
-                <TableGrid.Cell flex={1} className="muted">
+                <TableGrid.Cell width={72}>{o.orderType}</TableGrid.Cell>
+                <TableGrid.Cell width={72}>{o.status}</TableGrid.Cell>
+                <TableGrid.Cell width={148} className="muted">
                   {formatDate(o.createdAt)}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} className="muted">
+                <TableGrid.Cell width={120} className="muted">
                   {o.lastFailureReason ?? ''}
                 </TableGrid.Cell>
                 {allowMutations && (
-                  <TableGrid.Cell width={88} style={{ whiteSpace: 'nowrap' }}>
+                  <TableGrid.Cell width={88} sticky="right" style={{ whiteSpace: 'nowrap' }}>
                     <button
                       type="button"
                       onClick={() => onEditRow(o)}

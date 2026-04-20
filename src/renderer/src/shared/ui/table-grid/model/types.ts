@@ -21,6 +21,8 @@ export interface CellProps {
   overflow?: OverflowMode;
   /** mono + tabular-nums + align right shortcut */
   numeric?: boolean;
+  /** sticky 컬럼 — 가로 스크롤 시 고정. right: 우측 고정(액션 컬럼 등) */
+  sticky?: 'left' | 'right';
   /** 추가 CSS class */
   className?: string;
   /** inline style override */
@@ -57,6 +59,8 @@ export interface RootProps {
   columnDividers?: boolean;
   /** OverlayScrollbar 자동 마운트 (default true) */
   overlayScrollbar?: boolean;
+  /** 가로 스크롤 활성화 — Header + Body 를 공통 wrapper 로 가로 스크롤 (default false) */
+  horizontalScroll?: boolean;
   /** 접근성 레이블 */
   'aria-label'?: string;
   className?: string;

@@ -88,3 +88,43 @@
     animation: none;
   }
 }
+
+/* ── sticky 컬럼 배경 — 가로 스크롤 시 뒤 컨텐츠 차단 ── */
+
+/* 헤더 sticky 셀 */
+.table-grid-root[data-variant="hts"] .table-grid-header .table-grid-cell[data-sticky] {
+  background: var(--bg-3);
+}
+
+/* 바디 기본 행 sticky 셀 */
+.table-grid-root[data-variant="hts"] .table-grid-body
+  .table-grid-row
+  .table-grid-cell[data-sticky] {
+  background: var(--bg);
+}
+
+/* zebra 짝수 행 sticky 셀 */
+.table-grid-root[data-variant="hts"][data-zebra="true"] .table-grid-body
+  .table-grid-row:nth-child(even):not([data-expanded="true"]):not([data-selected="true"])
+  .table-grid-cell[data-sticky] {
+  background: var(--table-row-zebra);
+}
+
+/* hover 행 sticky 셀 */
+.table-grid-root[data-variant="hts"] .table-grid-body
+  .table-grid-row:hover
+  .table-grid-cell[data-sticky] {
+  background: var(--table-row-hover);
+}
+
+/* selected 행 sticky 셀 */
+.table-grid-root[data-variant="hts"] .table-grid-body
+  .table-grid-row[data-selected="true"]
+  .table-grid-cell[data-sticky] {
+  background: var(--table-row-selected);
+}
+
+/* ── 가로 스크롤 wrapper 기본 스크롤바 숨김 (webkit) ── */
+.table-grid-root .table-grid-hscroll-wrapper::-webkit-scrollbar {
+  display: none;
+}

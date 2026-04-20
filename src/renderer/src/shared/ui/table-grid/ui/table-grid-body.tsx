@@ -12,10 +12,11 @@ export interface TableGridBodyProps extends BodyProps {
  * - flex: 1, overflow-y: auto, min-height: 0
  * - Root.bodyRef 에 자동 등록 (OverlayScrollbar 부착)
  * - scrollRef prop 으로 가상화 hook 의 parentRef 와 동기화 가능
+ * - horizontalScroll=true 시 overflowX: visible (wrapper 가 가로 스크롤 담당)
  */
 export function TableGridBody(props: TableGridBodyProps): ReactElement {
   const { scrollRef, className, style, children } = props;
-  const { bodyRef } = useTableGridContext();
+  const { bodyRef, horizontalScroll } = useTableGridContext();
 
   // Root context bodyRef + 외부 scrollRef 동시에 부착
   const setRef = useCallback(
@@ -41,7 +42,8 @@ export function TableGridBody(props: TableGridBodyProps): ReactElement {
         flex: 1,
         minHeight: 0,
         overflowY: 'auto',
-        overflowX: 'hidden',
+        // horizontalScroll=true 이면 wrapper 가 가로 스크롤 담당 → body 는 overflow visible
+        overflowX: horizontalScroll ? 'visible' : 'hidden',
         ...style,
       }}
     >
