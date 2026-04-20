@@ -1,6 +1,6 @@
 import { KisOrderAmendRequestSchema, KisOrderRequestSchema } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { orders } from '../../db/schema';
 import { readPendingCancelConfig } from '../../db/settings-repo';
@@ -188,6 +188,46 @@ export const orderRouter = router({
         .from(orders)
         .where(and(eq(orders.accountId, accountId), inArray(orders.status, ['PENDING', 'PARTIAL'])))
         .orderBy(asc(orders.placedAt))
+        .all();
+      return { orders: rows };
+    }),
+
+  /**
+   * 내 체결 주문 목록 — 활성 계좌 한정. FilledPane (MainPositionsPane L2 "실시간 체결")
+   * 용도. 시장 전체 tick 피드(useTradeFeed)와 구분 — 여기는 "내 주문의 체결/부분체결
+   * 확인" 목적이라 본인 orders 테이블의 FILLED/PARTIAL 만 반환.
+   *
+   * pdno 필터는 선택 — 지정 시 해당 종목의 내 체결만, 미지정 시 전체.
+   * 최신순 limit 개 (default 100).
+   */
+  listMyFills: authedProcedure
+    .input(
+      z
+        .object({
+          accountId: AccountIdField.optional(),
+          pdno: z
+            .string()
+            .regex(/^\d{6}$/)
+            .optional(),
+          limit: z.number().int().min(1).max(500).default(100),
+        })
+        .optional(),
+    )
+    .query(({ ctx, input }) => {
+      const accountId = resolveAccountId(ctx, input ?? {});
+      const pdno = input?.pdno;
+      const limit = input?.limit ?? 100;
+      const conditions = [
+        eq(orders.accountId, accountId),
+        inArray(orders.status, ['FILLED', 'PARTIAL']),
+      ];
+      if (pdno) conditions.push(eq(orders.pdno, pdno));
+      const rows = ctx.db
+        .select()
+        .from(orders)
+        .where(and(...conditions))
+        .orderBy(desc(orders.filledAt), desc(orders.placedAt))
+        .limit(limit)
         .all();
       return { orders: rows };
     }),
