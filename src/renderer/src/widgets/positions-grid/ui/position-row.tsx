@@ -1,6 +1,7 @@
 import type { LotEntry } from '@renderer/entities/account';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { TableGrid } from '@renderer/shared/ui';
 import { LineChart } from 'lucide-react';
 import { type CSSProperties, type ReactElement, useTransition } from 'react';
 import type { PositionsGridRow } from '../model/use-positions-grid';
@@ -228,30 +229,47 @@ const ExpandedLots = ({ lots }: ExpandedLotsProps): ReactElement => {
         borderTop: '1px solid var(--hts-line, rgba(0,0,0,0.06))',
       }}
     >
-      <table className="hts-table" style={{ width: '100%' }}>
-        <thead>
-          <tr>
-            <th>차수</th>
-            <th className="num">매입가</th>
-            <th className="num">수량</th>
-            <th className="num">투입금액</th>
-            <th>상태</th>
-            <th className="muted">매수일</th>
-          </tr>
-        </thead>
-        <tbody>
+      <TableGrid.Root
+        variant="hts"
+        stickyHeader={false}
+        overlayScrollbar={false}
+        style={{ height: 'auto', width: '100%' }}
+      >
+        <TableGrid.Header>
+          <TableGrid.Cell width={40}>차수</TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            매입가
+          </TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            수량
+          </TableGrid.Cell>
+          <TableGrid.Cell flex={2} numeric>
+            투입금액
+          </TableGrid.Cell>
+          <TableGrid.Cell flex={1}>상태</TableGrid.Cell>
+          <TableGrid.Cell flex={2}>매수일</TableGrid.Cell>
+        </TableGrid.Header>
+        <TableGrid.Body>
           {lots.map((lot) => (
-            <tr key={`${lot.nth}-${lot.boughtAt}`}>
-              <td>{lot.nth}차</td>
-              <td className="num">{thousandSeparator(lot.buyPrice)}</td>
-              <td className="num">{thousandSeparator(lot.qty)}</td>
-              <td className="num">{thousandSeparator(Math.round(lot.amountKrw))}</td>
-              <td>{lot.status}</td>
-              <td className="muted">{new Date(lot.boughtAt).toLocaleDateString('ko-KR')}</td>
-            </tr>
+            <TableGrid.Row key={`${lot.nth}-${lot.boughtAt}`}>
+              <TableGrid.Cell width={40}>{lot.nth}차</TableGrid.Cell>
+              <TableGrid.Cell flex={1} numeric>
+                {thousandSeparator(lot.buyPrice)}
+              </TableGrid.Cell>
+              <TableGrid.Cell flex={1} numeric>
+                {thousandSeparator(lot.qty)}
+              </TableGrid.Cell>
+              <TableGrid.Cell flex={2} numeric>
+                {thousandSeparator(Math.round(lot.amountKrw))}
+              </TableGrid.Cell>
+              <TableGrid.Cell flex={1}>{lot.status}</TableGrid.Cell>
+              <TableGrid.Cell flex={2} className="muted">
+                {new Date(lot.boughtAt).toLocaleDateString('ko-KR')}
+              </TableGrid.Cell>
+            </TableGrid.Row>
           ))}
-        </tbody>
-      </table>
+        </TableGrid.Body>
+      </TableGrid.Root>
     </div>
   );
 };
