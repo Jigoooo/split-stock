@@ -66,6 +66,18 @@ vi.mock('@renderer/shared/api/trpc', () => ({
         }),
       },
     },
+    safety: {
+      getState: {
+        useQuery: () => ({
+          data: {
+            master: true,
+            bySymbol: {},
+            errorLock: { active: false, reason: null, triggeredAt: null },
+            updatedAt: 0,
+          },
+        }),
+      },
+    },
     useUtils: () => ({ order: { listActive: { invalidate: vi.fn() } } }),
   },
 }));

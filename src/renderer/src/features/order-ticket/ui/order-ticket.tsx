@@ -1,5 +1,6 @@
 import { useBalanceWithLots } from '@renderer/entities/account';
 import { SearchStockInput } from '@renderer/features/search-stock';
+import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, dialog, NumberInput, Select } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
@@ -49,6 +50,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const [appliedSuggestionKey, setAppliedSuggestionKey] = useState(suggestionKey);
   const actions = useOrderActions();
   const { lotsByPdno } = useBalanceWithLots();
+  const safetyQuery = trpc.safety.getState.useQuery(undefined, { staleTime: 0 });
 
   const lots = lotsByPdno[selection.pdno] ?? [];
   const openCount = lots.filter((l) => l.status === 'OPEN' || l.status === 'BUYING').length;
@@ -104,6 +106,33 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
 
   const submit = async (chosenSide: 'BUY' | 'SELL'): Promise<void> => {
     if (!canSubmit) return;
+
+    // safety 사전 체크 — 서버 가드 전에 즉시 안내
+    const snap = safetyQuery.data;
+    if (snap !== undefined) {
+      if (!snap.master) {
+        dialog.error({
+          title: '자동매매 잠금',
+          message: '글로벌 자동매매가 OFF 상태입니다. 헤더에서 자동매매를 켜주세요.',
+        });
+        return;
+      }
+      if (snap.bySymbol[selection.pdno] === false) {
+        dialog.error({
+          title: '종목 잠금',
+          message: `${selection.name} 종목의 자동매매가 OFF 입니다.`,
+        });
+        return;
+      }
+      if (snap.errorLock.active) {
+        dialog.error({
+          title: '에러 잠금',
+          message: snap.errorLock.reason ?? '에러 잠금 상태입니다. 잠금을 해제한 후 다시 시도하세요.',
+        });
+        return;
+      }
+    }
+
     const params = { side: chosenSide, qty, price, division };
     const mustConfirm = isProd || !oneClick;
     if (!mustConfirm) {
