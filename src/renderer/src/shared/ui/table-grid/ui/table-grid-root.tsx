@@ -8,7 +8,7 @@ interface TableGridContextValue {
   zebra: boolean;
   overlayScrollbar: boolean;
   /** Body 가 등록한 scroll container ref — Root 가 OverlayScrollbar 에 전달 */
-  bodyRef: React.MutableRefObject<HTMLDivElement | null>;
+  bodyRef: React.RefObject<HTMLDivElement | null>;
 }
 
 const TableGridContext = createContext<TableGridContextValue | null>(null);
