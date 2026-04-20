@@ -97,8 +97,16 @@ export class ProtectionLimitsRepo {
 
       const saved = this.get(accountId);
       if (saved.isErr()) return err(saved.error);
-      // upsert 직후이므로 반드시 존재
-      return ok(saved.value!);
+      // upsert 직후이므로 반드시 존재 — null 이면 DB 일관성 위반(예: 다른 트랜잭션이 즉시 삭제).
+      if (saved.value === null) {
+        return err({
+          kind: 'DB_ERROR',
+          cause: new Error(
+            `protection_limits row missing right after upsert (accountId=${accountId})`,
+          ),
+        });
+      }
+      return ok(saved.value);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
     }
