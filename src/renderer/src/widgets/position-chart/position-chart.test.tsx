@@ -7,6 +7,10 @@ const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoi
   const setDataMock = vi.fn();
   const createPriceLineMock = vi.fn();
   const removePriceLineMock = vi.fn();
+  const priceScaleApplyOptionsMock = vi.fn();
+  const priceScaleMock = vi.fn(() => ({
+    applyOptions: priceScaleApplyOptionsMock,
+  }));
   const addSeriesMock = vi.fn(
     (
       _seriesType: unknown,
@@ -15,6 +19,8 @@ const { fetchChartMock, addSeriesMock, createChartMock, trpcUtilsMock } = vi.hoi
       setData: setDataMock,
       createPriceLine: createPriceLineMock,
       removePriceLine: removePriceLineMock,
+      // candlestick-chart.tsx 의 series.priceScale().applyOptions() 호출 대응 stub.
+      priceScale: priceScaleMock,
     }),
   );
   const createChartMock = vi.fn(
@@ -63,6 +69,8 @@ vi.mock('@renderer/shared/api/trpc', () => ({
 
 vi.mock('lightweight-charts', () => ({
   CandlestickSeries: Symbol('CandlestickSeries'),
+  HistogramSeries: Symbol('HistogramSeries'),
+  LineSeries: Symbol('LineSeries'),
   LineStyle: {
     Solid: 0,
     Dashed: 1,
