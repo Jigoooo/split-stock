@@ -21,6 +21,16 @@ export interface PositionChartProps {
 
 const formatKrw = (value: number): string => (value > 0 ? thousandSeparator(value) : '—');
 
+/**
+ * 음수 대응이 필요한 필드(전일대비) 용 — thousandSeparator 기본값은 음수를 0 으로
+ * 클램프하므로 반드시 allowNegative 를 지정해야 한다.
+ */
+const formatSigned = (value: number): string => {
+  if (value === 0) return '0';
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${thousandSeparator(value, { allowNegative: true })}`;
+};
+
 const PriceChips = ({ pdno }: { pdno: string }): ReactElement => {
   // 상한가/하한가/고가/저가 는 KIS inquire-price REST 응답에서만 제공 — WS tick 에는 없음.
   // 15초 주기로 refresh: 헤더 칩은 실시간성 크리티컬하지 않고, API 쿼터를 아끼는 편이 낫다.
@@ -28,7 +38,9 @@ const PriceChips = ({ pdno }: { pdno: string }): ReactElement => {
   const data = q.data;
   const changeClass =
     !data || data.dayChange === 0 ? 'num' : data.dayChange > 0 ? 'num-up' : 'num-down';
-  const changeSign = data && data.dayChange > 0 ? '+' : '';
+  const rateLabel = data
+    ? `${data.dayChangeRate > 0 ? '+' : ''}${data.dayChangeRate.toFixed(2)}%`
+    : '—';
   return (
     <div
       style={{
@@ -46,9 +58,7 @@ const PriceChips = ({ pdno }: { pdno: string }): ReactElement => {
       <span>
         <span className="muted">전일대비</span>{' '}
         <span className={`num ${changeClass}`}>
-          {data
-            ? `${changeSign}${thousandSeparator(data.dayChange)} (${changeSign}${data.dayChangeRate.toFixed(2)}%)`
-            : '—'}
+          {data ? `${formatSigned(data.dayChange)} (${rateLabel})` : '—'}
         </span>
       </span>
       <span>
@@ -85,7 +95,13 @@ export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactE
         style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}
       >
         <span>
-          {name} ({pdno})
+          {name && name !== pdno ? (
+            <>
+              {name} ({pdno})
+            </>
+          ) : (
+            pdno
+          )}
         </span>
         <PriceChips pdno={pdno} />
         {chart.isLoading ? (

@@ -122,7 +122,7 @@ export const CandlestickChart = ({
       timeScale: { borderColor: '#cccccc' },
       localization: {
         priceFormatter: (price: number): string =>
-          thousandSeparator(price, { allowNegative: true, allowDecimal: true }),
+          thousandSeparator(Math.round(price), { allowNegative: true, allowDecimal: false }),
       },
     });
     chartRef.current = chart;
@@ -211,7 +211,7 @@ export const CandlestickChart = ({
         priceFormat: {
           type: 'custom',
           formatter: (price: number): string =>
-            thousandSeparator(price, { allowNegative: true, allowDecimal: true }),
+            thousandSeparator(Math.round(price), { allowNegative: true, allowDecimal: false }),
         },
       });
       series.priceScale().applyOptions({
@@ -292,7 +292,7 @@ export const CandlestickChart = ({
           priceFormat: {
             type: 'custom',
             formatter: (price: number): string =>
-              thousandSeparator(price, { allowNegative: true, allowDecimal: true }),
+              thousandSeparator(Math.round(price), { allowNegative: true, allowDecimal: false }),
           },
         });
         maSeriesRef.current[period] = maSeries;
