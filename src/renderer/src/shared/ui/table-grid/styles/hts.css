@@ -1,6 +1,6 @@
 /* ============================================================
  * TableGrid — HTS variant
- * .hts-table 의 시각 동등 + Compound flex 컨테이너에 맞춘 cell 스타일.
+ * 기존 HTS 테이블의 시각 동등 + Compound flex 컨테이너에 맞춘 cell 스타일.
  * 의존: app.css 의 --bg-3 / --fg-2 / --border / --border-strong /
  *       --hts-row-height / --table-row-zebra / --table-row-hover /
  *       --table-row-selected / --mono / --flash-up-bg / --flash-down-bg
