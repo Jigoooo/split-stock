@@ -1,8 +1,9 @@
 import type { WatchOrder } from '@renderer/entities/watch-order';
+import type { WatchOrderFormPrefill } from '@renderer/features/add-watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Checkbox } from '@renderer/shared/ui';
-import { type ReactElement, useEffectEvent, useState } from 'react';
+import { type CSSProperties, type ReactElement, useEffectEvent, useState } from 'react';
 
 export interface WatchListProps {
   orders: WatchOrder[];
@@ -10,6 +11,8 @@ export interface WatchListProps {
   error: { message: string } | null;
   /** 우클릭 메뉴에서 일부 액션 활성 여부 (히스토리 탭 등에서는 모두 비활성). */
   allowMutations: boolean;
+  /** allowMutations=true 일 때 행 수정 버튼 클릭 시 호출. */
+  onEditOrder?: (prefill: WatchOrderFormPrefill) => void;
 }
 
 interface ContextMenu {
@@ -27,7 +30,7 @@ interface ContextMenu {
  *   - 삭제: cancel 과 동일 의미 (FE 에서는 cancel 만 가능)
  */
 export const WatchList = (props: WatchListProps): ReactElement => {
-  const { allowMutations, error, isPending, orders } = props;
+  const { allowMutations, error, isPending, onEditOrder, orders } = props;
   const utils = trpc.useUtils();
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [menu, setMenu] = useState<ContextMenu | null>(null);
@@ -61,6 +64,29 @@ export const WatchList = (props: WatchListProps): ReactElement => {
       }
     }
     setSelected(new Set());
+    await utils.watch.list.invalidate();
+  });
+
+  const onEditRow = useEffectEvent((o: WatchOrder) => {
+    onEditOrder?.({
+      existingId: o.id,
+      pdno: o.pdno,
+      side: o.side,
+      comparator: o.comparator,
+      targetPrice: o.targetPrice,
+      orderType: o.orderType,
+      qtyOrAmountMode: o.qtyOrAmountMode,
+      ...(o.qty != null ? { qty: o.qty } : {}),
+      ...(o.amountKrw != null ? { amountKrw: o.amountKrw } : {}),
+    });
+  });
+
+  const onDeleteRow = useEffectEvent(async (id: number) => {
+    try {
+      await cancelMutation.mutateAsync({ id });
+    } catch {
+      // 무시 — invalidate 후 갱신
+    }
     await utils.watch.list.invalidate();
   });
 
@@ -115,18 +141,27 @@ export const WatchList = (props: WatchListProps): ReactElement => {
               <th>상태</th>
               <th className="muted">등록</th>
               <th className="muted">실패사유</th>
+              {allowMutations && <th style={{ width: '5.5rem' }} />}
             </tr>
           </thead>
           <tbody>
             {isPending ? (
               <tr>
-                <td colSpan={11} className="muted" style={{ textAlign: 'center' }}>
+                <td
+                  colSpan={allowMutations ? 12 : 11}
+                  className="muted"
+                  style={{ textAlign: 'center' }}
+                >
                   로드 중…
                 </td>
               </tr>
             ) : orders.length === 0 ? (
               <tr>
-                <td colSpan={11} className="muted" style={{ textAlign: 'center' }}>
+                <td
+                  colSpan={allowMutations ? 12 : 11}
+                  className="muted"
+                  style={{ textAlign: 'center' }}
+                >
                   없음
                 </td>
               </tr>
@@ -157,6 +192,28 @@ export const WatchList = (props: WatchListProps): ReactElement => {
                   <td>{o.status}</td>
                   <td className="muted">{formatDate(o.createdAt)}</td>
                   <td className="muted">{o.lastFailureReason ?? ''}</td>
+                  {allowMutations && (
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => onEditRow(o)}
+                        disabled={cancelMutation.isPending}
+                        style={inlineActionStyle}
+                        aria-label={`수정 ${o.id}`}
+                      >
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onDeleteRow(o.id)}
+                        disabled={cancelMutation.isPending}
+                        style={{ ...inlineActionStyle, color: 'var(--hts-sell, #e03)' }}
+                        aria-label={`삭제 ${o.id}`}
+                      >
+                        삭제
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))
             )}
@@ -197,6 +254,15 @@ export const WatchList = (props: WatchListProps): ReactElement => {
       ) : null}
     </div>
   );
+};
+
+const inlineActionStyle: CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  cursor: 'pointer',
+  fontSize: '0.85rem',
+  padding: '0.1rem 0.3rem',
+  color: 'inherit',
 };
 
 interface MenuItemProps {
