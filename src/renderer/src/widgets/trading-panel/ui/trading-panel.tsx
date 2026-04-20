@@ -2,7 +2,7 @@ import { OrderTicket, type OrderTicketSelection } from '@renderer/features/order
 import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   useFocusedSubscription,
   useLiveOrderbook,
@@ -32,6 +32,13 @@ export interface TradingPanelProps {
   hotkeys?: boolean;
 }
 
+/**
+ * `!started` 가 일정 시간 지속될 때만 재연결 UI 를 노출 — env 전환 중 realtime 이
+ * 재생성되며 순간적으로 false 로 깜빡이는 상황에서 버튼이 떴다 사라지는 layout shift
+ * 를 방지한다.
+ */
+const RECONNECT_REVEAL_DELAY_MS = 3000;
+
 const RealtimeStatusBar = ({
   pdno,
   tickTime,
@@ -43,6 +50,15 @@ const RealtimeStatusBar = ({
 }): ReactElement => {
   const { reconnect, reconnectError, reconnectPending, started, watched } = useRealtimeStatus();
   const mine = watched.find((w) => w.pdno === pdno);
+  const [showReconnect, setShowReconnect] = useState(false);
+  useEffect(() => {
+    if (started) {
+      setShowReconnect(false);
+      return;
+    }
+    const id = setTimeout(() => setShowReconnect(true), RECONNECT_REVEAL_DELAY_MS);
+    return () => clearTimeout(id);
+  }, [started]);
   return (
     <div
       className="panel"
@@ -74,13 +90,18 @@ const RealtimeStatusBar = ({
         {orderbookTime ? `호가 ${formatTime(orderbookTime)}` : '\u00A0'}
       </span>
       <span style={{ flex: 1 }} />
-      {!started ? (
+      {showReconnect ? (
         <Button
           disabled={reconnectPending}
           onClick={reconnect}
           variant="primary"
           dense
-          style={{ flexShrink: 0 }}
+          style={{
+            flexShrink: 0,
+            minHeight: '1.9rem',
+            padding: '0.1rem 0.55rem',
+            fontSize: '1rem',
+          }}
         >
           재연결
         </Button>
