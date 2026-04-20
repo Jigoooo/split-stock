@@ -1,4 +1,4 @@
-import { NumberInput } from '@renderer/shared/ui';
+import { NumberInput, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import type { AutoFillParams, DropBaseline, StageGridRaw, StageRow } from '../model/use-stage-grid';
 import { AutoFillTool } from './auto-fill-tool';
@@ -94,44 +94,33 @@ export const StageGrid = (props: StageGridProps): ReactElement => {
 /* ── 차수별 rows 테이블 ── */
 
 const StageRowsTable = ({ rows }: { rows: StageRow[] }): ReactElement => (
-  <section aria-label="차수별 매수 설정" style={{ overflowX: 'auto' }}>
-    <table
-      style={{
-        fontSize: '1.05rem',
-        borderCollapse: 'collapse',
-        width: '100%',
-        maxWidth: 400,
-      }}
+  <section aria-label="차수별 매수 설정">
+    <TableGrid.Root
+      variant="hts"
+      stickyHeader={false}
+      overlayScrollbar={false}
+      style={{ height: 'auto', maxWidth: 400, fontSize: '1.05rem' }}
     >
-      <caption style={{ display: 'none' }}>차수별 매수 설정</caption>
-      <thead>
-        <tr>
-          <Th>차수</Th>
-          <Th>하향 감지%</Th>
-          <Th>매수금액 (원)</Th>
-        </tr>
-      </thead>
-      <tbody>
+      <TableGrid.Header>
+        <TableGrid.Cell width={48}>차수</TableGrid.Cell>
+        <TableGrid.Cell flex={1}>하향 감지%</TableGrid.Cell>
+        <TableGrid.Cell flex={2} numeric>
+          매수금액 (원)
+        </TableGrid.Cell>
+      </TableGrid.Header>
+      <TableGrid.Body>
         {rows.map((row) => (
-          <tr key={row.stage}>
-            <Td>{row.stage}차</Td>
-            <Td>{row.dropPct}%</Td>
-            <Td>{row.amountKrw !== '' ? Number(row.amountKrw).toLocaleString() : '-'}</Td>
-          </tr>
+          <TableGrid.Row key={row.stage}>
+            <TableGrid.Cell width={48}>{row.stage}차</TableGrid.Cell>
+            <TableGrid.Cell flex={1}>{row.dropPct}%</TableGrid.Cell>
+            <TableGrid.Cell flex={2} numeric>
+              {row.amountKrw !== '' ? Number(row.amountKrw).toLocaleString() : '-'}
+            </TableGrid.Cell>
+          </TableGrid.Row>
         ))}
-      </tbody>
-    </table>
+      </TableGrid.Body>
+    </TableGrid.Root>
   </section>
-);
-
-const Th = ({ children }: { children: React.ReactNode }): ReactElement => (
-  <th style={{ textAlign: 'left', padding: '2px 8px 2px 0', opacity: 0.7, fontWeight: 500 }}>
-    {children}
-  </th>
-);
-
-const Td = ({ children }: { children: React.ReactNode }): ReactElement => (
-  <td style={{ padding: '2px 8px 2px 0' }}>{children}</td>
 );
 
 /* ── 글로벌 비율 입력 필드 ── */
