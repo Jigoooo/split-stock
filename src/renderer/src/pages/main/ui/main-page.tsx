@@ -146,7 +146,6 @@ export const MainPage = (): ReactElement => {
               selected={selectedEntry}
               onSelect={(entry) => setSelectedPdno(entry.pdno)}
               isProd={isProd}
-              hideSelectionBar
             />
           </div>
         </Panel>
