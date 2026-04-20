@@ -89,9 +89,12 @@ function bootstrapDeps(userDataDir: string) {
     decryptString: (encrypted) => safeStorage.decryptString(encrypted),
   });
   const tokenStore = new TokenStore(db);
+  // KIS 공식 RPS 한도: 실전 20 req/s, 모의 5 req/s. 20% margin 확보해 실전 18/모의 4로 운영.
+  // 모의에서 15 RPS 디폴트 유지 시 watchEngine/quote-feed 와 balance polling 동시 발생 시
+  // KIS 가 유량초과로 5xx 반환 → "잔고 서버에 일시적인 문제" 메시지로 변환되던 원인.
   const httpByEnv = {
-    MOCK: new KisHttpClient({ baseUrl: KIS_BASE_URL.MOCK }),
-    PROD: new KisHttpClient({ baseUrl: KIS_BASE_URL.PROD }),
+    MOCK: new KisHttpClient({ baseUrl: KIS_BASE_URL.MOCK, rateLimitRps: 4 }),
+    PROD: new KisHttpClient({ baseUrl: KIS_BASE_URL.PROD, rateLimitRps: 18 }),
   };
   const auth = new AuthService(httpByEnv, tokenStore);
   const dbLogger = createEventLogger(db);
