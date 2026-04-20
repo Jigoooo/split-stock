@@ -409,6 +409,7 @@ void app.whenReady().then(async () => {
     'dashboard',
     'trade',
     'logs',
+    'lots-log',
     'reports',
     'settings',
     'stock-picker',

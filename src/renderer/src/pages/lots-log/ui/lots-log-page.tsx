@@ -31,8 +31,9 @@ export const LotsLogPage = (): ReactElement => {
   const { accountId } = useActiveAccountId();
 
   // safety master 상태 — 수동편집 모드 진입 가드 결정에 사용.
-  const safetyState = trpc.safety.getState.useQuery({}).data;
-  const masterSafetyOn = safetyState?.master ?? false;
+  // accountId null 시 query 호출 자체는 문제 없으나, 실제 master 토글은 의미가 없으므로 false 처리.
+  const safetyQuery = trpc.safety.getState.useQuery({}, { enabled: accountId !== null });
+  const masterSafetyOn = safetyQuery.data?.master ?? false;
 
   const onEnterMode = async (): Promise<void> => {
     if (accountId === null) return;
