@@ -141,7 +141,11 @@ export const MainPage = (): ReactElement => {
             </Panel>
             {HORIZONTAL_SEPARATOR}
             <Panel id="main-right" defaultSize={40} minSize={25} style={panelStyle}>
-              <MainTradeHistoryPane accountId={accountId} selectedPdno={selectedPdno} />
+              <MainTradeHistoryPane
+                accountId={accountId}
+                selectedPdno={selectedPdno}
+                selectedName={selectedEntry?.name ?? null}
+              />
             </Panel>
           </Group>
         </Panel>

@@ -1,5 +1,10 @@
 import { BackupPanel } from '@renderer/features/backup-restore';
 import { CredentialsSettingsPanel } from '@renderer/features/credentials-settings';
+import {
+  ChartSettingsForm,
+  GridDensityForm,
+  useDisplaySettings,
+} from '@renderer/features/display-settings';
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
 import { ActivePendingList, PendingCancelForm } from '@renderer/features/pending-cancel-settings';
 import { PriceCorrectionForm } from '@renderer/features/price-correction-settings';
@@ -18,6 +23,9 @@ export const SettingsPage = (): ReactElement => {
     <div style={{ display: 'grid', gap: '1.2rem', minWidth: 0 }}>
       <Section name="차수 설정">
         <StrategySection />
+      </Section>
+      <Section name="표시 설정">
+        <DisplaySettingsSection />
       </Section>
       <Section name="미체결 자동취소">
         <PendingCancelForm />
@@ -138,6 +146,68 @@ function StrategySection(): ReactElement {
           void strategy.saveAsPreset(name, profile);
         }}
       />
+    </div>
+  );
+}
+
+function DisplaySettingsSection(): ReactElement {
+  const display = useDisplaySettings();
+
+  if (display.isPending) {
+    return (
+      <div className="panel">
+        <div className="panel__body muted">표시 설정 로드 중…</div>
+      </div>
+    );
+  }
+
+  if (display.error) {
+    return (
+      <div className="panel">
+        <div className="panel__body">
+          <span className="chip chip--down">{display.error.message}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: '1.2rem' }}>
+      <div className="panel">
+        <div className="panel__title">차트 표시</div>
+        <div className="panel__body">
+          <ChartSettingsForm
+            resolvedMa={display.resolvedMa}
+            resolvedVolume={display.resolvedVolume}
+            resolvedCrosshair={display.resolvedCrosshair}
+            isSaving={display.isSaving}
+            onMaChange={display.setMaField}
+            onVolumeChange={(field, value) => {
+              display.setVolumeField(
+                field as 'upColor' | 'downColor' | 'heightPercent',
+                value as never,
+              );
+            }}
+            onCrosshairChange={(field, value) => {
+              display.setCrosshairField(field as 'mode' | 'labelVisible', value as never);
+            }}
+            onSave={display.handleSave}
+            onReset={display.handleReset}
+          />
+        </div>
+      </div>
+      <div className="panel">
+        <div className="panel__title">그리드 표시</div>
+        <div className="panel__body">
+          <GridDensityForm
+            rowHeightPx={display.resolvedRowHeight}
+            isSaving={display.isSaving}
+            onChange={display.setRowHeight}
+            onSave={display.handleSave}
+            onReset={display.handleReset}
+          />
+        </div>
+      </div>
     </div>
   );
 }

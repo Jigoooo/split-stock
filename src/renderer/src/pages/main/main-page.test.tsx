@@ -69,21 +69,29 @@ vi.mock('@renderer/widgets/main-positions-pane', () => ({
 vi.mock('@renderer/widgets/main-trade-history-pane', () => ({
   MainTradeHistoryPane: ({
     accountId,
+    selectedName,
     selectedPdno,
   }: {
     accountId: number;
+    selectedName?: string | null;
     selectedPdno: string | null;
   }) => (
     <div
       data-testid="main-trade-history-pane"
       data-account-id={accountId}
+      data-selected-name={selectedName ?? ''}
       data-selected-pdno={selectedPdno ?? ''}
     />
   ),
 }));
 
 vi.mock('@renderer/widgets/stock-picker-list', () => ({
-  useStockList: () => ({ entries: [], total: 0, isLoading: false, error: null }),
+  useStockList: () => ({
+    entries: [{ pdno: '005930', name: '삼성전자', sector: '전기전자' }],
+    total: 1,
+    isLoading: false,
+    error: null,
+  }),
   StockPickerList: () => null,
 }));
 
@@ -122,6 +130,10 @@ describe('MainPage', () => {
     expect(screen.getByTestId('main-trade-history-pane')).toHaveAttribute(
       'data-selected-pdno',
       '005930',
+    );
+    expect(screen.getByTestId('main-trade-history-pane')).toHaveAttribute(
+      'data-selected-name',
+      '삼성전자',
     );
   });
 
