@@ -4,6 +4,7 @@ import type {
   BrowserWindow as BrowserWindowType,
   IpcMain as IpcMainType,
   safeStorage as safeStorageType,
+  session as sessionType,
 } from 'electron';
 import { createIPCHandler } from 'trpc-electron/main';
 
@@ -11,23 +12,34 @@ import { createIPCHandler } from 'trpc-electron/main';
 // `import { app } from 'electron'`이 런타임에 undefined가 되는 interop
 // 문제가 있어, createRequire로 직접 require한다.
 const electronRequire = createRequire(import.meta.url);
-const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, screen, shell } = electronRequire(
-  'electron',
-) as {
-  app: typeof import('electron').app;
-  BrowserWindow: typeof BrowserWindowType;
-  ipcMain: IpcMainType;
-  nativeTheme: typeof import('electron').nativeTheme;
-  safeStorage: typeof safeStorageType;
-  screen: typeof import('electron').screen;
-  shell: typeof import('electron').shell;
-};
+const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, screen, session, shell } =
+  electronRequire('electron') as {
+    app: typeof import('electron').app;
+    BrowserWindow: typeof BrowserWindowType;
+    ipcMain: IpcMainType;
+    nativeTheme: typeof import('electron').nativeTheme;
+    safeStorage: typeof safeStorageType;
+    screen: typeof import('electron').screen;
+    session: typeof sessionType;
+    shell: typeof import('electron').shell;
+  };
 
 // 앱 전반을 라이트 테마로 고정 — 시스템 다크모드 무시.
 // macOS 타이틀바, 네이티브 메뉴, 렌더러 color-scheme 모두 light 기반.
 nativeTheme.themeSource = 'light';
 
+// dev 전용 'unsafe-eval/inline' 경고 숨김 — 패키징 시 엄격 CSP가 적용되므로 무해.
+if (!app.isPackaged) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
+}
+
 import type { AppEnv } from '@shared/contracts';
+import {
+  getPopoutRouteConfig,
+  getPopoutWindowTitle,
+  POPOUT_ROUTES,
+  type PopoutRoute,
+} from '@shared/popout';
 import { and, eq } from 'drizzle-orm';
 import WebSocket from 'ws';
 import { ActiveAccountRepo } from './account/active-account';
@@ -89,20 +101,31 @@ function bootstrapDeps(userDataDir: string) {
     decryptString: (encrypted) => safeStorage.decryptString(encrypted),
   });
   const tokenStore = new TokenStore(db);
-  // KIS 공식 RPS 한도: 실전 20 req/s, 모의 5 req/s. 20% margin 확보해 실전 18/모의 4로 운영.
-  // 모의에서 15 RPS 디폴트 유지 시 watchEngine/quote-feed 와 balance polling 동시 발생 시
-  // KIS 가 유량초과로 5xx 반환 → "잔고 서버에 일시적인 문제" 메시지로 변환되던 원인.
-  const httpByEnv = {
-    MOCK: new KisHttpClient({ baseUrl: KIS_BASE_URL.MOCK, rateLimitRps: 4 }),
-    PROD: new KisHttpClient({ baseUrl: KIS_BASE_URL.PROD, rateLimitRps: 18 }),
-  };
-  const auth = new AuthService(httpByEnv, tokenStore);
   const dbLogger = createEventLogger(db);
   const logsDir = isDev ? join(process.cwd(), 'logs', 'dev') : join(userDataDir, 'logs');
   const fileLogger = createFileLogger({ dir: logsDir, retentionDays: 40 });
   // 부팅 시 1회 로테이션 — 40일 경과 파일 정리
   fileLogger.rotate();
   const eventLogger = teeLoggers(dbLogger, fileLogger);
+  // KIS 공식 RPS 한도: 실전 20 req/s, 모의 5 req/s. 20% margin 확보해 실전 18/모의 4로 운영.
+  // 모의에서 15 RPS 디폴트 유지 시 watchEngine/quote-feed 와 balance polling 동시 발생 시
+  // KIS 가 유량초과로 5xx 반환 → "잔고 서버에 일시적인 문제" 메시지로 변환되던 원인.
+  // logger 주입 — logs 페이지에서 `kis.http.*` message 로 요청/응답 감사 가능.
+  const httpByEnv = {
+    MOCK: new KisHttpClient({
+      baseUrl: KIS_BASE_URL.MOCK,
+      rateLimitRps: 4,
+      logger: eventLogger,
+      envLabel: 'MOCK',
+    }),
+    PROD: new KisHttpClient({
+      baseUrl: KIS_BASE_URL.PROD,
+      rateLimitRps: 18,
+      logger: eventLogger,
+      envLabel: 'PROD',
+    }),
+  };
+  const auth = new AuthService(httpByEnv, tokenStore);
   // per-account SafetyState 격리 registry. 각 계좌는 자체 master/symbol/errorLock 슬롯.
   const safetyRegistry = new SafetyStateRegistry({ logger: eventLogger });
   const settingsRepo = new SettingsRepo(db);
@@ -395,10 +418,29 @@ function bootstrapDeps(userDataDir: string) {
 }
 
 interface CreateWindowOpts {
-  popoutRoute?: string;
+  popoutRoute?: PopoutRoute;
   /** 팝아웃 창은 parent가 위치한 모니터에 열리도록 기준 창을 전달 */
   parent?: BrowserWindowType;
 }
+
+interface WindowLayoutSpec {
+  title: string;
+  defaultWidth: number;
+  defaultHeight: number;
+  minWidth?: number;
+  minHeight?: number;
+  autoContentHeight?: boolean;
+}
+
+const MAIN_WINDOW_LAYOUT: WindowLayoutSpec = {
+  title: 'Split Stock',
+  defaultWidth: 1760,
+  defaultHeight: 1100,
+  minWidth: 1440,
+  minHeight: 900,
+};
+
+const windowLayoutByWindow = new WeakMap<BrowserWindowType, WindowLayoutSpec>();
 
 /** 다중 모니터 환경에서 창을 배치할 Display를 고름. */
 function pickTargetDisplay(parent?: BrowserWindowType): Electron.Display {
@@ -410,75 +452,139 @@ function pickTargetDisplay(parent?: BrowserWindowType): Electron.Display {
   return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
 }
 
+function getWindowLayout(popoutRoute?: PopoutRoute): WindowLayoutSpec {
+  if (!popoutRoute) return MAIN_WINDOW_LAYOUT;
+  return getPopoutRouteConfig(popoutRoute);
+}
+
+function clampWindowSize(value: number, minValue: number | undefined, maxValue: number): number {
+  return Math.min(Math.max(value, minValue ?? 0), maxValue);
+}
+
+function resolveWindowConstraints(
+  layout: WindowLayoutSpec,
+  display: Electron.Display,
+): {
+  minWidth: number | undefined;
+  minHeight: number | undefined;
+  maxWidth: number;
+  maxHeight: number;
+} {
+  const area = display.workArea;
+  const minWidth =
+    layout.minWidth === undefined ? undefined : Math.min(layout.minWidth, area.width);
+  const minHeight =
+    layout.minHeight === undefined ? undefined : Math.min(layout.minHeight, area.height);
+  const maxWidth = area.width;
+  const maxHeight = area.height;
+  return { minWidth, minHeight, maxWidth, maxHeight };
+}
+
 /**
  * 지정 Display의 작업영역을 기준으로 min/max 클램프 + 중앙 배치 좌표 계산.
- * - designedMin이 해당 모니터보다 크면 모니터 크기로 축소 (잘림 방지)
- * - 초기 크기는 중간, 좌표는 작업영역 중앙
  */
 function resolveWindowBounds(
-  designedMinW: number,
-  designedMinH: number,
+  layout: WindowLayoutSpec,
   display: Electron.Display,
 ): {
   x: number;
   y: number;
   width: number;
   height: number;
-  minWidth: number;
-  minHeight: number;
+  minWidth: number | undefined;
+  minHeight: number | undefined;
   maxWidth: number;
   maxHeight: number;
 } {
-  const area = display.workArea; // {x, y, width, height} — 실제 스크린 좌표 기준
-  const minWidth = Math.min(designedMinW, area.width);
-  const minHeight = Math.min(designedMinH, area.height);
-  const maxWidth = area.width;
-  const maxHeight = area.height;
-  const width = Math.min(Math.max(designedMinW + 320, minWidth), maxWidth);
-  const height = Math.min(Math.max(designedMinH + 200, minHeight), maxHeight);
+  const area = display.workArea;
+  const { minWidth, minHeight, maxWidth, maxHeight } = resolveWindowConstraints(layout, display);
+  const width = clampWindowSize(layout.defaultWidth, minWidth, maxWidth);
+  const height = clampWindowSize(layout.defaultHeight, minHeight, maxHeight);
   const x = Math.round(area.x + (area.width - width) / 2);
   const y = Math.round(area.y + (area.height - height) / 2);
   return { x, y, width, height, minWidth, minHeight, maxWidth, maxHeight };
 }
 
+function applyDisplayConstraints(win: BrowserWindowType, layout: WindowLayoutSpec): void {
+  const display = screen.getDisplayMatching(win.getBounds());
+  const area = display.workArea;
+  const { minWidth, minHeight, maxWidth, maxHeight } = resolveWindowConstraints(layout, display);
+  const current = win.getBounds();
+  const width = clampWindowSize(current.width, minWidth, maxWidth);
+  const height = clampWindowSize(current.height, minHeight, maxHeight);
+  const maxX = area.x + area.width - width;
+  const maxY = area.y + area.height - height;
+  const x = Math.min(Math.max(current.x, area.x), maxX);
+  const y = Math.min(Math.max(current.y, area.y), maxY);
+
+  win.setMinimumSize(minWidth ?? 0, minHeight ?? 0);
+  win.setMaximumSize(maxWidth, maxHeight);
+
+  if (x !== current.x || y !== current.y || width !== current.width || height !== current.height) {
+    win.setBounds({ x, y, width, height });
+  }
+}
+
+function bindDisplayConstraints(win: BrowserWindowType, layout: WindowLayoutSpec): void {
+  let syncing = false;
+  const sync = (): void => {
+    if (syncing || win.isDestroyed()) return;
+    syncing = true;
+    try {
+      applyDisplayConstraints(win, layout);
+    } finally {
+      syncing = false;
+    }
+  };
+
+  const handleDisplayChange = (): void => sync();
+  win.on('move', sync);
+  win.on('resize', sync);
+  screen.on('display-metrics-changed', handleDisplayChange);
+  screen.on('display-added', handleDisplayChange);
+  screen.on('display-removed', handleDisplayChange);
+  win.once('closed', () => {
+    screen.off('display-metrics-changed', handleDisplayChange);
+    screen.off('display-added', handleDisplayChange);
+    screen.off('display-removed', handleDisplayChange);
+  });
+}
+
+function fitWindowHeightToContent(
+  win: BrowserWindowType,
+  layout: WindowLayoutSpec,
+  contentHeight: number,
+): void {
+  const display = screen.getDisplayMatching(win.getBounds());
+  const { minHeight, maxHeight } = resolveWindowConstraints(layout, display);
+  const bounds = win.getBounds();
+  const contentBounds = win.getContentBounds();
+  const frameHeight = Math.max(0, bounds.height - contentBounds.height);
+  const nextHeight = clampWindowSize(Math.ceil(contentHeight + frameHeight), minHeight, maxHeight);
+  if (nextHeight === bounds.height) return;
+
+  const area = display.workArea;
+  const nextY = Math.min(Math.max(bounds.y, area.y), area.y + area.height - nextHeight);
+  win.setBounds({ x: bounds.x, y: nextY, width: bounds.width, height: nextHeight });
+}
+
 function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
   const { popoutRoute, parent } = opts;
   const display = pickTargetDisplay(parent);
-  // profit-calculator는 작은 창 (380x420), add-account는 폼 전용 (520x620), add-watch-order는 폼 전용 (620x580)
-  const isProfitCalc = popoutRoute === 'profit-calculator';
-  const isAddAccount = popoutRoute === 'add-account';
-  const isAddWatchOrder = popoutRoute === 'add-watch-order';
-  const width = isProfitCalc
-    ? 380
-    : isAddAccount
-      ? 520
-      : isAddWatchOrder
-        ? 620
-        : popoutRoute
-          ? 720
-          : 1440;
-  const height = isProfitCalc
-    ? 420
-    : isAddAccount
-      ? 620
-      : isAddWatchOrder
-        ? 580
-        : popoutRoute
-          ? 540
-          : 900;
-  const bounds = resolveWindowBounds(width, height, display);
+  const layout = getWindowLayout(popoutRoute);
+  const bounds = resolveWindowBounds(layout, display);
   const win = new BrowserWindow({
     x: bounds.x,
     y: bounds.y,
     width: bounds.width,
     height: bounds.height,
-    minWidth: bounds.minWidth,
-    minHeight: bounds.minHeight,
+    ...(bounds.minWidth !== undefined ? { minWidth: bounds.minWidth } : {}),
+    ...(bounds.minHeight !== undefined ? { minHeight: bounds.minHeight } : {}),
     maxWidth: bounds.maxWidth,
     maxHeight: bounds.maxHeight,
     show: false,
     autoHideMenuBar: true,
-    title: popoutRoute ? `Split Stock · ${popoutRoute}` : 'Split Stock',
+    title: popoutRoute ? getPopoutWindowTitle(popoutRoute) : layout.title,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -487,8 +593,13 @@ function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
       webSecurity: true,
     },
   });
+  windowLayoutByWindow.set(win, layout);
+  bindDisplayConstraints(win, layout);
 
-  win.on('ready-to-show', () => win.show());
+  win.on('ready-to-show', () => {
+    win.show();
+    if (isDev) win.webContents.openDevTools({ mode: 'detach' });
+  });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -506,6 +617,20 @@ function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
 }
 
 void app.whenReady().then(async () => {
+  // CSP — dev 빌드에서만 Vite HMR/소스맵의 eval 허용.
+  // index.html <meta CSP>는 제거하고 HTTP 헤더로 일원화.
+  session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
+    const csp = isDev
+      ? "default-src 'self' 'unsafe-eval' 'unsafe-inline'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: ws://localhost:* http://localhost:*; img-src 'self' data:;"
+      : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss:; img-src 'self' data:;";
+    cb({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [csp],
+      },
+    });
+  });
+
   const userDataDir = app.getPath('userData');
   const { factory, safetyRegistry, eventLogger, settingsRepo, balanceSync, dbPath } =
     bootstrapDeps(userDataDir);
@@ -542,23 +667,14 @@ void app.whenReady().then(async () => {
 
   // 팝아웃 창: 메인 화면에서 특정 페이지(logs, reports, settings 등)를 별도 창으로 띄움.
   // route별 1개 창만 유지 — 이미 열려 있으면 포커스만 이동, 닫히면 렌더러에 통지해 placeholder 원복.
-  const ALLOWED_POPOUT_ROUTES = new Set([
-    'trade',
-    'logs',
-    'lots-log',
-    'reports',
-    'settings',
-    'stock-picker',
-    'profit-calculator',
-    'add-account',
-    'add-watch-order',
-  ]);
-  const popouts = new Map<string, BrowserWindowType>();
+  const ALLOWED_POPOUT_ROUTES = new Set(POPOUT_ROUTES);
+  const popouts = new Map<PopoutRoute, BrowserWindowType>();
   ipcMain.handle('appShell:openPopout', (event, route: unknown): { ok: boolean } => {
-    if (typeof route !== 'string' || !ALLOWED_POPOUT_ROUTES.has(route)) {
+    if (typeof route !== 'string' || !ALLOWED_POPOUT_ROUTES.has(route as PopoutRoute)) {
       return { ok: false };
     }
-    const existing = popouts.get(route);
+    const popoutRoute = route as PopoutRoute;
+    const existing = popouts.get(popoutRoute);
     if (existing && !existing.isDestroyed()) {
       if (existing.isMinimized()) existing.restore();
       existing.focus();
@@ -566,13 +682,13 @@ void app.whenReady().then(async () => {
     }
     // 팝아웃은 호출한 창(부모)이 있는 모니터에 열리도록 parent 전달.
     const sender = BrowserWindow.fromWebContents(event.sender) ?? win;
-    const popout = createMainWindow({ popoutRoute: route, parent: sender });
-    popouts.set(route, popout);
+    const popout = createMainWindow({ popoutRoute, parent: sender });
+    popouts.set(popoutRoute, popout);
     ipcHandler.attachWindow(popout);
     popout.on('closed', () => {
-      popouts.delete(route);
+      popouts.delete(popoutRoute);
       for (const target of BrowserWindow.getAllWindows()) {
-        if (!target.isDestroyed()) target.webContents.send('appShell:popout-closed', route);
+        if (!target.isDestroyed()) target.webContents.send('appShell:popout-closed', popoutRoute);
       }
     });
     return { ok: true };
@@ -606,6 +722,15 @@ void app.whenReady().then(async () => {
     if (target && !target.isDestroyed()) {
       target.setAlwaysOnTop(on);
     }
+  });
+
+  ipcMain.handle('appShell:fitContentHeight', (event, height: unknown) => {
+    if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) return;
+    const target = BrowserWindow.fromWebContents(event.sender);
+    if (!target || target.isDestroyed()) return;
+    const layout = windowLayoutByWindow.get(target);
+    if (!layout?.autoContentHeight) return;
+    fitWindowHeightToContent(target, layout, height);
   });
 
   void import('electron').then(({ globalShortcut }) => {

@@ -2,6 +2,7 @@ import type { KisError } from '@shared/contracts';
 import Bottleneck from 'bottleneck';
 import { err, ok, type Result } from 'neverthrow';
 import { type Dispatcher, request as undiciRequest } from 'undici';
+import type { EventLogger } from '../logging/event-logger';
 import { interpretRtCd, makeKisError } from './errors';
 
 /**
@@ -38,6 +39,14 @@ export interface KisHttpConfig {
   rateLimitRps?: number;
   /** 전체 요청 타임아웃 ms. */
   timeoutMs?: number;
+  /**
+   * 요청/응답/에러 감사 로그 sink. dev 디버깅 시 logs 페이지에서
+   * `message LIKE 'kis.http.%'` 로 필터해 네트워크 요청을 조회 가능.
+   * headers/query/body 는 민감정보 우려로 기록하지 않음 — path + status + durationMs 중심.
+   */
+  logger?: EventLogger;
+  /** 환경 라벨 (MOCK|PROD) — 로그 payload 에 포함. */
+  envLabel?: string;
 }
 
 export interface KisHttpResponse<T> {
@@ -70,7 +79,8 @@ export class KisHttpClient {
   ): Promise<Result<KisHttpResponse<T>, KisError>> {
     const qs = new URLSearchParams(params).toString();
     const url = `${this.config.baseUrl}${path}${qs ? `?${qs}` : ''}`;
-    return this.limiter.schedule(() => this.send<T>(url, 'GET', headers, null));
+    const trId = headers.tr_id ?? headers.TR_ID;
+    return this.limiter.schedule(() => this.send<T>(url, path, 'GET', headers, null, trId));
   }
 
   async post<T = unknown>(
@@ -84,15 +94,27 @@ export class KisHttpClient {
       'content-type': 'application/json; charset=utf-8',
       ...headers,
     };
-    return this.limiter.schedule(() => this.send<T>(url, 'POST', merged, payload));
+    const trId = merged.tr_id ?? merged.TR_ID;
+    return this.limiter.schedule(() => this.send<T>(url, path, 'POST', merged, payload, trId));
   }
 
   private async send<T>(
     url: string,
+    path: string,
     method: 'GET' | 'POST',
     headers: Record<string, string>,
     body: string | null,
+    trId: string | undefined,
   ): Promise<Result<KisHttpResponse<T>, KisError>> {
+    const logger = this.config.logger;
+    const env = this.config.envLabel;
+    const startedAt = Date.now();
+    logger?.log({
+      level: 'INFO',
+      category: 'SYS',
+      message: 'kis.http.request',
+      payload: { env, method, path, trId },
+    });
     try {
       const timeoutMs = this.config.timeoutMs ?? 10_000;
       const controller = new AbortController();
@@ -107,29 +129,110 @@ export class KisHttpClient {
         if (this.config.dispatcher) options.dispatcher = this.config.dispatcher;
         const res = await undiciRequest(url, options);
         const text = await res.body.text();
+        const durationMs = Date.now() - startedAt;
         if (res.statusCode >= 500) {
           // KIS 는 토큰 만료/인증 실패 등을 500 + body JSON 으로 반환하는 경우가 있음.
           // body 파싱 성공 시 해당 kind 로 분류해 상위 재인증 훅이 발화하게 한다.
           const classified = classifyFromBody(res.statusCode, text);
-          if (classified) return err(classified);
-          return err(
+          const e =
+            classified ??
             makeKisError('NETWORK', `HTTP ${res.statusCode}`, {
               cause: { status: res.statusCode, body: text.slice(0, 200) },
-            }),
-          );
+            });
+          logger?.log({
+            level: 'ERROR',
+            category: 'SYS',
+            message: 'kis.http.error',
+            payload: {
+              env,
+              method,
+              path,
+              trId,
+              status: res.statusCode,
+              durationMs,
+              kind: e.kind,
+              msg: e.msg,
+              body: text.slice(0, 200),
+            },
+          });
+          return err(e);
         }
         if (res.statusCode === 429) {
+          logger?.log({
+            level: 'ERROR',
+            category: 'SYS',
+            message: 'kis.http.error',
+            payload: {
+              env,
+              method,
+              path,
+              trId,
+              status: 429,
+              durationMs,
+              kind: 'RATE_LIMITED',
+              body: text.slice(0, 200),
+            },
+          });
           return err(makeKisError('RATE_LIMITED', 'HTTP 429', { cause: text }));
         }
         if (res.statusCode === 401 || res.statusCode === 403) {
+          logger?.log({
+            level: 'ERROR',
+            category: 'SYS',
+            message: 'kis.http.error',
+            payload: {
+              env,
+              method,
+              path,
+              trId,
+              status: res.statusCode,
+              durationMs,
+              kind: 'AUTH_FAILED',
+              body: text.slice(0, 200),
+            },
+          });
           return err(makeKisError('AUTH_FAILED', `HTTP ${res.statusCode}`, { cause: text }));
         }
         let parsed: T;
         try {
           parsed = text ? (JSON.parse(text) as T) : ({} as T);
         } catch (cause) {
+          logger?.log({
+            level: 'ERROR',
+            category: 'SYS',
+            message: 'kis.http.error',
+            payload: {
+              env,
+              method,
+              path,
+              trId,
+              status: res.statusCode,
+              durationMs,
+              kind: 'UNKNOWN',
+              msg: 'Invalid JSON response',
+            },
+          });
           return err(makeKisError('UNKNOWN', 'Invalid JSON response', { cause }));
         }
+        // rt_cd 가 0 아닌 경우 business error 로 간주해 WARN 으로 기록.
+        const rtCd = (parsed as { rt_cd?: string })?.rt_cd;
+        const msgCd = (parsed as { msg_cd?: string })?.msg_cd;
+        const isBizError = typeof rtCd === 'string' && rtCd !== '0';
+        logger?.log({
+          level: isBizError ? 'WARN' : 'INFO',
+          category: 'SYS',
+          message: 'kis.http.response',
+          payload: {
+            env,
+            method,
+            path,
+            trId,
+            status: res.statusCode,
+            durationMs,
+            ...(rtCd !== undefined ? { rtCd } : {}),
+            ...(msgCd !== undefined ? { msgCd } : {}),
+          },
+        });
         return ok({
           status: res.statusCode,
           body: parsed,
@@ -139,6 +242,21 @@ export class KisHttpClient {
         clearTimeout(timer);
       }
     } catch (cause) {
+      const durationMs = Date.now() - startedAt;
+      logger?.log({
+        level: 'ERROR',
+        category: 'SYS',
+        message: 'kis.http.error',
+        payload: {
+          env,
+          method,
+          path,
+          trId,
+          durationMs,
+          kind: 'NETWORK',
+          msg: cause instanceof Error ? cause.message : String(cause),
+        },
+      });
       return err(makeKisError('NETWORK', 'fetch failed', { cause }));
     }
   }
