@@ -86,4 +86,33 @@ describe('PositionsGrid', () => {
     fireEvent.click(screen.getByText('삼성전자'));
     expect(onSelect).toHaveBeenCalledWith('005930');
   });
+
+  it('차트 아이콘 클릭 → openPopout("trade") + assignStock 호출, onSelect 미호출', () => {
+    mockUsePositionsGrid.mockReturnValue({
+      isPending: false,
+      error: null,
+      rows: [makeRow('005930', '삼성전자')],
+      gridMaxStages: 2,
+    });
+
+    const openPopout = vi.fn().mockResolvedValue({ ok: true });
+    const assignStock = vi.fn();
+    Object.defineProperty(window, 'appShell', {
+      value: { openPopout, assignStock },
+      configurable: true,
+    });
+
+    const onSelect = vi.fn();
+    render(<PositionsGrid accountId={1} onSelect={onSelect} />);
+
+    const chartBtn = screen.getByRole('button', { name: '삼성전자 차트' });
+    fireEvent.click(chartBtn);
+
+    expect(openPopout).toHaveBeenCalledWith('trade');
+    expect(assignStock).toHaveBeenCalledWith('005930', '삼성전자');
+    expect(onSelect).not.toHaveBeenCalled();
+
+    // 정리
+    Object.defineProperty(window, 'appShell', { value: undefined, configurable: true });
+  });
 });

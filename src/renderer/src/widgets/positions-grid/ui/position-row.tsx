@@ -1,5 +1,6 @@
 import type { LotEntry } from '@renderer/entities/account';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { LineChart } from 'lucide-react';
 import { type CSSProperties, type ReactElement, useTransition } from 'react';
 import type { PositionsGridRow } from '../model/use-positions-grid';
 import { LotStageCells } from './lot-stage-cells';
@@ -16,6 +17,8 @@ export interface PositionRowProps {
   onToggleExpand: (pdno: string) => void;
   /** 행 클릭 → 종목 선택. */
   onSelect: (pdno: string) => void;
+  /** 차트 아이콘 클릭 → trade popout + 종목 assign. */
+  onChartPopout?: (pdno: string, name: string) => void;
   /** 가상화 스타일 (absolute positioning). */
   style?: CSSProperties;
 }
@@ -25,7 +28,16 @@ export interface PositionRowProps {
  * 컬럼 순서: [+] / 종목명 / 등락 / 수량 / 매입가 / 현재가 / 평가손익 / 수익률 / 매입금액 / 평가금액 / 자동 / 1차 / 2차 / ... / N차
  */
 export const PositionRow = (props: PositionRowProps): ReactElement => {
-  const { expanded, gridMaxStages, onSelect, onToggleExpand, row, selectedPdno, style } = props;
+  const {
+    expanded,
+    gridMaxStages,
+    onChartPopout,
+    onSelect,
+    onToggleExpand,
+    row,
+    selectedPdno,
+    style,
+  } = props;
   const [isPending, startTransition] = useTransition();
   const { lots, position, rowMaxStages } = row;
   const isSelected = selectedPdno === position.code;
@@ -57,6 +69,7 @@ export const PositionRow = (props: PositionRowProps): ReactElement => {
           {stageColumnWidths(gridMaxStages).map((nth) => (
             <col key={`stage-col-${nth}`} style={{ width: '5.5rem' }} />
           ))}
+          <col style={{ width: '2.8rem' }} />
         </colgroup>
         <tbody>
           <tr
@@ -103,6 +116,28 @@ export const PositionRow = (props: PositionRowProps): ReactElement => {
               {rowMaxStages > 0 ? 'ON' : 'OFF'}
             </td>
             <LotStageCells lots={lots} gridMaxStages={gridMaxStages} />
+            <td>
+              <button
+                type="button"
+                aria-label={`${position.name} 차트`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChartPopout?.(position.code, position.name);
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '0.1rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  color: 'var(--hts-muted, rgba(0,0,0,0.45))',
+                }}
+                title="차트 팝아웃"
+              >
+                <LineChart size={13} />
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>

@@ -49,6 +49,13 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
     onSelect?.(pdno);
   };
 
+  const handleChartPopout = (pdno: string, name: string): void => {
+    const shell = window.appShell;
+    if (!shell) return;
+    void shell.openPopout('trade');
+    shell.assignStock(pdno, name);
+  };
+
   return (
     <section
       className="panel"
@@ -86,6 +93,7 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
           {stageNumbers(gridMaxStages).map((nth) => (
             <col key={`hdr-stage-${nth}`} style={{ width: '5.5rem' }} />
           ))}
+          <col style={{ width: '2.8rem' }} />
         </colgroup>
         <thead>
           <tr>
@@ -105,6 +113,7 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
                 {nth}차
               </th>
             ))}
+            <th />
           </tr>
         </thead>
       </table>
@@ -148,6 +157,7 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
                     expanded={expanded.has(row.position.code)}
                     onToggleExpand={handleToggleExpand}
                     onSelect={handleSelect}
+                    onChartPopout={handleChartPopout}
                   />
                 </div>
               );
