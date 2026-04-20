@@ -52,30 +52,56 @@ const RealtimeStatusBar = ({
         alignItems: 'center',
         gap: '0.8rem',
         fontSize: '1.1rem',
-        flexWrap: 'wrap',
+        flexWrap: 'nowrap',
+        overflow: 'hidden',
+        minHeight: '2.4rem',
       }}
     >
-      <span className={started ? 'chip chip--up' : 'chip chip--down'}>
+      <span className={started ? 'chip chip--up' : 'chip chip--down'} style={{ flexShrink: 0 }}>
         {started ? '실시간 연결됨' : '실시간 미연결'}
       </span>
-      {mine ? (
-        <span className="muted">
-          체결 {mine.tick > 0 ? 'ON' : 'off'} · 호가 {mine.orderbook > 0 ? 'ON' : 'off'}
-        </span>
-      ) : started ? (
-        <span className="muted">구독 대기 중…</span>
-      ) : null}
-      {tickTime ? <span className="muted">체결 {formatTime(tickTime)}</span> : null}
-      {orderbookTime ? <span className="muted">호가 {formatTime(orderbookTime)}</span> : null}
+      <span className="muted" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+        {mine
+          ? `체결 ${mine.tick > 0 ? 'ON' : 'off'} · 호가 ${mine.orderbook > 0 ? 'ON' : 'off'}`
+          : started
+            ? '구독 대기 중…'
+            : '\u00A0'}
+      </span>
+      <span className="muted" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+        {tickTime ? `체결 ${formatTime(tickTime)}` : '\u00A0'}
+      </span>
+      <span className="muted" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
+        {orderbookTime ? `호가 ${formatTime(orderbookTime)}` : '\u00A0'}
+      </span>
       <span style={{ flex: 1 }} />
       {!started ? (
-        <Button disabled={reconnectPending} onClick={reconnect} variant="primary" dense>
+        <Button
+          disabled={reconnectPending}
+          onClick={reconnect}
+          variant="primary"
+          dense
+          style={{ flexShrink: 0 }}
+        >
           재연결
         </Button>
       ) : null}
-      {reconnectError ? <span className="chip chip--down">{reconnectError}</span> : null}
-      <span className="muted" style={{ fontSize: '1rem' }}>
-        ※ KRX 정규장 09:00–15:30 외엔 체결가가 흐르지 않을 수 있음
+      {reconnectError ? (
+        <span className="chip chip--down" style={{ flexShrink: 0 }}>
+          {reconnectError}
+        </span>
+      ) : null}
+      <span
+        className="muted"
+        title="KRX 정규장 09:00–15:30 외엔 체결가가 흐르지 않을 수 있음"
+        style={{
+          fontSize: '1rem',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          minWidth: 0,
+        }}
+      >
+        ※ 정규장(09:00–15:30) 외엔 체결가 흐름 중단 가능
       </span>
     </div>
   );
@@ -107,7 +133,15 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', height: '100%', minHeight: 0 }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.8rem',
+        height: '100%',
+        minHeight: 0,
+      }}
+    >
       <RealtimeStatusBar
         pdno={pdno}
         tickTime={tick?.time ?? null}
