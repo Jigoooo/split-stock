@@ -1,3 +1,4 @@
+import { useBalanceWithLots } from '@renderer/entities/account';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, NumberInput, Select } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
@@ -40,6 +41,11 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const suggestionKey = `${selection.pdno}:${selection.suggestedPrice ?? ''}:${selection.suggestedSide ?? ''}`;
   const [appliedSuggestionKey, setAppliedSuggestionKey] = useState(suggestionKey);
   const actions = useOrderActions();
+  const { lotsByPdno } = useBalanceWithLots();
+
+  const lots = lotsByPdno[selection.pdno] ?? [];
+  const openCount = lots.filter((l) => l.status === 'OPEN' || l.status === 'BUYING').length;
+  const nextNth = openCount + 1;
 
   if (appliedSuggestionKey !== suggestionKey) {
     setAppliedSuggestionKey(suggestionKey);
@@ -88,6 +94,10 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
       </div>
       <div className="order-ticket-form__scroll">
         <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span className="muted" style={{ fontSize: '0.9rem' }}>매수 차수</span>
+            <span className="chip" style={{ fontSize: '0.9rem' }}>{nextNth}차</span>
+          </div>
           <label htmlFor="order-division" style={{ display: 'grid', gap: '0.25rem' }}>
             <span className="muted">구분</span>
             <Select

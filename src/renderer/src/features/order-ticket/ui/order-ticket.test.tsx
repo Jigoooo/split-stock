@@ -33,6 +33,24 @@ vi.mock('@renderer/shared/api/trpc', () => ({
           isPending: false,
         }),
       },
+      getBalanceWithLots: {
+        useQuery: (_params: unknown, _opts: unknown) => ({
+          data: {
+            positions: [],
+            deposit: 0,
+            totalEval: 0,
+            lotsByPdno: {
+              '005930': [
+                { nth: 1, buyPrice: 70000, qty: 10, amountKrw: 700000, status: 'OPEN', boughtAt: 0 },
+                { nth: 2, buyPrice: 68000, qty: 10, amountKrw: 680000, status: 'BUYING', boughtAt: 0 },
+              ],
+            },
+            strategiesByPdno: {},
+          },
+          isPending: false,
+          error: null,
+        }),
+      },
     },
     useUtils: () => ({ order: { listActive: { invalidate: vi.fn() } } }),
   },
@@ -99,6 +117,20 @@ describe('OrderTicket', () => {
     expect(window.confirm).toHaveBeenCalled();
     expect(placeMock).not.toHaveBeenCalled();
     window.confirm = origConfirm;
+  });
+
+  it('현재 OPEN/BUYING lot 개수 기반으로 다음 차수를 표시한다', () => {
+    render(
+      wrap(
+        <OrderTicket
+          selection={{ pdno: '005930', name: '삼성전자' }}
+          isProd={false}
+          oneClick={false}
+        />,
+      ),
+    );
+    // mock: OPEN 1개 + BUYING 1개 = 2개 → 다음 차수 3
+    expect(screen.getByText('3차')).toBeInTheDocument();
   });
 
   it('시장가 선택 시 가격 입력 disabled', () => {
