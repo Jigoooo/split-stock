@@ -33,15 +33,19 @@ export const authRouter = router({
       });
     }
     const prev = ctx.currentEnv;
-    ctx.setCurrentEnv(input);
-    // env → accountId 매핑 후 활성 계좌 변경 (단일성 보장).
+    // ── 레이스 방지: env/accountId 가 어긋난 중간 상태가 관측되지 않도록 모든 선결
+    // 조건(계좌 해석 + DB 단일성 트랜잭션)을 먼저 끝낸 뒤 factory 상태를 원자 교체.
     const accId = ctx.credentialsRepo.resolveAccountIdByEnv(input);
     if (accId !== null) {
       const r = ctx.activeAccounts.setActiveAccountId(accId);
-      if (r.isOk()) {
-        ctx.setActiveAccountId(accId);
+      if (r.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `활성 계좌 전환 실패: ${r.error.kind}`,
+        });
       }
     }
+    ctx.setEnvAndAccount({ env: input, accountId: accId });
     ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, input);
     ctx.logger.log({
       level: input === 'PROD' ? 'WARN' : 'INFO',

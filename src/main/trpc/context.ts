@@ -59,6 +59,12 @@ export interface Context {
   currentEnv: AppEnv | null;
   setCurrentEnv: (env: AppEnv | null) => void;
   setActiveAccountId: (id: number | null) => void;
+  /**
+   * env 전환과 activeAccountId 변경을 원자적으로 수행. env 스위칭 시 개별 setter
+   * 를 순차 호출하면 중간 간극에 "새 env + 이전 accountId" 조합이 관측돼
+   * PROD URL 로 MOCK 자격증명을 보내는 등 AUTH_FAILED 가 발생하는 레이스를 방지.
+   */
+  setEnvAndAccount: (next: { env: AppEnv | null; accountId: number | null }) => void;
 }
 
 export interface ContextFactoryOptions
@@ -70,6 +76,7 @@ export interface ContextFactoryOptions
     | 'safety'
     | 'activeAccountId'
     | 'setActiveAccountId'
+    | 'setEnvAndAccount'
     | 'backupScheduler'
   > {
   /** env 전환 시 realtime 재생성을 호출측에 위임. 반환값이 현재 RealtimeService. */
@@ -82,6 +89,13 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   create: () => Context;
   setEnv: (env: AppEnv | null) => void;
   setActiveAccountId: (id: number | null) => void;
+  /**
+   * env 와 activeAccountId 를 원자적으로 교체 — env 전환 시 레이스 방지.
+   * 개별 setter 를 순차 호출하면 사이 간극에 돌아가는 tRPC query 가
+   * "새 env + 이전 accountId(이전 env 자격증명)" 조합을 잡아 KIS 에
+   * 모의투자키를 실전 URL 로 보내는 등 AUTH_FAILED 를 유발한다.
+   */
+  setEnvAndAccount: (next: { env: AppEnv | null; accountId: number | null }) => void;
   setBackupScheduler: (scheduler: BackupScheduler | null) => void;
   getRealtime: () => RealtimeService | null;
   getActiveAccountId: () => number | null;
@@ -102,6 +116,15 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   };
   const setActiveAccountId = (id: number | null): void => {
     activeAccountId = id;
+  };
+  const setEnvAndAccount = (next: { env: AppEnv | null; accountId: number | null }): void => {
+    // JS single-threaded 이므로 동일 tick 내 두 closure var 업데이트는 외부에서 관측 시 원자.
+    // accountId 를 먼저 세팅해 "새 env + 이전 accountId" 조합 윈도우 자체를 없앤다.
+    activeAccountId = next.accountId;
+    currentEnv = next.env;
+    if (realtimeFactory) {
+      realtime = realtimeFactory(next.env);
+    }
   };
   const setBackupScheduler = (scheduler: BackupScheduler | null): void => {
     backupScheduler = scheduler;
@@ -128,9 +151,11 @@ export function createContextFactory(opts: ContextFactoryOptions): {
       },
       setCurrentEnv,
       setActiveAccountId,
+      setEnvAndAccount,
     }),
     setEnv: setCurrentEnv,
     setActiveAccountId,
+    setEnvAndAccount,
     setBackupScheduler,
     getRealtime: () => realtime,
     getActiveAccountId: () => activeAccountId,

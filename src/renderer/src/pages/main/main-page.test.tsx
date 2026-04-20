@@ -82,6 +82,11 @@ vi.mock('@renderer/widgets/main-trade-history-pane', () => ({
   ),
 }));
 
+vi.mock('@renderer/widgets/stock-picker-list', () => ({
+  useStockList: () => ({ entries: [], total: 0, isLoading: false, error: null }),
+  StockPickerList: () => null,
+}));
+
 vi.mock('@renderer/widgets/trade-workspace', () => ({
   TradeWorkspace: ({
     selected,

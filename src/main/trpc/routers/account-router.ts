@@ -113,12 +113,12 @@ export const accountRouter = router({
           message: `활성 계좌 변경 실패: ${r.error.kind}`,
         });
       }
-      // 3) 컨텍스트의 activeAccountId 갱신.
-      ctx.setActiveAccountId(input.accountId);
-      // 4) env 가 다르면 currentEnv 도 원자적으로 동기 — realtime 재생성 트리거.
+      // 3) factory 상태 원자 교체 — accountId 와 env 를 동시에 교체해 "새 accountId
+      //    + 이전 env" 중간 상태 윈도우 제거. 이 간극에 돌아가는 tRPC 쿼리가 PROD URL
+      //    로 MOCK 자격증명을 보내거나 그 반대로 보내 AUTH_FAILED 유발하는 레이스 방지.
       const prevEnv = ctx.currentEnv;
+      ctx.setEnvAndAccount({ env: target.env, accountId: input.accountId });
       if (prevEnv !== target.env) {
-        ctx.setCurrentEnv(target.env);
         ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, target.env);
       }
       ctx.logger.log({
@@ -161,10 +161,10 @@ export const accountRouter = router({
     // 첫 계좌면 upsertFromCredentials 가 자동 활성화 — 컨텍스트에 반영.
     const activeNow = ctx.activeAccounts.getActiveAccountId();
     if (activeNow !== null && ctx.activeAccountId !== activeNow) {
-      ctx.setActiveAccountId(activeNow);
-      // 첫 계좌 자동 활성화 시 env 도 동기 — realtimeFactory 재생성 + 영속.
+      // 원자 교체 — env/accountId 레이스 방지.
+      const nextEnv = ctx.currentEnv !== input.env ? input.env : ctx.currentEnv;
+      ctx.setEnvAndAccount({ env: nextEnv, accountId: activeNow });
       if (ctx.currentEnv !== input.env) {
-        ctx.setCurrentEnv(input.env);
         ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, input.env);
       }
     }
@@ -234,9 +234,10 @@ export const accountRouter = router({
       if (wasActive && nextCandidate) {
         const switchResult = ctx.activeAccounts.setActiveAccountId(nextCandidate.id);
         if (switchResult.isOk()) {
-          ctx.setActiveAccountId(nextCandidate.id);
-          if (ctx.currentEnv !== nextCandidate.env) {
-            ctx.setCurrentEnv(nextCandidate.env);
+          // 원자 교체 — env/accountId 레이스 방지.
+          const prevEnv = ctx.currentEnv;
+          ctx.setEnvAndAccount({ env: nextCandidate.env, accountId: nextCandidate.id });
+          if (prevEnv !== nextCandidate.env) {
             ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, nextCandidate.env);
           }
         }
@@ -253,8 +254,7 @@ export const accountRouter = router({
       // 4) 유일 계좌였으면 전역 세션 해제 (로그아웃 + LAST_ACTIVE_ENV 제거).
       const loggedOut = wasActive && !nextCandidate;
       if (loggedOut) {
-        ctx.setActiveAccountId(null);
-        ctx.setCurrentEnv(null);
+        ctx.setEnvAndAccount({ env: null, accountId: null });
         ctx.settingsRepo.delete(SETTING_KEYS.LAST_ACTIVE_ENV);
       }
       ctx.logger.log({
