@@ -2,10 +2,9 @@ import { useBalanceWithLots } from '@renderer/entities/account';
 import { OrderConfirmDialog } from '@renderer/features/order-confirm-dialog';
 import { SearchStockInput } from '@renderer/features/search-stock';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { Button, NumberInput, Select } from '@renderer/shared/ui';
+import { Button, dialog, NumberInput, Select } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { useOrderActions } from '../model/use-order-actions';
 
 export interface OrderTicketSelection {
@@ -81,7 +80,9 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const executeOrder = async (confirmed: PendingConfirm): Promise<void> => {
     const sideLabel = confirmed.side === 'BUY' ? '매수' : '매도';
     const priceLabel =
-      confirmed.division === 'MARKET' ? '시장가' : `${thousandSeparator(String(confirmed.price))}원`;
+      confirmed.division === 'MARKET'
+        ? '시장가'
+        : `${thousandSeparator(String(confirmed.price))}원`;
     try {
       const result = await actions.place({
         pdno: selection.pdno,
@@ -91,13 +92,17 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
         division: confirmed.division,
       });
       const r = result as { odno?: string } | undefined;
-      toast.success(
-        `${nextNth}차 ${sideLabel} 주문 완료 — ${selection.name} ${thousandSeparator(String(confirmed.qty))}주 @ ${priceLabel}`,
-      );
+      dialog.success({
+        title: '주문 완료',
+        message: `${nextNth}차 ${sideLabel} 주문 완료 — ${selection.name} ${thousandSeparator(String(confirmed.qty))}주 @ ${priceLabel}`,
+      });
       if (r?.odno) props.onPlaced?.({ odno: r.odno, side: confirmed.side });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`주문 실패: ${msg}`, { duration: 6000 });
+      dialog.error({
+        title: '주문 실패',
+        message: msg,
+      });
     }
   };
 
