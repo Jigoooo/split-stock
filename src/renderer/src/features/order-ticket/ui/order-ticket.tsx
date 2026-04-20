@@ -202,7 +202,10 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
       aria-label="즉시 주문 티켓"
     >
       <div className="panel__title">
-        즉시 주문 — {selection.name} ({selection.pdno})
+        즉시 주문 —{' '}
+        {selection.name && selection.name !== selection.pdno
+          ? `${selection.name} (${selection.pdno})`
+          : selection.pdno}
       </div>
       <div className="order-ticket-form__scroll">
         <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>
@@ -239,13 +242,24 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
             />
             <span
               className="muted"
-              style={{ fontSize: '0.95rem', display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}
+              style={{
+                fontSize: '0.95rem',
+                display: 'flex',
+                gap: '0.6rem',
+                flexWrap: 'wrap',
+                rowGap: '0.2rem',
+              }}
             >
               <span>
-                매수가능{' '}
-                <span className={overBuyCap ? 'num-down' : 'num'}>
-                  {maxBuyQty === null ? '—' : `${thousandSeparator(maxBuyQty)}주`}
-                </span>
+                매수가능 <span className="num">{thousandSeparator(deposit)}원</span>
+                {maxBuyQty !== null ? (
+                  <>
+                    {' / '}
+                    <span className={overBuyCap ? 'num-down' : 'num'}>
+                      최대 {thousandSeparator(maxBuyQty)}주
+                    </span>
+                  </>
+                ) : null}
               </span>
               <span>
                 보유{' '}
