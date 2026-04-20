@@ -19,6 +19,17 @@ vi.mock('react-resizable-panels', () => ({
   Group: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Panel: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Separator: () => <div data-testid="separator" />,
+  useDefaultLayout: () => ({ defaultLayout: undefined, onLayoutChanged: vi.fn() }),
+}));
+
+vi.mock('@renderer/shared/api/trpc', () => ({
+  trpc: {
+    auth: {
+      getEnv: {
+        useQuery: () => ({ data: { env: 'MOCK', accountId: 1 } }),
+      },
+    },
+  },
 }));
 
 import { PanelWorkspace } from './panel-workspace';

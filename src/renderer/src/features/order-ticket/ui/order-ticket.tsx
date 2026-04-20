@@ -84,8 +84,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
       aria-label="즉시 주문 티켓"
     >
       <div className="panel__title">
-        즉시 주문 — {selection.name} ({selection.pdno}){' '}
-        {isProd ? <span className="chip chip--down">PROD</span> : null}
+        즉시 주문 — {selection.name} ({selection.pdno})
       </div>
       <div className="order-ticket-form__scroll">
         <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>

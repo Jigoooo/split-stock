@@ -1,6 +1,7 @@
 import { DashboardPage } from '@renderer/pages/dashboard';
 import { LogsPage } from '@renderer/pages/logs';
 import { TradePage } from '@renderer/pages/trade';
+import { trpc } from '@renderer/shared/api/trpc';
 import { Button } from '@renderer/shared/ui';
 import { ExternalLink } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
@@ -24,9 +25,17 @@ interface PanelCardProps {
   route: PopoutRoute;
   popout: PopoutApi;
   children: ReactNode;
+  /** 헤더 title 우측(팝아웃 버튼 왼쪽)에 달 수 있는 부가 표시 — PROD 배지 등. */
+  titleAccessory?: ReactNode;
 }
 
-const PanelCard = ({ title, route, popout, children }: PanelCardProps): ReactElement => {
+const PanelCard = ({
+  title,
+  route,
+  popout,
+  children,
+  titleAccessory,
+}: PanelCardProps): ReactElement => {
   const isOut = popout.isOpen(route);
   return (
     <div
@@ -53,6 +62,7 @@ const PanelCard = ({ title, route, popout, children }: PanelCardProps): ReactEle
         }}
       >
         <span>{title}</span>
+        {titleAccessory}
         <span style={{ flex: 1 }} />
         <Button
           onClick={() => {
@@ -88,6 +98,16 @@ export const PanelWorkspace = ({ popout }: PanelWorkspaceProps): ReactElement =>
     storage: localStorage,
   });
 
+  // PROD 배지는 즉시주문 헤더 대신 "주문" 패널카드 타이틀 우측에 — 폼 안에서
+  // 뜨고 사라지면서 발생하던 레이아웃 흔들림을 카드 바깥으로 격리.
+  const envQuery = trpc.auth.getEnv.useQuery();
+  const tradeTitleAccessory =
+    envQuery.data?.env === 'PROD' ? (
+      <span className="chip chip--down" style={{ fontSize: '0.85rem', padding: '0 0.4rem' }}>
+        PROD
+      </span>
+    ) : null;
+
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <Group
@@ -116,7 +136,12 @@ export const PanelWorkspace = ({ popout }: PanelWorkspaceProps): ReactElement =>
         </Panel>
         {DIVIDER('vertical')}
         <Panel id="trade" defaultSize={60} minSize={30} style={panelStyle}>
-          <PanelCard title="주문" route="trade" popout={popout}>
+          <PanelCard
+            title="주문"
+            route="trade"
+            popout={popout}
+            titleAccessory={tradeTitleAccessory}
+          >
             <TradePage
               isStockPickerPopoutOpen={popout.isOpen('stock-picker')}
               onOpenStockPickerPopout={() => popout.popout('stock-picker')}
