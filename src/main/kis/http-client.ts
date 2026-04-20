@@ -2,7 +2,33 @@ import type { KisError } from '@shared/contracts';
 import Bottleneck from 'bottleneck';
 import { err, ok, type Result } from 'neverthrow';
 import { type Dispatcher, request as undiciRequest } from 'undici';
-import { makeKisError } from './errors';
+import { interpretRtCd, makeKisError } from './errors';
+
+/**
+ * KIS는 토큰 만료 같은 인증 실패를 HTTP 401 대신 **HTTP 500 + body 에
+ * {"rt_cd":"1","msg_cd":"EGW00123","msg1":"기간이 만료된 token 입니다."} JSON**
+ * 을 실어 반환하는 경우가 자주 있음. 이를 NETWORK 로 분류하면 자동 재인증 훅이
+ * 발화하지 않아 사용자가 계속 500 을 봄. body 를 파싱해 rt_cd/msg_cd 기반으로
+ * 정확한 kind (AUTH_FAILED / RATE_LIMITED / API_BUSINESS 등)로 변환.
+ */
+function classifyFromBody(status: number, text: string): KisError | null {
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text) as { rt_cd?: string; msg_cd?: string; msg1?: string };
+    if (typeof parsed.rt_cd === 'string' && parsed.rt_cd !== '0') {
+      const biz = interpretRtCd(parsed.rt_cd, parsed.msg_cd ?? '', parsed.msg1 ?? '');
+      if (biz) {
+        return {
+          ...biz,
+          cause: { status, body: text.slice(0, 200) },
+        };
+      }
+    }
+  } catch {
+    // JSON 아님 — caller 가 HTTP 상태 기반 기본 분류 수행
+  }
+  return null;
+}
 
 export interface KisHttpConfig {
   baseUrl: string;
@@ -82,6 +108,10 @@ export class KisHttpClient {
         const res = await undiciRequest(url, options);
         const text = await res.body.text();
         if (res.statusCode >= 500) {
+          // KIS 는 토큰 만료/인증 실패 등을 500 + body JSON 으로 반환하는 경우가 있음.
+          // body 파싱 성공 시 해당 kind 로 분류해 상위 재인증 훅이 발화하게 한다.
+          const classified = classifyFromBody(res.statusCode, text);
+          if (classified) return err(classified);
           return err(
             makeKisError('NETWORK', `HTTP ${res.statusCode}`, {
               cause: { status: res.statusCode, body: text.slice(0, 200) },

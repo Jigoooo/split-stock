@@ -39,12 +39,24 @@ export class AuthService {
     env: AppEnv,
     appKey: string,
     appSecret: string,
+    opts: { forceRefresh?: boolean } = {},
   ): Promise<Result<StoredToken, KisError>> {
-    const cached = this.store.load(env);
-    if (cached.isOk() && cached.value && TokenStore.isReusable(cached.value, this.now())) {
-      return ok(cached.value);
+    if (!opts.forceRefresh) {
+      const cached = this.store.load(env);
+      if (cached.isOk() && cached.value && TokenStore.isReusable(cached.value, this.now())) {
+        return ok(cached.value);
+      }
     }
     return this.issueAndStore(env, appKey, appSecret);
+  }
+
+  /**
+   * KIS 가 서버측에서 토큰을 조기 무효화한 경우(다른 클라이언트 재발급 / 서버 재시작 등)
+   * 로컬 DB 캐시는 여전히 "유효"로 보이므로 명시적 invalidate 가 필요.
+   * 호출측(잔고조회 실패 핸들러 등)에서 EGW00123 검출 시 사용.
+   */
+  invalidate(env: AppEnv): void {
+    this.store.clear(env);
   }
 
   async issueAndStore(

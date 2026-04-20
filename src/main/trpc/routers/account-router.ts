@@ -45,6 +45,18 @@ function balanceDiagnostic(e: KisError): string {
   return parts.length > 0 ? ` [${parts.join(' · ')}]` : '';
 }
 
+/**
+ * KIS 토큰 만료/인증 실패 판정 — KIS 는 EGW00123 / "기간이 만료된 token" / "토큰"
+ * 류 msg 를 AUTH_FAILED 로 올려보낸다. (http-client 가 500+body JSON 도 파싱해서
+ * AUTH_FAILED 로 reclassify 하므로 kind 만 봐도 대부분 충분.)
+ */
+function isTokenExpired(e: KisError): boolean {
+  if (e.kind === 'AUTH_FAILED') return true;
+  if (e.msg_cd === 'EGW00123') return true;
+  if (e.msg && /토큰/.test(e.msg)) return true;
+  return false;
+}
+
 function balanceErrorMessage(e: KisError): string {
   const diag = balanceDiagnostic(e);
   switch (e.kind) {
@@ -288,7 +300,7 @@ export const accountRouter = router({
         });
       }
       const http = ctx.httpByEnv[env];
-      const r = await inquireBalance({
+      let r = await inquireBalance({
         http,
         env,
         token: tokenResult.value.token,
@@ -297,6 +309,24 @@ export const accountRouter = router({
         accountNo8: cred.accountNo8,
         accountProdCd: cred.accountProdCd,
       });
+      // 서버측 조기 무효화(EGW00123 등) 감지 시 토큰 강제 재발급 후 1회 재시도.
+      if (r.isErr() && isTokenExpired(r.error)) {
+        ctx.auth.invalidate(env);
+        const fresh = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret, {
+          forceRefresh: true,
+        });
+        if (fresh.isOk()) {
+          r = await inquireBalance({
+            http,
+            env,
+            token: fresh.value.token,
+            appKey: cred.appKey,
+            appSecret: cred.appSecret,
+            accountNo8: cred.accountNo8,
+            accountProdCd: cred.accountProdCd,
+          });
+        }
+      }
       if (r.isErr()) {
         // 원인(status, body, rt_cd, msg_cd 등)은 운영 로그에만 기록 — 사용자에게는 친화 메시지.
         ctx.logger.log({
@@ -357,7 +387,7 @@ export const accountRouter = router({
         });
       }
       const http = ctx.httpByEnv[env];
-      const balance = await inquireBalance({
+      let balance = await inquireBalance({
         http,
         env,
         token: tokenResult.value.token,
@@ -366,6 +396,24 @@ export const accountRouter = router({
         accountNo8: cred.accountNo8,
         accountProdCd: cred.accountProdCd,
       });
+      // 토큰 조기 만료(EGW00123 등) 자동 재발급 후 1회 재시도.
+      if (balance.isErr() && isTokenExpired(balance.error)) {
+        ctx.auth.invalidate(env);
+        const fresh = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret, {
+          forceRefresh: true,
+        });
+        if (fresh.isOk()) {
+          balance = await inquireBalance({
+            http,
+            env,
+            token: fresh.value.token,
+            appKey: cred.appKey,
+            appSecret: cred.appSecret,
+            accountNo8: cred.accountNo8,
+            accountProdCd: cred.accountProdCd,
+          });
+        }
+      }
       if (balance.isErr()) {
         ctx.logger.log({
           level: 'ERROR',
