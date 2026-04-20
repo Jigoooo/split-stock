@@ -1,3 +1,4 @@
+import { useRealtimeStatus } from '@renderer/entities/realtime';
 import { OrderTicket, type OrderTicketSelection } from '@renderer/features/order-ticket';
 import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -11,7 +12,6 @@ import {
   useTradeFeed,
 } from '../model/use-live-feed';
 import { useOrderHotkeys } from '../model/use-order-hotkeys';
-import { useRealtimeStatus } from '../model/use-realtime-status';
 import { ActiveOrdersPanel } from './active-orders-panel';
 import { OrderbookPanel } from './orderbook-panel';
 import { TradeFeedPanel } from './trade-feed-panel';
