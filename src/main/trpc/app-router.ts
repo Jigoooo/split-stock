@@ -19,6 +19,7 @@ import { realtimeRouter } from './routers/realtime-router';
 import { reportsRouter } from './routers/reports-router';
 import { safetyRouter } from './routers/safety-router';
 import { strategyRouter } from './routers/strategy-router';
+import { symbolMemoRouter } from './routers/symbol-memo-router';
 import { tradingWindowsRouter } from './routers/trading-windows-router';
 import { watchRouter } from './routers/watch-router';
 import { router } from './trpc-core';
@@ -35,6 +36,7 @@ export const appRouter = router({
   lots: lotsRouter,
   lotsManual: lotsManualRouter,
   strategy: strategyRouter,
+  symbolMemo: symbolMemoRouter,
   monitoring: monitoringRouter,
   notifications: notificationsRouter,
   reports: reportsRouter,
