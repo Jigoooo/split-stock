@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { lotsRepoErrorMessage } from '../../trading/lots-repo';
-import { resolveAccountId } from '../router-helpers';
-import { publicProcedure, router } from '../trpc-core';
+import { requireAccountId, resolveAccountId } from '../router-helpers';
+import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 export const lotsRouter = router({
   /**
@@ -27,6 +27,39 @@ export const lotsRouter = router({
         });
       }
       return { snapshots: result.value };
+    }),
+
+  /**
+   * 종목별 매매 사이클 조회 — 차수 단위 매수/매도 요약.
+   * - accountId 명시 강제 (requireAccountId — per-account 격리).
+   * - pdno 옵션: 미지정 시 모든 종목, 지정 시 해당 종목만.
+   * - status: 'all' | 'open'(OPEN|BUYING) | 'closed'(SOLD).
+   */
+  cyclesByPdno: authedProcedure
+    .input(
+      z.object({
+        accountId: z.number().int().positive(),
+        pdno: z
+          .string()
+          .regex(/^\d{6}$/, '종목코드는 6자리 숫자')
+          .optional(),
+        status: z.enum(['all', 'open', 'closed']),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const accountId = requireAccountId(input);
+      const result = ctx.lotsRepo.cyclesByPdno({
+        accountId,
+        status: input.status,
+        ...(input.pdno !== undefined ? { pdno: input.pdno } : {}),
+      });
+      if (result.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `매매 사이클 조회 실패: ${lotsRepoErrorMessage(result.error)}`,
+        });
+      }
+      return { cycles: result.value };
     }),
 
   /**
