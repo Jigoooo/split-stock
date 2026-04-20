@@ -1,6 +1,6 @@
 import { Button } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BarChart3, ClipboardList, Settings2 } from 'lucide-react';
+import { ArrowLeftRight, BarChart3, ClipboardList, ScrollText, Settings2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import type { PopoutRoute } from '../model/popout-route';
@@ -16,6 +16,8 @@ const BUTTONS: Array<{
   icon: ReactElement;
 }> = [
   { route: 'lots-log', label: '잔고(차수) 로그', icon: <ClipboardList size={14} /> },
+  { route: 'logs', label: '이벤트 로그', icon: <ScrollText size={14} /> },
+  { route: 'trade', label: '주문', icon: <ArrowLeftRight size={14} /> },
   { route: 'reports', label: '리포트', icon: <BarChart3 size={14} /> },
   { route: 'settings', label: '설정', icon: <Settings2 size={14} /> },
 ];
