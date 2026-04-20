@@ -24,21 +24,33 @@ function serializeCause(cause: unknown): unknown {
 /**
  * KIS 잔고조회 실패 → 사용자 친화 한국어 메시지로 변환.
  * 원인 정보(rt_cd / msg / status)는 호출측에서 ctx.logger 로 전체 dump (운영 디버깅용).
+ * 상세 진단 힌트(HTTP status, kis msg_cd, rt_cd)를 메시지 끝에 덧붙여 즉시 원인 식별 가능.
  */
+function balanceDiagnostic(e: KisError): string {
+  const parts: string[] = [];
+  const cause = e.cause as { status?: number; body?: string } | undefined;
+  if (cause?.status !== undefined) parts.push(`HTTP ${cause.status}`);
+  if (e.rt_cd) parts.push(`rt_cd=${e.rt_cd}`);
+  if (e.msg_cd) parts.push(`msg_cd=${e.msg_cd}`);
+  if (e.msg) parts.push(e.msg);
+  return parts.length > 0 ? ` [${parts.join(' · ')}]` : '';
+}
+
 function balanceErrorMessage(e: KisError): string {
+  const diag = balanceDiagnostic(e);
   switch (e.kind) {
     case 'NETWORK':
-      return '잔고 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해주세요.';
+      return `잔고 서버에 일시적인 문제가 있습니다. 잠시 후 다시 시도해주세요.${diag}`;
     case 'RATE_LIMITED':
-      return '잔고조회 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+      return `잔고조회 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.${diag}`;
     case 'AUTH_FAILED':
-      return '토큰이 만료되었거나 자격증명이 잘못되었습니다. 다시 로그인 해주세요.';
+      return `토큰이 만료되었거나 자격증명이 잘못되었습니다. 다시 로그인 해주세요.${diag}`;
     case 'VALIDATION':
-      return '잔고 응답 형식이 예상과 다릅니다. KIS 공지를 확인해주세요.';
+      return `잔고 응답 형식이 예상과 다릅니다. KIS 공지를 확인해주세요.${diag}`;
     case 'API_BUSINESS':
-      return e.msg || '잔고조회 중 오류가 발생했습니다.';
+      return `${e.msg || '잔고조회 중 오류가 발생했습니다.'}${diag}`;
     default:
-      return '잔고조회에 실패했습니다.';
+      return `잔고조회에 실패했습니다.${diag}`;
   }
 }
 
