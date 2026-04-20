@@ -157,6 +157,36 @@ export interface CyclesByPdnoInput {
   status: CycleStatusFilter;
 }
 
+export interface TradeHistoryFilters {
+  accountId: number;
+  year: number;
+  month: number;
+  day?: number;
+  search?: string;
+}
+
+/**
+ * 모든 매매 내역 전용 lot 조회 항목.
+ *
+ * 정렬/필터 기준:
+ * - relevantAt = soldAt ?? boughtAt
+ * - month/day/search 는 relevantAt 및 종목명/코드 기준으로 필터링
+ * - 반환 순서는 relevantAt 내림차순, 같은 시각이면 pdno 오름차순, nth 오름차순
+ */
+export interface TradeHistoryLot {
+  id: number;
+  pdno: string;
+  name: string;
+  nth: number;
+  qty: number;
+  amountKrw: number;
+  status: LotStatus;
+  buyPrice: number;
+  boughtAt: number;
+  soldAt?: number;
+  sellPrice?: number;
+}
+
 /**
  * 차수 장부 레포지토리.
  * 중요: better-sqlite3 transaction으로 insert/update가 원자적으로 실행됨.
@@ -781,6 +811,88 @@ export class LotsRepo {
         return cycle;
       });
       return ok(cycles);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
+   * 모든 매매 내역 전용 lot 목록 조회.
+   *
+   * v1은 account 단위로 lot을 읽은 뒤 JS 레벨에서 relevantAt / 이름 검색을 적용한다.
+   * 종목명은 stockMasterRepo lookup, 미주입 또는 미발견 시 빈 문자열.
+   */
+  listTradeHistoryLots(input: TradeHistoryFilters): Result<TradeHistoryLot[], LotsRepoError> {
+    try {
+      const rows = this.db
+        .select()
+        .from(lotsTable)
+        .where(eq(lotsTable.accountId, input.accountId))
+        .all();
+
+      const trimmedSearch = input.search?.trim() ?? '';
+      const normalizedSearch = trimmedSearch.toLowerCase();
+      const nameCache = new Map<string, string>();
+      const resolveName = (pdno: string): string => {
+        const cached = nameCache.get(pdno);
+        if (cached !== undefined) return cached;
+        const found = this.stockMasterRepo?.find(pdno)?.name ?? '';
+        nameCache.set(pdno, found);
+        return found;
+      };
+
+      const lots: TradeHistoryLot[] = [];
+      for (const row of rows) {
+        const soldAtMs =
+          row.soldAt === null
+            ? undefined
+            : row.soldAt instanceof Date
+              ? row.soldAt.getTime()
+              : Number(row.soldAt);
+        const boughtAtMs =
+          row.boughtAt instanceof Date ? row.boughtAt.getTime() : Number(row.boughtAt);
+        const relevantAt = soldAtMs ?? boughtAtMs;
+        const relevantDate = new Date(relevantAt);
+        const year = relevantDate.getUTCFullYear();
+        const month = relevantDate.getUTCMonth() + 1;
+        const day = relevantDate.getUTCDate();
+        if (year !== input.year || month !== input.month) continue;
+        if (input.day !== undefined && day !== input.day) continue;
+
+        const name = resolveName(row.pdno);
+        if (
+          normalizedSearch !== '' &&
+          !row.pdno.includes(trimmedSearch) &&
+          !name.toLowerCase().includes(normalizedSearch)
+        ) {
+          continue;
+        }
+
+        const entry: TradeHistoryLot = {
+          id: row.id,
+          pdno: row.pdno,
+          name,
+          nth: row.nth,
+          qty: row.qty,
+          amountKrw: row.amountKrw,
+          status: row.status as LotStatus,
+          buyPrice: row.buyPrice,
+          boughtAt: boughtAtMs,
+        };
+        if (soldAtMs !== undefined) entry.soldAt = soldAtMs;
+        if (row.sellPrice !== null) entry.sellPrice = row.sellPrice;
+        lots.push(entry);
+      }
+
+      lots.sort((a, b) => {
+        const relevantA = a.soldAt ?? a.boughtAt;
+        const relevantB = b.soldAt ?? b.boughtAt;
+        if (relevantB !== relevantA) return relevantB - relevantA;
+        if (a.pdno !== b.pdno) return a.pdno.localeCompare(b.pdno);
+        return a.nth - b.nth;
+      });
+
+      return ok(lots);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
     }

@@ -812,4 +812,135 @@ describe('LotsRepo', () => {
       }
     });
   });
+
+  describe('listTradeHistoryLots — 모든 매매 내역 조회', () => {
+    function seedTradeHistory(repo: LotsRepo, accountId: number): void {
+      repo.insertLot({
+        accountId,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 70000,
+        qty: 10,
+        amountKrw: 700_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-04-01T00:00:00Z'),
+      });
+      const sold = repo.insertLot({
+        accountId,
+        pdno: '005930',
+        nth: 2,
+        buyPrice: 65000,
+        qty: 12,
+        amountKrw: 780_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-03-28T00:00:00Z'),
+      });
+      if (sold.isOk()) {
+        repo.updateLotStatus({
+          lotId: sold.value,
+          status: 'SOLD',
+          sellPrice: 70000,
+          soldAt: new Date('2026-04-05T00:00:00Z'),
+        });
+      }
+      repo.insertLot({
+        accountId,
+        pdno: '005930',
+        nth: 3,
+        buyPrice: 62000,
+        qty: 8,
+        amountKrw: 496_000,
+        status: 'SELLING',
+        boughtAt: new Date('2026-04-03T00:00:00Z'),
+      });
+      repo.insertLot({
+        accountId,
+        pdno: '000660',
+        nth: 1,
+        buyPrice: 180_000,
+        qty: 5,
+        amountKrw: 900_000,
+        status: 'BUYING',
+        boughtAt: new Date('2026-04-04T00:00:00Z'),
+      });
+      repo.insertLot({
+        accountId,
+        pdno: '000660',
+        nth: 2,
+        buyPrice: 175_000,
+        qty: 4,
+        amountKrw: 700_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-05-01T00:00:00Z'),
+      });
+    }
+
+    it('relevantAt 기준 month/day 필터 + 정렬 적용', () => {
+      const { repo } = setupRepoWithMaster();
+      seedTradeHistory(repo, 1);
+
+      const result = repo.listTradeHistoryLots({ accountId: 1, year: 2026, month: 4 });
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        expect(result.value.map((lot) => [lot.pdno, lot.nth])).toEqual([
+          ['005930', 2],
+          ['000660', 1],
+          ['005930', 3],
+          ['005930', 1],
+        ]);
+      }
+    });
+
+    it('day 필터는 SOLD lot 에서 soldAt 을 우선 사용', () => {
+      const { repo } = setupRepoWithMaster();
+      seedTradeHistory(repo, 1);
+
+      const result = repo.listTradeHistoryLots({ accountId: 1, year: 2026, month: 4, day: 5 });
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]).toMatchObject({
+          pdno: '005930',
+          nth: 2,
+          soldAt: Date.parse('2026-04-05T00:00:00Z'),
+        });
+      }
+    });
+
+    it('name/pdno substring 검색 지원', () => {
+      const { repo } = setupRepoWithMaster();
+      seedTradeHistory(repo, 1);
+
+      const byName = repo.listTradeHistoryLots({
+        accountId: 1,
+        year: 2026,
+        month: 4,
+        search: '하이닉',
+      });
+      const byCode = repo.listTradeHistoryLots({
+        accountId: 1,
+        year: 2026,
+        month: 4,
+        search: '593',
+      });
+
+      expect(byName.isOk() && byCode.isOk()).toBe(true);
+      if (byName.isOk() && byCode.isOk()) {
+        expect(byName.value.map((lot) => lot.pdno)).toEqual(['000660']);
+        expect(byCode.value.map((lot) => lot.nth).sort((a, b) => a - b)).toEqual([1, 2, 3]);
+      }
+    });
+
+    it('SELLING 포함 + stockMasterRepo 미주입 시 name 빈 문자열', () => {
+      const repo = setupRepo();
+      seedTradeHistory(repo, 1);
+
+      const result = repo.listTradeHistoryLots({ accountId: 1, year: 2026, month: 4 });
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        expect(result.value.some((lot) => lot.status === 'SELLING')).toBe(true);
+        expect(result.value.every((lot) => lot.name === '')).toBe(true);
+      }
+    });
+  });
 });

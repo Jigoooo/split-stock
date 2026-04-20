@@ -63,6 +63,38 @@ export const lotsRouter = router({
     }),
 
   /**
+   * 모든 매매 내역 전용 lot 조회.
+   * month/day 기준은 relevantAt = soldAt ?? boughtAt.
+   */
+  tradeHistory: authedProcedure
+    .input(
+      z.object({
+        accountId: z.number().int().positive(),
+        year: z.number().int().min(2000).max(2100),
+        month: z.number().int().min(1).max(12),
+        day: z.number().int().min(1).max(31).optional(),
+        search: z.string().trim().max(100).optional(),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const accountId = requireAccountId(input);
+      const result = ctx.lotsRepo.listTradeHistoryLots({
+        accountId,
+        year: input.year,
+        month: input.month,
+        ...(input.day !== undefined ? { day: input.day } : {}),
+        ...(input.search !== undefined ? { search: input.search } : {}),
+      });
+      if (result.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `모든 매매 내역 조회 실패: ${lotsRepoErrorMessage(result.error)}`,
+        });
+      }
+      return { lots: result.value };
+    }),
+
+  /**
    * 스냅샷이 존재하는 날짜 목록 조회 (최신순).
    */
   listSnapshotDates: publicProcedure
