@@ -63,45 +63,47 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
 
   return (
     <div className="panel orderbook-panel">
-      <table className="hts-table orderbook-table" aria-label="호가 10단">
-        <thead>
-          <tr>
-            <th className="num" style={{ width: '40%' }}>
-              매도잔량
-            </th>
-            <th className="num">호가</th>
-            <th className="num" style={{ width: '40%' }}>
-              매수잔량
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {asksReversed.map((l) => (
-            <OrderbookRow
-              key={`ask-${l.price}`}
-              leftQty={l.quantity}
-              rightQty={0}
-              price={l.price}
-              maxQty={maxQty}
-              side="SELL"
-              current={l.price === currentPrice}
-              onClick={() => onClickPrice(l.price, 'BUY')}
-            />
-          ))}
-          {orderbook.bids.map((l) => (
-            <OrderbookRow
-              key={`bid-${l.price}`}
-              leftQty={0}
-              rightQty={l.quantity}
-              price={l.price}
-              maxQty={maxQty}
-              side="BUY"
-              current={l.price === currentPrice}
-              onClick={() => onClickPrice(l.price, 'SELL')}
-            />
-          ))}
-        </tbody>
-      </table>
+      <div className="orderbook-panel__scroll">
+        <table className="hts-table orderbook-table" aria-label="호가 10단">
+          <thead>
+            <tr>
+              <th className="num" style={{ width: '40%' }}>
+                매도잔량
+              </th>
+              <th className="num">호가</th>
+              <th className="num" style={{ width: '40%' }}>
+                매수잔량
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {asksReversed.map((l) => (
+              <OrderbookRow
+                key={`ask-${l.price}`}
+                leftQty={l.quantity}
+                rightQty={0}
+                price={l.price}
+                maxQty={maxQty}
+                side="SELL"
+                current={l.price === currentPrice}
+                onClick={() => onClickPrice(l.price, 'BUY')}
+              />
+            ))}
+            {orderbook.bids.map((l) => (
+              <OrderbookRow
+                key={`bid-${l.price}`}
+                leftQty={0}
+                rightQty={l.quantity}
+                price={l.price}
+                maxQty={maxQty}
+                side="BUY"
+                current={l.price === currentPrice}
+                onClick={() => onClickPrice(l.price, 'SELL')}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
       <div
         className="panel__body"
         style={{
@@ -111,7 +113,10 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
           overflow: 'hidden',
         }}
       >
-        <span className="muted" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+        <span
+          className="muted"
+          style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}
+        >
           총 매도 {thousandSeparator(orderbook.totalAskQty)} · 총 매수{' '}
           {thousandSeparator(orderbook.totalBidQty)}
         </span>

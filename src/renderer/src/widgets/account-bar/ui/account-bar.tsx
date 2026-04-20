@@ -30,16 +30,16 @@ export const AccountBar = ({ env }: AccountBarProps): ReactElement => (
     }}
   >
     <AccountSelector />
-    {env ? (
+    {env === 'PROD' ? (
       <span
-        className={env === 'PROD' ? 'env-badge env-badge--prod' : 'env-badge env-badge--mock'}
+        className="env-badge env-badge--prod"
         title="현재 활성 환경 — 계좌 셀렉터로 전환됩니다."
       >
-        {env}
+        PROD
       </span>
-    ) : (
+    ) : env === null ? (
       <span className="chip">연결 안 됨</span>
-    )}
+    ) : null}
     <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)' }} />
     <SafetySwitchHeader />
   </div>

@@ -108,11 +108,6 @@ body {
   line-height: 1.4;
 }
 
-.env-badge--mock {
-  background: #fde68a;
-  color: #78350f;
-}
-
 .env-badge--prod {
   background: #dc2626;
   color: #fff;
@@ -692,7 +687,16 @@ body {
 
 /* ===== 호가창 (OrderbookPanel) — 20행이 스크롤 없이 한 번에 보이도록 컴팩트 ===== */
 .orderbook-panel {
-  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.orderbook-panel__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 .orderbook-table {
   /* 호가창은 사용자 rowHeight 설정과 독립적으로 타이트하게 고정 */
@@ -712,6 +716,34 @@ body {
 .orderbook-panel .panel__body {
   padding: 0.3rem 0.5rem;
   font-size: 0.95rem;
+}
+
+/* ===== 리사이즈 구분선 — 드래그 후 포커스 아웃라인 숨김 ===== */
+.resize-separator,
+.resize-separator:focus,
+.resize-separator:focus-visible,
+.resize-separator[data-focus],
+.resize-separator[data-focused] {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ===== 즉시주문 폼 — 세로 공간이 부족하면 내부 스크롤 ===== */
+.order-ticket-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.order-ticket-form > .panel__title {
+  flex: 0 0 auto;
+}
+.order-ticket-form__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ===== Dashboard ===== */

@@ -78,89 +78,95 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   };
 
   return (
-    <form className="panel" onSubmit={(e) => e.preventDefault()} aria-label="즉시 주문 티켓">
+    <form
+      className="panel order-ticket-form"
+      onSubmit={(e) => e.preventDefault()}
+      aria-label="즉시 주문 티켓"
+    >
       <div className="panel__title">
         즉시 주문 — {selection.name} ({selection.pdno}){' '}
         {isProd ? <span className="chip chip--down">PROD</span> : null}
       </div>
-      <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>
-        <label htmlFor="order-division" style={{ display: 'grid', gap: '0.25rem' }}>
-          <span className="muted">구분</span>
-          <Select
-            id="order-division"
-            value={division}
-            onChange={(e) => setDivision(e.target.value as Division)}
-            aria-label="주문 구분"
-            dense
-          >
-            <option value="LIMIT">지정가</option>
-            <option value="MARKET">시장가</option>
-          </Select>
-        </label>
-        <label htmlFor="order-qty" style={{ display: 'grid', gap: '0.25rem' }}>
-          <span className="muted">수량</span>
-          <NumberInput
-            id="order-qty"
-            value={qtyStr}
-            onValueChange={setQtyStr}
-            aria-label="주문 수량"
-            dense
-          />
-        </label>
-        <label htmlFor="order-price" style={{ display: 'grid', gap: '0.25rem' }}>
-          <span className="muted">가격</span>
-          <NumberInput
-            id="order-price"
-            value={division === 'MARKET' ? '' : priceStr}
-            disabled={division === 'MARKET'}
-            emptyDisplay="시장가"
-            onValueChange={setPriceStr}
-            aria-label="주문 가격"
-            dense
-          />
-        </label>
-      </div>
-      <div
-        className="panel__body"
-        style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
-      >
-        <Button
-          disabled={!canSubmit}
-          variant="danger"
-          dense
-          onClick={() => {
-            setSide('BUY');
-            void submit('BUY');
-          }}
-          aria-label="매수 주문"
-        >
-          매수
-        </Button>
-        <Button
-          disabled={!canSubmit}
-          className="hts-btn--down"
-          dense
-          onClick={() => {
-            setSide('SELL');
-            void submit('SELL');
-          }}
-          aria-label="매도 주문"
-        >
-          매도
-        </Button>
-      </div>
-      {actions.lastError ? (
-        <div className="panel__body">
-          <span className="chip chip--down" role="alert">
-            {actions.lastError}
-          </span>
+      <div className="order-ticket-form__scroll">
+        <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>
+          <label htmlFor="order-division" style={{ display: 'grid', gap: '0.25rem' }}>
+            <span className="muted">구분</span>
+            <Select
+              id="order-division"
+              value={division}
+              onChange={(e) => setDivision(e.target.value as Division)}
+              aria-label="주문 구분"
+              dense
+            >
+              <option value="LIMIT">지정가</option>
+              <option value="MARKET">시장가</option>
+            </Select>
+          </label>
+          <label htmlFor="order-qty" style={{ display: 'grid', gap: '0.25rem' }}>
+            <span className="muted">수량</span>
+            <NumberInput
+              id="order-qty"
+              value={qtyStr}
+              onValueChange={setQtyStr}
+              aria-label="주문 수량"
+              dense
+            />
+          </label>
+          <label htmlFor="order-price" style={{ display: 'grid', gap: '0.25rem' }}>
+            <span className="muted">가격</span>
+            <NumberInput
+              id="order-price"
+              value={division === 'MARKET' ? '' : priceStr}
+              disabled={division === 'MARKET'}
+              emptyDisplay="시장가"
+              onValueChange={setPriceStr}
+              aria-label="주문 가격"
+              dense
+            />
+          </label>
         </div>
-      ) : null}
-      <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
-        현재 선택: {side} · {division === 'MARKET' ? '시장가' : '지정가'} ·{' '}
-        {qtyStr ? thousandSeparator(qtyStr) : '0'}주
-        {division === 'LIMIT' && priceStr ? ` · ${thousandSeparator(priceStr)}원` : ''}
-        {oneClick && !isProd ? ' · 원터치 ON' : ''}
+        <div
+          className="panel__body"
+          style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
+        >
+          <Button
+            disabled={!canSubmit}
+            variant="danger"
+            dense
+            onClick={() => {
+              setSide('BUY');
+              void submit('BUY');
+            }}
+            aria-label="매수 주문"
+          >
+            매수
+          </Button>
+          <Button
+            disabled={!canSubmit}
+            className="hts-btn--down"
+            dense
+            onClick={() => {
+              setSide('SELL');
+              void submit('SELL');
+            }}
+            aria-label="매도 주문"
+          >
+            매도
+          </Button>
+        </div>
+        {actions.lastError ? (
+          <div className="panel__body">
+            <span className="chip chip--down" role="alert">
+              {actions.lastError}
+            </span>
+          </div>
+        ) : null}
+        <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
+          현재 선택: {side} · {division === 'MARKET' ? '시장가' : '지정가'} ·{' '}
+          {qtyStr ? thousandSeparator(qtyStr) : '0'}주
+          {division === 'LIMIT' && priceStr ? ` · ${thousandSeparator(priceStr)}원` : ''}
+          {oneClick && !isProd ? ' · 원터치 ON' : ''}
+        </div>
       </div>
     </form>
   );

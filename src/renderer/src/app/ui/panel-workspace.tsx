@@ -4,12 +4,13 @@ import { TradePage } from '@renderer/pages/trade';
 import { Button } from '@renderer/shared/ui';
 import { ExternalLink } from 'lucide-react';
 import type { ReactElement, ReactNode } from 'react';
-import { Group, Panel, Separator } from 'react-resizable-panels';
+import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 import type { PopoutRoute } from '../model/popout-route';
 import type { PopoutApi } from '../model/use-popout-state';
 
 const DIVIDER = (direction: 'horizontal' | 'vertical'): ReactElement => (
   <Separator
+    className="resize-separator"
     style={
       direction === 'horizontal'
         ? { width: 6, background: 'var(--hts-line, rgba(0,0,0,0.08))', cursor: 'col-resize' }
@@ -78,18 +79,35 @@ export interface PanelWorkspaceProps {
 export const PanelWorkspace = ({ popout }: PanelWorkspaceProps): ReactElement => {
   const panelStyle = { overflow: 'hidden' } as const;
 
+  const outer = useDefaultLayout({
+    id: 'split-stock.layout.workspace.outer',
+    storage: localStorage,
+  });
+  const topRow = useDefaultLayout({
+    id: 'split-stock.layout.workspace.topRow',
+    storage: localStorage,
+  });
+
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-      <Group orientation="vertical">
-        <Panel defaultSize={40} minSize={20} style={panelStyle}>
-          <Group orientation="horizontal">
-            <Panel defaultSize={55} minSize={25} style={panelStyle}>
+      <Group
+        orientation="vertical"
+        defaultLayout={outer.defaultLayout}
+        onLayoutChanged={outer.onLayoutChanged}
+      >
+        <Panel id="top-row" defaultSize={40} minSize={20} style={panelStyle}>
+          <Group
+            orientation="horizontal"
+            defaultLayout={topRow.defaultLayout}
+            onLayoutChanged={topRow.onLayoutChanged}
+          >
+            <Panel id="dashboard" defaultSize={55} minSize={25} style={panelStyle}>
               <PanelCard title="대시보드" route="dashboard" popout={popout}>
                 <DashboardPage />
               </PanelCard>
             </Panel>
             {DIVIDER('horizontal')}
-            <Panel defaultSize={45} minSize={20} style={panelStyle}>
+            <Panel id="logs" defaultSize={45} minSize={20} style={panelStyle}>
               <PanelCard title="이벤트 로그" route="logs" popout={popout}>
                 <LogsPage />
               </PanelCard>
@@ -97,7 +115,7 @@ export const PanelWorkspace = ({ popout }: PanelWorkspaceProps): ReactElement =>
           </Group>
         </Panel>
         {DIVIDER('vertical')}
-        <Panel defaultSize={60} minSize={30} style={panelStyle}>
+        <Panel id="trade" defaultSize={60} minSize={30} style={panelStyle}>
           <PanelCard title="주문" route="trade" popout={popout}>
             <TradePage
               isStockPickerPopoutOpen={popout.isOpen('stock-picker')}
