@@ -2,6 +2,7 @@ import { useActiveAccountId } from '@renderer/entities/account';
 import {
   BulkPriceRatioForm,
   CsvImportDialog,
+  EditLotsGrid,
   EditLotsModeToggle,
   UndoButton,
   useEditLots,
@@ -227,7 +228,12 @@ export const LotsLogPage = (): ReactElement => {
                 </>
               )}
             </div>
-            {editLots.pdno && <BulkPriceRatioForm accountId={accountId} pdno={editLots.pdno} />}
+            {editLots.pdno && (
+              <>
+                <EditLotsGrid accountId={accountId} pdno={editLots.pdno} />
+                <BulkPriceRatioForm accountId={accountId} pdno={editLots.pdno} />
+              </>
+            )}
             {editLots.lastError && (
               <div className="chip chip--down" role="alert">
                 {editLots.lastError}

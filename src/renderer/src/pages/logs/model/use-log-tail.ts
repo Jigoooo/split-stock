@@ -48,10 +48,21 @@ export function useLogTail(): UseLogTailResult {
     {
       limit: 200,
       ...(level ? { level: level as 'INFO' | 'WARN' | 'ERROR' } : {}),
-      ...(categories.size > 0 ? { categories: Array.from(categories) as string[] } : {}),
+      ...(categories.size > 0
+        ? {
+            categories: Array.from(categories).filter((c) => c !== '') as (
+              | 'AUTH'
+              | 'ORDER'
+              | 'FSM'
+              | 'WS'
+              | 'SYS'
+              | 'BALANCE'
+            )[],
+          }
+        : {}),
       ...(search ? { search } : {}),
       ...(dateRange
-        ? { dateRange: dateRange as 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' | '' }
+        ? { dateRange: dateRange as 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' }
         : {}),
     },
     {
