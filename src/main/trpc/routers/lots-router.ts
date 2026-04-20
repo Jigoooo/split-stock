@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { lotsRepoErrorMessage } from '../../trading/lots-repo';
 import { resolveAccountId } from '../router-helpers';
 import { publicProcedure, router } from '../trpc-core';
 
@@ -22,7 +23,7 @@ export const lotsRouter = router({
       if (result.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: `차수 스냅샷 조회 실패: ${String(result.error.cause)}`,
+          message: `차수 스냅샷 조회 실패: ${lotsRepoErrorMessage(result.error)}`,
         });
       }
       return { snapshots: result.value };
@@ -43,7 +44,7 @@ export const lotsRouter = router({
       if (result.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: `스냅샷 날짜 목록 조회 실패: ${String(result.error.cause)}`,
+          message: `스냅샷 날짜 목록 조회 실패: ${lotsRepoErrorMessage(result.error)}`,
         });
       }
       return { dates: result.value };

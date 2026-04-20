@@ -1,7 +1,7 @@
 import { err, ok, type Result } from 'neverthrow';
 import type { EventLogger } from '../logging/event-logger';
 import type { SafetyState } from '../safety/safety-state';
-import type { LotsRepo, LotsRepoError } from './lots-repo';
+import { type LotsRepo, type LotsRepoError, lotsRepoErrorMessage } from './lots-repo';
 import type { RespiitPlan } from './respiit-planner';
 
 export interface ApplyRespiitInput {
@@ -29,7 +29,7 @@ export function applyRespiit(
       payload: {
         accountId: input.accountId,
         pdno: input.plan.pdno,
-        cause: String(res.error.cause ?? ''),
+        cause: lotsRepoErrorMessage(res.error),
       },
     });
     return err(res.error);
