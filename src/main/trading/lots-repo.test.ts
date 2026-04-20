@@ -304,6 +304,224 @@ describe('LotsRepo', () => {
     });
   });
 
+  describe('수동편집(A7) — manualInsert/Update/Delete/Move/applyStockSplitRatio + Undo', () => {
+    function seed(repo: LotsRepo, accountId: number): { id1: number; id2: number } {
+      const r1 = repo.insertLot({
+        accountId,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 70000,
+        qty: 10,
+        amountKrw: 700_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-04-01T00:00:00Z'),
+      });
+      const r2 = repo.insertLot({
+        accountId,
+        pdno: '005930',
+        nth: 2,
+        buyPrice: 65000,
+        qty: 12,
+        amountKrw: 780_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-04-02T00:00:00Z'),
+      });
+      if (r1.isErr() || r2.isErr()) throw new Error('seed failed');
+      return { id1: r1.value, id2: r2.value };
+    }
+
+    it('manualInsert: 새 차수 삽입 + before/after 반환', () => {
+      const repo = setupRepo();
+      seed(repo, 1);
+      const r = repo.manualInsert({
+        accountId: 1,
+        pdno: '005930',
+        nth: 3,
+        buyPrice: 60000,
+        qty: 14,
+        amountKrw: 840_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-04-03T00:00:00Z'),
+      });
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        expect(r.value.before).toBeNull();
+        expect(r.value.after?.nth).toBe(3);
+        expect(r.value.fullSnapshot).toHaveLength(2); // baseline (insert 전)
+      }
+      const snap = repo.snapshot(1, '005930');
+      if (snap.isOk()) expect(snap.value.lots).toHaveLength(3);
+    });
+
+    it('manualInsert: 동일 nth 충돌 → CONFLICT', () => {
+      const repo = setupRepo();
+      seed(repo, 1);
+      const r = repo.manualInsert({
+        accountId: 1,
+        pdno: '005930',
+        nth: 1, // 이미 존재
+        buyPrice: 50000,
+        qty: 5,
+        amountKrw: 250_000,
+        status: 'OPEN',
+        boughtAt: new Date(),
+      });
+      expect(r.isErr()).toBe(true);
+      if (r.isErr()) expect(r.error.kind).toBe('CONFLICT');
+    });
+
+    it('manualUpdate: 단가/수량 수정 + before/after 캡처', () => {
+      const repo = setupRepo();
+      const { id1 } = seed(repo, 1);
+      const r = repo.manualUpdate(1, id1, { buyPrice: 80000, qty: 8, amountKrw: 640_000 });
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        expect(r.value.before?.buyPrice).toBe(70000);
+        expect(r.value.after?.buyPrice).toBe(80000);
+        expect(r.value.after?.qty).toBe(8);
+      }
+    });
+
+    it('manualUpdate: 다른 계좌의 lotId → NOT_FOUND (per-account 격리)', () => {
+      const repo = setupRepo();
+      const { id1 } = seed(repo, 1);
+      const r = repo.manualUpdate(2, id1, { buyPrice: 1 });
+      expect(r.isErr()).toBe(true);
+      if (r.isErr()) expect(r.error.kind).toBe('NOT_FOUND');
+      // 원본은 그대로
+      const snap = repo.snapshot(1, '005930');
+      if (snap.isOk()) expect(snap.value.lots[0]?.buyPrice).toBe(70000);
+    });
+
+    it('manualDelete: 삭제 + before 캡처', () => {
+      const repo = setupRepo();
+      const { id2 } = seed(repo, 1);
+      const r = repo.manualDelete(1, id2);
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        expect(r.value.before?.nth).toBe(2);
+        expect(r.value.after).toBeNull();
+      }
+      const snap = repo.snapshot(1, '005930');
+      if (snap.isOk()) expect(snap.value.lots).toHaveLength(1);
+    });
+
+    it('manualDelete: 다른 계좌 lotId → NOT_FOUND (per-account 격리)', () => {
+      const repo = setupRepo();
+      const { id2 } = seed(repo, 1);
+      const r = repo.manualDelete(2, id2);
+      expect(r.isErr()).toBe(true);
+      if (r.isErr()) expect(r.error.kind).toBe('NOT_FOUND');
+      // 원본은 그대로
+      const snap = repo.snapshot(1, '005930');
+      if (snap.isOk()) expect(snap.value.lots).toHaveLength(2);
+    });
+
+    it('manualMove: nth 변경 + 충돌 검사', () => {
+      const repo = setupRepo();
+      const { id1 } = seed(repo, 1);
+      const moveOk = repo.manualMove(1, id1, 5);
+      expect(moveOk.isOk()).toBe(true);
+      // 충돌
+      const moveDup = repo.manualMove(1, id1, 2); // 이미 nth=2 존재
+      expect(moveDup.isErr()).toBe(true);
+      if (moveDup.isErr()) expect(moveDup.error.kind).toBe('CONFLICT');
+    });
+
+    it('applyStockSplitRatio: 모든 차수 단가 정확히 변경 + amountKrw 재계산', () => {
+      const repo = setupRepo();
+      seed(repo, 1);
+      // 1:2 액면분할 — 단가는 절반(-50%) → multiplier 0.5
+      const r = repo.applyStockSplitRatio(1, '005930', -50);
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        expect(r.value.before).toHaveLength(2);
+        expect(r.value.after).toHaveLength(2);
+        // 70000 → 35000, amountKrw = 35000*10 = 350_000
+        const after1 = r.value.after.find((x) => x.nth === 1);
+        const after2 = r.value.after.find((x) => x.nth === 2);
+        expect(after1?.buyPrice).toBe(35000);
+        expect(after1?.amountKrw).toBe(350_000);
+        expect(after2?.buyPrice).toBe(32500);
+        expect(after2?.amountKrw).toBe(390_000);
+      }
+    });
+
+    it('applyStockSplitRatio: 0% / -100% 거부', () => {
+      const repo = setupRepo();
+      seed(repo, 1);
+      const z = repo.applyStockSplitRatio(1, '005930', 0);
+      expect(z.isErr()).toBe(true);
+      const neg = repo.applyStockSplitRatio(1, '005930', -100);
+      expect(neg.isErr()).toBe(true);
+    });
+
+    it('applyStockSplitRatio: 다른 계좌 종목은 영향 없음 (per-account 격리)', () => {
+      const repo = setupRepo();
+      seed(repo, 1);
+      seed(repo, 2);
+      const r = repo.applyStockSplitRatio(1, '005930', 100); // +100%
+      expect(r.isOk()).toBe(true);
+      const snap2 = repo.snapshot(2, '005930');
+      if (snap2.isOk()) {
+        // 계좌 2 는 손대지 않음
+        expect(snap2.value.lots.find((l) => l.nth === 1)?.buyPrice).toBe(70000);
+      }
+    });
+
+    it('restoreFromSnapshot (Undo): 직전 상태 완전 복원', () => {
+      const repo = setupRepo();
+      const { id1 } = seed(repo, 1);
+      // baseline 캡처
+      const baseline = repo.listRows(1, '005930');
+      if (baseline.isErr()) throw new Error('baseline fetch failed');
+      const baselineRows = baseline.value;
+
+      // 변경 적용
+      repo.manualUpdate(1, id1, { buyPrice: 99999, qty: 1, amountKrw: 99999 });
+      const after = repo.snapshot(1, '005930');
+      if (after.isOk()) expect(after.value.lots[0]?.buyPrice).toBe(99999);
+
+      // Undo
+      const restored = repo.restoreFromSnapshot(1, '005930', baselineRows);
+      expect(restored.isOk()).toBe(true);
+      if (restored.isOk()) expect(restored.value.restored).toBe(2);
+      const final = repo.snapshot(1, '005930');
+      if (final.isOk()) {
+        expect(final.value.lots).toHaveLength(2);
+        // 원본 buyPrice 복원
+        const lot1 = final.value.lots.find((l) => l.nth === 1);
+        expect(lot1?.buyPrice).toBe(70000);
+      }
+    });
+
+    it('restoreFromSnapshot: 다른 계좌 snapshot 거부 (per-account 격리)', () => {
+      const repo = setupRepo();
+      seed(repo, 1);
+      seed(repo, 2);
+      const snap1 = repo.listRows(1, '005930');
+      if (snap1.isErr()) throw new Error('snap1');
+      // 계좌 2 에 계좌 1 snapshot 으로 복원 시도 → CONFLICT
+      const r = repo.restoreFromSnapshot(2, '005930', snap1.value);
+      expect(r.isErr()).toBe(true);
+      if (r.isErr()) expect(r.error.kind).toBe('CONFLICT');
+    });
+
+    it('listRows: 정렬 + per-account 격리', () => {
+      const repo = setupRepo();
+      seed(repo, 1);
+      seed(repo, 2);
+      const r1 = repo.listRows(1, '005930');
+      const r2 = repo.listRows(2, '005930');
+      if (r1.isErr() || r2.isErr()) throw new Error('listRows');
+      expect(r1.value).toHaveLength(2);
+      expect(r2.value).toHaveLength(2);
+      // 다른 종목 포함 안 됨 + nth asc
+      expect(r1.value[0]?.nth).toBe(1);
+      expect(r1.value[1]?.nth).toBe(2);
+    });
+  });
+
   describe('per-account 격리 회귀 방지', () => {
     it('계좌 A에 등록한 lot 이 계좌 B snapshot 에 안 나옴', () => {
       const repo = setupRepo();

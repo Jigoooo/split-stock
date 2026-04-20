@@ -11,6 +11,11 @@ export interface EventLogEntry {
   category: EventCategory;
   message: string;
   payload?: Record<string, unknown>;
+  /**
+   * 차수 수동편집 등 before/after 스냅샷 기록용 별도 필드.
+   * payload 와 동일하게 maskPayload 로 정화 후 audit_payload 컬럼에 JSON 직렬화.
+   */
+  audit?: Record<string, unknown>;
   /** 부가 민감 필드 키 (자동 마스킹 대상). */
   secretKeys?: readonly string[];
 }
@@ -81,10 +86,11 @@ export function teeLoggers(...loggers: EventLogger[]): EventLogger {
 export function createEventLogger(db: Db): EventLogger {
   return {
     log(entry: EventLogEntry): void {
-      const cleaned = entry.payload
-        ? maskPayload(entry.payload, entry.secretKeys ?? DEFAULT_SECRET_KEYS)
-        : null;
+      const secretKeys = entry.secretKeys ?? DEFAULT_SECRET_KEYS;
+      const cleaned = entry.payload ? maskPayload(entry.payload, secretKeys) : null;
       const payloadJson = cleaned === null ? null : JSON.stringify(cleaned);
+      const cleanedAudit = entry.audit ? maskPayload(entry.audit, secretKeys) : null;
+      const auditPayload = cleanedAudit === null ? null : JSON.stringify(cleanedAudit);
       try {
         db.insert(eventLogs)
           .values({
@@ -93,6 +99,7 @@ export function createEventLogger(db: Db): EventLogger {
             category: entry.category,
             message: entry.message,
             payloadJson,
+            auditPayload,
           })
           .run();
       } catch (cause) {
