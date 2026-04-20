@@ -1,4 +1,5 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import type { LiveOrderbook, WsRoutingMode } from '../model/use-live-feed';
 
@@ -64,19 +65,25 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
   return (
     <div className="panel orderbook-panel">
       <div className="orderbook-panel__scroll">
-        <table className="hts-table orderbook-table" aria-label="호가 10단">
-          <thead>
-            <tr>
-              <th className="num" style={{ width: '40%' }}>
-                매도잔량
-              </th>
-              <th className="num">호가</th>
-              <th className="num" style={{ width: '40%' }}>
-                매수잔량
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+        <TableGrid.Root
+          variant="hts"
+          stickyHeader
+          zebra={false}
+          aria-label="호가 10단"
+          style={{ '--hts-row-height': '18px' } as React.CSSProperties}
+        >
+          <TableGrid.Header>
+            <TableGrid.Cell flex={2} numeric>
+              매도잔량
+            </TableGrid.Cell>
+            <TableGrid.Cell flex={1} numeric>
+              호가
+            </TableGrid.Cell>
+            <TableGrid.Cell flex={2} numeric>
+              매수잔량
+            </TableGrid.Cell>
+          </TableGrid.Header>
+          <TableGrid.Body>
             {asksReversed.map((l, idx) => (
               <OrderbookRow
                 // biome-ignore lint/suspicious/noArrayIndexKey: orderbook은 고정 10단계 — level idx가 안정 식별자
@@ -103,8 +110,8 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
                 onClick={() => onClickPrice(l.price, 'SELL')}
               />
             ))}
-          </tbody>
-        </table>
+          </TableGrid.Body>
+        </TableGrid.Root>
       </div>
       <div
         className="panel__body"
@@ -149,16 +156,14 @@ const OrderbookRow = ({
 }: RowProps): ReactElement => {
   const leftPct = Math.round((leftQty / maxQty) * 100);
   const rightPct = Math.round((rightQty / maxQty) * 100);
-  const priceColor = side === 'SELL' ? 'num-down' : 'num-up';
+  const priceColorClass = side === 'SELL' ? 'num-down' : 'num-up';
   return (
-    <tr
+    <TableGrid.Row
       onClick={onClick}
-      style={{
-        cursor: 'pointer',
-        background: current ? 'rgba(45, 79, 202, 0.12)' : undefined,
-      }}
+      style={{ background: current ? 'rgba(45, 79, 202, 0.12)' : undefined }}
     >
-      <td className="num" style={{ position: 'relative' }}>
+      {/* 매도잔량 — bar 오른쪽 정렬 */}
+      <TableGrid.Cell flex={2} numeric style={{ position: 'relative' }}>
         {leftQty > 0 ? (
           <>
             <span
@@ -174,14 +179,18 @@ const OrderbookRow = ({
             <span style={{ position: 'relative' }}>{thousandSeparator(leftQty)}</span>
           </>
         ) : null}
-      </td>
-      <td
-        className={`num ${priceColor}`}
+      </TableGrid.Cell>
+      {/* 호가 */}
+      <TableGrid.Cell
+        flex={1}
+        numeric
+        className={priceColorClass}
         style={{ fontWeight: current ? 700 : 500, textAlign: 'center' }}
       >
         {thousandSeparator(price)}
-      </td>
-      <td className="num" style={{ position: 'relative' }}>
+      </TableGrid.Cell>
+      {/* 매수잔량 — bar 왼쪽 정렬 */}
+      <TableGrid.Cell flex={2} numeric style={{ position: 'relative' }}>
         {rightQty > 0 ? (
           <>
             <span
@@ -197,7 +206,7 @@ const OrderbookRow = ({
             <span style={{ position: 'relative' }}>{thousandSeparator(rightQty)}</span>
           </>
         ) : null}
-      </td>
-    </tr>
+      </TableGrid.Cell>
+    </TableGrid.Row>
   );
 };
