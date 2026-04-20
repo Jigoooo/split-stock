@@ -3,9 +3,8 @@ import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
 import { LineChart } from 'lucide-react';
-import { type CSSProperties, type ReactElement, useTransition } from 'react';
+import { type CSSProperties, forwardRef, type ReactElement, useTransition } from 'react';
 import type { PositionsGridRow } from '../model/use-positions-grid';
-import { LotStageCells } from './lot-stage-cells';
 
 export interface PositionRowProps {
   row: PositionsGridRow;
@@ -21,174 +20,201 @@ export interface PositionRowProps {
   onSelect: (pdno: string) => void;
   /** 차트 아이콘 클릭 → trade popout + 종목 assign. */
   onChartPopout?: (pdno: string, name: string) => void;
-  /** 가상화 스타일 (absolute positioning). */
+  /** 가상화 absolute positioning style. */
   style?: CSSProperties;
   /** 활성 계좌 ID — toggleSymbol mutation 에 필요. */
   accountId: number;
   /**
    * 종목별 자동매매 상태.
-   * - true: 명시적 ON
-   * - false: 명시적 OFF
-   * - null: 미지정 (기본값 — master ON 이면 거래 가능)
+   * - true: 명시적 ON / false: 명시적 OFF / null: 미지정
    */
   autoOn: boolean | null;
 }
 
+/** 컬럼 정의 — Header(positions-grid) 와 Row(position-row) 가 공유. */
+export const POSITION_COLS = {
+  expand: 38,
+  name: 128,
+  changeRate: 80,
+  qty: 80,
+  avgPrice: 96,
+  curPrice: 96,
+  pnlAmount: 112,
+  pnlRate: 80,
+  buyAmount: 128,
+  evalAmount: 128,
+  auto: 52,
+  stage: 88,
+  chart: 44,
+} as const;
+
 /**
  * 한 종목 행. 메인 행 + (expanded 면) 차수별 sub-row.
- * 컬럼 순서: [+] / 종목명 / 등락 / 수량 / 매입가 / 현재가 / 평가손익 / 수익률 / 매입금액 / 평가금액 / 자동 / 1차 / 2차 / ... / N차
+ *
+ * forwardRef 로 가상화 measureElement 를 받음 — expand 시 동적 높이 측정.
  */
-export const PositionRow = (props: PositionRowProps): ReactElement => {
-  const {
-    accountId,
-    autoOn,
-    expanded,
-    gridMaxStages,
-    onChartPopout,
-    onSelect,
-    onToggleExpand,
-    row,
-    selectedPdno,
-    style,
-  } = props;
-  const [isPending, startTransition] = useTransition();
+export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
+  function PositionRow(props, ref): ReactElement {
+    const {
+      accountId,
+      autoOn,
+      expanded,
+      gridMaxStages,
+      onChartPopout,
+      onSelect,
+      onToggleExpand,
+      row,
+      selectedPdno,
+      style,
+    } = props;
+    const [isPending, startTransition] = useTransition();
 
-  const utils = trpc.useUtils();
-  const toggleSymbol = trpc.safety.toggleSymbol.useMutation({
-    onSuccess: () => utils.safety.getState.invalidate({ accountId }),
-  });
-  const { lots, position } = row;
-  const isSelected = selectedPdno === position.code;
+    const utils = trpc.useUtils();
+    const toggleSymbol = trpc.safety.toggleSymbol.useMutation({
+      onSuccess: () => utils.safety.getState.invalidate({ accountId }),
+    });
+    const { lots, position } = row;
+    const isSelected = selectedPdno === position.code;
 
-  const sign = position.pnlAmount === 0 ? 'flat' : position.pnlAmount > 0 ? 'up' : 'down';
-  const pnlColorClass = sign === 'up' ? 'num-up' : sign === 'down' ? 'num-down' : 'num-flat';
+    const sign = position.pnlAmount === 0 ? 'flat' : position.pnlAmount > 0 ? 'up' : 'down';
+    const pnlColorClass = sign === 'up' ? 'num-up' : sign === 'down' ? 'num-down' : 'num-flat';
 
-  const buyAmount = position.qty * position.avgPrice;
+    const buyAmount = position.qty * position.avgPrice;
 
-  const handleToggle = (): void => {
-    startTransition(() => onToggleExpand(position.code));
-  };
+    const handleToggle = (): void => {
+      startTransition(() => onToggleExpand(position.code));
+    };
 
-  return (
-    <div style={style} data-position-row={position.code}>
-      <table className="hts-table" style={{ tableLayout: 'fixed', width: '100%', marginBottom: 0 }}>
-        <colgroup>
-          <col style={{ width: '2.4rem' }} />
-          <col style={{ width: '8rem' }} />
-          <col style={{ width: '5rem' }} />
-          <col style={{ width: '5rem' }} />
-          <col style={{ width: '6rem' }} />
-          <col style={{ width: '6rem' }} />
-          <col style={{ width: '7rem' }} />
-          <col style={{ width: '5rem' }} />
-          <col style={{ width: '8rem' }} />
-          <col style={{ width: '8rem' }} />
-          <col style={{ width: '3.2rem' }} />
-          {stageColumnWidths(gridMaxStages).map((nth) => (
-            <col key={`stage-col-${nth}`} style={{ width: '5.5rem' }} />
-          ))}
-          <col style={{ width: '2.8rem' }} />
-        </colgroup>
-        <tbody>
-          <tr
-            data-selected={isSelected}
-            onClick={() => onSelect(position.code)}
-            style={{ cursor: 'pointer' }}
+    // 차수별 셀 (1차 ~ N차) — 비어있는 차수는 빈 셀
+    const lotByNth = new Map<number, LotEntry>();
+    for (const lot of lots) lotByNth.set(lot.nth, lot);
+
+    const stageCells: ReactElement[] = [];
+    for (let nth = 1; nth <= gridMaxStages; nth += 1) {
+      const lot = lotByNth.get(nth);
+      if (!lot) {
+        stageCells.push(
+          <TableGrid.Cell
+            key={`stage-${nth}`}
+            width={POSITION_COLS.stage}
+            numeric
+            className="muted"
           >
-            <td>
-              <button
-                type="button"
-                aria-label={expanded ? '차수 접기' : '차수 펼치기'}
-                aria-expanded={expanded}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleToggle();
-                }}
-                disabled={isPending}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid var(--hts-line, rgba(0,0,0,0.2))',
-                  borderRadius: 2,
-                  width: '1.6rem',
-                  height: '1.6rem',
-                  cursor: 'pointer',
-                  fontFamily: 'monospace',
-                  fontSize: '1rem',
-                  lineHeight: 1,
-                  padding: 0,
-                }}
-              >
-                {expanded ? '−' : '+'}
-              </button>
-            </td>
-            <td>{position.name}</td>
-            <td className={`num ${pnlColorClass}`}>{position.pnlRate.toFixed(2)}%</td>
-            <td className="num">{thousandSeparator(position.qty)}</td>
-            <td className="num">{thousandSeparator(position.avgPrice)}</td>
-            <td className="num">{thousandSeparator(position.currentPrice)}</td>
-            <td className={`num ${pnlColorClass}`}>{formatSigned(position.pnlAmount)}</td>
-            <td className={`num ${pnlColorClass}`}>{position.pnlRate.toFixed(2)}%</td>
-            <td className="num">{thousandSeparator(Math.round(buyAmount))}</td>
-            <td className="num">{thousandSeparator(Math.round(position.evalAmount))}</td>
-            <td>
-              <button
-                type="button"
-                aria-label={`${position.name} 자동매매 ${autoOn === false ? 'OFF' : 'ON'}`}
-                aria-pressed={autoOn !== false}
-                disabled={toggleSymbol.isPending}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleSymbol.mutate({
-                    accountId,
-                    pdno: position.code,
-                    on: autoOn === false,
-                  });
-                }}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  padding: 0,
-                  cursor: toggleSymbol.isPending ? 'wait' : 'pointer',
-                  fontWeight: 600,
-                  fontSize: '1rem',
-                  color: autoOn === false ? 'var(--hts-down, #e53935)' : 'var(--hts-up, #1976d2)',
-                }}
-              >
-                {autoOn === false ? 'OFF' : 'ON'}
-              </button>
-            </td>
-            <LotStageCells lots={lots} gridMaxStages={gridMaxStages} />
-            <td>
-              <button
-                type="button"
-                aria-label={`${position.name} 차트`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChartPopout?.(position.code, position.name);
-                }}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  padding: '0.1rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  color: 'var(--hts-muted, rgba(0,0,0,0.45))',
-                }}
-                title="차트 팝아웃"
-              >
-                <LineChart size={13} />
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+            {'\u00A0'}
+          </TableGrid.Cell>,
+        );
+        continue;
+      }
+      stageCells.push(
+        <TableGrid.Cell
+          key={`stage-${nth}`}
+          width={POSITION_COLS.stage}
+          numeric
+          title={`${nth}차 · ${lot.status}`}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+            <span>{thousandSeparator(lot.buyPrice)}</span>
+            <span className="muted" style={{ fontSize: '0.95em' }}>
+              ×{thousandSeparator(lot.qty)}
+            </span>
+          </div>
+        </TableGrid.Cell>,
+      );
+    }
 
-      {/* expand: 차수별 상세 sub-row (가상화 행 안에서 동적 높이 — measureElement 가 처리) */}
-      {expanded ? <ExpandedLots lots={lots} /> : null}
-    </div>
-  );
-};
+    return (
+      <div ref={ref} style={style} data-position-row={position.code}>
+        <TableGrid.Row
+          selected={isSelected}
+          expanded={expanded}
+          onClick={() => onSelect(position.code)}
+        >
+          <TableGrid.Cell width={POSITION_COLS.expand}>
+            <button
+              type="button"
+              aria-label={expanded ? '차수 접기' : '차수 펼치기'}
+              aria-expanded={expanded}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggle();
+              }}
+              disabled={isPending}
+              style={expandBtnStyle}
+            >
+              {expanded ? '−' : '+'}
+            </button>
+          </TableGrid.Cell>
+          <TableGrid.Cell width={POSITION_COLS.name}>{position.name}</TableGrid.Cell>
+          <TableGrid.Cell width={POSITION_COLS.changeRate} numeric className={pnlColorClass}>
+            {position.pnlRate.toFixed(2)}%
+          </TableGrid.Cell>
+          <TableGrid.Cell width={POSITION_COLS.qty} numeric>
+            {thousandSeparator(position.qty)}
+          </TableGrid.Cell>
+          <TableGrid.Cell width={POSITION_COLS.avgPrice} numeric>
+            {thousandSeparator(position.avgPrice)}
+          </TableGrid.Cell>
+          <TableGrid.Cell width={POSITION_COLS.curPrice} numeric>
+            {thousandSeparator(position.currentPrice)}
+          </TableGrid.Cell>
+          <TableGrid.Cell width={POSITION_COLS.pnlAmount} numeric className={pnlColorClass}>
+            {formatSigned(position.pnlAmount)}
+          </TableGrid.Cell>
+          <TableGrid.Cell width={POSITION_COLS.pnlRate} numeric className={pnlColorClass}>
+            {position.pnlRate.toFixed(2)}%
+          </TableGrid.Cell>
+          <TableGrid.Cell width={POSITION_COLS.buyAmount} numeric>
+            {thousandSeparator(Math.round(buyAmount))}
+          </TableGrid.Cell>
+          <TableGrid.Cell width={POSITION_COLS.evalAmount} numeric>
+            {thousandSeparator(Math.round(position.evalAmount))}
+          </TableGrid.Cell>
+          <TableGrid.Cell width={POSITION_COLS.auto}>
+            <button
+              type="button"
+              aria-label={`${position.name} 자동매매 ${autoOn === false ? 'OFF' : 'ON'}`}
+              aria-pressed={autoOn !== false}
+              disabled={toggleSymbol.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleSymbol.mutate({
+                  accountId,
+                  pdno: position.code,
+                  on: autoOn === false,
+                });
+              }}
+              style={{
+                ...autoBtnStyle,
+                cursor: toggleSymbol.isPending ? 'wait' : 'pointer',
+                color: autoOn === false ? 'var(--hts-down, #e53935)' : 'var(--hts-up, #1976d2)',
+              }}
+            >
+              {autoOn === false ? 'OFF' : 'ON'}
+            </button>
+          </TableGrid.Cell>
+          {stageCells}
+          <TableGrid.Cell width={POSITION_COLS.chart}>
+            <button
+              type="button"
+              aria-label={`${position.name} 차트`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onChartPopout?.(position.code, position.name);
+              }}
+              style={chartBtnStyle}
+              title="차트 팝아웃"
+            >
+              <LineChart size={13} />
+            </button>
+          </TableGrid.Cell>
+        </TableGrid.Row>
+
+        {/* expand: 차수별 상세 sub-row (가상화 행 안에서 동적 높이 — measureElement 가 처리) */}
+        {expanded ? <ExpandedLots lots={lots} /> : null}
+      </div>
+    );
+  },
+);
 
 function formatSigned(value: number): string {
   if (!Number.isFinite(value)) return '-';
@@ -196,11 +222,36 @@ function formatSigned(value: number): string {
   return `${sign}${thousandSeparator(Math.round(value))}`;
 }
 
-function stageColumnWidths(count: number): number[] {
-  const out: number[] = [];
-  for (let n = 1; n <= count; n += 1) out.push(n);
-  return out;
-}
+const expandBtnStyle: CSSProperties = {
+  background: 'transparent',
+  border: '1px solid var(--hts-line, rgba(0,0,0,0.2))',
+  borderRadius: 2,
+  width: '1.6rem',
+  height: '1.6rem',
+  cursor: 'pointer',
+  fontFamily: 'monospace',
+  fontSize: '1rem',
+  lineHeight: 1,
+  padding: 0,
+};
+
+const autoBtnStyle: CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  padding: 0,
+  fontWeight: 600,
+  fontSize: '1rem',
+};
+
+const chartBtnStyle: CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  padding: '0.1rem',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  color: 'var(--hts-muted, rgba(0,0,0,0.45))',
+};
 
 interface ExpandedLotsProps {
   lots: LotEntry[];
