@@ -14,6 +14,7 @@ const PERIOD_LABEL: Record<ChartPeriod, string> = {
 };
 
 export interface PositionChartProps {
+  enableDrawingTools?: boolean;
   pdno: string;
   name: string;
   lines: LotOverlayLine[];
@@ -81,7 +82,12 @@ const PriceChips = ({ pdno }: { pdno: string }): ReactElement => {
   );
 };
 
-export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactElement => {
+export const PositionChart = ({
+  pdno,
+  name,
+  lines,
+  enableDrawingTools = true,
+}: PositionChartProps): ReactElement => {
   const chart = usePositionChart(pdno);
   const { settings: displaySettings } = useGetDisplaySettings();
 
@@ -155,6 +161,7 @@ export const PositionChart = ({ pdno, name, lines }: PositionChartProps): ReactE
         <CandlestickChart
           key={`${pdno}:${chart.period}`}
           candles={chart.candles}
+          enableDrawingTools={enableDrawingTools}
           liveCandle={chart.liveCandle}
           lines={lines}
           onFetchMore={chart.fetchMore}
