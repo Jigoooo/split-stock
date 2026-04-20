@@ -3,11 +3,23 @@ import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
 import type { LotSnapshotEntry } from './lots-repo';
 import { LotsRepo } from './lots-repo';
+import { StockMasterRepo } from './stock-master-repo';
 
 function setupRepo() {
   const db = createTestDb();
   bootstrapSchema(db);
   return new LotsRepo(db);
+}
+
+function setupRepoWithMaster() {
+  const db = createTestDb();
+  bootstrapSchema(db);
+  const master = new StockMasterRepo(db);
+  master.upsertMany([
+    { pdno: '005930', name: '삼성전자' },
+    { pdno: '000660', name: 'SK하이닉스' },
+  ]);
+  return { repo: new LotsRepo(db, master), master };
 }
 
 describe('LotsRepo', () => {
@@ -617,6 +629,187 @@ describe('LotsRepo', () => {
       // 계좌 B 의 1차는 버틸어야 한다.
       expect(snapB.value.lots).toHaveLength(1);
       expect(snapB.value.lots[0]?.buyPrice).toBe(60000);
+    });
+  });
+
+  describe('cyclesByPdno — 매매 사이클 조회', () => {
+    function seedMixed(repo: LotsRepo, accountId: number): void {
+      // 005930: 1차 OPEN, 2차 SOLD(익절), 3차 BUYING, 4차 SELLING
+      repo.insertLot({
+        accountId,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 70000,
+        qty: 10,
+        amountKrw: 700_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-04-01T00:00:00Z'),
+      });
+      const sold = repo.insertLot({
+        accountId,
+        pdno: '005930',
+        nth: 2,
+        buyPrice: 65000,
+        qty: 12,
+        amountKrw: 780_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-04-02T00:00:00Z'),
+      });
+      if (sold.isOk()) {
+        repo.updateLotStatus({
+          lotId: sold.value,
+          status: 'SOLD',
+          sellPrice: 70000,
+          soldAt: new Date('2026-04-05T00:00:00Z'),
+        });
+      }
+      repo.insertLot({
+        accountId,
+        pdno: '005930',
+        nth: 3,
+        buyPrice: 60000,
+        qty: 14,
+        amountKrw: 840_000,
+        status: 'BUYING',
+        boughtAt: new Date('2026-04-03T00:00:00Z'),
+      });
+      repo.insertLot({
+        accountId,
+        pdno: '005930',
+        nth: 4,
+        buyPrice: 55000,
+        qty: 16,
+        amountKrw: 880_000,
+        status: 'SELLING',
+        boughtAt: new Date('2026-04-04T00:00:00Z'),
+      });
+      // 다른 종목 — 000660 1차 OPEN
+      repo.insertLot({
+        accountId,
+        pdno: '000660',
+        nth: 1,
+        buyPrice: 180_000,
+        qty: 5,
+        amountKrw: 900_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-04-01T00:00:00Z'),
+      });
+    }
+
+    it("status='all' — 모든 차수 반환 (SELLING 포함)", () => {
+      const { repo } = setupRepoWithMaster();
+      seedMixed(repo, 1);
+      const r = repo.cyclesByPdno({ accountId: 1, pdno: '005930', status: 'all' });
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        expect(r.value).toHaveLength(4);
+        const statuses = r.value.map((c) => c.status).sort();
+        expect(statuses).toEqual(['BUYING', 'OPEN', 'SELLING', 'SOLD']);
+      }
+    });
+
+    it("status='open' — OPEN/BUYING만 (SOLD/SELLING 제외)", () => {
+      const { repo } = setupRepoWithMaster();
+      seedMixed(repo, 1);
+      const r = repo.cyclesByPdno({ accountId: 1, pdno: '005930', status: 'open' });
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        expect(r.value).toHaveLength(2);
+        const statuses = new Set(r.value.map((c) => c.status));
+        expect(statuses.has('OPEN')).toBe(true);
+        expect(statuses.has('BUYING')).toBe(true);
+        expect(statuses.has('SOLD')).toBe(false);
+        expect(statuses.has('SELLING')).toBe(false);
+      }
+    });
+
+    it("status='closed' — SOLD만 (pnl/pnlRate 계산)", () => {
+      const { repo } = setupRepoWithMaster();
+      seedMixed(repo, 1);
+      const r = repo.cyclesByPdno({ accountId: 1, pdno: '005930', status: 'closed' });
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        expect(r.value).toHaveLength(1);
+        const sold = r.value[0];
+        expect(sold?.status).toBe('SOLD');
+        // sellPrice 70000 * qty 12 = 840_000 - amountKrw 780_000 = 60_000 (≈7.69%)
+        expect(sold?.pnl).toBe(60_000);
+        expect(sold?.pnlRate).toBeCloseTo(7.6923, 3);
+        expect(sold?.sellPrice).toBe(70000);
+        expect(sold?.soldAt).toBe(Date.parse('2026-04-05T00:00:00Z'));
+      }
+    });
+
+    it('pdno 옵셔널 — 미지정 시 모든 종목 반환', () => {
+      const { repo } = setupRepoWithMaster();
+      seedMixed(repo, 1);
+      const r = repo.cyclesByPdno({ accountId: 1, status: 'all' });
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        const pdnos = new Set(r.value.map((c) => c.pdno));
+        expect(pdnos.has('005930')).toBe(true);
+        expect(pdnos.has('000660')).toBe(true);
+        expect(r.value).toHaveLength(5);
+      }
+    });
+
+    it('per-account 격리 — 다른 계좌 lot 안 보임', () => {
+      const { repo } = setupRepoWithMaster();
+      seedMixed(repo, 1);
+      seedMixed(repo, 2);
+      const r1 = repo.cyclesByPdno({ accountId: 1, pdno: '005930', status: 'all' });
+      const r2 = repo.cyclesByPdno({ accountId: 2, pdno: '005930', status: 'all' });
+      expect(r1.isOk() && r2.isOk()).toBe(true);
+      if (r1.isOk() && r2.isOk()) {
+        expect(r1.value).toHaveLength(4);
+        expect(r2.value).toHaveLength(4);
+        // 두 계좌의 차수 ID는 겹치지 않아야 한다.
+        const ids1 = new Set(r1.value.map((c) => c.id));
+        for (const c of r2.value) expect(ids1.has(c.id)).toBe(false);
+      }
+    });
+
+    it('종목명 lookup — stockMasterRepo 주입 시 name 채워짐', () => {
+      const { repo } = setupRepoWithMaster();
+      seedMixed(repo, 1);
+      const r = repo.cyclesByPdno({ accountId: 1, pdno: '005930', status: 'open' });
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        expect(r.value.every((c) => c.name === '삼성전자')).toBe(true);
+      }
+    });
+
+    it('stockMasterRepo 미주입 시 name=빈 문자열 (BC)', () => {
+      const repo = setupRepo(); // master 없이 생성
+      repo.insertLot({
+        accountId: 1,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 70000,
+        qty: 10,
+        amountKrw: 700_000,
+        status: 'OPEN',
+        boughtAt: new Date(),
+      });
+      const r = repo.cyclesByPdno({ accountId: 1, pdno: '005930', status: 'all' });
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        expect(r.value[0]?.name).toBe('');
+      }
+    });
+
+    it('OPEN 차수는 pnl/pnlRate undefined', () => {
+      const { repo } = setupRepoWithMaster();
+      seedMixed(repo, 1);
+      const r = repo.cyclesByPdno({ accountId: 1, pdno: '005930', status: 'open' });
+      if (r.isOk()) {
+        for (const c of r.value) {
+          expect(c.pnl).toBeUndefined();
+          expect(c.pnlRate).toBeUndefined();
+          expect(c.sellPrice).toBeUndefined();
+          expect(c.soldAt).toBeUndefined();
+        }
+      }
     });
   });
 });

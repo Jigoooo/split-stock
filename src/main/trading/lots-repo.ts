@@ -1,9 +1,10 @@
-import { and, asc, desc, eq, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, ne } from 'drizzle-orm';
 import { err, ok, type Result } from 'neverthrow';
 import type { Db } from '../db/client';
 import { lotsSnapshots, lots as lotsTable } from '../db/schema';
 import type { LotStatus, PositionSnapshot } from './fsm';
 import type { RespiitPlan } from './respiit-planner';
+import type { StockMasterRepo } from './stock-master-repo';
 
 /** lots_snapshots 테이블에 저장되는 차수 항목 */
 export interface LotSnapshotEntry {
@@ -120,12 +121,52 @@ export interface UpdateLotStatusInput {
 }
 
 /**
+ * cyclesByPdno() 반환 항목 — 한 차수의 매매 사이클(매수→매도) 요약.
+ *
+ * status 매핑:
+ *   - 'all'    : 모든 lots (OPEN/BUYING/SELLING/SOLD)
+ *   - 'open'   : OPEN | BUYING (보유 중 — 미매도)
+ *   - 'closed' : SOLD (매도 완료)
+ *   주의: SELLING(매도 진행 중)은 'open'/'closed' 어디에도 안 들어간다 — 'all'로만 노출.
+ *
+ * 단위:
+ *   - pnl: 원(KRW)
+ *   - pnlRate: 백분율 표현 (예: 5.25 == 5.25%) — KIS Position.pnlRate 관례와 일치.
+ */
+export interface TradeCycle {
+  id: number;
+  nth: number;
+  pdno: string;
+  name: string;
+  buyPrice: number;
+  qty: number;
+  amountKrw: number;
+  status: LotStatus;
+  boughtAt: number; // ms epoch
+  soldAt?: number;
+  sellPrice?: number;
+  pnl?: number; // 원 (sellPrice * qty - amountKrw)
+  pnlRate?: number; // 백분율 — (pnl / amountKrw) * 100
+}
+
+export type CycleStatusFilter = 'all' | 'open' | 'closed';
+
+export interface CyclesByPdnoInput {
+  accountId: number;
+  pdno?: string;
+  status: CycleStatusFilter;
+}
+
+/**
  * 차수 장부 레포지토리.
  * 중요: better-sqlite3 transaction으로 insert/update가 원자적으로 실행됨.
  * 콜백이 throw하면 자동 rollback.
  */
 export class LotsRepo {
-  constructor(private readonly db: Db) {}
+  constructor(
+    private readonly db: Db,
+    private readonly stockMasterRepo?: StockMasterRepo,
+  ) {}
 
   snapshot(accountId: number, pdno: string): Result<PositionSnapshot, LotsRepoError> {
     try {
@@ -666,6 +707,81 @@ export class LotsRepo {
         return count;
       });
       return ok({ restored });
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
+   * 매매 사이클 조회 — 종목별 차수의 매수→매도 라이프사이클 요약.
+   *
+   * - per-account 격리: accountId 강제.
+   * - pdno 옵션: 미지정 시 모든 종목, 지정 시 해당 종목만.
+   * - status 필터: 'all' | 'open'(OPEN|BUYING) | 'closed'(SOLD).
+   *   주의: SELLING 상태(매도 진행 중)는 'open'/'closed' 어디에도 포함하지 않는다 — 'all' 로만 노출.
+   * - 종목명(name): stockMasterRepo로 lookup, 미주입 또는 미발견 시 빈 문자열.
+   *   (lots 테이블에 name 컬럼이 없어 외부 lookup 필요. 호출당 종목별 1회 캐싱)
+   * - pnl: SOLD 차수에 한해 sellPrice*qty - amountKrw, pnlRate = (pnl/amountKrw)*100 (백분율).
+   */
+  cyclesByPdno(input: CyclesByPdnoInput): Result<TradeCycle[], LotsRepoError> {
+    try {
+      const conditions = [eq(lotsTable.accountId, input.accountId)];
+      if (input.pdno !== undefined) {
+        conditions.push(eq(lotsTable.pdno, input.pdno));
+      }
+      if (input.status === 'open') {
+        conditions.push(inArray(lotsTable.status, ['OPEN', 'BUYING']));
+      } else if (input.status === 'closed') {
+        conditions.push(eq(lotsTable.status, 'SOLD'));
+      }
+      // 'all' 은 status 조건 없음
+      const rows = this.db
+        .select()
+        .from(lotsTable)
+        .where(and(...conditions))
+        .orderBy(asc(lotsTable.pdno), asc(lotsTable.nth))
+        .all();
+      // 종목명 캐시 (호출당 pdno → name)
+      const nameCache = new Map<string, string>();
+      const resolveName = (pdno: string): string => {
+        const cached = nameCache.get(pdno);
+        if (cached !== undefined) return cached;
+        const found = this.stockMasterRepo?.find(pdno)?.name ?? '';
+        nameCache.set(pdno, found);
+        return found;
+      };
+      const cycles: TradeCycle[] = rows.map((r) => {
+        const status = r.status as LotStatus;
+        const sellPrice = r.sellPrice ?? undefined;
+        const soldAtMs =
+          r.soldAt === null
+            ? undefined
+            : r.soldAt instanceof Date
+              ? r.soldAt.getTime()
+              : Number(r.soldAt);
+        const boughtAtMs =
+          r.boughtAt instanceof Date ? r.boughtAt.getTime() : Number(r.boughtAt);
+        const cycle: TradeCycle = {
+          id: r.id,
+          nth: r.nth,
+          pdno: r.pdno,
+          name: resolveName(r.pdno),
+          buyPrice: r.buyPrice,
+          qty: r.qty,
+          amountKrw: r.amountKrw,
+          status,
+          boughtAt: boughtAtMs,
+        };
+        if (soldAtMs !== undefined) cycle.soldAt = soldAtMs;
+        if (sellPrice !== undefined) cycle.sellPrice = sellPrice;
+        if (status === 'SOLD' && sellPrice !== undefined && r.amountKrw > 0) {
+          const pnl = sellPrice * r.qty - r.amountKrw;
+          cycle.pnl = pnl;
+          cycle.pnlRate = (pnl / r.amountKrw) * 100;
+        }
+        return cycle;
+      });
+      return ok(cycles);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
     }
