@@ -1,8 +1,11 @@
 import { type HtsTabItem, HtsTabs } from '@renderer/widgets/hts-tabs';
 import { PositionsGrid } from '@renderer/widgets/positions-grid';
+import { ActiveOrdersPanel } from '@renderer/widgets/trading-panel';
 import { WatchBoard } from '@renderer/widgets/watch-board';
 import type { ReactElement } from 'react';
 import { type PaneL1, type PaneL2, usePaneTabs } from '../model/use-pane-tabs';
+import { FilledPane } from './filled-pane';
+import { PastTradesPane } from './past-trades-pane';
 
 export interface MainPositionsPaneProps {
   accountId: number;
@@ -25,8 +28,11 @@ const L2_TABS: ReadonlyArray<HtsTabItem<PaneL2>> = [
 /**
  * 좌측 메인 패널 — 외부(L1) + 내부(L2) 2-level 탭 컨테이너.
  *
- * - L1=포지션 → L2 4탭 + 선택된 L2에 따라 컨텐트 마운트.
- *   본 wave 는 L2='balance' 만 PositionsGrid 마운트, 나머지 L2 는 placeholder.
+ * - L1=포지션 → L2 4탭:
+ *   - balance  : PositionsGrid
+ *   - filled   : FilledPane (실시간 체결)
+ *   - unfilled : ActiveOrdersPanel (실시간 미체결)
+ *   - past     : PastTradesPane (과거 거래 종목)
  * - L1=자동감시 → WatchBoard 마운트 (L2 없음).
  */
 export const MainPositionsPane = (props: MainPositionsPaneProps): ReactElement => {
@@ -64,8 +70,12 @@ export const MainPositionsPane = (props: MainPositionsPaneProps): ReactElement =
                 selectedPdno={selectedPdno}
                 onSelect={onSelect}
               />
+            ) : l2 === 'filled' ? (
+              <FilledPane selectedPdno={selectedPdno} />
+            ) : l2 === 'unfilled' ? (
+              <ActiveOrdersPanel pdnoFilter={selectedPdno} />
             ) : (
-              <Placeholder label={`${labelOf(l2)} 탭 — Wave 5 에서 구현`} />
+              <PastTradesPane accountId={accountId} onSelect={onSelect} />
             )}
           </div>
         </>
@@ -85,14 +95,3 @@ export const MainPositionsPane = (props: MainPositionsPaneProps): ReactElement =
     </section>
   );
 };
-
-function labelOf(l2: PaneL2): string {
-  const found = L2_TABS.find((t) => t.id === l2);
-  return found ? found.label : String(l2);
-}
-
-const Placeholder = ({ label }: { label: string }): ReactElement => (
-  <div className="muted" style={{ padding: '1rem', fontSize: '1.1rem' }}>
-    {label}
-  </div>
-);
