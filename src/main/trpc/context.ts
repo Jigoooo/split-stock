@@ -1,5 +1,6 @@
 import type { AppEnv } from '@shared/contracts';
 import type { ActiveAccountRepo } from '../account/active-account';
+import type { BackupScheduler } from '../backup/scheduler';
 import type { Db } from '../db/client';
 import type { SettingsRepo } from '../db/settings-repo';
 import type { AuthService } from '../kis/auth';
@@ -53,6 +54,8 @@ export interface Context {
   pendingOrderWatcher: PendingOrderWatcher | null;
   realtime: RealtimeService | null;
   bus: FeedBus | null;
+  /** 차수 수동편집(A7) 등 위험 변경 직후 즉시 백업을 트리거하기 위한 핸들. 부팅 시 주입, 미설정 시 null. */
+  backupScheduler: BackupScheduler | null;
   currentEnv: AppEnv | null;
   setCurrentEnv: (env: AppEnv | null) => void;
   setActiveAccountId: (id: number | null) => void;
@@ -67,6 +70,7 @@ export interface ContextFactoryOptions
     | 'safety'
     | 'activeAccountId'
     | 'setActiveAccountId'
+    | 'backupScheduler'
   > {
   /** env 전환 시 realtime 재생성을 호출측에 위임. 반환값이 현재 RealtimeService. */
   realtimeFactory?: (env: AppEnv | null) => RealtimeService | null;
@@ -78,6 +82,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   create: () => Context;
   setEnv: (env: AppEnv | null) => void;
   setActiveAccountId: (id: number | null) => void;
+  setBackupScheduler: (scheduler: BackupScheduler | null) => void;
   getRealtime: () => RealtimeService | null;
   getActiveAccountId: () => number | null;
   /** 현재 활성 env. 부트스트랩 외부에서 lazy 로 끌어 쓸 때 사용. */
@@ -87,6 +92,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   let currentEnv: AppEnv | null = null;
   let activeAccountId: number | null = initialActiveAccountId ?? null;
   let realtime: RealtimeService | null = null;
+  let backupScheduler: BackupScheduler | null = null;
 
   const setCurrentEnv = (env: AppEnv | null): void => {
     currentEnv = env;
@@ -96,6 +102,9 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   };
   const setActiveAccountId = (id: number | null): void => {
     activeAccountId = id;
+  };
+  const setBackupScheduler = (scheduler: BackupScheduler | null): void => {
+    backupScheduler = scheduler;
   };
 
   return {
@@ -114,11 +123,15 @@ export function createContextFactory(opts: ContextFactoryOptions): {
         // activeAccountId 가 null 이면 0 슬롯 사용 — 안전하게 차단된 상태 (master=false 기본값)
         return deps.safetyRegistry.get(activeAccountId ?? 0);
       },
+      get backupScheduler() {
+        return backupScheduler;
+      },
       setCurrentEnv,
       setActiveAccountId,
     }),
     setEnv: setCurrentEnv,
     setActiveAccountId,
+    setBackupScheduler,
     getRealtime: () => realtime,
     getActiveAccountId: () => activeAccountId,
     getCurrentEnv: () => currentEnv,

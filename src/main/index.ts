@@ -324,13 +324,12 @@ function resolveWindowBounds(
 function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
   const { popoutRoute, parent } = opts;
   const display = pickTargetDisplay(parent);
-  // profit-calculator는 작은 창 (380x420)
+  // profit-calculator는 작은 창 (380x420), add-account는 폼 전용 (520x620)
   const isProfitCalc = popoutRoute === 'profit-calculator';
-  const bounds = resolveWindowBounds(
-    isProfitCalc ? 380 : popoutRoute ? 720 : 1440,
-    isProfitCalc ? 420 : popoutRoute ? 540 : 900,
-    display,
-  );
+  const isAddAccount = popoutRoute === 'add-account';
+  const width = isProfitCalc ? 380 : isAddAccount ? 520 : popoutRoute ? 720 : 1440;
+  const height = isProfitCalc ? 420 : isAddAccount ? 620 : popoutRoute ? 540 : 900;
+  const bounds = resolveWindowBounds(width, height, display);
   const win = new BrowserWindow({
     x: bounds.x,
     y: bounds.y,
@@ -380,6 +379,8 @@ void app.whenReady().then(async () => {
     logger: eventLogger,
   });
   backupScheduler.start();
+  // 차수 수동편집(A7) 라우터에서 변경 후 즉시 백업 트리거에 사용.
+  factory.setBackupScheduler(backupScheduler);
 
   // Sentry opt-in 초기화 (DSN 미지정 시 no-op)
   const sentryResult = await initSentryFromSettings({
@@ -412,6 +413,7 @@ void app.whenReady().then(async () => {
     'settings',
     'stock-picker',
     'profit-calculator',
+    'add-account',
   ]);
   const popouts = new Map<string, BrowserWindowType>();
   ipcMain.handle('appShell:openPopout', (event, route: unknown): { ok: boolean } => {
@@ -446,6 +448,16 @@ void app.whenReady().then(async () => {
       if (target.isDestroyed()) continue;
       if (target.webContents.id === event.sender.id) continue;
       target.webContents.send('appShell:stock-assigned', pdno, name);
+    }
+  });
+
+  // 팝아웃에서 계좌 추가/변경 완료 → 송신자 제외 모든 창에 브로드캐스트(렌더러 query invalidate + 토스트 트리거)
+  ipcMain.on('appShell:account-changed', (event, accountId: unknown) => {
+    if (typeof accountId !== 'number' || !Number.isInteger(accountId) || accountId <= 0) return;
+    for (const target of BrowserWindow.getAllWindows()) {
+      if (target.isDestroyed()) continue;
+      if (target.webContents.id === event.sender.id) continue;
+      target.webContents.send('appShell:account-changed', accountId);
     }
   });
 
