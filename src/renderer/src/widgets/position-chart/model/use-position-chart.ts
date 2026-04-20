@@ -180,34 +180,31 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
 
     loadingRef.current = true;
     try {
-      for (let index = 0; index < 2; index += 1) {
-        const oldest = current[0];
-        if (!oldest) break;
+      const oldest = current[0];
+      if (!oldest) return;
 
-        const toMs = getPreviousDayMs(oldest.date);
-        if (!Number.isFinite(toMs)) break;
+      const toMs = getPreviousDayMs(oldest.date);
+      if (!Number.isFinite(toMs)) return;
 
-        try {
-          const older = await fetchDailyChartRef.current({ code: pdno, period, toMs });
-          if (older.candles.length === 0) {
-            setReachedEnd(true);
-            reachedEndRef.current = true;
-            break;
-          }
-
-          const merged = mergeOlderCandles(current, older.candles);
-          current = merged.next;
-          setCandles(current);
-          candlesRef.current = current;
-
-          if (merged.reachedEnd) {
-            setReachedEnd(true);
-            reachedEndRef.current = true;
-            break;
-          }
-        } catch {
-          break;
+      try {
+        const older = await fetchDailyChartRef.current({ code: pdno, period, toMs });
+        if (older.candles.length === 0) {
+          setReachedEnd(true);
+          reachedEndRef.current = true;
+          return;
         }
+
+        const merged = mergeOlderCandles(current, older.candles);
+        current = merged.next;
+        setCandles(current);
+        candlesRef.current = current;
+
+        if (merged.reachedEnd) {
+          setReachedEnd(true);
+          reachedEndRef.current = true;
+        }
+      } catch {
+        return;
       }
     } finally {
       loadingRef.current = false;

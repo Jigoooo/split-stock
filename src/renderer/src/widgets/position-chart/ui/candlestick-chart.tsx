@@ -29,6 +29,8 @@ import type { Candle } from '../model/use-position-chart';
 import { DrawingToolbar } from './drawing-toolbar';
 
 const DEFAULT_VISIBLE_BARS = 60;
+const HISTORY_FETCH_TRIGGER_BARS = 10;
+const HISTORY_FETCH_REARM_BARS = 30;
 const MIN_VISIBLE_BARS = 5;
 const ZOOM_IN_FACTOR = 0.7;
 const ZOOM_OUT_FACTOR = 1.4;
@@ -121,6 +123,7 @@ function computeMa(candles: Candle[], period: MaPeriod): Array<{ time: string; v
 
 export interface CandlestickChartProps {
   candles: Candle[];
+  enableDrawingTools?: boolean;
   liveCandle: Candle | null;
   lines: Array<{ kind: 'buy' | 'sell-target'; label: string; price: number }>;
   onFetchMore: () => Promise<void>;
@@ -141,6 +144,7 @@ const resolveCrosshairOptions = (displaySettings?: DisplaySettings | null) => {
 
 export const CandlestickChart = ({
   candles,
+  enableDrawingTools = true,
   liveCandle,
   lines,
   onFetchMore,
@@ -152,6 +156,7 @@ export const CandlestickChart = ({
   const chartRef = useRef<IChartApi | null>(null);
   const priceLinesRef = useRef<PriceLineHandle[]>([]);
   const prevLengthRef = useRef(0);
+  const historyFetchArmedRef = useRef(true);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const maSeriesRef = useRef<Partial<Record<MaPeriod, ISeriesApi<'Line'>>>>({});
@@ -304,7 +309,15 @@ export const CandlestickChart = ({
 
     const onRangeChange = (range: { from: number; to: number } | null): void => {
       if (!range || reachedEnd) return;
-      if (range.from > 50) return;
+      if (range.from > HISTORY_FETCH_REARM_BARS) {
+        if (!historyFetchArmedRef.current) {
+          historyFetchArmedRef.current = true;
+        }
+        return;
+      }
+      if (range.from > HISTORY_FETCH_TRIGGER_BARS) return;
+      if (!historyFetchArmedRef.current) return;
+      historyFetchArmedRef.current = false;
       void onFetchMoreEvent();
     };
 
@@ -314,7 +327,7 @@ export const CandlestickChart = ({
     };
   }, [reachedEnd]);
 
-  // ── candles + lines + displaySettings → series update ────────────
+  // ── candles + displaySettings → series update ────────────────────
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -450,22 +463,11 @@ export const CandlestickChart = ({
       maSeries.setData(computeMa(candles, period));
     }
 
-    connectDrawingHost(chart, series);
-
-    // ── 매수/익절 라인 ────────────────────────────────────────────
-    for (const priceLine of priceLinesRef.current) {
-      series.removePriceLine(priceLine);
+    if (enableDrawingTools) {
+      connectDrawingHost(chart, series);
+    } else {
+      disconnectDrawingHost();
     }
-    priceLinesRef.current = lines.map((line) =>
-      series.createPriceLine({
-        price: line.price,
-        color: line.kind === 'buy' ? '#d73333' : '#2d4fca',
-        lineWidth: 1,
-        lineStyle: line.kind === 'buy' ? LineStyle.Solid : LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: line.label,
-      }),
-    );
 
     // ── visible range 유지 ────────────────────────────────────────
     // added === 0 (동일 길이, lines/displaySettings 등 다른 prop 변경으로 인한
@@ -480,18 +482,61 @@ export const CandlestickChart = ({
       });
     } else {
       const added = data.length - prevLengthRef.current;
-      if (added > 0) {
-        // 과거 데이터 prepend 시엔 사용자가 보던 bar 가 shift 되지 않도록 보정.
+      if (added > 0 && prevRange.from > HISTORY_FETCH_TRIGGER_BARS) {
         chart.timeScale().setVisibleLogicalRange({
           from: prevRange.from + added,
           to: prevRange.to + added,
         });
       }
-      // added === 0 일 때 range 를 건드리지 않음 — 사용자 스크롤 존중.
+      // added === 0 또는 좌측 엣지 근처일 때 range 를 건드리지 않음 — 사용자 스크롤 존중.
     }
 
     prevLengthRef.current = data.length;
-  }, [candles, lines, displaySettings, connectDrawingHost]);
+  }, [candles, displaySettings, enableDrawingTools, connectDrawingHost, disconnectDrawingHost]);
+
+  // ── 매수/익절 오버레이 라인 ─────────────────────────────────────
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    if (candles.length === 0) {
+      for (const priceLine of priceLinesRef.current) {
+        try {
+          series.removePriceLine(priceLine);
+        } catch {
+          // ignore
+        }
+      }
+      priceLinesRef.current = [];
+      return;
+    }
+
+    for (const priceLine of priceLinesRef.current) {
+      series.removePriceLine(priceLine);
+    }
+
+    priceLinesRef.current = lines.map((line) =>
+      series.createPriceLine({
+        price: line.price,
+        color: line.kind === 'buy' ? '#d73333' : '#2d4fca',
+        lineWidth: 1,
+        lineStyle: line.kind === 'buy' ? LineStyle.Solid : LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: line.label,
+      }),
+    );
+
+    return () => {
+      for (const priceLine of priceLinesRef.current) {
+        try {
+          series.removePriceLine(priceLine);
+        } catch {
+          // ignore
+        }
+      }
+      priceLinesRef.current = [];
+    };
+  }, [lines, candles.length]);
 
   const zoom = (factor: number): void => {
     const chart = chartRef.current;
@@ -529,22 +574,24 @@ export const CandlestickChart = ({
       }}
     >
       <div ref={ref} style={{ flex: 1, minHeight: 240, width: '100%' }} />
-      <div
-        style={{
-          position: 'absolute',
-          top: 6,
-          left: 6,
-          zIndex: 2,
-        }}
-      >
-        <DrawingToolbar
-          activeTool={drawingTools.activeTool}
-          disabled={!drawingTools.isReady}
-          onStartDraw={drawingTools.startDraw}
-          onRemoveLast={handleRemoveLastDrawing}
-          onRemoveAll={handleRemoveAllDrawings}
-        />
-      </div>
+      {enableDrawingTools ? (
+        <div
+          style={{
+            position: 'absolute',
+            top: 6,
+            left: 6,
+            zIndex: 2,
+          }}
+        >
+          <DrawingToolbar
+            activeTool={drawingTools.activeTool}
+            disabled={!drawingTools.isReady}
+            onStartDraw={drawingTools.startDraw}
+            onRemoveLast={handleRemoveLastDrawing}
+            onRemoveAll={handleRemoveAllDrawings}
+          />
+        </div>
+      ) : null}
       <div
         // 우측 Y축(가격 라벨) 영역을 가리지 않도록 오른쪽 inset 을 Y축 너비만큼 확보.
         // 7자리 원화 라벨 기준 ~60~72px. zIndex 2 로 드로잉보다 위에 뜨게 둔다.
