@@ -1,6 +1,6 @@
 import type { LineStyleType, MaPeriod, MaSettings } from '@renderer/entities/display-settings';
 import { MA_PERIODS } from '@renderer/entities/display-settings';
-import { Button } from '@renderer/shared/ui';
+import { Button, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
 const MA_LABEL: Record<MaPeriod, string> = {
@@ -53,22 +53,25 @@ export const ChartSettingsForm = ({
         >
           이동평균선
         </div>
-        <table className="hts-table" style={{ tableLayout: 'fixed' }}>
-          <thead>
-            <tr>
-              <th style={{ width: '3.5rem' }}>표시</th>
-              <th style={{ width: '4rem' }}>기간</th>
-              <th style={{ width: '6rem' }}>색상</th>
-              <th style={{ width: '4.5rem' }}>두께</th>
-              <th>스타일</th>
-            </tr>
-          </thead>
-          <tbody>
+        <TableGrid.Root
+          variant="hts"
+          stickyHeader={false}
+          overlayScrollbar={false}
+          style={{ height: 'auto' }}
+        >
+          <TableGrid.Header>
+            <TableGrid.Cell width={56}>표시</TableGrid.Cell>
+            <TableGrid.Cell width={64}>기간</TableGrid.Cell>
+            <TableGrid.Cell width={96}>색상</TableGrid.Cell>
+            <TableGrid.Cell width={72}>두께</TableGrid.Cell>
+            <TableGrid.Cell flex={1}>스타일</TableGrid.Cell>
+          </TableGrid.Header>
+          <TableGrid.Body>
             {MA_PERIODS.map((period) => {
               const ma = resolvedMa(period);
               return (
-                <tr key={period}>
-                  <td>
+                <TableGrid.Row key={period}>
+                  <TableGrid.Cell width={56}>
                     <input
                       type="checkbox"
                       checked={ma.enabled}
@@ -76,9 +79,9 @@ export const ChartSettingsForm = ({
                       onChange={(e) => onMaChange(period, 'enabled', e.target.checked)}
                       aria-label={`${MA_LABEL[period]} 표시`}
                     />
-                  </td>
-                  <td>{MA_LABEL[period]}</td>
-                  <td>
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={64}>{MA_LABEL[period]}</TableGrid.Cell>
+                  <TableGrid.Cell width={96}>
                     <input
                       type="color"
                       value={ma.color.startsWith('rgba') ? '#888888' : ma.color}
@@ -94,8 +97,8 @@ export const ChartSettingsForm = ({
                         cursor: 'pointer',
                       }}
                     />
-                  </td>
-                  <td>
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={72}>
                     <input
                       type="number"
                       className="hts-input hts-input--dense hts-input--num"
@@ -107,8 +110,8 @@ export const ChartSettingsForm = ({
                       aria-label={`${MA_LABEL[period]} 두께`}
                       style={{ width: '4rem' }}
                     />
-                  </td>
-                  <td>
+                  </TableGrid.Cell>
+                  <TableGrid.Cell flex={1}>
                     <select
                       className="hts-select hts-select--dense"
                       value={ma.style}
@@ -122,12 +125,12 @@ export const ChartSettingsForm = ({
                         </option>
                       ))}
                     </select>
-                  </td>
-                </tr>
+                  </TableGrid.Cell>
+                </TableGrid.Row>
               );
             })}
-          </tbody>
-        </table>
+          </TableGrid.Body>
+        </TableGrid.Root>
       </div>
 
       {/* ── 거래량 ── */}

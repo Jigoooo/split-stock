@@ -1,4 +1,4 @@
-import { Button } from '@renderer/shared/ui';
+import { Button, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
 interface GridDensityFormProps {
@@ -53,31 +53,41 @@ export const GridDensityForm = ({
         <div className="muted" style={{ fontSize: '1rem', marginBottom: '0.4rem' }}>
           미리보기
         </div>
-        <table
-          className="hts-table"
-          style={{ '--hts-row-height': `${rowHeightPx}px` } as React.CSSProperties}
+        <TableGrid.Root
+          variant="hts"
+          stickyHeader={false}
+          overlayScrollbar={false}
+          style={{ height: 'auto', '--hts-row-height': `${rowHeightPx}px` } as React.CSSProperties}
         >
-          <thead>
-            <tr>
-              <th>종목명</th>
-              <th className="num">현재가</th>
-              <th className="num">등락률</th>
-              <th className="num">보유수량</th>
-            </tr>
-          </thead>
-          <tbody>
+          <TableGrid.Header>
+            <TableGrid.Cell flex={2}>종목명</TableGrid.Cell>
+            <TableGrid.Cell flex={1} numeric>
+              현재가
+            </TableGrid.Cell>
+            <TableGrid.Cell flex={1} numeric>
+              등락률
+            </TableGrid.Cell>
+            <TableGrid.Cell flex={1} numeric>
+              보유수량
+            </TableGrid.Cell>
+          </TableGrid.Header>
+          <TableGrid.Body>
             {(['삼성전자', 'SK하이닉스', 'NAVER'] as const).map((name) => (
-              <tr key={name}>
-                <td>{name}</td>
-                <td className="num">75,000</td>
-                <td className="num" style={{ color: 'var(--up)' }}>
+              <TableGrid.Row key={name}>
+                <TableGrid.Cell flex={2}>{name}</TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric>
+                  75,000
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric style={{ color: 'var(--up)' }}>
                   +1.23%
-                </td>
-                <td className="num">100</td>
-              </tr>
+                </TableGrid.Cell>
+                <TableGrid.Cell flex={1} numeric>
+                  100
+                </TableGrid.Cell>
+              </TableGrid.Row>
             ))}
-          </tbody>
-        </table>
+          </TableGrid.Body>
+        </TableGrid.Root>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
