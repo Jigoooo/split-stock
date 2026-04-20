@@ -51,6 +51,21 @@ export const TradeWorkspace = ({
         />
       )}
 
+      {hideSelectionBar && !selected && (
+        <div
+          className="muted"
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.1rem',
+          }}
+        >
+          위 잔고 목록에서 종목을 클릭하면 차트·주문 화면이 표시됩니다.
+        </div>
+      )}
+
       {selected ? (
         <div
           style={{
