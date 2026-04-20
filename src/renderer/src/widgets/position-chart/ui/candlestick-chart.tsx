@@ -468,6 +468,9 @@ export const CandlestickChart = ({
     );
 
     // ── visible range 유지 ────────────────────────────────────────
+    // added === 0 (동일 길이, lines/displaySettings 등 다른 prop 변경으로 인한
+    // 재실행) 에선 setVisibleLogicalRange 를 호출하지 않는다 — 사용자가 좌측 스크롤
+    // 하는 중에 매 렌더마다 이전 범위로 튀는 "덜덜 떨림" 현상의 원인이었다.
     if (isFirstLoad || !prevRange) {
       const total = data.length;
       const shown = Math.min(60, total);
@@ -477,14 +480,14 @@ export const CandlestickChart = ({
       });
     } else {
       const added = data.length - prevLengthRef.current;
-      chart.timeScale().setVisibleLogicalRange(
-        added > 0
-          ? {
-              from: prevRange.from + added,
-              to: prevRange.to + added,
-            }
-          : prevRange,
-      );
+      if (added > 0) {
+        // 과거 데이터 prepend 시엔 사용자가 보던 bar 가 shift 되지 않도록 보정.
+        chart.timeScale().setVisibleLogicalRange({
+          from: prevRange.from + added,
+          to: prevRange.to + added,
+        });
+      }
+      // added === 0 일 때 range 를 건드리지 않음 — 사용자 스크롤 존중.
     }
 
     prevLengthRef.current = data.length;
