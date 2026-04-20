@@ -62,7 +62,7 @@ export const TradePage = ({
               minWidth: 0,
               display: 'flex',
               flexDirection: 'column',
-              overflow: 'auto',
+              overflow: 'hidden',
             }}
           >
             <TradingPanel pdno={selected.pdno} name={selected.name} isProd={runtime.isProd} />

@@ -107,7 +107,7 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', height: '100%', minHeight: 0 }}>
       <RealtimeStatusBar
         pdno={pdno}
         tickTime={tick?.time ?? null}
@@ -116,9 +116,11 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(180px, 220px) minmax(180px, 210px) minmax(240px, 1fr)',
+          gridTemplateColumns: 'minmax(180px, 220px) minmax(180px, 210px) minmax(0, 1fr)',
           gap: '0.6rem',
           alignItems: 'stretch',
+          flex: 1,
+          minHeight: 0,
         }}
       >
         <OrderbookPanel
