@@ -66,6 +66,11 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
   const loadingRef = useRef(false);
   const reachedEndRef = useRef(false);
   const utils = trpc.useUtils();
+  // tRPC utils proxy 는 매 render 마다 새 reference 를 돌려줄 수 있어 effect dep 에
+  // 넣으면 불필요하게 재실행 → setCandles([]) 가 반복 호출되며 차트 스크롤 위치가
+  // 매 render 마다 초기화되는 회귀가 있었다. ref 로 최신 fetch 함수를 잡아 둔다.
+  const fetchDailyChartRef = useRef(utils.market.getDailyChart.fetch);
+  fetchDailyChartRef.current = utils.market.getDailyChart.fetch;
 
   // 일봉 전용 실시간 tick (period !== 'D' 이면 null 로 처리)
   const rawTick = useLiveTick(pdno, 1000);
@@ -107,7 +112,7 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
       reachedEndRef.current = false;
 
       try {
-        const first = await utils.market.getDailyChart.fetch({ code: pdno, period });
+        const first = await fetchDailyChartRef.current({ code: pdno, period });
         if (cancelled) return;
 
         if (first.candles.length === 0) {
@@ -125,7 +130,7 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
           if (cancelled || !Number.isFinite(toMs)) break;
 
           try {
-            const older = await utils.market.getDailyChart.fetch({ code: pdno, period, toMs });
+            const older = await fetchDailyChartRef.current({ code: pdno, period, toMs });
             if (cancelled) return;
 
             if (older.candles.length === 0) {
@@ -165,7 +170,7 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
     return () => {
       cancelled = true;
     };
-  }, [pdno, period, reloadSeq, utils.market.getDailyChart]);
+  }, [pdno, period, reloadSeq]);
 
   const fetchMore = async (): Promise<void> => {
     if (loadingRef.current || reachedEndRef.current) return;
@@ -183,7 +188,7 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
         if (!Number.isFinite(toMs)) break;
 
         try {
-          const older = await utils.market.getDailyChart.fetch({ code: pdno, period, toMs });
+          const older = await fetchDailyChartRef.current({ code: pdno, period, toMs });
           if (older.candles.length === 0) {
             setReachedEnd(true);
             reachedEndRef.current = true;
