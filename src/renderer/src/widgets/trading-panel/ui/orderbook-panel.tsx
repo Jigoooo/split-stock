@@ -77,9 +77,10 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
             </tr>
           </thead>
           <tbody>
-            {asksReversed.map((l) => (
+            {asksReversed.map((l, idx) => (
               <OrderbookRow
-                key={`ask-${l.price}`}
+                // biome-ignore lint/suspicious/noArrayIndexKey: orderbook은 고정 10단계 — level idx가 안정 식별자
+                key={`ask-level-${idx}`}
                 leftQty={l.quantity}
                 rightQty={0}
                 price={l.price}
@@ -89,9 +90,10 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
                 onClick={() => onClickPrice(l.price, 'BUY')}
               />
             ))}
-            {orderbook.bids.map((l) => (
+            {orderbook.bids.map((l, idx) => (
               <OrderbookRow
-                key={`bid-${l.price}`}
+                // biome-ignore lint/suspicious/noArrayIndexKey: orderbook은 고정 10단계 — level idx가 안정 식별자
+                key={`bid-level-${idx}`}
                 leftQty={0}
                 rightQty={l.quantity}
                 price={l.price}
