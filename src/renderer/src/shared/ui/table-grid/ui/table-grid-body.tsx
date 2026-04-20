@@ -43,8 +43,10 @@ export function TableGridBody(props: TableGridBodyProps): ReactElement {
         minHeight: 0,
         // horizontalScroll=true 이면 wrapper(hScrollRef)가 양방향 스크롤 담당
         // → body 는 overflow visible (overflow: visible + visible = visible)
+        // → min-width: max-content 로 컬럼 합계 너비만큼 늘어나야 row 잘림 방지
         overflowY: horizontalScroll ? 'visible' : 'auto',
         overflowX: horizontalScroll ? 'visible' : 'hidden',
+        minWidth: horizontalScroll ? 'max-content' : undefined,
         ...style,
       }}
     >
