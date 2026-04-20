@@ -30,6 +30,12 @@ const UpdateDisplaySettingsSchema = z.object({
           heightPercent: z.number().min(10).max(60).optional(),
         })
         .optional(),
+      crosshair: z
+        .object({
+          mode: z.enum(['Magnet', 'Normal']).optional(),
+          labelVisible: z.boolean().optional(),
+        })
+        .optional(),
     })
     .optional(),
   grid: z
@@ -123,6 +129,16 @@ export const displayRouter = router({
       }
     }
 
+    if (input.chart?.crosshair) {
+      const crosshair = input.chart.crosshair;
+      if (crosshair.mode !== undefined) {
+        repo.set(SETTING_KEYS.DISPLAY_CROSSHAIR_MODE, crosshair.mode);
+      }
+      if (crosshair.labelVisible !== undefined) {
+        repo.set(SETTING_KEYS.DISPLAY_CROSSHAIR_LABEL_VISIBLE, String(crosshair.labelVisible));
+      }
+    }
+
     if (input.grid?.rowHeightPx !== undefined) {
       repo.set(SETTING_KEYS.DISPLAY_GRID_ROW_HEIGHT_PX, String(input.grid.rowHeightPx));
     }
@@ -150,6 +166,11 @@ export const displayRouter = router({
     repo.set(
       SETTING_KEYS.DISPLAY_VOLUME_HEIGHT_PERCENT,
       String(DISPLAY_DEFAULTS.volume.heightPercent),
+    );
+    repo.set(SETTING_KEYS.DISPLAY_CROSSHAIR_MODE, DISPLAY_DEFAULTS.crosshair.mode);
+    repo.set(
+      SETTING_KEYS.DISPLAY_CROSSHAIR_LABEL_VISIBLE,
+      String(DISPLAY_DEFAULTS.crosshair.labelVisible),
     );
     repo.set(SETTING_KEYS.DISPLAY_GRID_ROW_HEIGHT_PX, String(DISPLAY_DEFAULTS.grid.rowHeightPx));
 

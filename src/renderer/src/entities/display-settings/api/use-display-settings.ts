@@ -27,6 +27,10 @@ export interface UseUpdateDisplaySettingsResult {
           downColor: string;
           heightPercent: number;
         }>;
+        crosshair: Partial<{
+          mode: 'Magnet' | 'Normal';
+          labelVisible: boolean;
+        }>;
       }>;
       grid: Partial<{ rowHeightPx: number }>;
     }>,

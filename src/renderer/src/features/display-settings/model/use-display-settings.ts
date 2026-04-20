@@ -1,4 +1,5 @@
 import type {
+  CrosshairSettings,
   DisplaySettings,
   LineStyleType,
   MaPeriod,
@@ -29,6 +30,7 @@ export function useDisplaySettings() {
   const [localVolume, setLocalVolume] = useState<Partial<
     DisplaySettings['chart']['volume']
   > | null>(null);
+  const [localCrosshair, setLocalCrosshair] = useState<Partial<CrosshairSettings> | null>(null);
   const [localRowHeight, setLocalRowHeight] = useState<number | null>(null);
 
   const [isPendingTrans, startTransition] = useTransition();
@@ -54,6 +56,11 @@ export function useDisplaySettings() {
     heightPercent: localVolume?.heightPercent ?? settings?.chart.volume.heightPercent ?? 30,
   };
 
+  const resolvedCrosshair: CrosshairSettings = {
+    mode: localCrosshair?.mode ?? settings?.chart.crosshair.mode ?? 'Magnet',
+    labelVisible: localCrosshair?.labelVisible ?? settings?.chart.crosshair.labelVisible ?? true,
+  };
+
   const resolvedRowHeight: number = localRowHeight ?? settings?.grid.rowHeightPx ?? 26;
 
   // ── setters ──────────────────────────────────────────────────────
@@ -74,6 +81,13 @@ export function useDisplaySettings() {
     value: DisplaySettings['chart']['volume'][K],
   ): void {
     setLocalVolume((prev) => ({ ...(prev ?? {}), [field]: value }));
+  }
+
+  function setCrosshairField<K extends keyof CrosshairSettings>(
+    field: K,
+    value: CrosshairSettings[K],
+  ): void {
+    setLocalCrosshair((prev) => ({ ...(prev ?? {}), [field]: value }));
   }
 
   function setRowHeight(px: number): void {
@@ -101,11 +115,13 @@ export function useDisplaySettings() {
             }
           >,
           volume: resolvedVolume,
+          crosshair: resolvedCrosshair,
         },
         grid: { rowHeightPx: resolvedRowHeight },
       }).then(() => {
         setLocalMa(null);
         setLocalVolume(null);
+        setLocalCrosshair(null);
         setLocalRowHeight(null);
       });
     });
@@ -116,6 +132,7 @@ export function useDisplaySettings() {
       reset.mutate();
       setLocalMa(null);
       setLocalVolume(null);
+      setLocalCrosshair(null);
       setLocalRowHeight(null);
     });
   }
@@ -126,9 +143,11 @@ export function useDisplaySettings() {
     isSaving,
     resolvedMa,
     resolvedVolume,
+    resolvedCrosshair,
     resolvedRowHeight,
     setMaField,
     setVolumeField,
+    setCrosshairField,
     setRowHeight,
     handleSave,
     handleReset,

@@ -13,6 +13,13 @@ export interface VolumeSettings {
   heightPercent: number;
 }
 
+export type CrosshairModeType = 'Magnet' | 'Normal';
+
+export interface CrosshairSettings {
+  mode: CrosshairModeType;
+  labelVisible: boolean;
+}
+
 export interface DisplaySettings {
   chart: {
     ma: {
@@ -23,6 +30,7 @@ export interface DisplaySettings {
       120: MaSettings;
     };
     volume: VolumeSettings;
+    crosshair: CrosshairSettings;
   };
   grid: {
     rowHeightPx: number;

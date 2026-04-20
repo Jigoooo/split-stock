@@ -88,6 +88,8 @@ export const SETTING_KEYS = {
   DISPLAY_VOLUME_UP_COLOR: 'display.chart.volume.upColor',
   DISPLAY_VOLUME_DOWN_COLOR: 'display.chart.volume.downColor',
   DISPLAY_VOLUME_HEIGHT_PERCENT: 'display.chart.volume.heightPercent',
+  DISPLAY_CROSSHAIR_MODE: 'display.chart.crosshair.mode',
+  DISPLAY_CROSSHAIR_LABEL_VISIBLE: 'display.chart.crosshair.labelVisible',
 
   // ── 표시 설정: 그리드 ─────────────────────────────────────────────
   DISPLAY_GRID_ROW_HEIGHT_PX: 'display.grid.rowHeightPx',
@@ -225,10 +227,18 @@ export interface VolumeSettings {
   heightPercent: number;
 }
 
+export type CrosshairModeType = 'Magnet' | 'Normal';
+
+export interface CrosshairSettings {
+  mode: CrosshairModeType;
+  labelVisible: boolean;
+}
+
 export interface DisplaySettings {
   chart: {
     ma: Record<5 | 10 | 20 | 60 | 120, MaSettings>;
     volume: VolumeSettings;
+    crosshair: CrosshairSettings;
   };
   grid: {
     rowHeightPx: number;
@@ -247,6 +257,11 @@ const VOLUME_DEFAULTS: VolumeSettings = {
   upColor: 'rgba(220,38,38,0.5)',
   downColor: 'rgba(37,99,235,0.5)',
   heightPercent: 30,
+};
+
+const CROSSHAIR_DEFAULTS: CrosshairSettings = {
+  mode: 'Magnet',
+  labelVisible: true,
 };
 
 const DISPLAY_GRID_DEFAULTS = { rowHeightPx: 26 };
@@ -325,6 +340,17 @@ export function readDisplayConfig(repo: SettingsRepo): DisplaySettings {
       ? rowNum
       : DISPLAY_GRID_DEFAULTS.rowHeightPx;
 
+  const crosshairModeRaw = repo.get(SETTING_KEYS.DISPLAY_CROSSHAIR_MODE);
+  const validCrosshairModes: CrosshairModeType[] = ['Magnet', 'Normal'];
+  const crosshairMode: CrosshairModeType =
+    crosshairModeRaw !== null && validCrosshairModes.includes(crosshairModeRaw as CrosshairModeType)
+      ? (crosshairModeRaw as CrosshairModeType)
+      : CROSSHAIR_DEFAULTS.mode;
+
+  const crosshairLabelRaw = repo.get(SETTING_KEYS.DISPLAY_CROSSHAIR_LABEL_VISIBLE);
+  const crosshairLabelVisible =
+    crosshairLabelRaw !== null ? crosshairLabelRaw === 'true' : CROSSHAIR_DEFAULTS.labelVisible;
+
   return {
     chart: {
       ma: {
@@ -339,6 +365,10 @@ export function readDisplayConfig(repo: SettingsRepo): DisplaySettings {
         downColor: downColorRaw ?? VOLUME_DEFAULTS.downColor,
         heightPercent,
       },
+      crosshair: {
+        mode: crosshairMode,
+        labelVisible: crosshairLabelVisible,
+      },
     },
     grid: { rowHeightPx },
   };
@@ -347,6 +377,7 @@ export function readDisplayConfig(repo: SettingsRepo): DisplaySettings {
 export const DISPLAY_DEFAULTS = {
   ma: MA_DEFAULTS,
   volume: VOLUME_DEFAULTS,
+  crosshair: CROSSHAIR_DEFAULTS,
   grid: DISPLAY_GRID_DEFAULTS,
 } as const;
 

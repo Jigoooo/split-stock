@@ -1,6 +1,11 @@
-import type { LineStyleType, MaPeriod, MaSettings } from '@renderer/entities/display-settings';
+import type {
+  CrosshairModeType,
+  LineStyleType,
+  MaPeriod,
+  MaSettings,
+} from '@renderer/entities/display-settings';
 import { MA_PERIODS } from '@renderer/entities/display-settings';
-import { Button, TableGrid } from '@renderer/shared/ui';
+import { Button, Select, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
 const MA_LABEL: Record<MaPeriod, string> = {
@@ -20,6 +25,7 @@ const LINE_STYLE_OPTIONS: Array<{ value: LineStyleType; label: string }> = [
 interface ChartSettingsFormProps {
   resolvedMa: (period: MaPeriod) => MaSettings;
   resolvedVolume: { upColor: string; downColor: string; heightPercent: number };
+  resolvedCrosshair: { mode: CrosshairModeType; labelVisible: boolean };
   isSaving: boolean;
   onMaChange: <K extends keyof MaSettings>(
     period: MaPeriod,
@@ -30,6 +36,10 @@ interface ChartSettingsFormProps {
     field: K,
     value: K extends 'heightPercent' ? number : string,
   ) => void;
+  onCrosshairChange: <K extends 'mode' | 'labelVisible'>(
+    field: K,
+    value: K extends 'labelVisible' ? boolean : CrosshairModeType,
+  ) => void;
   onSave: () => void;
   onReset: () => void;
 }
@@ -37,9 +47,11 @@ interface ChartSettingsFormProps {
 export const ChartSettingsForm = ({
   resolvedMa,
   resolvedVolume,
+  resolvedCrosshair,
   isSaving,
   onMaChange,
   onVolumeChange,
+  onCrosshairChange,
   onSave,
   onReset,
 }: ChartSettingsFormProps): ReactElement => {
@@ -112,8 +124,8 @@ export const ChartSettingsForm = ({
                     />
                   </TableGrid.Cell>
                   <TableGrid.Cell flex={1}>
-                    <select
-                      className="hts-select hts-select--dense"
+                    <Select
+                      dense
                       value={ma.style}
                       disabled={isSaving}
                       onChange={(e) => onMaChange(period, 'style', e.target.value as LineStyleType)}
@@ -124,7 +136,7 @@ export const ChartSettingsForm = ({
                           {opt.label}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </TableGrid.Cell>
                 </TableGrid.Row>
               );
@@ -207,6 +219,57 @@ export const ChartSettingsForm = ({
           />
           <span className="muted" style={{ fontSize: '1rem' }}>
             10~60%
+          </span>
+        </div>
+      </div>
+
+      {/* ── 크로스헤어 ── */}
+      <div>
+        <div
+          className="muted"
+          style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.6rem' }}
+        >
+          크로스헤어
+        </div>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, auto)',
+            gap: '0.8rem 1.6rem',
+            alignItems: 'center',
+          }}
+        >
+          <label htmlFor="crosshair-mode" style={{ fontSize: '1.1rem' }}>
+            모드
+          </label>
+          <Select
+            id="crosshair-mode"
+            dense
+            value={resolvedCrosshair.mode}
+            disabled={isSaving}
+            onChange={(e) => onCrosshairChange('mode', e.target.value as CrosshairModeType)}
+            style={{ minWidth: '9rem' }}
+          >
+            <option value="Magnet">Magnet</option>
+            <option value="Normal">Normal</option>
+          </Select>
+          <span className="muted" style={{ fontSize: '1rem' }}>
+            마그넷은 가까운 OHLC 값에 흡착합니다.
+          </span>
+
+          <label htmlFor="crosshair-label-visible" style={{ fontSize: '1.1rem' }}>
+            축 라벨 표시
+          </label>
+          <input
+            id="crosshair-label-visible"
+            type="checkbox"
+            checked={resolvedCrosshair.labelVisible}
+            disabled={isSaving}
+            onChange={(e) => onCrosshairChange('labelVisible', e.target.checked)}
+            aria-label="크로스헤어 축 라벨 표시"
+          />
+          <span className="muted" style={{ fontSize: '1rem' }}>
+            가격 축과 시간 축의 현재 위치 라벨을 함께 표시합니다.
           </span>
         </div>
       </div>
