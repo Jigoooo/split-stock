@@ -1050,3 +1050,63 @@ body {
     animation: none;
   }
 }
+
+/* ===== 모달 오버레이 (SwitchEnvDialog / OrderConfirmDialog 공용) ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  max-width: min(90vw, 52rem);
+  min-width: 32rem;
+  background: var(--bg);
+  border: 0.1rem solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 1rem 3rem rgba(15, 23, 42, 0.25);
+  overflow: hidden;
+}
+
+/* ===== 주문 확인 다이얼로그 ===== */
+.order-confirm-dialog__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.order-confirm-dialog__summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1.6rem;
+  row-gap: 0.6rem;
+  margin: 0.4rem 0 0.8rem;
+  font-size: 1.2rem;
+}
+
+.order-confirm-dialog__summary dt {
+  color: var(--fg-2);
+  font-weight: 500;
+}
+
+.order-confirm-dialog__summary dd {
+  margin: 0;
+}
+
+.order-confirm-dialog__summary dd.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.order-confirm-dialog__warning {
+  margin: 0.2rem 0 0;
+  padding: 0.5rem 0.7rem;
+  border-left: 0.3rem solid var(--up);
+  background: var(--up-soft);
+  color: var(--fg);
+  font-size: 1.1rem;
+}

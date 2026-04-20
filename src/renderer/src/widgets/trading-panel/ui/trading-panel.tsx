@@ -184,7 +184,12 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
           onClickPrice={onPriceClick}
           routingMode={orderbookRoutingMode}
         />
-        <OrderTicket selection={selection} isProd={isProd} oneClick={oneClick} />
+        <OrderTicket
+          selection={selection}
+          isProd={isProd}
+          oneClick={oneClick}
+          onSelectionChange={(next) => setSelection({ pdno: next.pdno, name: next.name })}
+        />
         <FeedTabs pdno={pdno} name={name} feed={feed} />
       </div>
     </div>

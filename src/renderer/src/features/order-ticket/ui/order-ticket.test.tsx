@@ -80,11 +80,9 @@ function wrap(ui: ReactElement): ReactElement {
   return <Provider>{ui}</Provider>;
 }
 
-const origConfirm = window.confirm;
-
 describe('OrderTicket', () => {
-  it('콤마 표시 상태에서도 숫자 payload로 주문한다', async () => {
-    window.confirm = vi.fn().mockReturnValue(true);
+  it('콤마 표시 상태에서도 숫자 payload로 주문한다 (확인 다이얼로그 통과)', async () => {
+    placeMock.mockReset();
     placeMock.mockResolvedValue({ odno: 'ODN1' });
     render(
       wrap(
@@ -102,7 +100,11 @@ describe('OrderTicket', () => {
     expect(screen.getByLabelText('주문 가격')).toHaveValue('70,000');
 
     fireEvent.click(screen.getByRole('button', { name: '매수 주문' }));
-    expect(window.confirm).toHaveBeenCalled();
+    // 확인 다이얼로그 노출
+    const dialog = screen.getByRole('dialog', { name: '주문 확인' });
+    expect(dialog).toBeInTheDocument();
+    // 확인 확정 버튼 클릭 시 place mutation 호출
+    fireEvent.click(screen.getByRole('button', { name: '매수 주문 확정' }));
     expect(placeMock).toHaveBeenCalledWith(
       expect.objectContaining({
         pdno: '005930',
@@ -112,12 +114,10 @@ describe('OrderTicket', () => {
         division: 'LIMIT',
       }),
     );
-    window.confirm = origConfirm;
   });
 
-  it('PROD 환경은 oneClick=true라도 confirm 강제', () => {
-    window.confirm = vi.fn().mockReturnValue(false);
-    placeMock.mockClear();
+  it('PROD 환경은 oneClick=true라도 확인 다이얼로그 강제 — 취소 시 place 호출 없음', () => {
+    placeMock.mockReset();
     render(
       wrap(
         <OrderTicket
@@ -128,9 +128,9 @@ describe('OrderTicket', () => {
       ),
     );
     fireEvent.click(screen.getByRole('button', { name: '매도 주문' }));
-    expect(window.confirm).toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: '주문 확인' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '취소' }));
     expect(placeMock).not.toHaveBeenCalled();
-    window.confirm = origConfirm;
   });
 
   it('현재 OPEN/BUYING lot 개수 기반으로 다음 차수를 표시한다', () => {
