@@ -1110,3 +1110,96 @@ body {
   color: var(--fg);
   font-size: 1.1rem;
 }
+
+/* ===== 함수형 dialog 시스템 (shared/ui/dialog) ===== */
+.app-dialog-overlay {
+  /* OrderConfirmDialog(.modal-overlay z:1000)보다 위에 노출 */
+  z-index: 1100;
+  position: fixed;
+}
+
+.app-dialog-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  /* dialog 패널이 위로 오도록 */
+  z-index: 0;
+}
+
+.app-dialog {
+  min-width: 28rem;
+  max-width: min(90vw, 40rem);
+  border-left: 0.3rem solid var(--border-strong);
+  position: relative;
+  z-index: 1;
+}
+
+.app-dialog__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.app-dialog__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.app-dialog__body {
+  font-size: 1.2rem;
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: keep-all;
+}
+
+.app-dialog__actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+/* type별 좌측 보더 + 아이콘 색 */
+.app-dialog--info {
+  border-left-color: var(--accent);
+}
+.app-dialog--info .app-dialog__icon {
+  background: var(--accent-tint-12);
+  color: var(--accent);
+}
+
+.app-dialog--success {
+  border-left-color: var(--up);
+}
+.app-dialog--success .app-dialog__icon {
+  background: var(--up-soft);
+  color: var(--up);
+}
+
+.app-dialog--warning {
+  border-left-color: #ca8a04;
+}
+.app-dialog--warning .app-dialog__icon {
+  background: rgba(202, 138, 4, 0.12);
+  color: #ca8a04;
+}
+
+.app-dialog--error {
+  border-left-color: var(--down);
+}
+.app-dialog--error .app-dialog__icon {
+  background: var(--down-soft);
+  color: var(--down);
+}

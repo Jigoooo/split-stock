@@ -6,6 +6,7 @@ import superjson from 'superjson';
 import { ipcLink } from 'trpc-electron/renderer';
 import { createQueryClient } from '../shared/api/query-client';
 import { trpc } from '../shared/api/trpc';
+import { DialogProvider } from '../shared/ui';
 
 export const AppProviders = ({ children }: PropsWithChildren): ReactElement => {
   const [queryClient] = useState(() => createQueryClient());
@@ -20,6 +21,7 @@ export const AppProviders = ({ children }: PropsWithChildren): ReactElement => {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <Toaster position="top-right" theme="light" />
+        <DialogProvider />
         {children}
       </QueryClientProvider>
     </trpc.Provider>
