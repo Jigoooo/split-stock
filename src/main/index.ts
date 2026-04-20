@@ -325,11 +325,28 @@ function resolveWindowBounds(
 function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
   const { popoutRoute, parent } = opts;
   const display = pickTargetDisplay(parent);
-  // profit-calculator는 작은 창 (380x420), add-account는 폼 전용 (520x620)
+  // profit-calculator는 작은 창 (380x420), add-account는 폼 전용 (520x620), add-watch-order는 폼 전용 (780x700)
   const isProfitCalc = popoutRoute === 'profit-calculator';
   const isAddAccount = popoutRoute === 'add-account';
-  const width = isProfitCalc ? 380 : isAddAccount ? 520 : popoutRoute ? 720 : 1440;
-  const height = isProfitCalc ? 420 : isAddAccount ? 620 : popoutRoute ? 540 : 900;
+  const isAddWatchOrder = popoutRoute === 'add-watch-order';
+  const width = isProfitCalc
+    ? 380
+    : isAddAccount
+      ? 520
+      : isAddWatchOrder
+        ? 780
+        : popoutRoute
+          ? 720
+          : 1440;
+  const height = isProfitCalc
+    ? 420
+    : isAddAccount
+      ? 620
+      : isAddWatchOrder
+        ? 700
+        : popoutRoute
+          ? 540
+          : 900;
   const bounds = resolveWindowBounds(width, height, display);
   const win = new BrowserWindow({
     x: bounds.x,
@@ -415,6 +432,7 @@ void app.whenReady().then(async () => {
     'stock-picker',
     'profit-calculator',
     'add-account',
+    'add-watch-order',
   ]);
   const popouts = new Map<string, BrowserWindowType>();
   ipcMain.handle('appShell:openPopout', (event, route: unknown): { ok: boolean } => {

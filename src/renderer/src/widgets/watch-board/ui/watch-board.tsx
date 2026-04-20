@@ -1,14 +1,14 @@
 import {
+  WATCH_ORDER_PREFILL_KEY,
+  type WatchOrderPrefillPayload,
+} from '@renderer/app/ui/popout-page';
+import {
   useWatchOrders,
   type WatchOrder,
   type WatchStatus,
   type WatchTabKey,
 } from '@renderer/entities/watch-order';
-import {
-  AddWatchOrderDialog,
-  useAddWatchOrderDialog,
-  type WatchOrderFormPrefill,
-} from '@renderer/features/add-watch-order';
+import type { WatchOrderFormPrefill } from '@renderer/features/add-watch-order';
 import { Button } from '@renderer/shared/ui';
 import { type HtsTabItem, HtsTabs } from '@renderer/widgets/hts-tabs';
 import type { ReactElement } from 'react';
@@ -34,18 +34,26 @@ const TABS: ReadonlyArray<HtsTabItem<WatchTabKey>> = [
  *
  * 우클릭 컨텍스트 메뉴 액션은 WATCHING(현황) 탭에서만 활성.
  * 현황 탭 헤더에 "+ 자동감시 추가" 버튼 노출.
+ *
+ * 추가/수정은 별도 BrowserWindow(팝아웃)로 열린다.
+ * prefill 데이터는 localStorage 를 통해 핸드오프한다.
  */
 export const WatchBoard = (props: WatchBoardProps): ReactElement => {
   const { accountId } = props;
   const { setTab, tab } = useWatchTabs();
-  const dialog = useAddWatchOrderDialog();
 
   const status = tabToStatusFilter(tab);
   const query = useWatchOrders(status !== undefined ? { accountId, status } : { accountId });
   const visible = filterByTab(tab, query.orders);
 
+  const openAddWatchOrderPopout = (prefill: WatchOrderFormPrefill | null): void => {
+    const payload: WatchOrderPrefillPayload = { accountId, prefill };
+    localStorage.setItem(WATCH_ORDER_PREFILL_KEY, JSON.stringify(payload));
+    void window.appShell?.openPopout('add-watch-order');
+  };
+
   const onEditOrder = (prefill: WatchOrderFormPrefill): void => {
-    dialog.openEdit(prefill);
+    openAddWatchOrderPopout(prefill);
   };
 
   return (
@@ -65,7 +73,7 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
           display: 'flex',
           alignItems: 'center',
           gap: '0.5rem',
-          minHeight: '2.6rem',
+          minHeight: '2.8rem',
           padding: '0.3rem 0',
           flexShrink: 0,
         }}
@@ -74,7 +82,7 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
         <div style={{ marginLeft: 'auto', marginRight: '0.5rem', minWidth: '5rem' }}>
           {tab === 'watching' && (
             <Button
-              onClick={dialog.openCreate}
+              onClick={() => openAddWatchOrderPopout(null)}
               variant="primary"
               dense
               style={{ whiteSpace: 'nowrap' }}
@@ -90,12 +98,6 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
         error={query.error}
         allowMutations={tab === 'watching'}
         onEditOrder={onEditOrder}
-      />
-      <AddWatchOrderDialog
-        open={dialog.open}
-        accountId={accountId}
-        prefill={dialog.prefill}
-        onClose={dialog.close}
       />
     </section>
   );

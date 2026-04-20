@@ -6,7 +6,8 @@ export type PopoutRoute =
   | 'settings'
   | 'stock-picker'
   | 'profit-calculator'
-  | 'add-account';
+  | 'add-account'
+  | 'add-watch-order';
 
 export function isPopoutRoute(value: string): value is PopoutRoute {
   return (
@@ -17,7 +18,8 @@ export function isPopoutRoute(value: string): value is PopoutRoute {
     value === 'settings' ||
     value === 'stock-picker' ||
     value === 'profit-calculator' ||
-    value === 'add-account'
+    value === 'add-account' ||
+    value === 'add-watch-order'
   );
 }
 

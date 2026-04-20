@@ -203,6 +203,7 @@ export const WatchList = (props: WatchListProps): ReactElement => {
                         type="button"
                         onClick={() => onEditRow(o)}
                         disabled={cancelMutation.isPending}
+                        className="hts-btn hts-btn--xs"
                         style={inlineActionStyle}
                         aria-label={`수정 ${o.id}`}
                       >
@@ -212,6 +213,7 @@ export const WatchList = (props: WatchListProps): ReactElement => {
                         type="button"
                         onClick={() => void onDeleteRow(o.id)}
                         disabled={cancelMutation.isPending}
+                        className="hts-btn hts-btn--xs hts-btn--danger"
                         style={{ ...inlineActionStyle, color: 'var(--hts-sell, #e03)' }}
                         aria-label={`삭제 ${o.id}`}
                       >
@@ -263,11 +265,13 @@ export const WatchList = (props: WatchListProps): ReactElement => {
 
 const inlineActionStyle: CSSProperties = {
   background: 'transparent',
-  border: 'none',
+  border: '1px solid currentColor',
+  borderRadius: '3px',
   cursor: 'pointer',
   fontSize: '0.85rem',
-  padding: '0.1rem 0.3rem',
+  padding: '0.25rem 0.55rem',
   color: 'inherit',
+  marginRight: '0.2rem',
 };
 
 interface MenuItemProps {
