@@ -1,6 +1,15 @@
+import { useActiveAccountId } from '@renderer/entities/account';
+import {
+  BulkPriceRatioForm,
+  CsvImportDialog,
+  EditLotsModeToggle,
+  UndoButton,
+  useEditLots,
+} from '@renderer/features/edit-lots-manual';
+import { trpc } from '@renderer/shared/api/trpc';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ClipboardCopy } from 'lucide-react';
-import { type ReactElement, useRef } from 'react';
+import { type ReactElement, useRef, useState } from 'react';
 import { formatSnapshotBlock, formatSnapshotsText } from '../model/format-snapshot-text';
 import { useLotLog } from '../model/use-lots-log';
 
@@ -15,6 +24,19 @@ export const LotsLogPage = (): ReactElement => {
     snapshots,
     snapshotsLoading,
   } = useLotLog();
+  const editLots = useEditLots();
+  const [csvOpen, setCsvOpen] = useState(false);
+  const [editPdnoInput, setEditPdnoInput] = useState('');
+  const { accountId } = useActiveAccountId();
+
+  // safety master 상태 — 수동편집 모드 진입 가드 결정에 사용.
+  const safetyState = trpc.safety.getState.useQuery({}).data;
+  const masterSafetyOn = safetyState?.master ?? false;
+
+  const onEnterMode = async (): Promise<void> => {
+    if (accountId === null) return;
+    await editLots.enterMode(accountId);
+  };
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -126,7 +148,6 @@ export const LotsLogPage = (): ReactElement => {
             onClick={handleCopyAll}
             title="전체 클립보드 복사"
             style={{
-              marginLeft: 'auto',
               display: 'inline-flex',
               alignItems: 'center',
               gap: '0.3rem',
@@ -142,7 +163,86 @@ export const LotsLogPage = (): ReactElement => {
             <ClipboardCopy size={13} />
             전체 복사
           </button>
+          {/* 수동편집(A7) 토글 — 우측 정렬 */}
+          <div style={{ marginLeft: 'auto' }}>
+            <EditLotsModeToggle
+              accountId={accountId}
+              masterSafetyOn={masterSafetyOn}
+              active={editLots.mode}
+              onEnter={onEnterMode}
+              onExit={editLots.exitMode}
+              busy={editLots.busy}
+            />
+          </div>
         </div>
+
+        {/* 수동편집 모드 패널 — active 시에만 표시 */}
+        {editLots.mode && accountId !== null && (
+          <div
+            style={{
+              padding: '0.8rem',
+              borderBottom: '1px solid var(--hts-line, rgba(0,0,0,0.08))',
+              background: 'var(--hts-accent-bg, #fff3e0)',
+              display: 'grid',
+              gap: '0.6rem',
+            }}
+          >
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <strong>수동편집 모드</strong>
+              <input
+                type="text"
+                value={editPdnoInput}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setEditPdnoInput(v);
+                  if (/^\d{6}$/.test(v)) editLots.setPdno(v);
+                  else editLots.setPdno(null);
+                }}
+                placeholder="대상 종목 6자리 (예: 005930)"
+                maxLength={6}
+                style={{
+                  fontSize: '1rem',
+                  padding: '0.2rem 0.4rem',
+                  border: '1px solid var(--hts-line, rgba(0,0,0,0.2))',
+                  borderRadius: 3,
+                }}
+                aria-label="수동편집 대상 종목코드"
+              />
+              {editLots.pdno && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setCsvOpen(true)}
+                    style={{
+                      padding: '0.25rem 0.6rem',
+                      cursor: 'pointer',
+                      border: '1px solid var(--hts-line, rgba(0,0,0,0.2))',
+                      borderRadius: 3,
+                      background: 'transparent',
+                    }}
+                  >
+                    CSV 임포트…
+                  </button>
+                  <UndoButton accountId={accountId} pdno={editLots.pdno} />
+                </>
+              )}
+            </div>
+            {editLots.pdno && <BulkPriceRatioForm accountId={accountId} pdno={editLots.pdno} />}
+            {editLots.lastError && (
+              <div className="chip chip--down" role="alert">
+                {editLots.lastError}
+              </div>
+            )}
+            {editLots.pdno && (
+              <CsvImportDialog
+                accountId={accountId}
+                pdno={editLots.pdno}
+                open={csvOpen}
+                onClose={() => setCsvOpen(false)}
+              />
+            )}
+          </div>
+        )}
 
         {/* 가상화 스크롤 영역 */}
         <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
