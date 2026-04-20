@@ -1,7 +1,6 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { Select } from '@renderer/shared/ui';
-import type { ReactElement } from 'react';
-import { useTransition } from 'react';
+import { Select, TableGrid, useTableGridVirtual } from '@renderer/shared/ui';
+import { type ReactElement, useRef, useTransition } from 'react';
 import { LOG_CATEGORIES, LOG_LEVELS, useLogTail } from '../model/use-log-tail';
 
 export const LogsPage = (): ReactElement => {
@@ -32,6 +31,15 @@ export const LogsPage = (): ReactElement => {
       setCategories(newCategories);
     });
   };
+
+  // 가상화 setup — 필터 적용된 entries 기준
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtual = useTableGridVirtual({
+    count: entries.length,
+    estimateSize: () => 26,
+    parentRef: scrollRef,
+    overscan: 12,
+  });
 
   return (
     <div
@@ -161,66 +169,91 @@ export const LogsPage = (): ReactElement => {
         ))}
       </div>
 
-      {/* 로그 테이블 컨테이너 — flex: 1 + overflow-y */}
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
+      {/* TableGrid + 가상화 */}
+      <TableGrid.Root
+        variant="hts"
+        stickyHeader
+        aria-label="이벤트 로그"
+        style={{ flex: 1, minHeight: 0 }}
       >
-        <div className="panel__body" style={{ padding: 0 }}>
-          <table className="hts-table">
-            <thead>
-              <tr>
-                <th style={{ width: '12rem' }}>시각</th>
-                <th style={{ width: '5rem' }}>레벨</th>
-                <th style={{ width: '6rem' }}>카테고리</th>
-                <th>메시지</th>
-                <th>payload</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isPending || isPending_ ? (
-                <tr>
-                  <td colSpan={5} className="muted" style={{ textAlign: 'center' }}>
-                    로드 중…
-                  </td>
-                </tr>
-              ) : null}
-              {error ? (
-                <tr>
-                  <td colSpan={5}>
-                    <span className="chip chip--down">{error.message}</span>
-                  </td>
-                </tr>
-              ) : null}
-              {entries.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="muted" style={{ textAlign: 'center' }}>
-                    기록된 로그가 없습니다.
-                  </td>
-                </tr>
-              )}
-              {entries.map((e) => (
-                <tr key={e.id}>
-                  <td className="num">{formatTs(e.ts)}</td>
-                  <td>
-                    <span className={levelClass(e.level)}>{e.level}</span>
-                  </td>
-                  <td>{e.category}</td>
-                  <td>{e.message}</td>
-                  <td className="muted" style={{ fontFamily: 'monospace', fontSize: '1.05rem' }}>
-                    {e.payloadJson ?? ''}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <TableGrid.Header>
+          <TableGrid.Cell width={200} numeric>
+            시각
+          </TableGrid.Cell>
+          <TableGrid.Cell width={80}>레벨</TableGrid.Cell>
+          <TableGrid.Cell width={96}>카테고리</TableGrid.Cell>
+          <TableGrid.Cell flex={2} overflow="ellipsis">
+            메시지
+          </TableGrid.Cell>
+          <TableGrid.Cell flex={3} overflow="ellipsis">
+            payload
+          </TableGrid.Cell>
+        </TableGrid.Header>
+        <TableGrid.Body scrollRef={scrollRef}>
+          {error ? (
+            <TableGrid.Row>
+              <TableGrid.Cell flex={1}>
+                <span className="chip chip--down">{error.message}</span>
+              </TableGrid.Cell>
+            </TableGrid.Row>
+          ) : null}
+          {isPending || isPending_ ? (
+            <TableGrid.Row>
+              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
+                로드 중…
+              </TableGrid.Cell>
+            </TableGrid.Row>
+          ) : null}
+          {!isPending && !isPending_ && !error && entries.length === 0 ? (
+            <TableGrid.Row>
+              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
+                기록된 로그가 없습니다.
+              </TableGrid.Cell>
+            </TableGrid.Row>
+          ) : null}
+          {entries.length > 0 ? (
+            <div style={{ height: virtual.totalSize, position: 'relative', width: '100%' }}>
+              {virtual.items.map((vItem) => {
+                const e = entries[vItem.index];
+                if (!e) return null;
+                return (
+                  <TableGrid.Row
+                    key={e.id}
+                    ref={virtual.measureElement}
+                    data-key={String(e.id)}
+                    style={{
+                      position: 'absolute',
+                      top: vItem.start,
+                      left: 0,
+                      right: 0,
+                    }}
+                  >
+                    <TableGrid.Cell width={200} numeric>
+                      {formatTs(e.ts)}
+                    </TableGrid.Cell>
+                    <TableGrid.Cell width={80}>
+                      <span className={levelClass(e.level)}>{e.level}</span>
+                    </TableGrid.Cell>
+                    <TableGrid.Cell width={96}>{e.category}</TableGrid.Cell>
+                    <TableGrid.Cell flex={2} overflow="ellipsis" title={e.message}>
+                      {e.message}
+                    </TableGrid.Cell>
+                    <TableGrid.Cell
+                      flex={3}
+                      overflow="ellipsis"
+                      className="muted"
+                      style={{ fontFamily: 'monospace', fontSize: '1.05rem' }}
+                      title={e.payloadJson ?? ''}
+                    >
+                      {e.payloadJson ?? ''}
+                    </TableGrid.Cell>
+                  </TableGrid.Row>
+                );
+              })}
+            </div>
+          ) : null}
+        </TableGrid.Body>
+      </TableGrid.Root>
     </div>
   );
 };
