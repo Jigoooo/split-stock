@@ -50,7 +50,6 @@ export const AddAccountPage = (): ReactElement => {
 
   return (
     <div className="panel" style={{ maxWidth: '44rem', margin: '0 auto' }}>
-      <div className="panel__title">계좌 추가</div>
       <form onSubmit={onSubmit}>
         <div className="panel__body" style={{ display: 'grid', gap: '1rem' }}>
           <div style={{ display: 'grid', gap: '0.35rem' }}>

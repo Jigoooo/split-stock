@@ -732,19 +732,15 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
 }
-.orderbook-table {
-  /* 호가창은 사용자 rowHeight 설정과 독립적으로 타이트하게 고정 */
-  --hts-row-height: 18px;
+.orderbook-grid.table-grid-root[data-variant="hts"] {
+  font-size: 1.05rem;
 }
-.orderbook-table th,
-.orderbook-table td {
-  padding: 0.05rem 0.35rem;
-  font-size: 1rem;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
+.orderbook-grid.table-grid-root[data-variant="hts"] .table-grid-header .table-grid-cell,
+.orderbook-grid.table-grid-root[data-variant="hts"] .table-grid-row .table-grid-cell {
+  padding: 0 0.35rem;
+  letter-spacing: -0.025em;
 }
-.orderbook-table thead th {
-  padding: 0.35rem 0.6rem;
+.orderbook-grid.table-grid-root[data-variant="hts"] .table-grid-header .table-grid-cell {
   font-size: 0.9rem;
 }
 .orderbook-panel .panel__body {

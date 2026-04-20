@@ -71,9 +71,7 @@ export const ProfitCalculatorPage = (): ReactElement => {
 
   return (
     <div style={styles.container}>
-      {/* 헤더 */}
-      <div style={styles.header}>
-        <h1 style={styles.title}>수익률 계산기</h1>
+      <div style={styles.toolbar}>
         <label style={styles.alwaysOnTopLabel}>
           <input
             type="checkbox"
@@ -302,18 +300,13 @@ const styles = {
     padding: '12px',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
-  header: {
+  toolbar: {
     display: 'flex' as const,
-    justifyContent: 'space-between' as const,
+    justifyContent: 'flex-end' as const,
     alignItems: 'center' as const,
     marginBottom: '12px',
     paddingBottom: '8px',
     borderBottom: '1px solid #e0e0e0',
-  },
-  title: {
-    margin: 0,
-    fontSize: '18px',
-    fontWeight: 600,
   },
   alwaysOnTopLabel: {
     display: 'flex' as const,

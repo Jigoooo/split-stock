@@ -52,10 +52,6 @@ export const LogsPage = (): ReactElement => {
         overflow: 'hidden',
       }}
     >
-      <div className="panel__title" style={{ flexShrink: 0 }}>
-        이벤트 로그 (실시간 tail)
-      </div>
-
       {/* 필터 행 1: 레벨, 날짜 범위 */}
       <div
         className="panel__body"
