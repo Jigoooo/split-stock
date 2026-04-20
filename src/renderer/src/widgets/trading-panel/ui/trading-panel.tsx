@@ -140,6 +140,13 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
   const feed = useTradeFeed(pdno);
   const orderbookRoutingMode = useRoutingMode(pdno);
   const [selection, setSelection] = useState<OrderTicketSelection>({ pdno, name });
+  // 상단 종목 검색에서 종목이 바뀌면 티켓의 selection 도 초기화 — suggestedPrice/side 를 지워
+  // 이전 종목의 호가 클릭 값이 잔상처럼 남지 않게 한다.
+  const [appliedPdno, setAppliedPdno] = useState(pdno);
+  if (appliedPdno !== pdno) {
+    setAppliedPdno(pdno);
+    setSelection({ pdno, name });
+  }
 
   const onPriceClick = (price: number, side: 'BUY' | 'SELL'): void => {
     setSelection({ pdno, name, suggestedPrice: price, suggestedSide: side });
@@ -184,19 +191,14 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
           onClickPrice={onPriceClick}
           routingMode={orderbookRoutingMode}
         />
-        <OrderTicket
-          selection={selection}
-          isProd={isProd}
-          oneClick={oneClick}
-          onSelectionChange={(next) => setSelection({ pdno: next.pdno, name: next.name })}
-        />
+        <OrderTicket selection={selection} isProd={isProd} oneClick={oneClick} />
         <FeedTabs pdno={pdno} name={name} feed={feed} />
       </div>
     </div>
   );
 };
 
-type FeedTab = 'feed' | 'active';
+type FeedTab = 'active' | 'feed';
 
 const FeedTabs = ({
   pdno,
@@ -207,7 +209,8 @@ const FeedTabs = ({
   name: string;
   feed: ReturnType<typeof useTradeFeed>;
 }): ReactElement => {
-  const [tab, setTab] = useState<FeedTab>('feed');
+  // 미체결 주문이 실사용상 더 중요 — default 로 노출하고 탭 순서도 먼저 둔다.
+  const [tab, setTab] = useState<FeedTab>('active');
   return (
     <div
       style={{
@@ -221,11 +224,11 @@ const FeedTabs = ({
       <SegmentedToggle
         value={tab}
         onChange={setTab}
-        ariaLabel="체결/미체결"
+        ariaLabel="미체결/체결"
         dense
         items={[
-          { value: 'feed', label: '실시간 체결' },
           { value: 'active', label: '미체결 주문' },
+          { value: 'feed', label: '실시간 체결' },
         ]}
       />
       <AnimatePresence mode="wait" initial={false}>
