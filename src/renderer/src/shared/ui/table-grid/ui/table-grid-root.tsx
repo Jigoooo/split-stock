@@ -96,13 +96,28 @@ export function TableGridRoot(props: RootProps): ReactElement {
               flex: 1,
               minHeight: 0,
               overflow: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
               // 브라우저 기본 스크롤바 숨김 (OverlayScrollbar 사용)
               scrollbarWidth: 'none',
             }}
           >
-            {children}
+            {/*
+             * inner content — min-width: max-content 로 Header/Body 폭을 통일.
+             * wrapper 자체에 min-width:max-content 를 두면 root overflow:hidden 으로
+             * 가로 스크롤이 죽으므로, 내부에 content div 를 두어 그 안에서만 max-content
+             * 로 늘어나게 한다. 이렇게 하면 Body 가 비어("없음" 등) 있어도 Header 의
+             * 컬럼 합계 너비만큼 stretch 되어 가로 스크롤 시 Body 끝이 잘리지 않는다.
+             */}
+            <div
+              className="table-grid-hscroll-content"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                minWidth: 'max-content',
+                minHeight: '100%',
+              }}
+            >
+              {children}
+            </div>
           </div>
         ) : (
           <>

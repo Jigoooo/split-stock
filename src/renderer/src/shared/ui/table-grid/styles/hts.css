@@ -130,9 +130,9 @@
 }
 
 /* ── horizontalScroll: 헤더·body·행이 wrapper 너비에 묶이지 않도록 ── */
-/* wrapper 는 overflow:auto 이므로 자식이 min-width:max-content 여야
-   실제 컬럼 합계만큼 scroll 범위가 생김 (미설정 시 끝 컬럼 잘림)
-   body 자체도 max-content 로 잡아야 그 안의 row 도 따라서 늘어남 */
+/* hscroll-content 가 max-content 로 늘어나면 그 안의 Header/Body 는 stretch
+   로 동일 너비를 갖게 되어 비어 있는 Body 도 Header 합계만큼 확장됨.
+   각 row 도 max-content 가 본인 너비 미만이면 안 되므로 동일 규칙 적용. */
 .table-grid-root .table-grid-hscroll-wrapper .table-grid-header,
 .table-grid-root .table-grid-hscroll-wrapper .table-grid-body,
 .table-grid-root .table-grid-hscroll-wrapper .table-grid-row {
