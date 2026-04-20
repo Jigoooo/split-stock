@@ -10,7 +10,8 @@ import { ReportsPage } from '@renderer/pages/reports';
 import { SettingsPage } from '@renderer/pages/settings';
 import { TradePage } from '@renderer/pages/trade';
 import { StockPickerList } from '@renderer/widgets/stock-picker-list';
-import { type ReactElement, useEffect, useState } from 'react';
+import { getPopoutWindowTitle } from '@shared/popout';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { PopoutRoute } from '../model/popout-route';
 import type { PopoutApi } from '../model/use-popout-state';
 
@@ -28,9 +29,11 @@ export interface WatchOrderPrefillPayload {
  * 저장 또는 취소 시 창을 닫는다.
  */
 const AddWatchOrderPage = (): ReactElement => {
+  const contentRef = useRef<HTMLDivElement>(null);
   const [payload, setPayload] = useState<WatchOrderPrefillPayload | null>(null);
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
+  const isEdit = payload?.prefill?.existingId !== undefined;
 
   useEffect(() => {
     try {
@@ -47,6 +50,39 @@ const AddWatchOrderPage = (): ReactElement => {
     setReady(true);
   }, []);
 
+  useEffect(() => {
+    document.title = isEdit ? 'Split Stock · 자동감시 수정' : 'Split Stock · 자동감시 추가';
+  }, [isEdit]);
+
+  useEffect(() => {
+    const shell = window.appShell;
+    const node = contentRef.current;
+    if (!ready || !shell?.fitContentHeight || !node) return;
+
+    let frameId = 0;
+    let lastHeight = 0;
+    const schedule = (): void => {
+      if (frameId !== 0) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        const nextHeight = Math.ceil(node.getBoundingClientRect().height);
+        if (nextHeight <= 0 || nextHeight === lastHeight) return;
+        lastHeight = nextHeight;
+        void shell.fitContentHeight(nextHeight);
+      });
+    };
+
+    schedule();
+    const observer = new ResizeObserver(() => schedule());
+    observer.observe(node);
+    window.addEventListener('resize', schedule);
+    return () => {
+      if (frameId !== 0) window.cancelAnimationFrame(frameId);
+      observer.disconnect();
+      window.removeEventListener('resize', schedule);
+    };
+  }, [ready]);
+
   const handleClose = (): void => {
     setOpen(false);
     window.close();
@@ -57,12 +93,15 @@ const AddWatchOrderPage = (): ReactElement => {
   }
 
   return (
-    <AddWatchOrderDialog
-      open={open}
-      accountId={payload?.accountId ?? 0}
-      prefill={payload?.prefill ?? null}
-      onClose={handleClose}
-    />
+    <div ref={contentRef}>
+      <AddWatchOrderDialog
+        open={open}
+        accountId={payload?.accountId ?? 0}
+        prefill={payload?.prefill ?? null}
+        layout="page"
+        onClose={handleClose}
+      />
+    </div>
   );
 };
 
@@ -72,24 +111,39 @@ export interface PopoutPageProps {
 }
 
 export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => {
-  return (
-    <div style={{ padding: '1rem', height: '100vh', overflow: 'auto' }}>
-      {route === 'trade' ? (
+  const isEdgeToEdgeRoute = route === 'add-watch-order';
+  useEffect(() => {
+    if (route === 'add-watch-order') return;
+    document.title = getPopoutWindowTitle(route);
+  }, [route]);
+
+  let content: ReactElement;
+  switch (route) {
+    case 'trade':
+      content = (
         <TradePage
           isStockPickerPopoutOpen={popout.isOpen('stock-picker')}
           onOpenStockPickerPopout={() => popout.popout('stock-picker')}
         />
-      ) : route === 'logs' ? (
-        <LogsPage />
-      ) : route === 'lots-log' ? (
+      );
+      break;
+    case 'logs':
+      content = <LogsPage />;
+      break;
+    case 'lots-log':
+      content = (
         <div
           style={{ height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         >
           <LotsLogPage />
         </div>
-      ) : route === 'reports' ? (
-        <ReportsPage />
-      ) : route === 'stock-picker' ? (
+      );
+      break;
+    case 'reports':
+      content = <ReportsPage />;
+      break;
+    case 'stock-picker':
+      content = (
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
           <StockPickerList
             alwaysOpen
@@ -99,15 +153,31 @@ export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => 
             }}
           />
         </div>
-      ) : route === 'profit-calculator' ? (
-        <ProfitCalculatorPage />
-      ) : route === 'add-account' ? (
-        <AddAccountPage />
-      ) : route === 'add-watch-order' ? (
-        <AddWatchOrderPage />
-      ) : (
-        <SettingsPage />
-      )}
+      );
+      break;
+    case 'profit-calculator':
+      content = <ProfitCalculatorPage />;
+      break;
+    case 'add-account':
+      content = <AddAccountPage />;
+      break;
+    case 'add-watch-order':
+      content = <AddWatchOrderPage />;
+      break;
+    case 'settings':
+      content = <SettingsPage />;
+      break;
+  }
+
+  return (
+    <div
+      style={{
+        padding: isEdgeToEdgeRoute ? 0 : '1rem',
+        height: isEdgeToEdgeRoute ? undefined : '100vh',
+        overflow: isEdgeToEdgeRoute ? 'visible' : 'auto',
+      }}
+    >
+      {content}
     </div>
   );
 };

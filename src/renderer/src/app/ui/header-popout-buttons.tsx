@@ -1,4 +1,5 @@
 import { Button } from '@renderer/shared/ui';
+import { getPopoutLabel } from '@shared/popout';
 import { AnimatePresence, motion } from 'framer-motion';
 import { BarChart3, ClipboardList, ScrollText, Settings2 } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -12,13 +13,12 @@ export interface HeaderPopoutButtonsProps {
 
 const BUTTONS: Array<{
   route: PopoutRoute;
-  label: string;
   icon: ReactElement;
 }> = [
-  { route: 'lots-log', label: '잔고(차수) 로그', icon: <ClipboardList size={14} /> },
-  { route: 'logs', label: '이벤트 로그', icon: <ScrollText size={14} /> },
-  { route: 'reports', label: '리포트', icon: <BarChart3 size={14} /> },
-  { route: 'settings', label: '설정', icon: <Settings2 size={14} /> },
+  { route: 'lots-log', icon: <ClipboardList size={14} /> },
+  { route: 'logs', icon: <ScrollText size={14} /> },
+  { route: 'reports', icon: <BarChart3 size={14} /> },
+  { route: 'settings', icon: <Settings2 size={14} /> },
 ];
 
 export const HeaderPopoutButtons = ({ popout }: HeaderPopoutButtonsProps): ReactElement => {
@@ -38,21 +38,24 @@ export const HeaderPopoutButtons = ({ popout }: HeaderPopoutButtonsProps): React
 
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-      {BUTTONS.map(({ route, label, icon }) => (
-        <Button
-          key={route}
-          onClick={() => {
-            void onOpen(route, label);
-          }}
-          aria-pressed={popout.isOpen(route)}
-          title={`${label} 팝아웃`}
-          iconLeading={icon}
-          dense
-          variant={popout.isOpen(route) ? 'primary' : 'default'}
-        >
-          {label}
-        </Button>
-      ))}
+      {BUTTONS.map(({ route, icon }) => {
+        const label = getPopoutLabel(route);
+        return (
+          <Button
+            key={route}
+            onClick={() => {
+              void onOpen(route, label);
+            }}
+            aria-pressed={popout.isOpen(route)}
+            title={`${label} 팝아웃`}
+            iconLeading={icon}
+            dense
+            variant={popout.isOpen(route) ? 'primary' : 'default'}
+          >
+            {label}
+          </Button>
+        );
+      })}
       <AnimatePresence initial={false}>
         {feedback ? (
           <motion.span

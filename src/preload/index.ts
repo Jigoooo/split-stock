@@ -39,6 +39,8 @@ contextBridge.exposeInMainWorld('appShell', {
     return () => ipcRenderer.off('appShell:account-changed', handler);
   },
   setAlwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('appShell:setAlwaysOnTop', on),
+  fitContentHeight: (height: number): Promise<void> =>
+    ipcRenderer.invoke('appShell:fitContentHeight', height),
 });
 
 export type AppEnvBridge = {
@@ -54,4 +56,5 @@ export type AppShellBridge = {
   broadcastAccountChanged: (accountId: number) => void;
   onAccountChanged: (listener: (accountId: number) => void) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;
+  fitContentHeight: (height: number) => Promise<void>;
 };

@@ -1,0 +1,27 @@
+import { describe, expect, it } from 'vitest';
+import {
+  getPopoutLabel,
+  getPopoutRouteConfig,
+  getPopoutWindowTitle,
+  isPopoutRoute,
+  POPOUT_ROUTES,
+} from './popout';
+
+describe('popout config', () => {
+  it('허용된 route만 통과시킨다', () => {
+    expect(isPopoutRoute('logs')).toBe(true);
+    expect(isPopoutRoute('add-watch-order')).toBe(true);
+    expect(isPopoutRoute('unknown')).toBe(false);
+  });
+
+  it('타이틀과 라벨을 중앙 정의에서 제공한다', () => {
+    expect(POPOUT_ROUTES).toContain('settings');
+    expect(getPopoutLabel('logs')).toBe('이벤트 로그');
+    expect(getPopoutWindowTitle('settings')).toBe('Split Stock · 설정');
+  });
+
+  it('자동감시 추가 팝업은 콘텐츠 높이 기반 리사이즈를 허용한다', () => {
+    expect(getPopoutRouteConfig('add-watch-order').autoContentHeight).toBe(true);
+    expect(getPopoutRouteConfig('add-watch-order').minHeight).toBeUndefined();
+  });
+});

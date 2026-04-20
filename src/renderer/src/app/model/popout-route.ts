@@ -1,27 +1,6 @@
-export type PopoutRoute =
-  | 'trade'
-  | 'logs'
-  | 'lots-log'
-  | 'reports'
-  | 'settings'
-  | 'stock-picker'
-  | 'profit-calculator'
-  | 'add-account'
-  | 'add-watch-order';
+import { isPopoutRoute, type PopoutRoute } from '@shared/popout';
 
-export function isPopoutRoute(value: string): value is PopoutRoute {
-  return (
-    value === 'trade' ||
-    value === 'logs' ||
-    value === 'lots-log' ||
-    value === 'reports' ||
-    value === 'settings' ||
-    value === 'stock-picker' ||
-    value === 'profit-calculator' ||
-    value === 'add-account' ||
-    value === 'add-watch-order'
-  );
-}
+export { isPopoutRoute, type PopoutRoute };
 
 export function readPopoutRoute(): PopoutRoute | null {
   if (typeof window === 'undefined') return null;
