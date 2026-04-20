@@ -70,6 +70,14 @@ export class BackupScheduler {
     this.lastCheckedMinute = -1;
   }
 
+  /**
+   * 외부 트리거 — 차수 수동편집 등 위험 변경 직후 즉시 백업 1회 실행.
+   * `lastCheckedMinute` 은 건드리지 않으므로 정시 트리거(12:30/15:20)와 독립.
+   */
+  triggerNow(reason: string): void {
+    this.runBackup(`manual:${reason}`);
+  }
+
   /** 테스트에서 직접 호출 가능 */
   tick(): void {
     const now = new Date(this.deps.now());
