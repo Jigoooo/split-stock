@@ -96,6 +96,11 @@ export const accountRouter = router({
     const activeNow = ctx.activeAccounts.getActiveAccountId();
     if (activeNow !== null && ctx.activeAccountId !== activeNow) {
       ctx.setActiveAccountId(activeNow);
+      // 첫 계좌 자동 활성화 시 env 도 동기 — realtimeFactory 재생성 + 영속.
+      if (ctx.currentEnv !== input.env) {
+        ctx.setCurrentEnv(input.env);
+        ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, input.env);
+      }
     }
     ctx.logger.log({
       level: 'INFO',

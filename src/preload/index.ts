@@ -29,6 +29,15 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:stock-assigned', handler);
     return () => ipcRenderer.off('appShell:stock-assigned', handler);
   },
+  /** 계좌 추가/변경을 다른 창에 통지 — 메인 창 등에서 query invalidate + 토스트 트리거. */
+  broadcastAccountChanged: (accountId: number): void => {
+    ipcRenderer.send('appShell:account-changed', accountId);
+  },
+  onAccountChanged: (listener: (accountId: number) => void): (() => void) => {
+    const handler = (_: unknown, accountId: number): void => listener(accountId);
+    ipcRenderer.on('appShell:account-changed', handler);
+    return () => ipcRenderer.off('appShell:account-changed', handler);
+  },
   setAlwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('appShell:setAlwaysOnTop', on),
 });
 
@@ -42,5 +51,7 @@ export type AppShellBridge = {
   onPopoutClosed: (listener: (route: string) => void) => () => void;
   assignStock: (pdno: string, name: string) => void;
   onStockAssigned: (listener: (pdno: string, name: string) => void) => () => void;
+  broadcastAccountChanged: (accountId: number) => void;
+  onAccountChanged: (listener: (accountId: number) => void) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;
 };

@@ -1,3 +1,4 @@
+import type { Credentials } from '@shared/contracts/app';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ActiveAccountRepo } from '../account/active-account';
 import { bootstrapSchema } from '../db/bootstrap-schema';
@@ -49,8 +50,8 @@ describe('CredentialsRepo', () => {
     accountIdMock = r.value;
   });
 
-  const validCred = {
-    env: 'MOCK' as const,
+  const validCred: Credentials = {
+    env: 'MOCK',
     appKey: 'PSKEY_abcdefghij',
     appSecret: 'PSSECRET_abcdefghij',
     accountNo8: '12345678',

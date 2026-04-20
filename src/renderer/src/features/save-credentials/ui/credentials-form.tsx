@@ -1,5 +1,5 @@
 import { Button, RadioGroup, TextInput } from '@renderer/shared/ui';
-import type { AppEnv, Credentials } from '@shared/contracts';
+import type { AccountProdCode, AppEnv, Credentials } from '@shared/contracts';
 import { type FormEvent, type ReactElement, useState } from 'react';
 import { useSaveCredentials } from '../model/use-save-credentials';
 
@@ -9,7 +9,7 @@ export const CredentialsForm = (): ReactElement => {
   const [appKey, setAppKey] = useState('');
   const [appSecret, setAppSecret] = useState('');
   const [accountNo8, setAccountNo8] = useState('');
-  const [accountProdCd, setAccountProdCd] = useState('01');
+  const [accountProdCd, setAccountProdCd] = useState<AccountProdCode>('01');
 
   const onSubmit = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
@@ -94,7 +94,11 @@ export const CredentialsForm = (): ReactElement => {
           <TextInput
             id="credentials-account-prod-cd"
             value={accountProdCd}
-            onChange={(e) => setAccountProdCd(e.target.value.replace(/\D/g, '').slice(0, 2))}
+            onChange={(e) =>
+              setAccountProdCd(
+                (e.target.value.replace(/\D/g, '').slice(0, 2) || '01') as AccountProdCode,
+              )
+            }
             placeholder="01"
             inputMode="numeric"
             dense
