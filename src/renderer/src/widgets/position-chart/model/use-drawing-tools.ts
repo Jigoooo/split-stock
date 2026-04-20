@@ -19,7 +19,7 @@ import {
  * 이전 외부 라이브러리(lightweight-charts-line-tools-*)는 제거됨 — plugin 이 chart
  * detach 시 GPU 리소스를 반납하지 않아 Electron IOSurface 가 고갈되며 UI 가 멈추는
  * 회귀가 있었다. 자체 primitive 는 chart/series 외부 참조를 들지 않아 chart.remove
- * 시 정상적으로 GC 되고, `unsafe-cancel` 경로 없이도 상태가 잘 정리된다.
+ * 시 정상적으로 GC 된다.
  *
  * 지원 tool:
  *  - HorizontalLine: series.createPriceLine (lightweight-charts built-in)
@@ -27,9 +27,20 @@ import {
  *
  * 인터랙티브 플로우:
  *  1. 사용자 툴바 버튼 클릭 → `startDraw(tool)` 호출 → pendingTool 상태.
- *  2. 차트 클릭 → `handleChartClick` 가 MouseEventParams 로부터 time/price 수집.
+ *  2. 차트 클릭 → chart.subscribeClick 핸들러가 time/price 를 수집.
  *  3. 필요 포인트 수(1 또는 2) 채워지면 Drawing 생성 + 영속화 + 렌더 attach.
+ *
+ * 클릭 핸들러는 useEffectEvent 대신 "latest-ref" 패턴으로 잡는다. React 19 에서
+ * useEffectEvent 는 effect 안에서만 호출하도록 설계돼 있어 외부 라이브러리
+ * (subscribeClick) 콜백에서는 경고를 띄우거나 동작이 불안정할 수 있다.
  */
+
+const DEBUG = false;
+const log = (...args: unknown[]): void => {
+  if (DEBUG) {
+    console.debug('[drawing-tools]', ...args);
+  }
+};
 
 const randomId = (): string => {
   try {
@@ -143,14 +154,27 @@ const detachAll = (series: ISeriesApi<'Candlestick'> | null, handles: AttachedHa
   handles.primitives.clear();
 };
 
+/**
+ * MouseEventParams → DrawingPoint.
+ * - param.time 이 set 이면 바로 사용 (클릭이 데이터 범위 안).
+ * - param.time 이 undefined 면 coordinateToTime 으로 대체 (데이터 범위 밖 클릭 허용).
+ * - coordinateToTime 도 null 이면 point 생성 불가 → null 반환.
+ */
 const toPointFromEvent = (
   param: MouseEventParams<Time>,
+  chart: IChartApi,
   series: ISeriesApi<'Candlestick'>,
 ): DrawingPoint | null => {
-  if (!param.time || !param.point) return null;
+  if (!param.point) return null;
+  let time: Time | undefined = param.time;
+  if (!time) {
+    const fallback = chart.timeScale().coordinateToTime(param.point.x);
+    if (fallback !== null) time = fallback as Time;
+  }
+  if (!time) return null;
   const price = series.coordinateToPrice(param.point.y);
   if (price === null || !Number.isFinite(price)) return null;
-  return { time: String(param.time), price };
+  return { time: String(time), price };
 };
 
 const buildDrawing = (tool: DrawingToolKind, points: DrawingPoint[]): Drawing | null => {
@@ -202,15 +226,29 @@ export function useDrawingTools(pdno: string): UseDrawingToolsResult {
     setActiveTool(null);
   };
 
-  const handleClick = useEffectEvent((param: MouseEventParams<Time>) => {
+  /**
+   * 클릭 핸들러는 매 렌더마다 최신 로직으로 덮어쓰는 ref — chart.subscribeClick 에는
+   * 한 번만 등록된 "얇은 wrapper" 가 들어가고, 내부에서 최신 ref 를 호출해 항상 최신
+   * state/props 를 본다.  useEffectEvent 는 외부 라이브러리 콜백에서 호출할 때 경고를
+   * 띄울 수 있어 피한다.
+   */
+  const dispatchClickRef = useRef<(param: MouseEventParams<Time>) => void>(() => {});
+  dispatchClickRef.current = (param: MouseEventParams<Time>): void => {
     const tool = pendingToolRef.current;
     const series = seriesRef.current;
-    if (!tool || !series) return;
-    const point = toPointFromEvent(param, series);
-    if (!point) return;
-
+    const chart = chartRef.current;
+    if (!tool || !series || !chart) {
+      log('click ignored — not drawing', { tool, hasSeries: !!series, hasChart: !!chart });
+      return;
+    }
+    const point = toPointFromEvent(param, chart, series);
+    if (!point) {
+      log('click ignored — could not resolve point', param);
+      return;
+    }
     pendingPointsRef.current = [...pendingPointsRef.current, point];
     const required = POINTS_REQUIRED[tool];
+    log('click collected', { tool, point, have: pendingPointsRef.current.length, required });
     if (pendingPointsRef.current.length < required) return;
 
     const drawing = buildDrawing(tool, pendingPointsRef.current);
@@ -218,42 +256,49 @@ export function useDrawingTools(pdno: string): UseDrawingToolsResult {
       drawingsRef.current = [...drawingsRef.current, drawing];
       attachDrawing(series, drawing, handlesRef.current);
       persist(pdnoRef.current, drawingsRef.current);
+      log('drawing committed', drawing);
     }
     clearPending();
-  });
+  };
 
-  const connectHost = useEffectEvent((chart: IChartApi, series: ISeriesApi<'Candlestick'>) => {
-    if (chartRef.current === chart && seriesRef.current === series && isReady) return;
+  // connectHost / disconnectHost 는 candlestick-chart 의 useEffect 안에서 호출된다.
+  // 재렌더 때마다 새 reference 가 반환되면 해당 useEffect dep 가 바뀌어 불필요한 재실행이
+  // 발생하므로 useEffectEvent 로 stable reference 를 보장한다. 반면 click dispatcher
+  // 는 외부 라이브러리 콜백에서 호출되므로 latest-ref 패턴으로 따로 처리한다.
+  const connectHost = useEffectEvent(
+    (chart: IChartApi, series: ISeriesApi<'Candlestick'>): void => {
+      if (chartRef.current === chart && seriesRef.current === series && isReady) return;
 
-    // 동일 series 의 재연결일 수 있으므로 이전 구독을 먼저 정리.
-    const prevChart = chartRef.current;
-    const prevHandler = clickHandlerRef.current;
-    if (prevChart && prevHandler) {
-      try {
-        prevChart.unsubscribeClick(prevHandler);
-      } catch {
-        // ignore
+      const prevChart = chartRef.current;
+      const prevHandler = clickHandlerRef.current;
+      if (prevChart && prevHandler) {
+        try {
+          prevChart.unsubscribeClick(prevHandler);
+        } catch {
+          // ignore
+        }
       }
-    }
-    detachAll(seriesRef.current, handlesRef.current);
+      detachAll(seriesRef.current, handlesRef.current);
 
-    chartRef.current = chart;
-    seriesRef.current = series;
+      chartRef.current = chart;
+      seriesRef.current = series;
 
-    drawingsRef.current = readPersisted(pdnoRef.current);
-    for (const drawing of drawingsRef.current) {
-      attachDrawing(series, drawing, handlesRef.current);
-    }
+      drawingsRef.current = readPersisted(pdnoRef.current);
+      for (const drawing of drawingsRef.current) {
+        attachDrawing(series, drawing, handlesRef.current);
+      }
 
-    const handler = (param: MouseEventParams<Time>): void => handleClick(param);
-    clickHandlerRef.current = handler;
-    chart.subscribeClick(handler);
+      const handler = (param: MouseEventParams<Time>): void => dispatchClickRef.current(param);
+      clickHandlerRef.current = handler;
+      chart.subscribeClick(handler);
+      log('host connected', { pdno: pdnoRef.current, restored: drawingsRef.current.length });
 
-    setIsReady(true);
-    setActiveTool(null);
-  });
+      setIsReady(true);
+      setActiveTool(null);
+    },
+  );
 
-  const disconnectHost = useEffectEvent(() => {
+  const disconnectHost = useEffectEvent((): void => {
     const chart = chartRef.current;
     const handler = clickHandlerRef.current;
     if (chart && handler) {
@@ -267,43 +312,59 @@ export function useDrawingTools(pdno: string): UseDrawingToolsResult {
     chartRef.current = null;
     seriesRef.current = null;
     clickHandlerRef.current = null;
-    clearPending();
+    pendingToolRef.current = null;
+    pendingPointsRef.current = [];
+    setActiveTool(null);
     setIsReady(false);
-    // drawingsRef 는 비우지 않는다 — pdno 가 바뀌지 않는 한 다음 connectHost 에서
-    // 그대로 재사용. localStorage 도 그대로 유지(현재 값이 최신).
+    log('host disconnected');
   });
 
   // pdno 변경 → 이전 pdno 저장분은 이미 localStorage 에 있음. 새 pdno 로 리로드.
-  const applyPdnoSwap = useEffectEvent((nextPdno: string) => {
+  useEffect(() => {
     const series = seriesRef.current;
     if (!series) {
       drawingsRef.current = [];
       return;
     }
     detachAll(series, handlesRef.current);
-    drawingsRef.current = readPersisted(nextPdno);
+    drawingsRef.current = readPersisted(pdno);
     for (const drawing of drawingsRef.current) {
       attachDrawing(series, drawing, handlesRef.current);
     }
-    clearPending();
-  });
-
-  useEffect(() => {
-    applyPdnoSwap(pdno);
+    pendingToolRef.current = null;
+    pendingPointsRef.current = [];
+    setActiveTool(null);
+    log('pdno swap', { pdno, restored: drawingsRef.current.length });
   }, [pdno]);
 
   // 컴포넌트 unmount 시 chart 리소스 정리 — 자체 primitive 라 GPU 리소스 누수 없음.
   useEffect(() => {
     return () => {
-      disconnectHost();
+      const chart = chartRef.current;
+      const handler = clickHandlerRef.current;
+      if (chart && handler) {
+        try {
+          chart.unsubscribeClick(handler);
+        } catch {
+          // ignore
+        }
+      }
+      detachAll(seriesRef.current, handlesRef.current);
+      chartRef.current = null;
+      seriesRef.current = null;
+      clickHandlerRef.current = null;
     };
   }, []);
 
   const startDraw = (tool: DrawingToolKind): void => {
-    if (!seriesRef.current) return;
+    if (!seriesRef.current) {
+      log('startDraw ignored — series not ready');
+      return;
+    }
     pendingToolRef.current = tool;
     pendingPointsRef.current = [];
     setActiveTool(tool);
+    log('startDraw', tool);
   };
 
   const removeAll = (): void => {
@@ -311,7 +372,10 @@ export function useDrawingTools(pdno: string): UseDrawingToolsResult {
     detachAll(series, handlesRef.current);
     drawingsRef.current = [];
     persist(pdnoRef.current, []);
-    clearPending();
+    pendingToolRef.current = null;
+    pendingPointsRef.current = [];
+    setActiveTool(null);
+    log('removeAll');
   };
 
   const removeLast = (): void => {
@@ -344,7 +408,10 @@ export function useDrawingTools(pdno: string): UseDrawingToolsResult {
     }
     drawingsRef.current = drawingsRef.current.slice(0, -1);
     persist(pdnoRef.current, drawingsRef.current);
-    clearPending();
+    pendingToolRef.current = null;
+    pendingPointsRef.current = [];
+    setActiveTool(null);
+    log('removeLast', last.id);
   };
 
   return {
