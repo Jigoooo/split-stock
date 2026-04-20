@@ -91,6 +91,12 @@ interface AccountSlot {
   records: Map<string, SubscriptionRecord>;
   /** 현재 WS 활성 (accountId, pdno) 집합. */
   wsActive: Set<string>;
+  /**
+   * 현재 WS 활성으로 어떤 kind 가 구독되어 있는지 추적 (pdno → kind).
+   * kind-promotion(PRICE→BOTH) 또는 downgrade(BOTH→PRICE) 발생 시 prev kind 로
+   * unsubscribe 후 새 kind 로 re-subscribe 하기 위함.
+   */
+  wsActiveKind: Map<string, WsKind>;
   /** 현재 REST fallback 활성 (pdno) 집합. */
   restActive: Set<string>;
   /** kind 집계 — WS 슬롯 산정용 ("PRICE"|"ORDERBOOK"|"BOTH"의 슬롯 비용 = 1|1|2). */
@@ -250,8 +256,9 @@ export class WsPoolManager {
     }
     for (const [accountId, slot] of this.slots) {
       for (const pdno of slot.wsActive) {
-        const rec = slot.records.get(pdno);
-        if (rec) this.ws.unsubscribe(accountId, pdno, rec.kind);
+        // 어댑터에 실제로 통지된 kind 로 해지 — record 변동/누락이어도 일관성 유지.
+        const prevKind = slot.wsActiveKind.get(pdno) ?? slot.records.get(pdno)?.kind;
+        if (prevKind !== undefined) this.ws.unsubscribe(accountId, pdno, prevKind);
       }
       for (const pdno of slot.restActive) this.rest.unsubscribe(pdno);
     }
@@ -265,6 +272,7 @@ export class WsPoolManager {
         capacity: this.defaultCapacity,
         records: new Map(),
         wsActive: new Set(),
+        wsActiveKind: new Map(),
         restActive: new Set(),
       };
       this.slots.set(accountId, slot);
@@ -300,31 +308,38 @@ export class WsPoolManager {
       if (rec.kind === 'PRICE' || rec.kind === 'BOTH') desiredRest.add(pdno);
     }
 
-    // 1) WS unsubscribe diff (current - desired)
+    // 다음 사이클의 wsActiveKind — 실제 어댑터에 통지된 kind 와 1:1 정렬.
+    const nextWsKind = new Map<string, WsKind>();
+
+    // 1) WS unsubscribe diff (current - desired) — desired 에서 빠진 종목 전면 해지.
     for (const pdno of slot.wsActive) {
       if (!desiredWs.has(pdno)) {
-        const rec = slot.records.get(pdno);
-        // record 가 사라졌어도 unsubscribe 는 마지막 알려진 kind 가 가장 안전.
-        // 단, BOTH→PRICE 처럼 kind 가 좁혀진 경우는 이전 BOTH 로 모두 해지하고 다음 단계에서 재구독.
-        // record 가 있으면 desired 와 비교해 kind 변경분만 처리.
-        const targetRecKind = rec?.kind;
-        if (targetRecKind !== undefined) {
-          this.ws.unsubscribe(accountId, pdno, targetRecKind);
-        } else {
-          this.ws.unsubscribe(accountId, pdno, 'BOTH');
-        }
+        // 어댑터에 실제로 통지된 kind 로 해지 — record 가 바뀌었거나 사라졌어도 일관성 유지.
+        const prevKind = slot.wsActiveKind.get(pdno) ?? slot.records.get(pdno)?.kind ?? 'BOTH';
+        this.ws.unsubscribe(accountId, pdno, prevKind);
       }
     }
 
-    // 2) WS subscribe diff (desired - current). kind 변경(BOTH↔PRICE 등)도 다시 정렬.
+    // 2) WS subscribe diff (desired - current) + kind-promotion/downgrade 처리.
+    //    - 신규 active: 새 kind 로 subscribe
+    //    - 이미 active 이고 kind 가 동일: no-op
+    //    - 이미 active 이지만 kind 가 변경됨 (PRICE↔BOTH 등):
+    //        prev kind 로 unsubscribe (잔여 PRICE/ORDERBOOK 슬롯까지 깨끗이) → 새 kind 로 subscribe
     for (const pdno of desiredWs) {
       const rec = slot.records.get(pdno);
       if (!rec) continue;
       const wasActive = slot.wsActive.has(pdno);
-      // wasActive 라도 kind 가 바뀌었으면 unsubscribe 후 다시 subscribe — 어댑터가 idempotent 보장 가정.
+      const prevKind = slot.wsActiveKind.get(pdno);
+
       if (!wasActive) {
         this.ws.subscribe(accountId, pdno, rec.kind);
+      } else if (prevKind !== undefined && prevKind !== rec.kind) {
+        // kind-promotion (e.g. PRICE→BOTH 로 ORDERBOOK 슬롯 추가)
+        // 또는 downgrade (BOTH→PRICE 로 ORDERBOOK 슬롯 해제) — 이전 구독 전면 해지 후 재구독.
+        this.ws.unsubscribe(accountId, pdno, prevKind);
+        this.ws.subscribe(accountId, pdno, rec.kind);
       }
+      nextWsKind.set(pdno, rec.kind);
     }
 
     // 3) REST unsubscribe diff
@@ -339,6 +354,7 @@ export class WsPoolManager {
 
     // 상태 commit
     slot.wsActive = desiredWs;
+    slot.wsActiveKind = nextWsKind;
     slot.restActive = desiredRest;
   }
 }

@@ -247,6 +247,69 @@ describe('WsPoolManager — capacity 라우팅', () => {
     expect(ws.calls[0]).toMatchObject({ op: 'sub', pdno: '000001', kind: 'PRICE' });
   });
 
+  it('kind-promotion PRICE→BOTH — 기존 PRICE 해지 후 BOTH 로 재구독 (ORDERBOOK 슬롯 추가)', () => {
+    const ws = createFakeWs();
+    const rest = createFakeRest();
+    const mgr = new WsPoolManager({
+      ws,
+      rest,
+      logger: createFakeLogger(),
+      timer: fakeTimer,
+      defaultCapacity: 10,
+      rebalanceDebounceMs: 0,
+    });
+    // 1) PRICE 로 등록
+    mgr.subscribe({ accountId: 1, pdno: '000001', kind: 'PRICE', priority: 50 });
+    expect(ws.calls.filter((c) => c.op === 'sub')).toEqual([
+      { op: 'sub', accountId: 1, pdno: '000001', kind: 'PRICE' },
+    ]);
+    ws.calls.length = 0;
+
+    // 2) BOTH 로 승격 — 같은 priority 라도 kind 변경이므로 갱신.
+    mgr.subscribe({ accountId: 1, pdno: '000001', kind: 'BOTH', priority: 50 });
+    // 어댑터에는 prev PRICE unsubscribe + 신규 BOTH subscribe 가 모두 호출되어야 함
+    // (그렇지 않으면 ORDERBOOK 슬롯이 누락된 채 BOTH 로 표시됨).
+    const calls = ws.calls;
+    expect(calls).toEqual([
+      { op: 'unsub', accountId: 1, pdno: '000001', kind: 'PRICE' },
+      { op: 'sub', accountId: 1, pdno: '000001', kind: 'BOTH' },
+    ]);
+    // view 도 BOTH 로 일관성 있게 표시
+    const view = mgr.getActiveSubscriptions(1);
+    expect(view).toHaveLength(1);
+    expect(view[0]).toMatchObject({ pdno: '000001', kind: 'BOTH', isWS: true });
+  });
+
+  it('kind-downgrade BOTH→PRICE — BOTH 전면 해지 후 PRICE 단일 슬롯으로 재구독', () => {
+    const ws = createFakeWs();
+    const rest = createFakeRest();
+    const mgr = new WsPoolManager({
+      ws,
+      rest,
+      logger: createFakeLogger(),
+      timer: fakeTimer,
+      defaultCapacity: 10,
+      rebalanceDebounceMs: 0,
+    });
+    // 1) BOTH 로 등록
+    mgr.subscribe({ accountId: 1, pdno: '000001', kind: 'BOTH', priority: 50 });
+    expect(ws.calls.filter((c) => c.op === 'sub')).toEqual([
+      { op: 'sub', accountId: 1, pdno: '000001', kind: 'BOTH' },
+    ]);
+    ws.calls.length = 0;
+
+    // 2) PRICE 로 다운그레이드 — kind 변경이므로 갱신 (priority 동일)
+    mgr.subscribe({ accountId: 1, pdno: '000001', kind: 'PRICE', priority: 50 });
+    // BOTH unsubscribe → PRICE subscribe 가 모두 호출되어야 ORDERBOOK 슬롯이 명시적으로 해제됨
+    expect(ws.calls).toEqual([
+      { op: 'unsub', accountId: 1, pdno: '000001', kind: 'BOTH' },
+      { op: 'sub', accountId: 1, pdno: '000001', kind: 'PRICE' },
+    ]);
+    const view = mgr.getActiveSubscriptions(1);
+    expect(view).toHaveLength(1);
+    expect(view[0]).toMatchObject({ pdno: '000001', kind: 'PRICE', isWS: true });
+  });
+
   it('dispose — 모든 active 구독 해지 + 슬롯 비우기', () => {
     const ws = createFakeWs();
     const rest = createFakeRest();
