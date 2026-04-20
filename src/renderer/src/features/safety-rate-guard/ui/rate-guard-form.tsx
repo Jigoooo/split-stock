@@ -73,7 +73,16 @@ export const RateGuardForm = (): ReactElement => {
   };
 
   return (
-    <section aria-label="연속매수방지" style={{ display: 'grid', gap: '0.8rem' }}>
+    <section
+      aria-label="연속매수방지"
+      style={{
+        display: 'grid',
+        gap: '0.8rem',
+        minWidth: 0,
+        overflow: 'hidden',
+        boxSizing: 'border-box',
+      }}
+    >
       <div className="muted" style={{ fontSize: '1.1rem', fontWeight: 600 }}>
         연속매수 방지 (N+1회 발생 시 자동매매 수동 전환)
       </div>

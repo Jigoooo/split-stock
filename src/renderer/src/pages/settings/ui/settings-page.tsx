@@ -14,7 +14,7 @@ import { useState } from 'react';
  */
 export const SettingsPage = (): ReactElement => {
   return (
-    <div style={{ display: 'grid', gap: '1.2rem' }}>
+    <div style={{ display: 'grid', gap: '1.2rem', minWidth: 0 }}>
       <Section name="차수 설정">
         <StrategySection />
       </Section>
