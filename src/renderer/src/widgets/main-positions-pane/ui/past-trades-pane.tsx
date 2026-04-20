@@ -112,10 +112,8 @@ export const PastTradesPane = ({ accountId, onSelect }: PastTradesPaneProps): Re
         </TableGrid.Header>
         <TableGrid.Body>
           {groups.length === 0 ? (
-            <TableGrid.Row>
-              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
-                과거 거래 없음
-              </TableGrid.Cell>
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell className="muted">과거 거래 없음</TableGrid.Cell>
             </TableGrid.Row>
           ) : null}
           {groups.map((g) => {

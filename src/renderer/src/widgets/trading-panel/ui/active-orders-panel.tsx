@@ -64,10 +64,8 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
         </TableGrid.Header>
         <TableGrid.Body>
           {orders.length === 0 ? (
-            <TableGrid.Row>
-              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
-                미체결 없음
-              </TableGrid.Cell>
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell className="muted">미체결 없음</TableGrid.Cell>
             </TableGrid.Row>
           ) : null}
           {orders.map((o) => (

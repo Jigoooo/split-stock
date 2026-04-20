@@ -152,16 +152,12 @@ export const WatchList = (props: WatchListProps): ReactElement => {
         </TableGrid.Header>
         <TableGrid.Body>
           {isPending ? (
-            <TableGrid.Row>
-              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
-                로드 중…
-              </TableGrid.Cell>
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell className="muted">로드 중…</TableGrid.Cell>
             </TableGrid.Row>
           ) : orders.length === 0 ? (
-            <TableGrid.Row>
-              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
-                없음
-              </TableGrid.Cell>
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell className="muted">없음</TableGrid.Cell>
             </TableGrid.Row>
           ) : (
             orders.map((o) => (

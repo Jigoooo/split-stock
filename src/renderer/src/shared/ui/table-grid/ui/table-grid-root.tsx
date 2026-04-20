@@ -82,6 +82,8 @@ export function TableGridRoot(props: RootProps): ReactElement {
           minHeight: 0,
           overflow: 'hidden',
           position: 'relative',
+          // 100cqw(컨테이너 쿼리 가로) 단위로 placeholder row 가 viewport 너비에 정렬됨
+          containerType: 'inline-size',
           ...style,
         }}
       >

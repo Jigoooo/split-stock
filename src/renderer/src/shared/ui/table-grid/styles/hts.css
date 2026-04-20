@@ -129,6 +129,26 @@
   display: none;
 }
 
+/* ── placeholder row (빈/로딩) — viewport 가운데 고정 ── */
+/* root 가 container-type: inline-size 이므로 100cqw = root 가시 너비.
+   sticky-left:0 으로 가로 스크롤 위치와 무관하게 viewport 좌측에 고정 →
+   100cqw 너비 + 자식 cell 의 text-align:center 로 viewport 가운데 정렬. */
+.table-grid-row.table-grid-row--placeholder {
+  position: sticky;
+  left: 0;
+  width: 100cqw;
+  min-width: 100cqw;
+  max-width: 100cqw;
+  justify-content: center;
+}
+
+.table-grid-row.table-grid-row--placeholder .table-grid-cell {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  justify-content: center;
+}
+
 /* ── horizontalScroll: 헤더·body·행이 wrapper 너비에 묶이지 않도록 ── */
 /* hscroll-content 가 max-content 로 늘어나면 그 안의 Header/Body 는 stretch
    로 동일 너비를 갖게 되어 비어 있는 Body 도 Header 합계만큼 확장됨.

@@ -17,6 +17,7 @@ export const TableGridRow = forwardRef<HTMLDivElement, RowProps>(
       flash = null,
       onClick,
       onContextMenu,
+      placeholder = false,
       className,
       style,
       children,
@@ -49,9 +50,16 @@ export const TableGridRow = forwardRef<HTMLDivElement, RowProps>(
         data-selected={selected || undefined}
         data-expanded={expanded || undefined}
         data-flash={flash ?? undefined}
+        data-placeholder={placeholder || undefined}
         data-key={rest['data-key']}
         {...interactiveProps}
-        className={['table-grid-row', className ?? ''].filter(Boolean).join(' ')}
+        className={[
+          'table-grid-row',
+          placeholder ? 'table-grid-row--placeholder' : '',
+          className ?? '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         style={{
           display: 'flex',
           flexDirection: 'row',

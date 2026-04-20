@@ -198,17 +198,13 @@ export const LogsPage = (): ReactElement => {
             </TableGrid.Row>
           ) : null}
           {isPending || isPending_ ? (
-            <TableGrid.Row>
-              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
-                로드 중…
-              </TableGrid.Cell>
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell className="muted">로드 중…</TableGrid.Cell>
             </TableGrid.Row>
           ) : null}
           {!isPending && !isPending_ && !error && entries.length === 0 ? (
-            <TableGrid.Row>
-              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
-                기록된 로그가 없습니다.
-              </TableGrid.Cell>
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell className="muted">기록된 로그가 없습니다.</TableGrid.Cell>
             </TableGrid.Row>
           ) : null}
           {entries.length > 0 ? (

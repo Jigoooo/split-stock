@@ -173,16 +173,12 @@ export const AllTradeHistoryPanel = ({ accountId }: AllTradeHistoryPanelProps): 
         </TableGrid.Header>
         <TableGrid.Body>
           {isPending && rows.length === 0 ? (
-            <TableGrid.Row>
-              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
-                조회 중…
-              </TableGrid.Cell>
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell className="muted">조회 중…</TableGrid.Cell>
             </TableGrid.Row>
           ) : rows.length === 0 ? (
-            <TableGrid.Row>
-              <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
-                매매 내역 없음
-              </TableGrid.Cell>
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell className="muted">매매 내역 없음</TableGrid.Cell>
             </TableGrid.Row>
           ) : (
             rows.map((row) => (

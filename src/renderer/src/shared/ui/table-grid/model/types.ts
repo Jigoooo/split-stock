@@ -41,6 +41,11 @@ export interface RowProps {
   onClick?: (e: MouseEvent<HTMLDivElement>) => void;
   /** 우클릭 컨텍스트 메뉴 핸들러 */
   onContextMenu?: (e: MouseEvent<HTMLDivElement>) => void;
+  /**
+   * 빈/로딩 placeholder row — sticky-left + viewport 너비(100cqw)로 고정해
+   * 가로 스크롤 위치와 상관없이 보이는 영역 가운데에 메시지가 보이도록 함.
+   */
+  placeholder?: boolean;
   className?: string;
   style?: CSSProperties;
   /** 가상화 시 react key 보조 — DOM data-key */

@@ -64,16 +64,12 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
       </TableGrid.Header>
       <TableGrid.Body>
         {isPending ? (
-          <TableGrid.Row>
-            <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
-              로드 중…
-            </TableGrid.Cell>
+          <TableGrid.Row placeholder>
+            <TableGrid.Cell className="muted">로드 중…</TableGrid.Cell>
           </TableGrid.Row>
         ) : cycles.length === 0 ? (
-          <TableGrid.Row>
-            <TableGrid.Cell flex={1} className="muted" style={{ textAlign: 'center' }}>
-              사이클 없음
-            </TableGrid.Cell>
+          <TableGrid.Row placeholder>
+            <TableGrid.Cell className="muted">사이클 없음</TableGrid.Cell>
           </TableGrid.Row>
         ) : (
           cycles.map((cycle) => {
