@@ -1071,51 +1071,53 @@ body {
   overflow: hidden;
 }
 
-/* ===== 주문 확인 다이얼로그 ===== */
-.order-confirm-dialog__title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-}
-
-.order-confirm-dialog__summary {
+/* ===== 주문 확인 요약 (dialog renderActions 내부) ===== */
+.order-confirm-summary__dl {
   display: grid;
   grid-template-columns: auto 1fr;
   column-gap: 1.6rem;
-  row-gap: 0.6rem;
-  margin: 0.4rem 0 0.8rem;
-  font-size: 1.2rem;
+  row-gap: 0.55rem;
+  margin: 0 0 0.4rem;
+  font-size: 1.15rem;
 }
 
-.order-confirm-dialog__summary dt {
+.order-confirm-summary__dl dt {
   color: var(--fg-2);
   font-weight: 500;
 }
 
-.order-confirm-dialog__summary dd {
+.order-confirm-summary__dl dd {
   margin: 0;
 }
 
-.order-confirm-dialog__summary dd.num {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.order-confirm-dialog__warning {
-  margin: 0.2rem 0 0;
-  padding: 0.5rem 0.7rem;
-  border-left: 0.3rem solid var(--up);
-  background: var(--up-soft);
-  color: var(--fg);
-  font-size: 1.1rem;
+.order-confirm-summary__warning {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.4rem;
+  background: var(--down-soft);
+  color: var(--down);
+  font-size: 1.05rem;
+  line-height: 1.5;
 }
 
 /* ===== 함수형 dialog 시스템 (shared/ui/dialog) ===== */
+@keyframes app-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(0.4rem);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
 .app-dialog-overlay {
   /* OrderConfirmDialog(.modal-overlay z:1000)보다 위에 노출 */
   z-index: 1100;
   position: fixed;
+  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .app-dialog-overlay__backdrop {
@@ -1133,73 +1135,84 @@ body {
 }
 
 .app-dialog {
-  min-width: 28rem;
-  max-width: min(90vw, 40rem);
-  border-left: 0.3rem solid var(--border-strong);
+  min-width: 32rem;
+  max-width: min(90vw, 44rem);
+  background: var(--bg);
+  border: 0.1rem solid var(--border);
+  border-radius: 1rem;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.18),
+    0 1px 4px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
   position: relative;
   z-index: 1;
+  animation: app-dialog-in 0.22s ease-out both;
 }
 
 .app-dialog__title {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.7rem;
+  padding: 1.4rem 1.6rem 0.9rem;
+  font-size: 1.25rem;
+  font-weight: 650;
+  color: var(--fg);
+  border-bottom: 0.1rem solid var(--border);
 }
 
 .app-dialog__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.6rem;
-  height: 1.6rem;
-  border-radius: 50%;
-  font-size: 1.1rem;
-  font-weight: 700;
-  line-height: 1;
+  flex-shrink: 0;
 }
 
 .app-dialog__body {
-  font-size: 1.2rem;
-  color: var(--fg);
+  padding: 1.2rem 1.6rem;
+  font-size: 1.1rem;
+  color: var(--fg-2);
   white-space: pre-wrap;
   word-break: keep-all;
+  line-height: 1.65;
 }
 
 .app-dialog__actions {
   display: flex;
   gap: 0.6rem;
   justify-content: flex-end;
+  padding: 0.8rem 1.6rem 1.4rem;
 }
 
-/* type별 좌측 보더 + 아이콘 색 */
-.app-dialog--info {
-  border-left-color: var(--accent);
-}
+/* type별 아이콘 색상 (수직 바 없음) */
 .app-dialog--info .app-dialog__icon {
-  background: var(--accent-tint-12);
   color: var(--accent);
 }
 
-.app-dialog--success {
-  border-left-color: var(--up);
-}
 .app-dialog--success .app-dialog__icon {
-  background: var(--up-soft);
   color: var(--up);
 }
 
-.app-dialog--warning {
-  border-left-color: #ca8a04;
-}
 .app-dialog--warning .app-dialog__icon {
-  background: rgba(202, 138, 4, 0.12);
   color: #ca8a04;
 }
 
-.app-dialog--error {
-  border-left-color: var(--down);
-}
 .app-dialog--error .app-dialog__icon {
-  background: var(--down-soft);
+  color: var(--down);
+}
+
+/* type별 제목 색상 */
+.app-dialog--info .app-dialog__title {
+  color: var(--accent);
+}
+
+.app-dialog--success .app-dialog__title {
+  color: var(--up);
+}
+
+.app-dialog--warning .app-dialog__title {
+  color: #ca8a04;
+}
+
+.app-dialog--error .app-dialog__title {
   color: var(--down);
 }

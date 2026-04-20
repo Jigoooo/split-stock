@@ -1,5 +1,6 @@
+import { AlertCircle, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '../../button';
 import { useDialogStore } from '../model/dialog-store';
@@ -19,11 +20,11 @@ const TYPE_TITLE: Record<DialogTypeValue, string> = {
   [DialogType.ERROR]: '오류',
 };
 
-const TYPE_ICON: Record<DialogTypeValue, string> = {
-  [DialogType.INFO]: 'ℹ',
-  [DialogType.SUCCESS]: '✓',
-  [DialogType.WARNING]: '⚠',
-  [DialogType.ERROR]: '✕',
+const TYPE_ICON: Record<DialogTypeValue, ReactElement> = {
+  [DialogType.INFO]: <Info size={20} aria-hidden />,
+  [DialogType.SUCCESS]: <CheckCircle2 size={20} aria-hidden />,
+  [DialogType.WARNING]: <AlertTriangle size={20} aria-hidden />,
+  [DialogType.ERROR]: <AlertCircle size={20} aria-hidden />,
 };
 
 /**
@@ -46,14 +47,38 @@ export const DialogProvider = (): ReactElement | null => {
     renderActions,
   } = config;
 
+  const dialogRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!isOpen) return;
+
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
         e.preventDefault();
         onCancel();
+        return;
+      }
+      // 포커스 트랩 (Tab 순환)
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last?.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first?.focus();
+          }
+        }
       }
     };
+
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [isOpen, onCancel]);
@@ -74,19 +99,18 @@ export const DialogProvider = (): ReactElement | null => {
         />
       ) : null}
       <div
-        className={`modal app-dialog panel ${variantClass}`}
+        ref={dialogRef}
+        className={`app-dialog ${variantClass}`}
         role="dialog"
         aria-modal="true"
-        aria-label={displayTitle}
+        aria-labelledby="app-dialog-title"
       >
-        <div className="panel__title app-dialog__title">
-          <span className="app-dialog__icon" aria-hidden>
-            {TYPE_ICON[type]}
-          </span>
+        <div className="app-dialog__title" id="app-dialog-title">
+          <span className="app-dialog__icon">{TYPE_ICON[type]}</span>
           <span>{displayTitle}</span>
         </div>
-        <div className="panel__body app-dialog__body">{message}</div>
-        <div className="panel__body app-dialog__actions">
+        <div className="app-dialog__body">{message}</div>
+        <div className="app-dialog__actions">
           {renderActions ? (
             renderActions(onCancel)
           ) : (
