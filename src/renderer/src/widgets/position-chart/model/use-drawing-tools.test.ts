@@ -58,7 +58,12 @@ describe('useDrawingTools', () => {
   it('connectHost 후 저장된 드로잉을 복원해 series 에 attach 한다', async () => {
     const stored: Drawing[] = [
       { id: 'h-1', tool: 'HorizontalLine', price: 70000 },
-      { id: 'r-1', tool: 'Rectangle', p1: { time: '2026-04-01', price: 70000 }, p2: { time: '2026-04-15', price: 72000 } },
+      {
+        id: 'r-1',
+        tool: 'Rectangle',
+        p1: { time: '2026-04-01', price: 70000 },
+        p2: { time: '2026-04-15', price: 72000 },
+      },
     ];
     window.localStorage.setItem(getDrawingStorageKey('005930'), JSON.stringify(stored));
 
@@ -176,7 +181,12 @@ describe('useDrawingTools', () => {
     window.localStorage.setItem(
       getDrawingStorageKey('000660'),
       JSON.stringify([
-        { id: 'r-b', tool: 'Rectangle', p1: { time: '2026-04-01', price: 80000 }, p2: { time: '2026-04-15', price: 82000 } } satisfies Drawing,
+        {
+          id: 'r-b',
+          tool: 'Rectangle',
+          p1: { time: '2026-04-01', price: 80000 },
+          p2: { time: '2026-04-15', price: 82000 },
+        } satisfies Drawing,
       ]),
     );
 

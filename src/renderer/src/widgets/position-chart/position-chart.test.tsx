@@ -78,7 +78,6 @@ const {
   };
 });
 
-
 vi.mock('@renderer/shared/api/trpc', () => ({
   trpc: {
     useUtils: () => trpcUtilsMock,

@@ -77,14 +77,16 @@ export class TrendLinePrimitive extends BaseSeriesPrimitive {
           draw: (target) => {
             if (x1 === null || x2 === null || y1 === null || y2 === null) return;
             // biome-ignore lint/correctness/useHookAtTopLevel: canvas API, not a React hook
-            target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hpx, verticalPixelRatio: vpx }) => {
-              ctx.lineWidth = Math.max(1, Math.round(1.5 * vpx));
-              ctx.strokeStyle = selected ? SELECTED_STROKE : STROKE;
-              ctx.beginPath();
-              ctx.moveTo(x1 * hpx, y1 * vpx);
-              ctx.lineTo(x2 * hpx, y2 * vpx);
-              ctx.stroke();
-            });
+            target.useBitmapCoordinateSpace(
+              ({ context: ctx, horizontalPixelRatio: hpx, verticalPixelRatio: vpx }) => {
+                ctx.lineWidth = Math.max(1, Math.round(1.5 * vpx));
+                ctx.strokeStyle = selected ? SELECTED_STROKE : STROKE;
+                ctx.beginPath();
+                ctx.moveTo(x1 * hpx, y1 * vpx);
+                ctx.lineTo(x2 * hpx, y2 * vpx);
+                ctx.stroke();
+              },
+            );
           },
         }),
       },
@@ -119,17 +121,19 @@ export class RectanglePrimitive extends BaseSeriesPrimitive {
           draw: (target) => {
             if (x1 === null || x2 === null || y1 === null || y2 === null) return;
             // biome-ignore lint/correctness/useHookAtTopLevel: canvas API, not a React hook
-            target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hpx, verticalPixelRatio: vpx }) => {
-              const left = Math.min(x1, x2) * hpx;
-              const right = Math.max(x1, x2) * hpx;
-              const top = Math.min(y1, y2) * vpx;
-              const bottom = Math.max(y1, y2) * vpx;
-              ctx.fillStyle = FILL;
-              ctx.fillRect(left, top, right - left, bottom - top);
-              ctx.lineWidth = Math.max(1, Math.round(1.5 * vpx));
-              ctx.strokeStyle = selected ? SELECTED_STROKE : STROKE;
-              ctx.strokeRect(left, top, right - left, bottom - top);
-            });
+            target.useBitmapCoordinateSpace(
+              ({ context: ctx, horizontalPixelRatio: hpx, verticalPixelRatio: vpx }) => {
+                const left = Math.min(x1, x2) * hpx;
+                const right = Math.max(x1, x2) * hpx;
+                const top = Math.min(y1, y2) * vpx;
+                const bottom = Math.max(y1, y2) * vpx;
+                ctx.fillStyle = FILL;
+                ctx.fillRect(left, top, right - left, bottom - top);
+                ctx.lineWidth = Math.max(1, Math.round(1.5 * vpx));
+                ctx.strokeStyle = selected ? SELECTED_STROKE : STROKE;
+                ctx.strokeRect(left, top, right - left, bottom - top);
+              },
+            );
           },
         }),
       },
@@ -161,7 +165,12 @@ export class VerticalLinePrimitive extends BaseSeriesPrimitive {
             if (x === null) return;
             // biome-ignore lint/correctness/useHookAtTopLevel: canvas API, not a React hook
             target.useBitmapCoordinateSpace(
-              ({ context: ctx, horizontalPixelRatio: hpx, verticalPixelRatio: vpx, mediaSize: { height } }) => {
+              ({
+                context: ctx,
+                horizontalPixelRatio: hpx,
+                verticalPixelRatio: vpx,
+                mediaSize: { height },
+              }) => {
                 ctx.lineWidth = Math.max(1, Math.round(1.5 * vpx));
                 ctx.strokeStyle = selected ? SELECTED_STROKE : STROKE;
                 ctx.setLineDash([Math.round(3 * vpx), Math.round(3 * vpx)]);
@@ -178,4 +187,3 @@ export class VerticalLinePrimitive extends BaseSeriesPrimitive {
     ];
   }
 }
-
