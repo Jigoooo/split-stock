@@ -82,6 +82,21 @@ vi.mock('@renderer/widgets/main-trade-history-pane', () => ({
   ),
 }));
 
+vi.mock('@renderer/widgets/trade-workspace', () => ({
+  TradeWorkspace: ({
+    selected,
+  }: {
+    selected: { pdno: string; name: string } | null;
+    onSelect: (entry: { pdno: string; name: string }) => void;
+    isProd: boolean;
+  }) => (
+    <div
+      data-testid="trade-workspace"
+      data-selected-pdno={selected?.pdno ?? ''}
+    />
+  ),
+}));
+
 describe('MainPage', () => {
   it('좌/우 split 마운트 — accountId 있을 때 양측 pane 렌더링', () => {
     mockUseActiveAccountId.mockReturnValue({ accountId: 1, isPending: false });

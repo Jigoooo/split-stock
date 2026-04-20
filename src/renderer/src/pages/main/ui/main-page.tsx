@@ -2,7 +2,7 @@ import { useActiveAccountId, useBalanceWithLots } from '@renderer/entities/accou
 import { trpc } from '@renderer/shared/api/trpc';
 import { MainPositionsPane } from '@renderer/widgets/main-positions-pane';
 import { MainTradeHistoryPane } from '@renderer/widgets/main-trade-history-pane';
-import { TradingPanel } from '@renderer/widgets/trading-panel';
+import { TradeWorkspace } from '@renderer/widgets/trade-workspace';
 import type { ReactElement } from 'react';
 import { Group, type Layout, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 import { useMainRealtime } from '../model/use-main-realtime';
@@ -38,8 +38,9 @@ const panelStyle = { overflow: 'hidden' } as const;
  * - 상단 70% (min 35%) :
  *     - 좌측 60% (min 35%) : MainPositionsGridPane
  *     - 우측 40% (min 25%) : MainTradeHistoryPane
- * - 하단 30% (min 25%) : TradingPanel (호가/주문/체결/미체결) — selectedPdno 기준
- * - selectedPdno 없으면 하단은 안내 메시지만 표시.
+ * - 하단 30% (min 25%) : TradeWorkspace (종목선택바 + 차트 + 호가/주문/체결/미체결)
+ *   - selectedPdno source-of-truth: useMainSelection (잔고 그리드 클릭 → 하단 자동 반영)
+ *   - TradeWorkspace 내 StockPicker에서 직접 선택도 가능
  * - activeAccountId 없으면 안내 패널만 표시 (login 화면을 따로 두지 않고 shell 레벨).
  */
 export const MainPage = (): ReactElement => {
@@ -57,14 +58,17 @@ export const MainPage = (): ReactElement => {
     storage: localStorage,
   });
 
-  // 하단 TradingPanel 의 isProd / 종목명 조회 — 좌측에서 선택된 pdno 의 name 을
+  // 하단 TradeWorkspace 의 isProd / 종목명 조회 — 좌측에서 선택된 pdno 의 name 을
   // useBalanceWithLots.positions 에서 lookup, 미발견 시 pdno 자체로 fallback.
   const envQuery = trpc.auth.getEnv.useQuery();
   const isProd = envQuery.data?.env === 'PROD';
   const balance = useBalanceWithLots();
-  const selectedName =
+  const selectedEntry =
     selectedPdno !== null
-      ? (balance.positions.find((p) => p.code === selectedPdno)?.name ?? selectedPdno)
+      ? {
+          pdno: selectedPdno,
+          name: balance.positions.find((p) => p.code === selectedPdno)?.name ?? selectedPdno,
+        }
       : null;
 
   if (isAccountPending) {
@@ -137,23 +141,13 @@ export const MainPage = (): ReactElement => {
         </Panel>
         {VERTICAL_SEPARATOR}
         <Panel id="main-bottom" defaultSize={30} minSize={20} style={panelStyle}>
-          {selectedPdno !== null && selectedName !== null ? (
-            <TradingPanel pdno={selectedPdno} name={selectedName} isProd={isProd} />
-          ) : (
-            <div
-              className="muted"
-              style={{
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '1rem',
-              }}
-              role="status"
-            >
-              상단 포지션에서 종목을 선택하면 호가창/주문 패널이 표시됩니다.
-            </div>
-          )}
+          <div style={{ height: '100%', padding: '0.8rem', boxSizing: 'border-box' }}>
+            <TradeWorkspace
+              selected={selectedEntry}
+              onSelect={(entry) => setSelectedPdno(entry.pdno)}
+              isProd={isProd}
+            />
+          </div>
         </Panel>
       </Group>
     </div>
