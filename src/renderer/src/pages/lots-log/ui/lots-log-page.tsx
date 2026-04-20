@@ -8,7 +8,7 @@ import {
   useEditLots,
 } from '@renderer/features/edit-lots-manual';
 import { trpc } from '@renderer/shared/api/trpc';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { TableGrid, useTableGridVirtual } from '@renderer/shared/ui';
 import { ClipboardCopy } from 'lucide-react';
 import { type ReactElement, useRef, useState } from 'react';
 import { formatSnapshotBlock, formatSnapshotsText } from '../model/format-snapshot-text';
@@ -31,7 +31,6 @@ export const LotsLogPage = (): ReactElement => {
   const { accountId } = useActiveAccountId();
 
   // safety master 상태 — 수동편집 모드 진입 가드 결정에 사용.
-  // accountId null 시 query 호출 자체는 문제 없으나, 실제 master 토글은 의미가 없으므로 false 처리.
   const safetyQuery = trpc.safety.getState.useQuery({}, { enabled: accountId !== null });
   const masterSafetyOn = safetyQuery.data?.master ?? false;
 
@@ -41,11 +40,10 @@ export const LotsLogPage = (): ReactElement => {
   };
 
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const virtualizer = useVirtualizer({
+  const virtual = useTableGridVirtual({
     count: snapshots.length,
-    getScrollElement: () => scrollRef.current,
     estimateSize: () => 200,
+    parentRef: scrollRef,
     overscan: 5,
   });
 
@@ -251,86 +249,95 @@ export const LotsLogPage = (): ReactElement => {
           </div>
         )}
 
-        {/* 가상화 스크롤 영역 */}
-        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-          {snapshotsLoading ? (
-            <div className="muted" style={{ padding: '1rem' }}>
-              로드 중…
-            </div>
-          ) : snapshots.length === 0 ? (
-            <div className="muted" style={{ padding: '1rem' }}>
-              {selectedDate ? '해당 일자 데이터 없음' : '날짜를 선택하세요'}
-            </div>
-          ) : (
-            <div
-              style={{
-                height: virtualizer.getTotalSize(),
-                position: 'relative',
-              }}
-            >
-              {virtualizer.getVirtualItems().map((vItem) => {
-                const row = snapshots[vItem.index];
-                if (!row) return null;
-                const text = formatSnapshotBlock(row);
-                return (
-                  <div
-                    key={vItem.key}
-                    data-index={vItem.index}
-                    ref={virtualizer.measureElement}
-                    style={{
-                      position: 'absolute',
-                      top: vItem.start,
-                      left: 0,
-                      right: 0,
-                      padding: '0.6rem 0.8rem',
-                      borderBottom: '1px solid var(--hts-line, rgba(0,0,0,0.06))',
-                    }}
-                  >
+        {/* TableGrid + useTableGridVirtual — overlayScrollbar 끄고 외부 OverlayScrollbar 사용하지 않음 */}
+        <TableGrid.Root
+          variant="plain"
+          stickyHeader={false}
+          overlayScrollbar
+          aria-label="일자별 차수 스냅샷"
+          style={{ flex: 1, minHeight: 0 }}
+        >
+          <TableGrid.Body scrollRef={scrollRef}>
+            {snapshotsLoading ? (
+              <div className="muted" style={{ padding: '1rem' }}>
+                로드 중…
+              </div>
+            ) : snapshots.length === 0 ? (
+              <div className="muted" style={{ padding: '1rem' }}>
+                {selectedDate ? '해당 일자 데이터 없음' : '날짜를 선택하세요'}
+              </div>
+            ) : (
+              <div
+                style={{
+                  height: virtual.totalSize,
+                  position: 'relative',
+                  width: '100%',
+                }}
+              >
+                {virtual.items.map((vItem) => {
+                  const row = snapshots[vItem.index];
+                  if (!row) return null;
+                  const text = formatSnapshotBlock(row);
+                  return (
                     <div
+                      key={vItem.key}
+                      data-index={vItem.index}
+                      ref={virtual.measureElement}
                       style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        justifyContent: 'space-between',
-                        gap: '0.4rem',
+                        position: 'absolute',
+                        top: vItem.start,
+                        left: 0,
+                        right: 0,
+                        padding: '0.6rem 0.8rem',
+                        borderBottom: '1px solid var(--hts-line, rgba(0,0,0,0.06))',
                       }}
                     >
-                      <pre
+                      <div
                         style={{
-                          fontFamily: 'monospace',
-                          fontSize: '1.1rem',
-                          whiteSpace: 'pre',
-                          margin: 0,
-                          flex: 1,
-                          minWidth: 0,
-                          overflowX: 'auto',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          justifyContent: 'space-between',
+                          gap: '0.4rem',
                         }}
                       >
-                        {text}
-                      </pre>
-                      <button
-                        type="button"
-                        onClick={() => handleCopyOne(vItem.index)}
-                        title="이 종목 복사"
-                        style={{
-                          flexShrink: 0,
-                          padding: '0.15rem 0.4rem',
-                          fontSize: '1rem',
-                          cursor: 'pointer',
-                          border: '1px solid var(--hts-line, rgba(0,0,0,0.15))',
-                          borderRadius: 3,
-                          background: 'transparent',
-                          color: 'var(--hts-muted, #666)',
-                        }}
-                      >
-                        <ClipboardCopy size={12} />
-                      </button>
+                        <pre
+                          style={{
+                            fontFamily: 'monospace',
+                            fontSize: '1.1rem',
+                            whiteSpace: 'pre',
+                            margin: 0,
+                            flex: 1,
+                            minWidth: 0,
+                            overflowX: 'auto',
+                          }}
+                        >
+                          {text}
+                        </pre>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyOne(vItem.index)}
+                          title="이 종목 복사"
+                          style={{
+                            flexShrink: 0,
+                            padding: '0.15rem 0.4rem',
+                            fontSize: '1rem',
+                            cursor: 'pointer',
+                            border: '1px solid var(--hts-line, rgba(0,0,0,0.15))',
+                            borderRadius: 3,
+                            background: 'transparent',
+                            color: 'var(--hts-muted, #666)',
+                          }}
+                        >
+                          <ClipboardCopy size={12} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                  );
+                })}
+              </div>
+            )}
+          </TableGrid.Body>
+        </TableGrid.Root>
       </div>
     </div>
   );
