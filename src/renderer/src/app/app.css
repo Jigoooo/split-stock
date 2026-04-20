@@ -1183,6 +1183,12 @@ body {
   padding: 0.8rem 1.6rem 1.4rem;
 }
 
+.app-dialog__actions button {
+  min-width: 7rem;
+  padding: 0.55rem 1.4rem;
+  font-size: 1.15rem;
+}
+
 /* type별 아이콘 색상 (수직 바 없음) */
 .app-dialog--info .app-dialog__icon {
   color: var(--accent);
