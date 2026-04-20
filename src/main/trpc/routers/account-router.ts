@@ -32,7 +32,16 @@ function balanceDiagnostic(e: KisError): string {
   if (cause?.status !== undefined) parts.push(`HTTP ${cause.status}`);
   if (e.rt_cd) parts.push(`rt_cd=${e.rt_cd}`);
   if (e.msg_cd) parts.push(`msg_cd=${e.msg_cd}`);
-  if (e.msg) parts.push(e.msg);
+  // e.msg 가 "HTTP 500" 처럼 cause.status 와 중복되는 상용구면 생략
+  if (e.msg && !/^HTTP \d+$/.test(e.msg) && e.msg !== 'fetch failed') {
+    parts.push(e.msg);
+  }
+  // KIS 가 5xx/비즈니스에도 body 에 JSON 에러({rt_cd, msg1, msg_cd})를 실어주는 경우가 있음 —
+  // 첫 200자 그대로 붙여 사용자가 원 메시지를 볼 수 있게.
+  if (cause?.body) {
+    const trimmed = cause.body.trim().replace(/\s+/g, ' ');
+    if (trimmed.length > 0) parts.push(`body=${trimmed.slice(0, 160)}`);
+  }
   return parts.length > 0 ? ` [${parts.join(' · ')}]` : '';
 }
 
