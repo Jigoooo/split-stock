@@ -172,6 +172,62 @@ describe('WatchEngine', () => {
     expect(c.error.kind).toBe('NOT_FOUND');
   });
 
+  it('pause/resume: PAUSED 동안 트리거되지 않고 재개 후 다시 동작', async () => {
+    const { db, timer } = setup();
+    const calls: number[] = [];
+    const engine = new WatchEngine({
+      db,
+      timer,
+      handlers: {
+        CUSTOM: async (order) => {
+          calls.push(order.id);
+          return { ok: true };
+        },
+      },
+    });
+    const r = engine.register(buyInput());
+    if (r.isErr()) throw new Error('register failed');
+
+    expect(engine.pause(r.value.id).isOk()).toBe(true);
+    engine.onPrice('005930', 50_000);
+    await flush();
+    expect(calls).toEqual([]);
+
+    const resumed = engine.resume(r.value.id);
+    expect(resumed.isOk()).toBe(true);
+    engine.onPrice('005930', 50_000);
+    await flush();
+    expect(calls).toEqual([r.value.id]);
+  });
+
+  it('setGlobalEnabled(false): WATCHING row도 실행 차단', async () => {
+    const { db, timer } = setup();
+    let called = 0;
+    const engine = new WatchEngine({
+      db,
+      timer,
+      handlers: {
+        CUSTOM: async () => {
+          called++;
+          return { ok: true };
+        },
+      },
+    });
+    engine.setActiveAccountId(1);
+    engine.setGlobalEnabled(1, false);
+    const r = engine.register(buyInput());
+    if (r.isErr()) throw new Error('register failed');
+
+    engine.onPrice('005930', 50_000);
+    await flush();
+    expect(called).toBe(0);
+
+    engine.setGlobalEnabled(1, true);
+    engine.onPrice('005930', 50_000);
+    await flush();
+    expect(called).toBe(1);
+  });
+
   it('startCycle: expires_at 경과 시 EXPIRED + 큐 제거', () => {
     const { db, timer } = setup();
     const expired: number[] = [];

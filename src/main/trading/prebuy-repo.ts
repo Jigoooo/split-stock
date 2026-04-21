@@ -7,6 +7,7 @@ export type PrebuyStatus = 'PENDING' | 'FILLED' | 'EXPIRED' | 'CANCELLED';
 
 export interface PrebuyOrder {
   id: number;
+  accountId: number | null;
   pdno: string;
   targetPrice: number;
   amountKrw: number;
@@ -27,6 +28,7 @@ export class PrebuyRepo {
   constructor(private readonly db: Db) {}
 
   insert(input: {
+    accountId: number;
     pdno: string;
     targetPrice: number;
     amountKrw: number;
@@ -45,7 +47,13 @@ export class PrebuyRepo {
         const dup = tx
           .select({ id: prebuyOrders.id })
           .from(prebuyOrders)
-          .where(and(eq(prebuyOrders.pdno, input.pdno), eq(prebuyOrders.status, 'PENDING')))
+          .where(
+            and(
+              eq(prebuyOrders.accountId, input.accountId),
+              eq(prebuyOrders.pdno, input.pdno),
+              eq(prebuyOrders.status, 'PENDING'),
+            ),
+          )
           .all();
         if (dup.length > 0) {
           throw { kind: 'DUPLICATE_PENDING' as const, pdno: input.pdno };
@@ -53,6 +61,7 @@ export class PrebuyRepo {
         const inserted = tx
           .insert(prebuyOrders)
           .values({
+            accountId: input.accountId,
             pdno: input.pdno,
             targetPrice: input.targetPrice,
             amountKrw: input.amountKrw,
@@ -83,6 +92,7 @@ export class PrebuyRepo {
       .all();
     return rows.map((r) => ({
       id: r.id,
+      accountId: r.accountId ?? null,
       pdno: r.pdno,
       targetPrice: r.targetPrice,
       amountKrw: r.amountKrw,
@@ -90,6 +100,21 @@ export class PrebuyRepo {
       status: r.status as PrebuyStatus,
       createdAt: r.createdAt,
     }));
+  }
+
+  getById(id: number): PrebuyOrder | null {
+    const row = this.db.select().from(prebuyOrders).where(eq(prebuyOrders.id, id)).get();
+    if (!row) return null;
+    return {
+      id: row.id,
+      accountId: row.accountId ?? null,
+      pdno: row.pdno,
+      targetPrice: row.targetPrice,
+      amountKrw: row.amountKrw,
+      validUntil: row.validUntil,
+      status: row.status as PrebuyStatus,
+      createdAt: row.createdAt,
+    };
   }
 
   cancel(id: number): Result<void, PrebuyError> {

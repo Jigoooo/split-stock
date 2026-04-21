@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { err, ok, type Result } from 'neverthrow';
 import { z } from 'zod';
 import type { Db } from '../db/client';
@@ -14,7 +14,7 @@ export type WatchSide = 'BUY' | 'SELL';
 export type WatchComparator = 'LTE' | 'GTE';
 export type WatchOrderType = 'MARKET' | 'LIMIT';
 export type WatchQtyMode = 'QTY' | 'AMOUNT';
-export type WatchStatus = 'WATCHING' | 'EXECUTED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
+export type WatchStatus = 'WATCHING' | 'PAUSED' | 'EXECUTED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
 
 export interface WatchOrder {
   id: number;
@@ -29,9 +29,11 @@ export interface WatchOrder {
   qty: number | null;
   amountKrw: number | null;
   nth: number | null;
+  sourceRefId: string | null;
   expiresAt: Date | null;
   status: WatchStatus;
   lastFailureReason: string | null;
+  metadata: string | null;
   createdAt: Date;
   updatedAt: Date;
   executedAt: Date | null;
@@ -50,8 +52,10 @@ export const WatchOrderInputSchema = z
     qty: z.number().int().positive().optional(),
     amountKrw: z.number().int().positive().optional(),
     nth: z.number().int().positive().optional(),
+    sourceRefId: z.string().min(1).max(120).optional(),
     /** unix epoch ms (Date 또는 number 모두 허용). undefined면 만료 없음. */
     expiresAt: z.union([z.number().int().positive(), z.date()]).optional(),
+    metadata: z.string().optional(),
   })
   .refine(
     (v) =>
@@ -109,6 +113,7 @@ export interface WatchEngineOptions {
 
 interface QueueEntry {
   id: number;
+  accountId: number;
   pdno: string;
   /** 가격 비교는 인메모리에서. DB는 진실의 원천. */
   comparator: WatchComparator;
@@ -116,6 +121,8 @@ interface QueueEntry {
   expiresAt: number | null; // ms epoch
   inFlight: boolean;
 }
+
+const ACTIVE_CONTROL_STATUSES = ['WATCHING', 'PAUSED'] as const;
 
 /* -------------------------------------------------------------------------- */
 /*                                  Engine                                    */
@@ -125,16 +132,12 @@ interface QueueEntry {
  * 통합 자동감시주문 엔진.
  *
  * 흐름:
- *   1. register() → DB insert + 인메모리 큐 추가
- *   2. tiered-quote-feed가 onPrice(pdno, price) 호출 → 매칭되는 큐 항목 트리거
+ *   1. register() → sourceRefId 기반 upsert + 인메모리 큐 동기
+ *   2. tiered-quote-feed가 onPrice(pdno, price) 호출 → WATCHING 상태 행만 트리거
  *   3. 트리거 시 source별 handler 실행:
  *      - 성공 → status='EXECUTED', 큐에서 제거
  *      - 실패 → status='FAILED', last_failure_reason 기록, 큐에서 제거
- *   4. 만료 체크는 startCycle() 호출 시 60초 주기로 실행 → status='EXPIRED'
- *
- * 동시성:
- *   - 단일 onPrice 호출은 inFlight 플래그로 중복 트리거 방지
- *   - DB 상태 갱신과 큐 제거는 트랜잭션 내에서 원자적으로 처리
+ *   4. 만료 체크는 startCycle() 호출 시 60초 주기로 실행 → WATCHING/PAUSED 모두 EXPIRED
  */
 export class WatchEngine {
   private readonly expiryCheckMs: number;
@@ -144,11 +147,17 @@ export class WatchEngine {
    * 다계좌 환경에서 BoosterWatcher/PrebuyWatcher 인스턴스 N개가 안전하게 공존하도록 분리.
    */
   private readonly handlerRegistry = new Map<WatchSource, Map<number, WatchHandler>>();
+  private readonly fallbackHandlers = new Map<WatchSource, WatchHandler>();
+  private readonly globalEnabledByAccount = new Map<number, boolean>();
+  private activeAccountId: number | null = null;
   private intervalHandle: { clear: () => void } | null = null;
   private disposed = false;
 
   constructor(private readonly opts: WatchEngineOptions) {
     this.expiryCheckMs = opts.expiryCheckMs ?? 60_000;
+    for (const [source, handler] of Object.entries(opts.handlers ?? {})) {
+      if (handler) this.fallbackHandlers.set(source as WatchSource, handler);
+    }
     this.reload();
   }
 
@@ -176,6 +185,27 @@ export class WatchEngine {
     if (perAccount.size === 0) this.handlerRegistry.delete(source);
   }
 
+  setFallbackHandler(source: WatchSource, handler: WatchHandler): void {
+    this.fallbackHandlers.set(source, handler);
+  }
+
+  /**
+   * 현재 런타임에서 실제 주문을 내보낼 활성 계좌.
+   * 앱은 한 시점에 하나의 env/account 조합만 실거래 가능하므로, 다른 계좌의 watch row 는
+   * DB 에 남아 있어도 실행은 현재 활성 계좌로 제한한다.
+   */
+  setActiveAccountId(accountId: number | null): void {
+    this.activeAccountId = accountId;
+  }
+
+  /**
+   * 계좌 단위 전역 자동감시 ON/OFF.
+   * false여도 row 상태는 유지하고, 런타임 실행만 차단한다.
+   */
+  setGlobalEnabled(accountId: number, enabled: boolean): void {
+    this.globalEnabledByAccount.set(accountId, enabled);
+  }
+
   /**
    * DB의 WATCHING 항목을 인메모리 큐로 다시 적재.
    * 앱 재시작 또는 외부에서 직접 DB를 변경한 경우 호출.
@@ -187,15 +217,8 @@ export class WatchEngine {
       .from(watchOrders)
       .where(eq(watchOrders.status, 'WATCHING'))
       .all();
-    for (const r of rows) {
-      this.enqueue({
-        id: r.id,
-        pdno: r.pdno,
-        comparator: r.comparator as WatchComparator,
-        targetPrice: r.targetPrice,
-        expiresAt: r.expiresAt ? r.expiresAt.getTime() : null,
-        inFlight: false,
-      });
+    for (const row of rows) {
+      this.enqueueFromOrder(rowToOrder(row));
     }
   }
 
@@ -214,7 +237,52 @@ export class WatchEngine {
           : new Date(v.expiresAt);
 
     try {
-      const inserted = this.opts.db
+      const existing =
+        v.sourceRefId === undefined
+          ? null
+          : this.opts.db
+              .select()
+              .from(watchOrders)
+              .where(
+                and(
+                  eq(watchOrders.accountId, v.accountId),
+                  eq(watchOrders.source, v.source),
+                  eq(watchOrders.sourceRefId, v.sourceRefId),
+                  inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES),
+                ),
+              )
+              .get();
+
+      if (existing) {
+        const row = this.opts.db
+          .update(watchOrders)
+          .set({
+            pdno: v.pdno,
+            side: v.side,
+            targetPrice: v.targetPrice,
+            comparator: v.comparator,
+            orderType: v.orderType,
+            qtyOrAmountMode: v.qtyOrAmountMode,
+            qty: v.qty ?? null,
+            amountKrw: v.amountKrw ?? null,
+            nth: v.nth ?? null,
+            expiresAt,
+            lastFailureReason: null,
+            metadata: v.metadata ?? existing.metadata ?? null,
+            updatedAt: now,
+          })
+          .where(eq(watchOrders.id, existing.id))
+          .returning()
+          .all()[0];
+        if (!row) return err({ kind: 'DB_ERROR', cause: 'update returned no row' });
+
+        const order = rowToOrder(row);
+        if (order.status === 'WATCHING') this.enqueueFromOrder(order);
+        else this.dequeue(order.id);
+        return ok(order);
+      }
+
+      const row = this.opts.db
         .insert(watchOrders)
         .values({
           accountId: v.accountId,
@@ -228,27 +296,21 @@ export class WatchEngine {
           qty: v.qty ?? null,
           amountKrw: v.amountKrw ?? null,
           nth: v.nth ?? null,
+          sourceRefId: v.sourceRefId ?? null,
           expiresAt,
           status: 'WATCHING',
           lastFailureReason: null,
+          metadata: v.metadata ?? null,
           createdAt: now,
           updatedAt: now,
           executedAt: null,
         })
         .returning()
-        .all();
-      const row = inserted[0];
+        .all()[0];
       if (!row) return err({ kind: 'DB_ERROR', cause: 'insert returned no row' });
 
       const order = rowToOrder(row);
-      this.enqueue({
-        id: order.id,
-        pdno: order.pdno,
-        comparator: order.comparator,
-        targetPrice: order.targetPrice,
-        expiresAt: order.expiresAt ? order.expiresAt.getTime() : null,
-        inFlight: false,
-      });
+      this.enqueueFromOrder(order);
       return ok(order);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
@@ -261,11 +323,87 @@ export class WatchEngine {
       const res = this.opts.db
         .update(watchOrders)
         .set({ status: 'CANCELLED', updatedAt: now })
+        .where(and(eq(watchOrders.id, id), inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES)))
+        .run();
+      if (res.changes === 0) return err({ kind: 'NOT_FOUND', id });
+      this.dequeue(id);
+      return ok(undefined);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  pause(id: number): Result<void, WatchError> {
+    try {
+      const res = this.opts.db
+        .update(watchOrders)
+        .set({ status: 'PAUSED', updatedAt: new Date() })
         .where(and(eq(watchOrders.id, id), eq(watchOrders.status, 'WATCHING')))
         .run();
       if (res.changes === 0) return err({ kind: 'NOT_FOUND', id });
       this.dequeue(id);
       return ok(undefined);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  update(id: number, input: WatchOrderInput): Result<WatchOrder, WatchError> {
+    const parsed = WatchOrderInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return err({ kind: 'VALIDATION', message: parsed.error.issues[0]?.message ?? 'invalid' });
+    }
+    const v = parsed.data;
+    const expiresAt =
+      v.expiresAt === undefined
+        ? null
+        : v.expiresAt instanceof Date
+          ? v.expiresAt
+          : new Date(v.expiresAt);
+    try {
+      const row = this.opts.db
+        .update(watchOrders)
+        .set({
+          pdno: v.pdno,
+          source: v.source,
+          side: v.side,
+          targetPrice: v.targetPrice,
+          comparator: v.comparator,
+          orderType: v.orderType,
+          qtyOrAmountMode: v.qtyOrAmountMode,
+          qty: v.qty ?? null,
+          amountKrw: v.amountKrw ?? null,
+          nth: v.nth ?? null,
+          sourceRefId: v.sourceRefId ?? null,
+          expiresAt,
+          metadata: v.metadata ?? null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(watchOrders.id, id), inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES)))
+        .returning()
+        .all()[0];
+      if (!row) return err({ kind: 'NOT_FOUND', id });
+      const order = rowToOrder(row);
+      if (order.status === 'WATCHING') this.enqueueFromOrder(order);
+      else this.dequeue(order.id);
+      return ok(order);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  resume(id: number): Result<WatchOrder, WatchError> {
+    try {
+      const row = this.opts.db
+        .update(watchOrders)
+        .set({ status: 'WATCHING', updatedAt: new Date() })
+        .where(and(eq(watchOrders.id, id), eq(watchOrders.status, 'PAUSED')))
+        .returning()
+        .all()[0];
+      if (!row) return err({ kind: 'NOT_FOUND', id });
+      const order = rowToOrder(row);
+      this.enqueueFromOrder(order);
+      return ok(order);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
     }
@@ -304,6 +442,7 @@ export class WatchEngine {
     // 스냅샷 — 트리거 중 dequeue가 호출돼도 안전
     for (const entry of [...list]) {
       if (entry.inFlight) continue;
+      if (!this.isExecutionAllowed(entry.accountId)) continue;
       const matches =
         entry.comparator === 'LTE' ? price <= entry.targetPrice : price >= entry.targetPrice;
       if (!matches) continue;
@@ -347,12 +486,16 @@ export class WatchEngine {
       this.dequeue(entry.id);
       return;
     }
+    if (!this.isExecutionAllowed(order.accountId)) {
+      entry.inFlight = false;
+      return;
+    }
 
     this.opts.onTriggered?.(order);
 
     // 라우팅: 1) per-account → 2) 글로벌 fallback (deprecated, BC) → 3) FAILED
     const perAccount = this.handlerRegistry.get(order.source);
-    const handler = perAccount?.get(order.accountId) ?? this.opts.handlers?.[order.source];
+    const handler = perAccount?.get(order.accountId) ?? this.fallbackHandlers.get(order.source);
     let result: ExecutionResult;
     if (!handler) {
       result = { ok: false, reason: `handler 미등록: source=${order.source}` };
@@ -390,36 +533,51 @@ export class WatchEngine {
 
   private expireStale(): void {
     const now = this.opts.timer.now();
-    for (const [pdno, list] of Array.from(this.queue.entries())) {
-      for (const entry of [...list]) {
-        if (entry.expiresAt !== null && entry.expiresAt <= now) {
-          // race 가드: WATCHING 상태일 때만 update. cancel/fire 등으로 이미 다른 상태면
-          // res.changes === 0 → onExpired 호출하지 않음 (잘못된 라이프사이클 콜백 방지).
-          const res = this.opts.db
-            .update(watchOrders)
-            .set({ status: 'EXPIRED', updatedAt: new Date(now) })
-            .where(and(eq(watchOrders.id, entry.id), eq(watchOrders.status, 'WATCHING')))
-            .run();
-          this.dequeue(entry.id);
-          if (res.changes > 0) {
-            const row = this.opts.db
-              .select()
-              .from(watchOrders)
-              .where(eq(watchOrders.id, entry.id))
-              .get();
-            if (row) {
-              const order = rowToOrder(row);
-              this.opts.onExpired?.({ ...order, status: 'EXPIRED' });
-            }
-          }
+    const rows = this.opts.db
+      .select()
+      .from(watchOrders)
+      .where(inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES))
+      .all()
+      .filter((row) => row.expiresAt !== null && row.expiresAt.getTime() <= now);
+
+    for (const row of rows) {
+      const res = this.opts.db
+        .update(watchOrders)
+        .set({ status: 'EXPIRED', updatedAt: new Date(now) })
+        .where(
+          and(eq(watchOrders.id, row.id), inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES)),
+        )
+        .run();
+      this.dequeue(row.id);
+      if (res.changes > 0) {
+        const next = this.opts.db
+          .select()
+          .from(watchOrders)
+          .where(eq(watchOrders.id, row.id))
+          .get();
+        if (next) {
+          const order = rowToOrder(next);
+          this.opts.onExpired?.({ ...order, status: 'EXPIRED' });
         }
       }
-      if ((this.queue.get(pdno)?.length ?? 0) === 0) this.queue.delete(pdno);
     }
   }
 
+  private enqueueFromOrder(order: WatchOrder): void {
+    if (order.status !== 'WATCHING') return;
+    this.enqueue({
+      id: order.id,
+      accountId: order.accountId,
+      pdno: order.pdno,
+      comparator: order.comparator,
+      targetPrice: order.targetPrice,
+      expiresAt: order.expiresAt ? order.expiresAt.getTime() : null,
+      inFlight: false,
+    });
+  }
+
   private enqueue(entry: QueueEntry): void {
-    const list = this.queue.get(entry.pdno) ?? [];
+    const list = (this.queue.get(entry.pdno) ?? []).filter((queued) => queued.id !== entry.id);
     list.push(entry);
     this.queue.set(entry.pdno, list);
   }
@@ -430,6 +588,11 @@ export class WatchEngine {
       if (next.length === 0) this.queue.delete(pdno);
       else if (next.length !== list.length) this.queue.set(pdno, next);
     }
+  }
+
+  private isExecutionAllowed(accountId: number): boolean {
+    if (this.activeAccountId !== null && this.activeAccountId !== accountId) return false;
+    return this.globalEnabledByAccount.get(accountId) !== false;
   }
 }
 
@@ -451,9 +614,11 @@ function rowToOrder(r: typeof watchOrders.$inferSelect): WatchOrder {
     qty: r.qty,
     amountKrw: r.amountKrw,
     nth: r.nth,
+    sourceRefId: r.sourceRefId,
     expiresAt: r.expiresAt,
     status: r.status as WatchStatus,
     lastFailureReason: r.lastFailureReason,
+    metadata: r.metadata,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     executedAt: r.executedAt,

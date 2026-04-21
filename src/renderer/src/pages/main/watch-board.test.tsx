@@ -13,6 +13,11 @@ vi.mock('@renderer/entities/watch-order', () => ({
     isPending: false,
     error: null,
   }),
+  useWatchHistory: () => ({
+    items: [],
+    isPending: false,
+    error: null,
+  }),
 }));
 
 vi.mock('@renderer/features/add-watch-order', () => ({
@@ -24,11 +29,15 @@ vi.mock('@renderer/shared/api/trpc', () => ({
     useUtils: () => ({
       watch: {
         list: { invalidate: vi.fn() },
+        getControlState: { invalidate: vi.fn() },
+        history: { invalidate: vi.fn() },
       },
     }),
     watch: {
       cancel: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
-      cancelAll: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      pause: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
+      resume: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
+      setGlobalEnabled: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
   },
 }));

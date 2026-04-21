@@ -33,7 +33,7 @@ if (!app.isPackaged) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 }
 
-import type { AppEnv } from '@shared/contracts';
+import type { AppEnv, WatchOutcomeEvent } from '@shared/contracts';
 import {
   getPopoutRouteConfig,
   getPopoutWindowTitle,
@@ -61,6 +61,7 @@ import { realTimer, type WsLike } from './kis/ws-client';
 import { createEventLogger, teeLoggers } from './logging/event-logger';
 import { createFileLogger } from './logging/file-logger';
 import { initSentryFromSettings } from './monitoring/sentry';
+import { notifyWatchOutcome } from './notification/trade-notifier';
 import { FeedBus } from './realtime/feed-bus';
 import { RealtimeService } from './realtime/realtime-service';
 import { ProtectionLimitsRepo } from './safety/protection-limits-repo';
@@ -69,15 +70,19 @@ import { SafetyStateRegistry } from './safety/safety-state';
 import { createTimeWindowRepo } from './safety/time-window';
 import { CredentialsRepo } from './security/credentials-repo';
 import { BalanceSync } from './trading/balance-sync';
+import { BoosterWatcher } from './trading/booster-watcher';
 import { DailyCandlesRepo } from './trading/daily-candles-repo';
 import { createEnvAwarePricePoller } from './trading/env-aware-price-poller';
 import { LotsRepo } from './trading/lots-repo';
 import { PendingOrderWatcher } from './trading/pending-order-watcher';
+import { PrebuyRepo } from './trading/prebuy-repo';
+import { PrebuyWatcher } from './trading/prebuy-watcher';
 import { StockMasterRepo } from './trading/stock-master-repo';
 import { StockMasterSyncService } from './trading/stock-master-sync';
 import { StrategyRepo } from './trading/strategy-repo';
 import { RotatingQuoteFeed } from './trading/tiered-quote-feed';
-import { WatchEngine } from './trading/watch-engine';
+import { WatchEngine, type WatchOrder } from './trading/watch-engine';
+import { executeWatchOrder } from './trading/watch-order-executor';
 import { appRouter } from './trpc/app-router';
 import { createContextFactory } from './trpc/context';
 import { initAutoUpdater } from './updater';
@@ -133,6 +138,7 @@ function bootstrapDeps(userDataDir: string) {
   const stockMasterRepo = new StockMasterRepo(db);
   const stockMasterSync = new StockMasterSyncService(stockMasterRepo, settingsRepo);
   const candlesRepo = new DailyCandlesRepo(db);
+  const prebuyRepo = new PrebuyRepo(db);
   // stockMasterRepo 주입 — cyclesByPdno 의 종목명(name) 필드를 stock_master 에서 lookup.
   const lotsRepo = new LotsRepo(db, stockMasterRepo);
   const activeAccounts = new ActiveAccountRepo(db);
@@ -146,11 +152,83 @@ function bootstrapDeps(userDataDir: string) {
     // 단일 계좌 시절 strategy 키를 활성 계좌로 이전 (멱등).
     strategyRepo.migrateLegacyKeys(ensured.value);
   }
+  const toWatchOutcomeEvent = (
+    status: WatchOutcomeEvent['status'],
+    order: WatchOrder,
+    extras: {
+      triggerPrice?: number | null;
+      failureReason?: string | null;
+    } = {},
+  ): WatchOutcomeEvent => ({
+    watchId: order.id,
+    accountId: order.accountId,
+    pdno: order.pdno,
+    source: order.source,
+    side: order.side,
+    status,
+    targetPrice: order.targetPrice,
+    triggerPrice: extras.triggerPrice ?? null,
+    orderType: order.orderType,
+    failureReason: extras.failureReason ?? null,
+    occurredAt: Date.now(),
+  });
+  const broadcastWatchOutcome = (event: WatchOutcomeEvent): void => {
+    if (settingsRepo.get('notifications.osEnabled') !== 'false') {
+      notifyWatchOutcome(event);
+    }
+    for (const target of BrowserWindow.getAllWindows()) {
+      if (target.isDestroyed()) continue;
+      target.webContents.send('appShell:watch-event', event);
+    }
+  };
   // 통합 자동감시주문 엔진 — booster/prebuy/custom을 단일 큐로 관리.
   // BOOSTER/PREBUY 핸들러는 어댑터(BoosterWatcher/PrebuyWatcher) 생성 시 registerHandler로 주입됨.
   const watchEngine = new WatchEngine({
     db,
     timer: realTimer,
+    onExecuted: (order) => {
+      eventLogger.log({
+        level: 'INFO',
+        category: 'WATCH',
+        message: 'watch.executed',
+        payload: {
+          accountId: order.accountId,
+          watchId: order.id,
+          source: order.source,
+          pdno: order.pdno,
+        },
+      });
+      broadcastWatchOutcome(toWatchOutcomeEvent('EXECUTED', order));
+    },
+    onFailed: (order, reason) => {
+      eventLogger.log({
+        level: 'WARN',
+        category: 'WATCH',
+        message: 'watch.failed',
+        payload: {
+          accountId: order.accountId,
+          watchId: order.id,
+          source: order.source,
+          pdno: order.pdno,
+          reason,
+        },
+      });
+      broadcastWatchOutcome(toWatchOutcomeEvent('FAILED', order, { failureReason: reason }));
+    },
+    onExpired: (order) => {
+      eventLogger.log({
+        level: 'INFO',
+        category: 'WATCH',
+        message: 'watch.expired',
+        payload: {
+          accountId: order.accountId,
+          watchId: order.id,
+          source: order.source,
+          pdno: order.pdno,
+        },
+      });
+      broadcastWatchOutcome(toWatchOutcomeEvent('EXPIRED', order));
+    },
   });
   watchEngine.startCycle();
   // 실시간 버스는 env 전환 상관없이 공유, RealtimeService는 env별 lazy 재생성.
@@ -310,6 +388,155 @@ function bootstrapDeps(userDataDir: string) {
     },
   });
 
+  const runWatchedOrder = async (order: WatchOrder, triggerPrice: number): Promise<void> => {
+    await executeWatchOrder(
+      {
+        db,
+        settingsRepo,
+        credentialsRepo,
+        auth,
+        httpByEnv,
+        safetyRegistry,
+        pendingOrderWatcher,
+        logger: eventLogger,
+        getCurrentEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
+      },
+      order,
+      triggerPrice,
+    );
+  };
+
+  watchEngine.setFallbackHandler('CUSTOM', async (order, ctx) => {
+    try {
+      await runWatchedOrder(order, ctx.price);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  watchEngine.setFallbackHandler('PREBUY', async (order, ctx) => {
+    const prebuyId = Number(order.sourceRefId);
+    if (!Number.isInteger(prebuyId) || prebuyId <= 0) {
+      return { ok: false, reason: 'PREBUY_SOURCE_REF_INVALID' };
+    }
+    const source = prebuyRepo.getById(prebuyId);
+    if (!source) return { ok: false, reason: 'PREBUY_SOURCE_NOT_FOUND' };
+    if (source.accountId !== null && source.accountId !== order.accountId) {
+      return { ok: false, reason: 'PREBUY_ACCOUNT_MISMATCH' };
+    }
+    if (source.status !== 'PENDING') {
+      return { ok: false, reason: `PREBUY_STATUS_${source.status}` };
+    }
+    try {
+      await runWatchedOrder(order, ctx.price);
+      prebuyRepo.markFilled(source.id);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  watchEngine.setFallbackHandler('BOOSTER', async (order, ctx) => {
+    try {
+      await runWatchedOrder(order, ctx.price);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  const prebuyWatchers = new Map<number, PrebuyWatcher>();
+  const boosterWatchers = new Map<number, BoosterWatcher>();
+  for (const account of activeAccounts.list()) {
+    const prebuyWatcher = new PrebuyWatcher({
+      timer: realTimer,
+      repo: prebuyRepo,
+      engine: watchEngine,
+      accountId: account.id,
+      onTrigger: (source, ctx) => {
+        return runWatchedOrder(
+          {
+            id: 0,
+            accountId: account.id,
+            pdno: source.pdno,
+            source: 'PREBUY',
+            side: 'BUY',
+            targetPrice: source.targetPrice,
+            comparator: 'LTE',
+            orderType: 'LIMIT',
+            qtyOrAmountMode: 'AMOUNT',
+            qty: null,
+            amountKrw: source.amountKrw,
+            nth: 1,
+            sourceRefId: String(source.id),
+            expiresAt: source.validUntil,
+            status: 'WATCHING',
+            lastFailureReason: null,
+            metadata: null,
+            createdAt: source.createdAt,
+            updatedAt: source.createdAt,
+            executedAt: null,
+          },
+          ctx.price,
+        );
+      },
+      onExpire: (source) => {
+        eventLogger.log({
+          level: 'INFO',
+          category: 'WATCH',
+          message: 'watch.prebuy.expired',
+          payload: { accountId: source.accountId, prebuyId: source.id, pdno: source.pdno },
+        });
+      },
+    });
+    prebuyWatcher.reload();
+    prebuyWatchers.set(account.id, prebuyWatcher);
+
+    const boosterWatcher = new BoosterWatcher({
+      timer: realTimer,
+      engine: watchEngine,
+      accountId: account.id,
+      onTrigger: (task, ctx) => {
+        return runWatchedOrder(
+          {
+            id: 0,
+            accountId: account.id,
+            pdno: task.pdno,
+            source: 'BOOSTER',
+            side: 'BUY',
+            targetPrice:
+              task.boosterPct <= 0
+                ? task.lastFilledPrice
+                : Math.floor(task.lastFilledPrice * (1 - task.boosterPct)),
+            comparator: 'LTE',
+            orderType: 'LIMIT',
+            qtyOrAmountMode: 'AMOUNT',
+            qty: null,
+            amountKrw: task.amountKrw,
+            nth: 1,
+            sourceRefId: task.pdno,
+            expiresAt: task.expiresAt !== undefined ? new Date(task.expiresAt) : null,
+            status: 'WATCHING',
+            lastFailureReason: null,
+            metadata: JSON.stringify(task),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            executedAt: null,
+          },
+          ctx.price,
+        );
+      },
+      onExpire: (task) => {
+        eventLogger.log({
+          level: 'INFO',
+          category: 'WATCH',
+          message: 'watch.booster.expired',
+          payload: { accountId: account.id, pdno: task.pdno },
+        });
+      },
+    });
+    boosterWatchers.set(account.id, boosterWatcher);
+  }
+
   const factory = createContextFactory({
     db,
     credentialsRepo,
@@ -323,6 +550,7 @@ function bootstrapDeps(userDataDir: string) {
     stockMasterSync,
     candlesRepo,
     lotsRepo,
+    prebuyRepo,
     activeAccounts,
     timeWindowRepo,
     rateGuardRepo,
@@ -412,6 +640,8 @@ function bootstrapDeps(userDataDir: string) {
     safetyRegistry,
     eventLogger,
     settingsRepo,
+    prebuyWatchers,
+    boosterWatchers,
     balanceSync,
     dbPath: defaultDbPath(userDataDir),
   };
@@ -632,8 +862,16 @@ void app.whenReady().then(async () => {
   });
 
   const userDataDir = app.getPath('userData');
-  const { factory, safetyRegistry, eventLogger, settingsRepo, balanceSync, dbPath } =
-    bootstrapDeps(userDataDir);
+  const {
+    factory,
+    safetyRegistry,
+    eventLogger,
+    settingsRepo,
+    prebuyWatchers,
+    boosterWatchers,
+    balanceSync,
+    dbPath,
+  } = bootstrapDeps(userDataDir);
 
   const backupScheduler = new BackupScheduler({
     dbPath,
@@ -750,6 +988,8 @@ void app.whenReady().then(async () => {
   app.once('will-quit', () => {
     balanceSync.dispose();
     backupScheduler.stop();
+    for (const watcher of prebuyWatchers.values()) watcher.dispose();
+    for (const watcher of boosterWatchers.values()) watcher.dispose();
   });
 
   app.on('activate', () => {

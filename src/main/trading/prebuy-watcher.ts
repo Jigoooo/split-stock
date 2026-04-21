@@ -5,7 +5,7 @@ import type { WatchEngine, WatchHandler, WatchOrder } from './watch-engine';
 export interface PrebuyWatcherOptions {
   timer: Timer;
   repo: PrebuyRepo;
-  onTrigger: (order: PrebuyOrder, context: { price: number }) => void;
+  onTrigger: (order: PrebuyOrder, context: { price: number }) => unknown | Promise<unknown>;
   onExpire?: (order: PrebuyOrder) => void;
   /** 만료 체크 주기 ms (기본 60s). */
   expiryCheckMs?: number;
@@ -18,11 +18,6 @@ export interface PrebuyWatcherOptions {
 export interface PrebuyWatcherEngineOptions extends PrebuyWatcherOptions {
   engine: WatchEngine;
   accountId: number;
-}
-
-interface EngineMapping {
-  order: PrebuyOrder;
-  watchId: number;
 }
 
 /**
@@ -38,7 +33,6 @@ interface EngineMapping {
 export class PrebuyWatcher {
   private readonly expiryCheckMs: number;
   private watchMap = new Map<string, PrebuyOrder[]>(); // legacy: pdno → 여러 주문
-  private engineMap = new Map<number, EngineMapping>(); // engine: prebuyId → mapping
   private timerHandle: { clear: () => void } | null = null;
   private readonly mode: 'legacy' | 'engine';
   private readonly engine: WatchEngine | null;
@@ -60,16 +54,26 @@ export class PrebuyWatcher {
 
   /**
    * 본 인스턴스(accountId 한정) PREBUY 핸들러.
-   * engineMap 클로저는 인스턴스 단위로 격리되어 다계좌에서도 안전.
+   * sourceRefId를 prebuy_orders.id 로 사용해 재시작 후에도 source row를 복원한다.
    */
   private makeHandler(): WatchHandler {
     return async (order: WatchOrder, ctx) => {
-      const found = Array.from(this.engineMap.values()).find((m) => m.watchId === order.id);
-      if (found) {
-        this.opts.onTrigger(found.order, { price: ctx.price });
-        this.opts.repo.markFilled(found.order.id);
-        this.engineMap.delete(found.order.id);
+      const prebuyId = Number(order.sourceRefId);
+      if (!Number.isInteger(prebuyId) || prebuyId <= 0) {
+        return { ok: false, reason: 'PREBUY_SOURCE_REF_INVALID' };
       }
+      const source = this.opts.repo.getById(prebuyId);
+      if (!source) {
+        return { ok: false, reason: 'PREBUY_SOURCE_NOT_FOUND' };
+      }
+      if (source.accountId !== null && source.accountId !== this.accountId) {
+        return { ok: false, reason: 'PREBUY_ACCOUNT_MISMATCH' };
+      }
+      if (source.status !== 'PENDING') {
+        return { ok: false, reason: `PREBUY_STATUS_${source.status}` };
+      }
+      await this.opts.onTrigger(source, { price: ctx.price });
+      this.opts.repo.markFilled(source.id);
       return { ok: true };
     };
   }
@@ -78,17 +82,17 @@ export class PrebuyWatcher {
   reload(): void {
     const pending = this.opts.repo.listPending();
     if (this.mode === 'engine') {
-      this.engineMap.clear();
-      for (const o of pending) {
-        this.registerToEngine(o);
+      for (const order of pending) {
+        if (order.accountId !== this.accountId) continue;
+        this.registerToEngine(order);
       }
       return;
     }
     this.watchMap.clear();
-    for (const o of pending) {
-      const list = this.watchMap.get(o.pdno) ?? [];
-      list.push(o);
-      this.watchMap.set(o.pdno, list);
+    for (const order of pending) {
+      const list = this.watchMap.get(order.pdno) ?? [];
+      list.push(order);
+      this.watchMap.set(order.pdno, list);
     }
     this.ensureExpiryLoop();
   }
@@ -102,7 +106,7 @@ export class PrebuyWatcher {
     if (!list || list.length === 0) return;
     for (const order of [...list]) {
       if (price <= order.targetPrice) {
-        this.opts.onTrigger(order, { price });
+        void this.opts.onTrigger(order, { price });
         this.removeFromMap(order);
       }
     }
@@ -112,9 +116,7 @@ export class PrebuyWatcher {
     this.timerHandle?.clear();
     this.timerHandle = null;
     if (this.mode === 'engine') {
-      for (const m of this.engineMap.values()) this.engine?.cancel(m.watchId);
-      this.engineMap.clear();
-      // stale closure 누수 방지 — 인스턴스 폐기 시 핸들러도 함께 해제.
+      // runtime detach는 terminal cancel이 아니라 handler 해제만 수행.
       this.engine?.unregisterHandler('PREBUY', this.accountId);
       return;
     }
@@ -122,7 +124,10 @@ export class PrebuyWatcher {
   }
 
   size(): number {
-    if (this.mode === 'engine') return this.engineMap.size;
+    if (this.mode === 'engine') {
+      return this.opts.repo.listPending().filter((order) => order.accountId === this.accountId)
+        .length;
+    }
     let n = 0;
     for (const list of this.watchMap.values()) n += list.length;
     return n;
@@ -165,7 +170,7 @@ export class PrebuyWatcher {
 
   private registerToEngine(order: PrebuyOrder): void {
     if (!this.engine) return;
-    const r = this.engine.register({
+    this.engine.register({
       accountId: this.accountId,
       pdno: order.pdno,
       source: 'PREBUY',
@@ -176,10 +181,8 @@ export class PrebuyWatcher {
       qtyOrAmountMode: 'AMOUNT',
       amountKrw: order.amountKrw,
       nth: 1,
+      sourceRefId: String(order.id),
       expiresAt: order.validUntil,
     });
-    if (r.isOk()) {
-      this.engineMap.set(order.id, { order, watchId: r.value.id });
-    }
   }
 }

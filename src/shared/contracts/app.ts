@@ -61,3 +61,21 @@ export const SafetyFlagsSchema = z.object({
   updatedAt: z.number().int().positive(),
 });
 export type SafetyFlags = z.infer<typeof SafetyFlagsSchema>;
+
+export const WatchOutcomeStatusSchema = z.enum(['EXECUTED', 'FAILED', 'EXPIRED']);
+export type WatchOutcomeStatus = z.infer<typeof WatchOutcomeStatusSchema>;
+
+export const WatchOutcomeEventSchema = z.object({
+  watchId: z.number().int().positive(),
+  accountId: z.number().int().positive(),
+  pdno: z.string().regex(/^\d{6}$/),
+  source: z.enum(['BOOSTER', 'PREBUY', 'CUSTOM']),
+  side: z.enum(['BUY', 'SELL']),
+  status: WatchOutcomeStatusSchema,
+  targetPrice: z.number().int().positive(),
+  triggerPrice: z.number().int().positive().nullable(),
+  orderType: z.enum(['MARKET', 'LIMIT']),
+  failureReason: z.string().nullable(),
+  occurredAt: z.number().int().positive(),
+});
+export type WatchOutcomeEvent = z.infer<typeof WatchOutcomeEventSchema>;

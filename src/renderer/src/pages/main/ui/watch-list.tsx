@@ -3,7 +3,7 @@ import type { WatchOrderFormPrefill } from '@renderer/features/add-watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Checkbox, TableGrid } from '@renderer/shared/ui';
-import { type ReactElement, useEffectEvent, useState } from 'react';
+import { type ReactElement, useEffectEvent, useMemo, useState } from 'react';
 
 export interface WatchListProps {
   orders: WatchOrder[];
@@ -25,9 +25,9 @@ interface ContextMenu {
  * 자동감시 행 리스트 + 다중 선택 + 우클릭 컨텍스트 메뉴.
  *
  * 액션:
- *   - 시작: 현재 라우터에 start 가 없어 비활성 (Wave 5 추가 예정)
- *   - 중지: 선택된 WATCHING 항목 cancel
- *   - 삭제: cancel 과 동일 의미 (FE 에서는 cancel 만 가능)
+ *   - 시작: PAUSED → WATCHING
+ *   - 중지: WATCHING → PAUSED
+ *   - 삭제: terminal cancel
  */
 export const WatchList = (props: WatchListProps): ReactElement => {
   const { allowMutations, error, isPending, onEditOrder, orders } = props;
@@ -35,7 +35,11 @@ export const WatchList = (props: WatchListProps): ReactElement => {
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [menu, setMenu] = useState<ContextMenu | null>(null);
 
+  const pauseMutation = trpc.watch.pause.useMutation();
+  const resumeMutation = trpc.watch.resume.useMutation();
   const cancelMutation = trpc.watch.cancel.useMutation();
+  const mutationPending =
+    pauseMutation.isPending || resumeMutation.isPending || cancelMutation.isPending;
 
   const toggle = (id: number): void => {
     setSelected((prev) => {
@@ -54,37 +58,77 @@ export const WatchList = (props: WatchListProps): ReactElement => {
 
   const closeMenu = (): void => setMenu(null);
 
-  const onCancelSelected = useEffectEvent(async (ids: number[]) => {
+  const refresh = async (): Promise<void> => {
+    setSelected(new Set());
+    await utils.watch.list.invalidate();
+    await utils.watch.getControlState.invalidate();
+    await utils.watch.history.invalidate();
+  };
+
+  const onPauseSelected = useEffectEvent(async (ids: number[]) => {
+    setMenu(null);
+    for (const id of ids) {
+      try {
+        await pauseMutation.mutateAsync({ id });
+      } catch {
+        // 개별 실패는 무시 — invalidate 후 새 상태 반영
+      }
+    }
+    await refresh();
+  });
+
+  const onResumeSelected = useEffectEvent(async (ids: number[]) => {
+    setMenu(null);
+    for (const id of ids) {
+      try {
+        await resumeMutation.mutateAsync({ id });
+      } catch {
+        // 개별 실패는 무시 — invalidate 후 새 상태 반영
+      }
+    }
+    await refresh();
+  });
+
+  const onDeleteSelected = useEffectEvent(async (ids: number[]) => {
     setMenu(null);
     for (const id of ids) {
       try {
         await cancelMutation.mutateAsync({ id });
       } catch {
-        // 개별 실패는 무시 — UI는 invalidate 후 새 상태로 갱신
+        // 개별 실패는 무시 — invalidate 후 새 상태 반영
       }
     }
-    setSelected(new Set());
-    await utils.watch.list.invalidate();
+    await refresh();
   });
 
-  const onEditRow = useEffectEvent((o: WatchOrder) => {
+  const onEditRow = useEffectEvent((order: WatchOrder) => {
     onEditOrder?.({
-      existingId: o.id,
-      pdno: o.pdno,
-      side: o.side,
-      comparator: o.comparator,
-      targetPrice: o.targetPrice,
-      orderType: o.orderType,
-      qtyOrAmountMode: o.qtyOrAmountMode,
-      ...(o.qty != null ? { qty: o.qty } : {}),
-      ...(o.amountKrw != null ? { amountKrw: o.amountKrw } : {}),
-      ...(o.expiresAt != null
+      existingId: order.id,
+      pdno: order.pdno,
+      side: order.side,
+      comparator: order.comparator,
+      targetPrice: order.targetPrice,
+      orderType: order.orderType,
+      qtyOrAmountMode: order.qtyOrAmountMode,
+      ...(order.qty != null ? { qty: order.qty } : {}),
+      ...(order.amountKrw != null ? { amountKrw: order.amountKrw } : {}),
+      ...(order.expiresAt != null
         ? {
-            expiresAtMs: o.expiresAt instanceof Date ? o.expiresAt.getTime() : Number(o.expiresAt),
+            expiresAtMs:
+              order.expiresAt instanceof Date ? order.expiresAt.getTime() : Number(order.expiresAt),
           }
         : {}),
     });
   });
+
+  const selectedRows = useMemo(
+    () => (menu ? orders.filter((order) => menu.ids.includes(order.id)) : []),
+    [menu, orders],
+  );
+  const canPause =
+    selectedRows.length > 0 && selectedRows.every((order) => order.status === 'WATCHING');
+  const canResume =
+    selectedRows.length > 0 && selectedRows.every((order) => order.status === 'PAUSED');
 
   return (
     <div
@@ -98,7 +142,6 @@ export const WatchList = (props: WatchListProps): ReactElement => {
       }}
     >
       {menu ? (
-        // 메뉴 외부 클릭/Esc 로 close — overlay 버튼이 키보드 포커스 가능.
         <button
           type="button"
           aria-label="컨텍스트 메뉴 닫기"
@@ -160,53 +203,53 @@ export const WatchList = (props: WatchListProps): ReactElement => {
               <TableGrid.Cell className="muted">없음</TableGrid.Cell>
             </TableGrid.Row>
           ) : (
-            orders.map((o) => (
+            orders.map((order) => (
               <TableGrid.Row
-                key={o.id}
-                selected={selected.has(o.id)}
-                onContextMenu={(e) => onContextMenu(e, o.id)}
+                key={order.id}
+                selected={selected.has(order.id)}
+                onContextMenu={(e) => onContextMenu(e, order.id)}
                 style={{ position: 'relative' }}
               >
                 <TableGrid.Cell width={42}>
                   <Checkbox
-                    checked={selected.has(o.id)}
-                    onChange={() => toggle(o.id)}
-                    aria-label={`선택 ${o.id}`}
+                    checked={selected.has(order.id)}
+                    onChange={() => toggle(order.id)}
+                    aria-label={`선택 ${order.id}`}
                     dense
                   />
                 </TableGrid.Cell>
                 <TableGrid.Cell width={80} numeric>
-                  {o.pdno}
+                  {order.pdno}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={72}>{o.source}</TableGrid.Cell>
+                <TableGrid.Cell width={72}>{order.source}</TableGrid.Cell>
                 <TableGrid.Cell width={60}>
-                  <span className={o.side === 'BUY' ? 'num-up' : 'num-down'}>{o.side}</span>
+                  <span className={order.side === 'BUY' ? 'num-up' : 'num-down'}>{order.side}</span>
                 </TableGrid.Cell>
                 <TableGrid.Cell width={90} numeric>
-                  {thousandSeparator(o.targetPrice)}
+                  {thousandSeparator(order.targetPrice)}
                 </TableGrid.Cell>
                 <TableGrid.Cell width={90} numeric>
-                  {o.qtyOrAmountMode === 'QTY'
-                    ? thousandSeparator(o.qty ?? 0)
-                    : `${thousandSeparator(o.amountKrw ?? 0)}원`}
+                  {order.qtyOrAmountMode === 'QTY'
+                    ? thousandSeparator(order.qty ?? 0)
+                    : `${thousandSeparator(order.amountKrw ?? 0)}원`}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={40}>{o.comparator === 'LTE' ? '≤' : '≥'}</TableGrid.Cell>
-                <TableGrid.Cell width={72}>{o.orderType}</TableGrid.Cell>
-                <TableGrid.Cell width={72}>{o.status}</TableGrid.Cell>
+                <TableGrid.Cell width={40}>{order.comparator === 'LTE' ? '≤' : '≥'}</TableGrid.Cell>
+                <TableGrid.Cell width={72}>{order.orderType}</TableGrid.Cell>
+                <TableGrid.Cell width={72}>{statusLabel(order.status)}</TableGrid.Cell>
                 <TableGrid.Cell width={148} className="muted">
-                  {formatDate(o.createdAt)}
+                  {formatDate(order.createdAt)}
                 </TableGrid.Cell>
                 <TableGrid.Cell width={120} className="muted">
-                  {o.lastFailureReason ?? ''}
+                  {order.lastFailureReason ?? ''}
                 </TableGrid.Cell>
-                {allowMutations && (
+                {allowMutations ? (
                   <button
                     type="button"
                     className="watch-list-more-btn"
-                    aria-label={`더보기 ${o.id}`}
+                    aria-label={`더보기 ${order.id}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onContextMenu(e, o.id);
+                      onContextMenu(e, order.id);
                     }}
                     style={{
                       position: 'absolute',
@@ -234,7 +277,7 @@ export const WatchList = (props: WatchListProps): ReactElement => {
                   >
                     ···
                   </button>
-                )}
+                ) : null}
               </TableGrid.Row>
             ))
           )}
@@ -259,27 +302,31 @@ export const WatchList = (props: WatchListProps): ReactElement => {
             flexDirection: 'column',
           }}
         >
-          <MenuItem disabled label="시작 (Wave 5 예정)" onSelect={closeMenu} />
           <MenuItem
-            disabled={!allowMutations || cancelMutation.isPending}
-            label={`중지 (${menu.ids.length}건)`}
-            onSelect={() => void onCancelSelected(menu.ids)}
+            disabled={!allowMutations || !canResume || mutationPending}
+            label={`시작 (${menu.ids.length}건)`}
+            onSelect={() => void onResumeSelected(menu.ids)}
           />
-          {allowMutations && menu.ids.length === 1 ? (
+          <MenuItem
+            disabled={!allowMutations || !canPause || mutationPending}
+            label={`중지 (${menu.ids.length}건)`}
+            onSelect={() => void onPauseSelected(menu.ids)}
+          />
+          {allowMutations && menu.ids.length === 1 && selectedRows[0]?.source === 'CUSTOM' ? (
             <MenuItem
-              disabled={cancelMutation.isPending}
+              disabled={mutationPending}
               label="수정"
               onSelect={() => {
-                const target = orders.find((o) => o.id === menu.ids[0]);
+                const target = orders.find((order) => order.id === menu.ids[0]);
                 if (target) onEditRow(target);
                 closeMenu();
               }}
             />
           ) : null}
           <MenuItem
-            disabled={!allowMutations || cancelMutation.isPending}
+            disabled={!allowMutations || mutationPending}
             label={`삭제 (${menu.ids.length}건)`}
-            onSelect={() => void onCancelSelected(menu.ids)}
+            onSelect={() => void onDeleteSelected(menu.ids)}
           />
         </div>
       ) : null}
@@ -313,6 +360,23 @@ const MenuItem = ({ disabled = false, label, onSelect }: MenuItemProps): ReactEl
     {label}
   </button>
 );
+
+function statusLabel(status: WatchOrder['status']): string {
+  switch (status) {
+    case 'WATCHING':
+      return '감시중';
+    case 'PAUSED':
+      return '일시중지';
+    case 'EXECUTED':
+      return '실행';
+    case 'FAILED':
+      return '실패';
+    case 'EXPIRED':
+      return '만료';
+    case 'CANCELLED':
+      return '삭제';
+  }
+}
 
 function formatDate(d: Date | string | number): string {
   const date = d instanceof Date ? d : new Date(d);

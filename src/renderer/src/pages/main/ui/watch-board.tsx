@@ -1,4 +1,5 @@
 import {
+  useWatchHistory,
   useWatchOrders,
   type WatchOrder,
   type WatchStatus,
@@ -12,6 +13,7 @@ import {
 import { Button, type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useWatchTabs } from '../model/use-watch-tabs';
+import { WatchHistoryList } from './watch-history-list';
 import { WatchList } from './watch-list';
 
 export interface WatchBoardProps {
@@ -42,7 +44,14 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
   const { setTab, tab } = useWatchTabs();
 
   const status = tabToStatusFilter(tab);
-  const query = useWatchOrders(status !== undefined ? { accountId, status } : { accountId });
+  const watchFilter =
+    tab === 'watching'
+      ? { accountId }
+      : status !== undefined
+        ? { accountId, status }
+        : { accountId };
+  const query = useWatchOrders(watchFilter);
+  const history = useWatchHistory();
   const visible = filterByTab(tab, query.orders);
 
   const openAddWatchOrderPopout = (prefill: WatchOrderFormPrefill | null): void => {
@@ -91,13 +100,21 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
           )}
         </div>
       </div>
-      <WatchList
-        orders={visible}
-        isPending={query.isPending}
-        error={query.error}
-        allowMutations={tab === 'watching'}
-        onEditOrder={onEditOrder}
-      />
+      {tab === 'history' ? (
+        <WatchHistoryList
+          items={history.items}
+          isPending={history.isPending}
+          error={history.error}
+        />
+      ) : (
+        <WatchList
+          orders={visible}
+          isPending={query.isPending}
+          error={query.error}
+          allowMutations={tab === 'watching'}
+          onEditOrder={onEditOrder}
+        />
+      )}
     </section>
   );
 };
@@ -119,6 +136,12 @@ function tabToStatusFilter(tab: WatchTabKey): WatchStatus | undefined {
 }
 
 function filterByTab(tab: WatchTabKey, orders: WatchOrder[]): WatchOrder[] {
-  if (tab !== 'history') return orders;
-  return orders.filter((o) => o.status === 'EXPIRED' || o.status === 'CANCELLED');
+  switch (tab) {
+    case 'watching':
+      return orders.filter((o) => o.status === 'WATCHING' || o.status === 'PAUSED');
+    case 'history':
+      return [];
+    default:
+      return orders;
+  }
 }

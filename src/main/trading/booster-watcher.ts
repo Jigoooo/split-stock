@@ -26,7 +26,7 @@ export interface BoosterTriggerContext {
 
 export interface BoosterWatcherOptions {
   timer: Timer;
-  onTrigger: (task: BoosterTask, context: BoosterTriggerContext) => void;
+  onTrigger: (task: BoosterTask, context: BoosterTriggerContext) => unknown | Promise<unknown>;
   onExpire?: (task: BoosterTask) => void;
 }
 
@@ -83,19 +83,18 @@ export class BoosterWatcher {
 
   /**
    * 본 인스턴스의 (accountId 한정) BOOSTER 핸들러.
-   * engineEntries 클로저는 인스턴스 단위라 다계좌에서도 안전.
+   * register 시점 task를 유지하지 못한 상황(재시작 후 reload)도 metadata 로 복원한다.
    */
   private makeHandler(): WatchHandler {
     return async (order: WatchOrder, ctx) => {
-      const found = Array.from(this.engineEntries.values()).find((e) => e.watchId === order.id);
-      if (found) {
-        this.opts.onTrigger(found.task, {
-          price: ctx.price,
-          at: this.opts.timer.now(),
-          strategySnapshot: found.task.strategySnapshot,
-        });
-        this.engineEntries.delete(found.task.pdno);
-      }
+      const task = this.resolveTask(order);
+      if (!task) return { ok: false, reason: 'BOOSTER_METADATA_INVALID' };
+      await this.opts.onTrigger(task, {
+        price: ctx.price,
+        at: this.opts.timer.now(),
+        strategySnapshot: task.strategySnapshot,
+      });
+      this.engineEntries.delete(task.pdno);
       return { ok: true };
     };
   }
@@ -142,15 +141,14 @@ export class BoosterWatcher {
 
   dispose(): void {
     if (this.mode === 'engine') {
-      for (const e of this.engineEntries.values()) this.engine?.cancel(e.watchId);
       this.engineEntries.clear();
-      // stale closure 누수 방지 — 인스턴스 폐기 시 핸들러도 함께 해제.
+      // runtime detach는 terminal cancel이 아니라 핸들러 해제만 수행.
       this.engine?.unregisterHandler('BOOSTER', this.accountId);
       return;
     }
-    for (const e of this.legacyEntries.values()) {
-      e.disposed = true;
-      e.expireHandle?.clear();
+    for (const entry of this.legacyEntries.values()) {
+      entry.disposed = true;
+      entry.expireHandle?.clear();
     }
     this.legacyEntries.clear();
   }
@@ -184,7 +182,7 @@ export class BoosterWatcher {
     entry.disposed = true;
     entry.expireHandle?.clear();
     this.legacyEntries.delete(entry.task.pdno);
-    this.opts.onTrigger(entry.task, {
+    void this.opts.onTrigger(entry.task, {
       price,
       at: this.opts.timer.now(),
       strategySnapshot: entry.task.strategySnapshot,
@@ -200,12 +198,6 @@ export class BoosterWatcher {
         ? task.lastFilledPrice
         : Math.floor(task.lastFilledPrice * (1 - task.boosterPct));
 
-    const existing = this.engineEntries.get(task.pdno);
-    if (existing) {
-      this.engine.cancel(existing.watchId);
-      this.engineEntries.delete(task.pdno);
-    }
-
     const r = this.engine.register({
       accountId: this.accountId,
       pdno: task.pdno,
@@ -217,10 +209,41 @@ export class BoosterWatcher {
       qtyOrAmountMode: 'AMOUNT',
       amountKrw: task.amountKrw,
       nth: 1,
+      sourceRefId: task.pdno,
       expiresAt: task.expiresAt,
+      metadata: JSON.stringify(task),
     });
     if (r.isOk()) {
       this.engineEntries.set(task.pdno, { task, watchId: r.value.id });
+    }
+  }
+
+  private resolveTask(order: WatchOrder): BoosterTask | null {
+    const current = this.engineEntries.get(order.pdno)?.task;
+    if (current) return current;
+    if (!order.metadata) return null;
+    try {
+      const parsed = JSON.parse(order.metadata) as Partial<BoosterTask>;
+      if (
+        typeof parsed.pdno !== 'string' ||
+        typeof parsed.lastFilledPrice !== 'number' ||
+        typeof parsed.boosterPct !== 'number' ||
+        typeof parsed.amountKrw !== 'number'
+      ) {
+        return null;
+      }
+      return {
+        pdno: parsed.pdno,
+        lastFilledPrice: parsed.lastFilledPrice,
+        boosterPct: parsed.boosterPct,
+        amountKrw: parsed.amountKrw,
+        ...(parsed.expiresAt !== undefined ? { expiresAt: parsed.expiresAt } : {}),
+        ...(parsed.strategySnapshot !== undefined
+          ? { strategySnapshot: parsed.strategySnapshot }
+          : {}),
+      };
+    } catch {
+      return null;
     }
   }
 }

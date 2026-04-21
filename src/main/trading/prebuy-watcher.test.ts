@@ -15,6 +15,7 @@ describe('PrebuyWatcher', () => {
   it('reload → listPending을 내부 맵으로 로드', () => {
     const repo = setup();
     repo.insert({
+      accountId: 1,
       pdno: '005930',
       targetPrice: 60_000,
       amountKrw: 1_000_000,
@@ -32,6 +33,7 @@ describe('PrebuyWatcher', () => {
   it('targetPrice 도달 시 onTrigger + 중복 트리거 방지', () => {
     const repo = setup();
     const ins = repo.insert({
+      accountId: 1,
       pdno: '005930',
       targetPrice: 60_000,
       amountKrw: 1_000_000,
@@ -54,6 +56,7 @@ describe('PrebuyWatcher', () => {
   it('validUntil 경과 → markExpired + onExpire', () => {
     const repo = setup();
     const ins = repo.insert({
+      accountId: 1,
       pdno: '005930',
       targetPrice: 60_000,
       amountKrw: 1_000_000,
@@ -83,6 +86,7 @@ describe('PrebuyWatcher', () => {
   it('미도달 시 트리거 없음 (가격 >= targetPrice)', () => {
     const repo = setup();
     const ins = repo.insert({
+      accountId: 1,
       pdno: '005930',
       targetPrice: 60_000,
       amountKrw: 1_000_000,

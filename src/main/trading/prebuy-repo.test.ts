@@ -10,6 +10,7 @@ function fresh() {
 }
 
 const base = (p: Partial<Parameters<PrebuyRepo['insert']>[0]> = {}) => ({
+  accountId: 1,
   pdno: '005930',
   targetPrice: 60_000,
   amountKrw: 1_000_000,
@@ -25,6 +26,7 @@ describe('PrebuyRepo', () => {
 
     const pending = repo.listPending();
     expect(pending).toHaveLength(1);
+    expect(pending[0]?.accountId).toBe(1);
     expect(pending[0]?.pdno).toBe('005930');
     expect(pending[0]?.status).toBe('PENDING');
   });
@@ -37,6 +39,13 @@ describe('PrebuyRepo', () => {
     if (r.isErr()) {
       expect(r.error.kind).toBe('DUPLICATE_PENDING');
     }
+  });
+
+  it('다른 accountId 의 동일 pdno 는 중복 아님', () => {
+    const repo = fresh();
+    repo.insert(base());
+    const r = repo.insert(base({ accountId: 2 }));
+    expect(r.isOk()).toBe(true);
   });
 
   it('CANCELLED 이후 동일 pdno는 재등록 가능', () => {

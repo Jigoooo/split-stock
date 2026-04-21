@@ -2,7 +2,9 @@ import type { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { bootstrapSchema } from '../../db/bootstrap-schema';
 import { createTestDb, type Db } from '../../db/client';
+import { SettingsRepo } from '../../db/settings-repo';
 import { FakeTimer } from '../../testing/fake-timer';
+import { PrebuyRepo } from '../../trading/prebuy-repo';
 import { WatchEngine } from '../../trading/watch-engine';
 import type { Context } from '../context';
 import { t } from '../trpc-core';
@@ -24,6 +26,9 @@ function setup(): SetupResult {
   const baseCtx = {
     db,
     watchEngine: engine,
+    settingsRepo: new SettingsRepo(db),
+    prebuyRepo: new PrebuyRepo(db),
+    logger: { log: () => {} },
   } as unknown as Omit<Context, 'currentEnv' | 'activeAccountId'>;
   return { db, engine, baseCtx };
 }
@@ -191,6 +196,49 @@ describe('watch-router 권한 검증', () => {
           qty: 10,
         }),
       ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' } satisfies Partial<TRPCError>);
+    });
+  });
+
+  describe('control', () => {
+    it('getControlState: 기본 globalEnabled=true + watchingCount 반환', async () => {
+      s.engine.register({
+        accountId: 1,
+        pdno: '005930',
+        source: 'CUSTOM',
+        side: 'BUY',
+        targetPrice: 60_000,
+        comparator: 'LTE',
+        orderType: 'LIMIT',
+        qtyOrAmountMode: 'QTY',
+        qty: 10,
+      });
+      const caller = createCaller(ctxFor(s.baseCtx, 1));
+      const res = await caller.getControlState();
+      expect(res.globalEnabled).toBe(true);
+      expect(res.watchingCount).toBe(1);
+      expect(res.pausedCount).toBe(0);
+    });
+
+    it('pause/resume: 상태가 WATCHING ↔ PAUSED 로 전이', async () => {
+      const r = s.engine.register({
+        accountId: 1,
+        pdno: '005930',
+        source: 'CUSTOM',
+        side: 'BUY',
+        targetPrice: 60_000,
+        comparator: 'LTE',
+        orderType: 'LIMIT',
+        qtyOrAmountMode: 'QTY',
+        qty: 10,
+      });
+      if (r.isErr()) throw new Error('seed');
+
+      const caller = createCaller(ctxFor(s.baseCtx, 1));
+      await caller.pause({ id: r.value.id });
+      expect(s.engine.list({ status: 'PAUSED' }).map((o) => o.id)).toEqual([r.value.id]);
+
+      const resumed = await caller.resume({ id: r.value.id });
+      expect(resumed.order.status).toBe('WATCHING');
     });
   });
 });

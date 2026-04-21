@@ -1,24 +1,56 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { WatchGlobalToggle } from './watch-global-toggle';
+
+const { mutateMock, invalidateMock } = vi.hoisted(() => ({
+  mutateMock: vi.fn(),
+  invalidateMock: vi.fn(),
+}));
 
 vi.mock('@renderer/entities/account', () => ({
   useActiveAccountId: () => ({ accountId: 1, isPending: false }),
 }));
 
 vi.mock('@renderer/entities/watch-order', () => ({
-  useWatchOrders: (filter: { status?: string }) => {
-    if (filter.status === 'WATCHING') {
-      return { orders: [{ id: 1 }, { id: 2 }, { id: 3 }], isPending: false, error: null };
-    }
-    return { orders: [], isPending: false, error: null };
+  useWatchControlState: () => ({
+    state: {
+      globalEnabled: true,
+      watchingCount: 2,
+      pausedCount: 1,
+      totalTrackedCount: 3,
+    },
+    isPending: false,
+    error: null,
+  }),
+}));
+
+vi.mock('@renderer/shared/api/trpc', () => ({
+  trpc: {
+    useUtils: () => ({
+      watch: {
+        getControlState: { invalidate: invalidateMock },
+        list: { invalidate: invalidateMock },
+        history: { invalidate: invalidateMock },
+      },
+    }),
+    watch: {
+      setGlobalEnabled: {
+        useMutation: () => ({ mutate: mutateMock, isPending: false }),
+      },
+    },
   },
 }));
 
 describe('WatchGlobalToggle', () => {
-  it('WATCHING 건수를 "자동감시 (N)" 형식으로 표시', () => {
+  it('전역 상태와 전체 건수를 "자동감시 ON (N)" 형식으로 표시', () => {
     render(<WatchGlobalToggle />);
-    expect(screen.getByText('자동감시 (3)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '자동감시 ON (3)' })).toBeInTheDocument();
+  });
+
+  it('클릭 시 전역 OFF mutation 호출', () => {
+    render(<WatchGlobalToggle />);
+    fireEvent.click(screen.getByRole('button', { name: '자동감시 ON (3)' }));
+    expect(mutateMock).toHaveBeenCalledWith({ enabled: false });
   });
 });

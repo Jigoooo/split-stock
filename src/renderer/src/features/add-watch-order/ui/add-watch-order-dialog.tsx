@@ -7,7 +7,7 @@ import type {
   WatchSide,
 } from '@renderer/entities/watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, NumberInput, RadioGroup, Select, TextInput } from '@renderer/shared/ui';
+import { Button, DateInput, NumberInput, RadioGroup, Select } from '@renderer/shared/ui';
 import type { CSSProperties, ReactElement } from 'react';
 import { useState } from 'react';
 import type { WatchOrderFormPrefill } from '../model/types';
@@ -171,8 +171,8 @@ interface InnerProps {
 const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
   const { accountId, layout, onClose, onSaved, prefill } = props;
   const utils = trpc.useUtils();
-  const cancelMutation = trpc.watch.cancel.useMutation();
   const createMutation = trpc.watch.create.useMutation();
+  const updateMutation = trpc.watch.update.useMutation();
   const isEdit = prefill?.existingId !== undefined;
 
   const [pdno, setPdno] = useState<string>(prefill?.pdno ?? '');
@@ -275,15 +275,10 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
     if (v === null) return;
     setError(null);
     try {
-      // 수정 모드: 기존 행 cancel → 새 행 create. 둘 사이 race window 는 사용자 1명 상정 시
-      // 무시 가능. cancel 실패 시 create 도 중단해 중복 생성 방지.
-      if (isEdit && prefill?.existingId !== undefined) {
-        await cancelMutation.mutateAsync({ id: prefill.existingId });
-      }
-      const result = await createMutation.mutateAsync({
+      const payload = {
         accountId,
         pdno,
-        source: 'CUSTOM',
+        source: 'CUSTOM' as const,
         side,
         targetPrice: v.targetPrice,
         comparator,
@@ -291,8 +286,14 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
         qtyOrAmountMode: qtyMode,
         ...(qtyMode === 'QTY' ? { qty: v.qty as number } : { amountKrw: v.amountKrw as number }),
         ...(v.expiresAt !== undefined ? { expiresAt: v.expiresAt } : {}),
-      });
+      };
+      const result =
+        isEdit && prefill?.existingId !== undefined
+          ? await updateMutation.mutateAsync({ id: prefill.existingId, ...payload })
+          : await createMutation.mutateAsync(payload);
       await utils.watch.list.invalidate();
+      await utils.watch.getControlState.invalidate();
+      await utils.watch.history.invalidate();
       onSaved?.(result.order as unknown as WatchOrder);
       onClose();
     } catch (e) {
@@ -300,7 +301,7 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
     }
   };
 
-  const isPending = createMutation.isPending || cancelMutation.isPending;
+  const isPending = createMutation.isPending || updateMutation.isPending;
   const isPageLayout = layout === 'page';
   const isDense = !isPageLayout;
   const titleText = isEdit ? '자동감시 수정' : '자동감시 추가';
@@ -457,8 +458,7 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
 
           <FormRow label="유효일">
             <div style={{ display: 'grid', gap: isPageLayout ? '0.5rem' : '0.3rem' }}>
-              <TextInput
-                type="date"
+              <DateInput
                 value={expiresAtIso}
                 onChange={(e) => setExpiresAtIso(e.target.value)}
                 min={todayIso}

@@ -33,6 +33,7 @@ export type ReorderMode = 'NONE' | 'MARKET' | 'LIMIT_AT_LAST_PRICE';
 
 export const SETTING_KEYS = {
   LAST_ACTIVE_ENV: 'last_active_env',
+  WATCH_GLOBAL_ENABLED_PREFIX: 'watch.global.enabled',
   /** 미체결 자동 취소 활성화 여부 ('true'/'false'). */
   PENDING_CANCEL_ENABLED: 'pending_cancel_enabled',
   /** 미체결 지정가 주문 자동 취소 타임아웃 (분, 1~60). */
@@ -102,6 +103,10 @@ export const SETTING_KEYS = {
   /** 2중 백업 외부 드라이브 경로 */
   BACKUP_DUPLICATE_PATH: 'backup.duplicatePath',
 } as const;
+
+export function watchGlobalEnabledKey(accountId: number): string {
+  return `${SETTING_KEYS.WATCH_GLOBAL_ENABLED_PREFIX}.${accountId}`;
+}
 
 export const PENDING_CANCEL_DEFAULTS = {
   enabled: true,
@@ -178,6 +183,11 @@ export function readPendingCancelConfig(repo: SettingsRepo): {
       : PENDING_CANCEL_DEFAULTS.reorderMode;
 
   return { enabled, timeoutMs: clampedMin * 60_000, maxRetries, reorderMode };
+}
+
+export function readWatchGlobalEnabled(repo: SettingsRepo, accountId: number): boolean {
+  const raw = repo.get(watchGlobalEnabledKey(accountId));
+  return raw !== 'false';
 }
 
 export type PriceCorrectionStrategy = 'AGGRESSIVE' | 'CONSERVATIVE';

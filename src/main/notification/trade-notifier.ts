@@ -1,3 +1,4 @@
+import type { WatchOutcomeEvent } from '@shared/contracts';
 import { Notification } from 'electron';
 
 export interface TradeNotifyParams {
@@ -32,5 +33,35 @@ export function notifyTrade(param: TradeNotifyParams): void {
   } catch (error) {
     // Notification API 미지원 환경에서는 조용히 실패
     console.warn('[trade-notifier] Notification API 사용 불가', error);
+  }
+}
+
+export function notifyWatchOutcome(event: WatchOutcomeEvent): void {
+  const statusLabel =
+    event.status === 'EXECUTED'
+      ? '자동감시 실행'
+      : event.status === 'FAILED'
+        ? '자동감시 실패'
+        : '자동감시 만료';
+  const bodyParts = [
+    `${event.pdno}`,
+    `${event.side === 'BUY' ? '매수' : '매도'}`,
+    `목표가 ${event.targetPrice.toLocaleString('ko-KR')}원`,
+  ];
+  if (event.triggerPrice !== null) {
+    bodyParts.push(`감지가 ${event.triggerPrice.toLocaleString('ko-KR')}원`);
+  }
+  if (event.failureReason) {
+    bodyParts.push(event.failureReason);
+  }
+
+  try {
+    new Notification({
+      title: statusLabel,
+      body: bodyParts.join(' · '),
+      timeoutType: 'default',
+    }).show();
+  } catch (error) {
+    console.warn('[trade-notifier] Watch Notification API 사용 불가', error);
   }
 }

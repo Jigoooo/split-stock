@@ -21,7 +21,14 @@ export type WatchOrderType = z.infer<typeof WatchOrderTypeSchema>;
 export const WatchQtyModeSchema = z.enum(['QTY', 'AMOUNT']);
 export type WatchQtyMode = z.infer<typeof WatchQtyModeSchema>;
 
-export const WatchStatusSchema = z.enum(['WATCHING', 'EXECUTED', 'FAILED', 'EXPIRED', 'CANCELLED']);
+export const WatchStatusSchema = z.enum([
+  'WATCHING',
+  'PAUSED',
+  'EXECUTED',
+  'FAILED',
+  'EXPIRED',
+  'CANCELLED',
+]);
 export type WatchStatus = z.infer<typeof WatchStatusSchema>;
 
 export const WatchOrderSchema = z.object({
@@ -37,14 +44,37 @@ export const WatchOrderSchema = z.object({
   qty: z.number().int().nullable(),
   amountKrw: z.number().int().nullable(),
   nth: z.number().int().nullable(),
+  sourceRefId: z.string().nullable(),
   expiresAt: z.date().nullable(),
   status: WatchStatusSchema,
   lastFailureReason: z.string().nullable(),
+  metadata: z.string().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
   executedAt: z.date().nullable(),
 });
 export type WatchOrder = z.infer<typeof WatchOrderSchema>;
+
+export const WatchHistoryItemSchema = z.object({
+  id: z.number().int().positive(),
+  at: z.date(),
+  level: z.enum(['INFO', 'WARN', 'ERROR']),
+  message: z.string(),
+  accountId: z.number().int().positive(),
+  pdno: z.string().nullable(),
+  source: WatchSourceSchema.nullable(),
+  watchId: z.number().int().nullable(),
+  reason: z.string().nullable(),
+});
+export type WatchHistoryItem = z.infer<typeof WatchHistoryItemSchema>;
+
+export const WatchControlStateSchema = z.object({
+  globalEnabled: z.boolean(),
+  watchingCount: z.number().int().nonnegative(),
+  pausedCount: z.number().int().nonnegative(),
+  totalTrackedCount: z.number().int().nonnegative(),
+});
+export type WatchControlState = z.infer<typeof WatchControlStateSchema>;
 
 /** UI 4탭 구분 — 현황(WATCHING) / 실행내역(EXECUTED) / 실패(FAILED) / 히스토리(전체). */
 export type WatchTabKey = 'watching' | 'executed' | 'failed' | 'history';

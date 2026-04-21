@@ -3,6 +3,7 @@ import type { ActiveAccountRepo } from '../account/active-account';
 import type { BackupScheduler } from '../backup/scheduler';
 import type { Db } from '../db/client';
 import type { SettingsRepo } from '../db/settings-repo';
+import { readWatchGlobalEnabled } from '../db/settings-repo';
 import type { AuthService } from '../kis/auth';
 import type { KisHttpClient } from '../kis/http-client';
 import type { EventLogger } from '../logging/event-logger';
@@ -16,6 +17,7 @@ import type { CredentialsRepo } from '../security/credentials-repo';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import type { LotsRepo } from '../trading/lots-repo';
 import type { PendingOrderWatcher } from '../trading/pending-order-watcher';
+import type { PrebuyRepo } from '../trading/prebuy-repo';
 import type { StockMasterRepo } from '../trading/stock-master-repo';
 import type { StockMasterSyncService } from '../trading/stock-master-sync';
 import type { StrategyRepo } from '../trading/strategy-repo';
@@ -50,6 +52,7 @@ export interface Context {
   rateGuardRepo: RateGuardRepo;
   protectionLimitsRepo: ProtectionLimitsRepo;
   watchEngine: WatchEngine | null;
+  prebuyRepo: PrebuyRepo;
   /** 미체결 자동취소(F6) 감시 인스턴스 — 부팅 시 주입, 미활성화 시 null. */
   pendingOrderWatcher: PendingOrderWatcher | null;
   realtime: RealtimeService | null;
@@ -108,6 +111,16 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   let realtime: RealtimeService | null = null;
   let backupScheduler: BackupScheduler | null = null;
 
+  const syncWatchEngine = (accountId: number | null): void => {
+    deps.watchEngine?.setActiveAccountId(accountId);
+    if (accountId !== null) {
+      deps.watchEngine?.setGlobalEnabled(
+        accountId,
+        readWatchGlobalEnabled(deps.settingsRepo, accountId),
+      );
+    }
+  };
+
   const setCurrentEnv = (env: AppEnv | null): void => {
     currentEnv = env;
     if (realtimeFactory) {
@@ -116,12 +129,14 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   };
   const setActiveAccountId = (id: number | null): void => {
     activeAccountId = id;
+    syncWatchEngine(id);
   };
   const setEnvAndAccount = (next: { env: AppEnv | null; accountId: number | null }): void => {
     // JS single-threaded 이므로 동일 tick 내 두 closure var 업데이트는 외부에서 관측 시 원자.
     // accountId 를 먼저 세팅해 "새 env + 이전 accountId" 조합 윈도우 자체를 없앤다.
     activeAccountId = next.accountId;
     currentEnv = next.env;
+    syncWatchEngine(next.accountId);
     if (realtimeFactory) {
       realtime = realtimeFactory(next.env);
     }
@@ -129,6 +144,8 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   const setBackupScheduler = (scheduler: BackupScheduler | null): void => {
     backupScheduler = scheduler;
   };
+
+  syncWatchEngine(activeAccountId);
 
   return {
     create: () => ({

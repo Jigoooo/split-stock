@@ -205,6 +205,7 @@ export const lotsSnapshots = sqliteTable(
  */
 export const prebuyOrders = sqliteTable('prebuy_orders', {
   id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id'),
   pdno: text('pdno').notNull(),
   targetPrice: integer('target_price').notNull(),
   amountKrw: integer('amount_krw').notNull(),
@@ -237,6 +238,7 @@ export const symbolMemos = sqliteTable('symbol_memos', {
  *
  * status:
  *   - 'WATCHING' : 가격 감시 중
+ *   - 'PAUSED'   : 사용자 일시중지 (재개 가능)
  *   - 'EXECUTED' : 주문 발사 성공
  *   - 'FAILED'   : 주문 발사 실패 (last_failure_reason 참조)
  *   - 'EXPIRED'  : expires_at 경과
@@ -258,9 +260,11 @@ export const watchOrders = sqliteTable('watch_orders', {
   qty: integer('qty'),
   amountKrw: integer('amount_krw'),
   nth: integer('nth'), // booster=1, prebuy=1, custom=사용자 지정 (nullable)
+  sourceRefId: text('source_ref_id'),
   expiresAt: integer('expires_at', { mode: 'timestamp_ms' }),
-  status: text('status').notNull(), // 'WATCHING' | 'EXECUTED' | 'FAILED' | 'EXPIRED' | 'CANCELLED'
+  status: text('status').notNull(), // 'WATCHING' | 'PAUSED' | 'EXECUTED' | 'FAILED' | 'EXPIRED' | 'CANCELLED'
   lastFailureReason: text('last_failure_reason'),
+  metadata: text('metadata'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   executedAt: integer('executed_at', { mode: 'timestamp_ms' }),

@@ -1,5 +1,6 @@
 import { CredentialsReentryBanner } from '@renderer/features/backup-restore';
 import { SwitchEnvDialog } from '@renderer/features/switch-env';
+import { useWatchEventNotifications } from '@renderer/features/trade-notifications';
 import { LoginPage } from '@renderer/pages/login';
 import { Button } from '@renderer/shared/ui';
 import { AccountBar } from '@renderer/widgets/account-bar';
@@ -16,6 +17,7 @@ import './app.css';
 
 const AppShell = ({ popout }: { popout: PopoutApi }): ReactElement => {
   const shell = useAppShell();
+  useWatchEventNotifications();
 
   return (
     <div className="app-root" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>

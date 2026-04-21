@@ -18,6 +18,7 @@
 | 인증 / 자격증명 / 환경 전환 | [src/main/security/credentials-repo.ts](../src/main/security/credentials-repo.ts), [src/main/kis/auth.ts](../src/main/kis/auth.ts), [src/renderer/src/features/switch-env/](../src/renderer/src/features/switch-env/) | — (저장 시점은 없음) | [features/authentication.md](features/authentication.md) |
 | 시세 조회 / 종목 검색 / 티어드 감시 / 차트 | [src/main/kis/domestic-stock.ts](../src/main/kis/domestic-stock.ts), [src/main/kis/ws-client.ts](../src/main/kis/ws-client.ts), [src/main/kis/ws-frame-parser.ts](../src/main/kis/ws-frame-parser.ts), [src/main/trading/tiered-quote-feed.ts](../src/main/trading/tiered-quote-feed.ts), [src/main/trading/stock-master-repo.ts](../src/main/trading/stock-master-repo.ts) | 대부분 필요 (검색은 public) | [features/market-data.md](features/market-data.md) |
 | 주문 실행 / 미체결 자동취소 | [src/main/kis/order.ts](../src/main/kis/order.ts), [src/main/trpc/routers/order-router.ts](../src/main/trpc/routers/order-router.ts), [src/main/trading/pending-order-watcher.ts](../src/main/trading/pending-order-watcher.ts) | 필요 | [features/order-execution.md](features/order-execution.md) |
+| 자동감시 보드 / 전역 ON/OFF / pause-resume / outcome 알림 | [src/main/trading/watch-engine.ts](../src/main/trading/watch-engine.ts), [src/main/trpc/routers/watch-router.ts](../src/main/trpc/routers/watch-router.ts), [src/renderer/src/pages/main/ui/watch-board.tsx](../src/renderer/src/pages/main/ui/watch-board.tsx) | 필요 (주문 경유) | [features/auto-watch.md](features/auto-watch.md) |
 | 실시간 트레이딩 패널 (호가/체결/주문/단축키) | [src/main/realtime/](../src/main/realtime/), [src/main/trpc/routers/realtime-router.ts](../src/main/trpc/routers/realtime-router.ts), [src/renderer/src/widgets/trading-panel/](../src/renderer/src/widgets/trading-panel/), [src/renderer/src/features/order-ticket/](../src/renderer/src/features/order-ticket/) | 필요 | [features/realtime-trading.md](features/realtime-trading.md) |
 | 자동매매 FSM / 차수 장부 / 부스터 / 예약매수 / 리스플릿 | [src/main/trading/fsm.ts](../src/main/trading/fsm.ts), [src/main/trading/lots-repo.ts](../src/main/trading/lots-repo.ts), [src/main/trading/booster-watcher.ts](../src/main/trading/booster-watcher.ts), [src/main/trading/prebuy-repo.ts](../src/main/trading/prebuy-repo.ts), [src/main/trading/respiit-planner.ts](../src/main/trading/respiit-planner.ts) | 필요 (주문 경유) | [features/auto-trading.md](features/auto-trading.md) |
 | 안전 3계층 / 킬스위치 / 로그 뷰어 | [src/main/safety/safety-state.ts](../src/main/safety/safety-state.ts), [src/main/trpc/routers/logs-router.ts](../src/main/trpc/routers/logs-router.ts), [src/renderer/src/features/safety-switch/](../src/renderer/src/features/safety-switch/) | — | [features/safety.md](features/safety.md) |
@@ -66,8 +67,6 @@ Vitest 프로젝트 분리: [vitest.config.ts](../vitest.config.ts) — main은 
   - [src/main/index.ts](../src/main/index.ts): `new AuthService(httpByEnv, tokenStore)` 로 전체 전달
   - [src/main/kis/auth.test.ts](../src/main/kis/auth.test.ts): MOCK/PROD 양쪽 dispatch 테스트 추가
 
-- **[관찰됨, 본 세션에서 스코프 외]** `prebuy_orders` 테이블 및 `pending-order-watcher` 내부 키에 `accountId` 필드가 없음. 현재는 사용자 1명/계좌 1개 가정 하에 동작. 다중 계좌 지원 시 스키마/키에 accountId 추가 필요 — 다음 마일스톤 후보.
-
 - **[관찰됨, 본 세션에서 스코프 외]** `dashboard-page`의 `getPositionOverlay` 호출에서 `accountId`가 `1`로 하드코드. `accounts` 테이블에 계좌가 실제 등록되는 플로우가 아직 없으므로 다중 계좌 도입 전까지는 허용.
 
 ## 디렉토리 인덱스
@@ -75,6 +74,7 @@ Vitest 프로젝트 분리: [vitest.config.ts](../vitest.config.ts) — main은 
 - [features/authentication.md](features/authentication.md) — US-005, US-006, NM-002
 - [features/market-data.md](features/market-data.md) — US-007, US-011, NM-003, NM-011, NM-013
 - [features/order-execution.md](features/order-execution.md) — US-010, NM-001
+- [features/auto-watch.md](features/auto-watch.md) — CUSTOM / PREBUY / BOOSTER 자동감시 제어, 알림, 히스토리
 - [features/realtime-trading.md](features/realtime-trading.md) — NM-014 (WS parser/FeedBus/RealtimeService + 호가/체결/주문/단축키)
 - [features/auto-trading.md](features/auto-trading.md) — US-012, NM-004, NM-005, NM-006
 - [features/safety.md](features/safety.md) — US-013

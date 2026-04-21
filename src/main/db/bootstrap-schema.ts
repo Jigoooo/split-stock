@@ -91,6 +91,7 @@ const CREATE_STATEMENTS: readonly string[] = [
   )`,
   `CREATE TABLE IF NOT EXISTS prebuy_orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER,
     pdno TEXT NOT NULL,
     target_price INTEGER NOT NULL,
     amount_krw INTEGER NOT NULL,
@@ -133,9 +134,11 @@ const CREATE_STATEMENTS: readonly string[] = [
     qty INTEGER,
     amount_krw INTEGER,
     nth INTEGER,
+    source_ref_id TEXT,
     expires_at INTEGER,
     status TEXT NOT NULL,
     last_failure_reason TEXT,
+    metadata TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     executed_at INTEGER
