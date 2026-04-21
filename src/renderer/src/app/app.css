@@ -265,14 +265,29 @@ body {
 /* HTS 테이블 클래스는 shared/ui/table-grid 로 마이그레이션 완료 (NM-100~104). */
 
 /* ===== 폼 요소 HTS 감성 ===== */
+.hts-control-root,
+.hts-date-root {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.hts-control-hidden {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
 .hts-input,
 .hts-select,
-.hts-date-input {
+.hts-date-input,
+.hts-date-shell {
   background: var(--bg);
   color: var(--fg);
   border: 0.1rem solid var(--border-strong);
   border-radius: 0.3rem;
-  padding: 0.45rem 0.7rem;
   font-size: 1.2rem;
   font-family: inherit;
   line-height: 1.35;
@@ -285,10 +300,134 @@ body {
     background-color var(--motion-fast) var(--motion-crisp);
 }
 
+.hts-input,
+.hts-select {
+  padding: 0.45rem 0.7rem;
+}
+
+.hts-select,
+.hts-date-shell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.hts-select {
+  justify-content: space-between;
+  cursor: pointer;
+  appearance: none;
+  text-align: left;
+  background: var(--bg);
+  box-shadow: 0 0.1rem 0.2rem rgba(15, 23, 42, 0.04);
+  transition:
+    border-color var(--motion-fast) var(--motion-crisp),
+    box-shadow var(--motion-fast) var(--motion-crisp),
+    background-color var(--motion-fast) var(--motion-crisp);
+}
+
+.hts-select__label-wrap {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.hts-select__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hts-select__label--placeholder {
+  color: var(--fg-3);
+}
+
+.hts-select__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  color: var(--fg-3);
+  flex-shrink: 0;
+  transition:
+    color var(--motion-fast) var(--motion-crisp),
+    transform var(--motion-fast) var(--motion-crisp);
+}
+
+.hts-select:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.hts-select[data-state="open"] {
+  background: var(--bg);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 0.2rem var(--accent-ring);
+}
+
+.hts-select[data-state="open"] .hts-select__icon {
+  color: var(--accent);
+  transform: rotate(180deg);
+}
+
+.hts-date-shell {
+  padding: 0 0.4rem 0 0.7rem;
+}
+
+.hts-date-shell__field {
+  flex: 1;
+  min-width: 0;
+  min-height: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+}
+
+.hts-date-shell__field::placeholder {
+  color: var(--fg-3);
+}
+
+.hts-date-shell__field:focus {
+  outline: none;
+}
+
+.hts-date-shell__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  min-width: 2.4rem;
+  align-self: stretch;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--fg-2);
+  cursor: pointer;
+  transition:
+    color var(--motion-fast) var(--motion-crisp),
+    background-color var(--motion-fast) var(--motion-crisp);
+}
+
+.hts-date-shell__trigger:hover {
+  color: var(--accent);
+  background: var(--accent-tint-8);
+}
+
+.hts-date-shell__trigger:disabled {
+  cursor: not-allowed;
+  color: var(--fg-3);
+  background: transparent;
+}
+
 /* 폼 컨트롤은 box-shadow 링이 이미 있어 global outline을 중복 방지 */
 .hts-input:focus-visible,
 .hts-select:focus-visible,
-.hts-date-input:focus-visible {
+.hts-date-shell:focus-within {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 0.2rem var(--accent-ring);
@@ -296,10 +435,14 @@ body {
 
 .hts-input:disabled,
 .hts-select:disabled,
-.hts-date-input:disabled {
+.hts-date-shell--disabled {
   background: var(--bg-3);
   color: var(--fg-2);
   cursor: not-allowed;
+}
+
+.hts-date-shell--invalid {
+  border-color: var(--up);
 }
 
 .hts-input--dense,
@@ -307,6 +450,10 @@ body {
 .hts-date-input--dense {
   min-height: 2.8rem;
   font-size: 1.1rem;
+}
+
+.hts-input--dense,
+.hts-select--dense {
   padding: 0.35rem 0.55rem;
 }
 
@@ -359,12 +506,222 @@ body {
   flex: 1;
 }
 
-.hts-select {
-  appearance: none;
+.hts-control-popup {
+  background: var(--bg);
+  border: 0.1rem solid var(--border-strong);
+  border-radius: 0.5rem;
+  box-shadow:
+    0 0.4rem 1.2rem rgba(15, 23, 42, 0.08),
+    0 0.1rem 0.3rem rgba(15, 23, 42, 0.05);
+  box-sizing: border-box;
 }
 
-.hts-date-input::-webkit-calendar-picker-indicator {
+.hts-control-popup--select {
+  max-height: min(28rem, calc(100vh - 1.6rem));
+  overflow: auto;
+  padding: 0.3rem;
+  background: var(--bg);
+}
+
+.hts-control-popup--date {
+  width: min(29.6rem, calc(100vw - 1.6rem));
+  padding: 0.8rem;
+}
+
+.hts-control-option {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  min-height: 2.8rem;
+  padding: 0.45rem 0.55rem;
+  border: none;
+  border-radius: 0.35rem;
+  background: transparent;
   cursor: pointer;
+  color: var(--fg);
+  user-select: none;
+  transition:
+    background-color var(--motion-fast) var(--motion-crisp),
+    color var(--motion-fast) var(--motion-crisp);
+}
+
+.hts-control-option--dense {
+  min-height: 2.6rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 1.1rem;
+}
+
+.hts-control-option:hover:not(.hts-control-option--disabled) {
+  background: var(--surface-hover);
+}
+
+.hts-control-option--active {
+  background: var(--accent-tint-6);
+}
+
+.hts-control-option--selected {
+  background: var(--accent-tint-8);
+  color: var(--accent-active);
+  font-weight: 500;
+}
+
+.hts-control-option__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hts-control-option__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  color: var(--accent);
+  flex-shrink: 0;
+  opacity: 1;
+}
+
+.hts-control-option__check--hidden {
+  opacity: 0;
+}
+
+.hts-control-option--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hts-date-popup {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.hts-date-popup__header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hts-date-popup__nav,
+.hts-date-popup__selector,
+.hts-date-popup__month-cell,
+.hts-date-popup__day {
+  border: 0.1rem solid transparent;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+}
+
+.hts-date-popup__nav,
+.hts-date-popup__selector {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 2.6rem;
+  cursor: pointer;
+}
+
+.hts-date-popup__nav {
+  width: 2.6rem;
+  min-width: 2.6rem;
+}
+
+.hts-date-popup__selector {
+  padding: 0 0.75rem;
+  border-color: var(--border);
+}
+
+.hts-date-popup__selector--active {
+  border-color: var(--accent);
+  background: var(--accent-tint-8);
+  color: var(--accent-active);
+}
+
+.hts-date-popup__selectors {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.hts-date-popup__weekdays,
+.hts-date-popup__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.3rem;
+}
+
+.hts-date-popup__weekday {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  color: var(--fg-3);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.hts-date-popup__day {
+  min-height: 2.8rem;
+  cursor: pointer;
+}
+
+.hts-date-popup__day--adjacent {
+  color: var(--fg-3);
+}
+
+.hts-date-popup__day--today {
+  border-color: var(--accent-tint-22);
+}
+
+.hts-date-popup__day--selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.hts-date-popup__day--disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.hts-date-popup__month-grid,
+.hts-date-popup__year-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.hts-date-popup__month-cell {
+  min-height: 3rem;
+  padding: 0.45rem 0.3rem;
+  border-color: var(--border);
+  cursor: pointer;
+}
+
+.hts-date-popup__month-cell--selected {
+  border-color: var(--accent);
+  background: var(--accent-tint-10);
+  color: var(--accent-active);
+  font-weight: 700;
+}
+
+.hts-date-popup__nav:hover,
+.hts-date-popup__selector:hover,
+.hts-date-popup__month-cell:hover,
+.hts-date-popup__day:hover {
+  background: var(--surface-hover);
+}
+
+.hts-date-popup__day--selected:hover {
+  background: var(--accent-hover);
 }
 
 .hts-btn {
