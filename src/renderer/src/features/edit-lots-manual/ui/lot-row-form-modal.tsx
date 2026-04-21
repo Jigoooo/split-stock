@@ -1,4 +1,4 @@
-import { Button, NumberInput, TextInput } from '@renderer/shared/ui';
+import { Button, DateInput, NumberInput } from '@renderer/shared/ui';
 import { type ReactElement, useState } from 'react';
 
 export interface LotRowDraft {
@@ -105,7 +105,7 @@ export const LotRowFormModal = (props: LotRowFormModalProps): ReactElement => {
           </label>
           <label htmlFor="lot-boughtat" style={{ display: 'grid', gap: '0.3rem' }}>
             <span className="muted">매수일 (YYYY-MM-DD)</span>
-            <TextInput
+            <DateInput
               id="lot-boughtat"
               value={boughtAt}
               onChange={(e) => setBoughtAt(e.target.value)}

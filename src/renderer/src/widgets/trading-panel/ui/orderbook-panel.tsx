@@ -1,6 +1,6 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
-import type { CSSProperties, ReactElement } from 'react';
+import { type CSSProperties, type ReactElement, useRef } from 'react';
 import type { LiveOrderbook, WsRoutingMode } from '../model/use-live-feed';
 
 export interface OrderbookPanelProps {
@@ -32,8 +32,8 @@ const RoutingIndicator = ({ mode }: { mode: WsRoutingMode }): ReactElement | nul
   return null;
 };
 
-const ORDERBOOK_QTY_MIN_CHARS = 7;
-const ORDERBOOK_PRICE_MIN_CHARS = 7;
+const ORDERBOOK_QTY_BASE_CHARS = 12;
+const ORDERBOOK_PRICE_BASE_CHARS = 11;
 const ORDERBOOK_CELL_EXTRA_WIDTH_REM = 1;
 
 const getLongestFormattedLength = (values: number[], minChars: number): number =>
@@ -42,26 +42,36 @@ const getLongestFormattedLength = (values: number[], minChars: number): number =
 const toColumnMinWidth = (chars: number): string =>
   `calc(${chars}ch + ${ORDERBOOK_CELL_EXTRA_WIDTH_REM}rem)`;
 
-const getOrderbookLayoutStyles = (
+export const ORDERBOOK_PANEL_MIN_WIDTH = `calc(${
+  ORDERBOOK_QTY_BASE_CHARS * 2 + ORDERBOOK_PRICE_BASE_CHARS
+}ch + ${ORDERBOOK_CELL_EXTRA_WIDTH_REM * 3}rem)`;
+
+const measureOrderbookLayoutChars = (
   orderbook: LiveOrderbook,
 ): {
+  qtyChars: number;
+  priceChars: number;
+} => ({
+  qtyChars: getLongestFormattedLength(
+    [...orderbook.asks, ...orderbook.bids].map((level) => level.quantity),
+    ORDERBOOK_QTY_BASE_CHARS,
+  ),
+  priceChars: getLongestFormattedLength(
+    [...orderbook.asks, ...orderbook.bids].map((level) => level.price),
+    ORDERBOOK_PRICE_BASE_CHARS,
+  ),
+});
+
+const getOrderbookLayoutStyles = (chars: {
+  qtyChars: number;
+  priceChars: number;
+}): {
   qtyCellStyle: CSSProperties;
   priceCellStyle: CSSProperties;
-  gridMinWidth: string;
 } => {
-  const qtyChars = getLongestFormattedLength(
-    [...orderbook.asks, ...orderbook.bids].map((level) => level.quantity),
-    ORDERBOOK_QTY_MIN_CHARS,
-  );
-  const priceChars = getLongestFormattedLength(
-    [...orderbook.asks, ...orderbook.bids].map((level) => level.price),
-    ORDERBOOK_PRICE_MIN_CHARS,
-  );
-
   return {
-    qtyCellStyle: { minWidth: toColumnMinWidth(qtyChars) },
-    priceCellStyle: { minWidth: toColumnMinWidth(priceChars) },
-    gridMinWidth: `calc(${qtyChars * 2 + priceChars}ch + ${ORDERBOOK_CELL_EXTRA_WIDTH_REM * 3}rem)`,
+    qtyCellStyle: { minWidth: toColumnMinWidth(chars.qtyChars) },
+    priceCellStyle: { minWidth: toColumnMinWidth(chars.priceChars) },
   };
 };
 
@@ -74,6 +84,16 @@ const getOrderbookLayoutStyles = (
  */
 export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
   const { orderbook, currentPrice, onClickPrice, routingMode } = props;
+  const layoutCharsRef = useRef<{
+    pdno: string | null;
+    qtyChars: number;
+    priceChars: number;
+  }>({
+    pdno: null,
+    qtyChars: ORDERBOOK_QTY_BASE_CHARS,
+    priceChars: ORDERBOOK_PRICE_BASE_CHARS,
+  });
+
   if (!orderbook) {
     return (
       <div className="panel">
@@ -94,7 +114,22 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
   );
   // 매도는 10→1로 내려오게 역순 표시 (HTS 관례: 매도 위/매수 아래, 매도 1단이 아래에 붙음)
   const asksReversed = [...orderbook.asks].reverse();
-  const { qtyCellStyle, priceCellStyle, gridMinWidth } = getOrderbookLayoutStyles(orderbook);
+  const measuredChars = measureOrderbookLayoutChars(orderbook);
+
+  if (layoutCharsRef.current.pdno !== orderbook.pdno) {
+    layoutCharsRef.current = { pdno: orderbook.pdno, ...measuredChars };
+  } else {
+    layoutCharsRef.current.qtyChars = Math.max(
+      layoutCharsRef.current.qtyChars,
+      measuredChars.qtyChars,
+    );
+    layoutCharsRef.current.priceChars = Math.max(
+      layoutCharsRef.current.priceChars,
+      measuredChars.priceChars,
+    );
+  }
+
+  const { qtyCellStyle, priceCellStyle } = getOrderbookLayoutStyles(layoutCharsRef.current);
 
   return (
     <div className="panel orderbook-panel">
@@ -106,7 +141,7 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
           horizontalScroll
           zebra={false}
           aria-label="호가 10단"
-          style={{ '--hts-row-height': '18px', minWidth: gridMinWidth } as CSSProperties}
+          style={{ '--hts-row-height': '18px', width: '100%' } as CSSProperties}
         >
           <TableGrid.Header>
             <TableGrid.Cell

@@ -13,7 +13,7 @@ import {
 } from '../model/use-live-feed';
 import { useOrderHotkeys } from '../model/use-order-hotkeys';
 import { ActiveOrdersPanel } from './active-orders-panel';
-import { OrderbookPanel } from './orderbook-panel';
+import { ORDERBOOK_PANEL_MIN_WIDTH, OrderbookPanel } from './orderbook-panel';
 import { TradeFeedPanel } from './trade-feed-panel';
 
 function formatTime(hhmmss: string): string {
@@ -178,7 +178,7 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'fit-content(280px) minmax(180px, 210px) minmax(0, 1fr)',
+          gridTemplateColumns: `${ORDERBOOK_PANEL_MIN_WIDTH} minmax(180px, 210px) minmax(0, 1fr)`,
           gap: '0.6rem',
           alignItems: 'stretch',
           flex: 1,

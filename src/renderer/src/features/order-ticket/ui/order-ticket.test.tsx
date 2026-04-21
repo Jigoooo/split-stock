@@ -189,7 +189,14 @@ describe('OrderTicket', () => {
       ),
     );
     const divSelect = screen.getByRole('combobox', { name: '주문 구분' });
-    fireEvent.change(divSelect, { target: { value: 'MARKET' } });
+    fireEvent.click(divSelect);
+    const options = screen.getAllByRole('option', { hidden: true });
+    const marketOption = options[1];
+    expect(marketOption).toBeDefined();
+    if (!marketOption) {
+      throw new Error('시장가 option이 렌더되지 않았습니다.');
+    }
+    fireEvent.click(marketOption);
     expect(screen.getByLabelText('주문 가격')).toBeDisabled();
     expect(screen.getByLabelText('주문 가격')).toHaveValue('시장가');
   });

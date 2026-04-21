@@ -108,16 +108,60 @@ describe('OrderbookPanel', () => {
 
   it('큰 숫자일 때 열 최소 너비를 넉넉히 잡아 가운데 호가가 잘리지 않게 한다', () => {
     const orderbook = mkOrderbook();
-    orderbook.asks[0] = { price: 1234567, quantity: 9876543 };
+    orderbook.asks[0] = { price: 123456789012, quantity: 987654321098 };
 
     render(<OrderbookPanel orderbook={orderbook} currentPrice={70400} onClickPrice={vi.fn()} />);
 
-    const priceCell = screen.getByText(/^1,234,567$/).closest('[data-grid-role="cell"]');
-    const qtyCell = screen.getByText(/^9,876,543$/).closest('[data-grid-role="cell"]');
+    const priceCell = screen.getByText(/^123,456,789,012$/).closest('[data-grid-role="cell"]');
+    const qtyCell = screen.getByText(/^987,654,321,098$/).closest('[data-grid-role="cell"]');
 
     expect(priceCell).not.toBeNull();
     expect(qtyCell).not.toBeNull();
-    expect((priceCell as HTMLElement).style.minWidth).toBe('calc(9ch + 1rem)');
-    expect((qtyCell as HTMLElement).style.minWidth).toBe('calc(9ch + 1rem)');
+    expect((priceCell as HTMLElement).style.minWidth).toBe('calc(15ch + 1rem)');
+    expect((qtyCell as HTMLElement).style.minWidth).toBe('calc(15ch + 1rem)');
+  });
+
+  it('같은 종목 안에서는 한 번 넓어진 열 폭이 이후 틱에서 줄어들지 않는다', () => {
+    const orderbook = mkOrderbook();
+    orderbook.asks[0] = { price: 123456789012, quantity: 987654321098 };
+
+    const { rerender } = render(
+      <OrderbookPanel orderbook={orderbook} currentPrice={70400} onClickPrice={vi.fn()} />,
+    );
+
+    rerender(
+      <OrderbookPanel orderbook={mkOrderbook()} currentPrice={70400} onClickPrice={vi.fn()} />,
+    );
+
+    const priceCell = screen.getByText(/^70,500$/).closest('[data-grid-role="cell"]');
+    const qtyCell = screen.getByText(/^100$/).closest('[data-grid-role="cell"]');
+
+    expect(priceCell).not.toBeNull();
+    expect(qtyCell).not.toBeNull();
+    expect((priceCell as HTMLElement).style.minWidth).toBe('calc(15ch + 1rem)');
+    expect((qtyCell as HTMLElement).style.minWidth).toBe('calc(15ch + 1rem)');
+  });
+
+  it('종목이 바뀌면 열 폭 budget 을 기본값으로 다시 잡는다', () => {
+    const orderbook = mkOrderbook();
+    orderbook.asks[0] = { price: 123456789012, quantity: 987654321098 };
+
+    const { rerender } = render(
+      <OrderbookPanel orderbook={orderbook} currentPrice={70400} onClickPrice={vi.fn()} />,
+    );
+
+    const nextOrderbook = { ...mkOrderbook(), pdno: '000660' };
+
+    rerender(
+      <OrderbookPanel orderbook={nextOrderbook} currentPrice={70400} onClickPrice={vi.fn()} />,
+    );
+
+    const priceCell = screen.getByText(/^70,500$/).closest('[data-grid-role="cell"]');
+    const qtyCell = screen.getByText(/^100$/).closest('[data-grid-role="cell"]');
+
+    expect(priceCell).not.toBeNull();
+    expect(qtyCell).not.toBeNull();
+    expect((priceCell as HTMLElement).style.minWidth).toBe('calc(11ch + 1rem)');
+    expect((qtyCell as HTMLElement).style.minWidth).toBe('calc(12ch + 1rem)');
   });
 });
