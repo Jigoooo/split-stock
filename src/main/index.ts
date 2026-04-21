@@ -82,6 +82,7 @@ import { StockMasterSyncService } from './trading/stock-master-sync';
 import { StrategyRepo } from './trading/strategy-repo';
 import { RotatingQuoteFeed } from './trading/tiered-quote-feed';
 import { WatchEngine, type WatchOrder } from './trading/watch-engine';
+import { quarantineLegacyWatchRows } from './trading/watch-legacy-quarantine';
 import { executeWatchOrder } from './trading/watch-order-executor';
 import { appRouter } from './trpc/app-router';
 import { createContextFactory } from './trpc/context';
@@ -181,6 +182,7 @@ function bootstrapDeps(userDataDir: string) {
       target.webContents.send('appShell:watch-event', event);
     }
   };
+  quarantineLegacyWatchRows(db, eventLogger);
   // 통합 자동감시주문 엔진 — booster/prebuy/custom을 단일 큐로 관리.
   // BOOSTER/PREBUY 핸들러는 어댑터(BoosterWatcher/PrebuyWatcher) 생성 시 registerHandler로 주입됨.
   const watchEngine = new WatchEngine({

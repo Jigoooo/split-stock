@@ -74,7 +74,7 @@ Vitest 프로젝트 분리: [vitest.config.ts](../vitest.config.ts) — main은 
 - [features/authentication.md](features/authentication.md) — US-005, US-006, NM-002
 - [features/market-data.md](features/market-data.md) — US-007, US-011, NM-003, NM-011, NM-013
 - [features/order-execution.md](features/order-execution.md) — US-010, NM-001
-- [features/auto-watch.md](features/auto-watch.md) — CUSTOM / PREBUY / BOOSTER 자동감시 제어, 알림, 히스토리
+- [features/auto-watch.md](features/auto-watch.md) — 예약매수 전용 자동감시 제어, 수익부스터 예약매수, 알림, 히스토리
 - [features/realtime-trading.md](features/realtime-trading.md) — NM-014 (WS parser/FeedBus/RealtimeService + 호가/체결/주문/단축키)
 - [features/auto-trading.md](features/auto-trading.md) — US-012, NM-004, NM-005, NM-006
 - [features/safety.md](features/safety.md) — US-013

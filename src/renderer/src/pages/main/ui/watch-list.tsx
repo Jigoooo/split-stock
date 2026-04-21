@@ -105,8 +105,6 @@ export const WatchList = (props: WatchListProps): ReactElement => {
     onEditOrder?.({
       existingId: order.id,
       pdno: order.pdno,
-      side: order.side,
-      comparator: order.comparator,
       targetPrice: order.targetPrice,
       orderType: order.orderType,
       qtyOrAmountMode: order.qtyOrAmountMode,
@@ -176,14 +174,12 @@ export const WatchList = (props: WatchListProps): ReactElement => {
           <TableGrid.Cell width={42} />
           <TableGrid.Cell width={80}>종목</TableGrid.Cell>
           <TableGrid.Cell width={72}>구분</TableGrid.Cell>
-          <TableGrid.Cell width={60}>방향</TableGrid.Cell>
           <TableGrid.Cell width={90} numeric>
             목표가
           </TableGrid.Cell>
           <TableGrid.Cell width={90} numeric>
             수량
           </TableGrid.Cell>
-          <TableGrid.Cell width={40}>비교</TableGrid.Cell>
           <TableGrid.Cell width={72}>주문</TableGrid.Cell>
           <TableGrid.Cell width={72}>상태</TableGrid.Cell>
           <TableGrid.Cell width={148} className="muted">
@@ -221,10 +217,7 @@ export const WatchList = (props: WatchListProps): ReactElement => {
                 <TableGrid.Cell width={80} numeric>
                   {order.pdno}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={72}>{order.source}</TableGrid.Cell>
-                <TableGrid.Cell width={60}>
-                  <span className={order.side === 'BUY' ? 'num-up' : 'num-down'}>{order.side}</span>
-                </TableGrid.Cell>
+                <TableGrid.Cell width={72}>{sourceLabel(order.source)}</TableGrid.Cell>
                 <TableGrid.Cell width={90} numeric>
                   {thousandSeparator(order.targetPrice)}
                 </TableGrid.Cell>
@@ -233,7 +226,6 @@ export const WatchList = (props: WatchListProps): ReactElement => {
                     ? thousandSeparator(order.qty ?? 0)
                     : `${thousandSeparator(order.amountKrw ?? 0)}원`}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={40}>{order.comparator === 'LTE' ? '≤' : '≥'}</TableGrid.Cell>
                 <TableGrid.Cell width={72}>{order.orderType}</TableGrid.Cell>
                 <TableGrid.Cell width={72}>{statusLabel(order.status)}</TableGrid.Cell>
                 <TableGrid.Cell width={148} className="muted">
@@ -375,6 +367,16 @@ function statusLabel(status: WatchOrder['status']): string {
       return '만료';
     case 'CANCELLED':
       return '삭제';
+  }
+}
+
+function sourceLabel(source: WatchOrder['source']): string {
+  switch (source) {
+    case 'BOOSTER':
+      return '수익부스터';
+    case 'PREBUY':
+    case 'CUSTOM':
+      return '예약매수';
   }
 }
 

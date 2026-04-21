@@ -1,13 +1,7 @@
 import { type StockListEntry, StockPickerList } from '@renderer/entities/stock';
-import type {
-  WatchComparator,
-  WatchOrder,
-  WatchOrderType,
-  WatchQtyMode,
-  WatchSide,
-} from '@renderer/entities/watch-order';
+import type { WatchOrder, WatchOrderType, WatchQtyMode } from '@renderer/entities/watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, DateInput, NumberInput, RadioGroup, Select } from '@renderer/shared/ui';
+import { Button, DateInput, NumberInput, Select } from '@renderer/shared/ui';
 import type { CSSProperties, ReactElement } from 'react';
 import { useState } from 'react';
 import type { WatchOrderFormPrefill } from '../model/types';
@@ -21,33 +15,6 @@ export interface AddWatchOrderDialogProps {
   layout?: 'modal' | 'page';
   /** 저장 성공 시 호출 — 호출측이 watch.list invalidate. */
   onSaved?: (order: WatchOrder) => void;
-}
-
-const SIDE_ITEMS: ReadonlyArray<{ value: WatchSide; label: string }> = [
-  { value: 'BUY', label: '매수' },
-  { value: 'SELL', label: '매도' },
-];
-
-const COMPARATOR_ITEMS: ReadonlyArray<{
-  value: WatchComparator;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: 'LTE',
-    label: '목표가 이하',
-    description: '현재가가 설정한 가격 이하로 내려가면 자동감시가 트리거됩니다.',
-  },
-  {
-    value: 'GTE',
-    label: '목표가 이상',
-    description: '현재가가 설정한 가격 이상으로 올라가면 자동감시가 트리거됩니다.',
-  },
-];
-
-/** side 변경 시 자연스러운 comparator 기본값. */
-function defaultComparatorForSide(s: WatchSide): WatchComparator {
-  return s === 'BUY' ? 'LTE' : 'GTE';
 }
 
 const ORDER_TYPE_ITEMS: ReadonlyArray<{ value: WatchOrderType; label: string }> = [
@@ -133,7 +100,7 @@ function addMonthsIso(months: number): string {
 }
 
 /**
- * 자동감시 추가/수정 다이얼로그 (CUSTOM source 전용).
+ * 자동감시 추가/수정 다이얼로그 (예약매수 전용).
  *
  * 보안 가드:
  *   - accountId 는 호출측이 useActiveAccountId 로 주입한 값만 받는다 — 서버는
@@ -177,10 +144,6 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
 
   const [pdno, setPdno] = useState<string>(prefill?.pdno ?? '');
   const [pdName, setPdName] = useState<string>(prefill?.pdName ?? '');
-  const [side, setSide] = useState<WatchSide>(prefill?.side ?? 'BUY');
-  const [comparator, setComparator] = useState<WatchComparator>(
-    prefill?.comparator ?? defaultComparatorForSide(prefill?.side ?? 'BUY'),
-  );
   const [targetPriceRaw, setTargetPriceRaw] = useState<string>(
     prefill?.targetPrice !== undefined ? String(prefill.targetPrice) : '',
   );
@@ -278,10 +241,7 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
       const payload = {
         accountId,
         pdno,
-        source: 'CUSTOM' as const,
-        side,
         targetPrice: v.targetPrice,
-        comparator,
         orderType,
         qtyOrAmountMode: qtyMode,
         ...(qtyMode === 'QTY' ? { qty: v.qty as number } : { amountKrw: v.amountKrw as number }),
@@ -393,7 +353,7 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
                 </div>
                 <div className="muted" style={{ fontSize: isPageLayout ? '0.9rem' : '0.82rem' }}>
                   {pdno
-                    ? '검색 결과에서 선택한 종목으로 자동감시가 등록됩니다.'
+                    ? '검색 결과에서 선택한 종목으로 예약매수가 등록됩니다.'
                     : '검색창에 종목명이나 6자리 종목코드를 입력한 뒤 결과에서 선택하세요.'}
                 </div>
               </div>
@@ -415,7 +375,7 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
               }}
             >
               <span className="chip chip--up">가격</span>
-              <span>설정한 가격 도달 시 주문 실행</span>
+              <span>감시가격 이하 도달 시 예약매수 실행</span>
             </div>
           </FormRow>
 
@@ -436,23 +396,6 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
                 disabled={isPending}
               />
               <span className="muted">원</span>
-            </div>
-          </FormRow>
-
-          <FormRow label="비교">
-            <div style={{ display: 'grid', gap: isPageLayout ? '0.45rem' : '0.2rem' }}>
-              <RadioGroup
-                name="watch-comparator"
-                value={comparator}
-                onChange={setComparator}
-                items={COMPARATOR_ITEMS.map((it) => ({
-                  value: it.value,
-                  label: it.label,
-                  description: it.description,
-                }))}
-                ariaLabel="비교"
-                dense={isDense}
-              />
             </div>
           </FormRow>
 
@@ -510,28 +453,8 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
             실행조건
           </div>
           <div className="muted" style={{ fontSize: isPageLayout ? '0.92rem' : '0.82rem' }}>
-            트리거가 발생했을 때 어떤 방식으로 주문할지 정합니다.
+            예약매수가 실행될 때 어떤 방식과 수량 기준으로 주문할지 정합니다.
           </div>
-
-          <FormRow label="매매 방향">
-            <Select
-              dense={isDense}
-              value={side}
-              onChange={(e) => {
-                const next = e.target.value as WatchSide;
-                setSide(next);
-                setComparator(defaultComparatorForSide(next));
-              }}
-              aria-label="주문구분"
-              disabled={isPending}
-            >
-              {SIDE_ITEMS.map((it) => (
-                <option key={it.value} value={it.value}>
-                  {it.label}
-                </option>
-              ))}
-            </Select>
-          </FormRow>
 
           <FormRow label="주문 방식">
             <Select
@@ -679,7 +602,7 @@ const AddWatchOrderDialogInner = (props: InnerProps): ReactElement => {
         >
           {isEdit ? (
             <div className="muted" style={{ fontSize: isPageLayout ? '0.9rem' : '0.8rem' }}>
-              ※ 수정은 기존 항목 취소 후 새 항목으로 등록됩니다 (id/등록시각 갱신).
+              ※ 수정 시 예약매수 조건만 갱신되며, 감시 이력은 유지됩니다.
             </div>
           ) : null}
           {error ? (

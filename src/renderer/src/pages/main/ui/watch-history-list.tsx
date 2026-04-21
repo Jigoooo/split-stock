@@ -52,7 +52,7 @@ export const WatchHistoryList = ({
         >
           <div style={{ display: 'flex', gap: '0.55rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <strong>{historyLabel(item.message)}</strong>
-            {item.source ? <span className="chip">{item.source}</span> : null}
+            {item.source ? <span className="chip">{sourceLabel(item.source)}</span> : null}
             {item.pdno ? <span className="num muted">{item.pdno}</span> : null}
             <span className="muted" style={{ marginLeft: 'auto' }}>
               {formatDate(item.at)}
@@ -83,12 +83,24 @@ function historyLabel(message: string): string {
       return '만료';
     case 'watch.cancelled':
       return '삭제';
+    case 'watch.legacy.quarantined':
+      return '구버전 자동감시 종료';
     case 'watch.global.on':
       return '전역 자동감시 ON';
     case 'watch.global.off':
       return '전역 자동감시 OFF';
     default:
       return message;
+  }
+}
+
+function sourceLabel(source: NonNullable<WatchHistoryItem['source']>): string {
+  switch (source) {
+    case 'BOOSTER':
+      return '수익부스터';
+    case 'PREBUY':
+    case 'CUSTOM':
+      return '예약매수';
   }
 }
 

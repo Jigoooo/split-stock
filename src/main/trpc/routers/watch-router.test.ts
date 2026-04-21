@@ -153,10 +153,7 @@ describe('watch-router 권한 검증', () => {
       const res = await caller.create({
         accountId: 1,
         pdno: '005930',
-        source: 'CUSTOM',
-        side: 'BUY',
         targetPrice: 60_000,
-        comparator: 'LTE',
         orderType: 'LIMIT',
         qtyOrAmountMode: 'QTY',
         qty: 10,
@@ -170,10 +167,7 @@ describe('watch-router 권한 검증', () => {
         caller.create({
           accountId: 2,
           pdno: '005930',
-          source: 'CUSTOM',
-          side: 'BUY',
           targetPrice: 60_000,
-          comparator: 'LTE',
           orderType: 'LIMIT',
           qtyOrAmountMode: 'QTY',
           qty: 10,
@@ -187,15 +181,29 @@ describe('watch-router 권한 검증', () => {
         caller.create({
           accountId: 1,
           pdno: '005930',
-          source: 'CUSTOM',
-          side: 'BUY',
           targetPrice: 60_000,
-          comparator: 'LTE',
           orderType: 'LIMIT',
           qtyOrAmountMode: 'QTY',
           qty: 10,
         }),
       ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' } satisfies Partial<TRPCError>);
+    });
+
+    it('legacy field(source/side/comparator) 포함 시 BAD_REQUEST', async () => {
+      const caller = createCaller(ctxFor(s.baseCtx, 1));
+      await expect(
+        caller.create({
+          accountId: 1,
+          pdno: '005930',
+          targetPrice: 60_000,
+          orderType: 'LIMIT',
+          qtyOrAmountMode: 'QTY',
+          qty: 10,
+          source: 'CUSTOM',
+          side: 'BUY',
+          comparator: 'LTE',
+        } as never),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' } satisfies Partial<TRPCError>);
     });
   });
 
@@ -239,6 +247,65 @@ describe('watch-router 권한 검증', () => {
 
       const resumed = await caller.resume({ id: r.value.id });
       expect(resumed.order.status).toBe('WATCHING');
+    });
+  });
+
+  describe('update', () => {
+    it('예약매수 필드만 수정 가능', async () => {
+      const r = s.engine.register({
+        accountId: 1,
+        pdno: '005930',
+        source: 'CUSTOM',
+        side: 'BUY',
+        targetPrice: 60_000,
+        comparator: 'LTE',
+        orderType: 'LIMIT',
+        qtyOrAmountMode: 'QTY',
+        qty: 10,
+      });
+      if (r.isErr()) throw new Error('seed');
+
+      const caller = createCaller(ctxFor(s.baseCtx, 1));
+      const res = await caller.update({
+        id: r.value.id,
+        pdno: '005930',
+        targetPrice: 59_000,
+        orderType: 'MARKET',
+        qtyOrAmountMode: 'AMOUNT',
+        amountKrw: 1_000_000,
+      });
+      expect(res.order.side).toBe('BUY');
+      expect(res.order.comparator).toBe('LTE');
+      expect(res.order.targetPrice).toBe(59_000);
+      expect(res.order.orderType).toBe('MARKET');
+    });
+
+    it('immutable legacy 필드 변경 시 BAD_REQUEST', async () => {
+      const r = s.engine.register({
+        accountId: 1,
+        pdno: '005930',
+        source: 'CUSTOM',
+        side: 'BUY',
+        targetPrice: 60_000,
+        comparator: 'LTE',
+        orderType: 'LIMIT',
+        qtyOrAmountMode: 'QTY',
+        qty: 10,
+      });
+      if (r.isErr()) throw new Error('seed');
+
+      const caller = createCaller(ctxFor(s.baseCtx, 1));
+      await expect(
+        caller.update({
+          id: r.value.id,
+          pdno: '005930',
+          targetPrice: 59_000,
+          orderType: 'LIMIT',
+          qtyOrAmountMode: 'QTY',
+          qty: 10,
+          side: 'SELL',
+        } as never),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' } satisfies Partial<TRPCError>);
     });
   });
 });
