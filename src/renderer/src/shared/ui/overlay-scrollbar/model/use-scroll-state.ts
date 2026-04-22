@@ -31,6 +31,7 @@ export function useScrollState(containerRef: RefObject<HTMLDivElement | null>): 
       if (!el) return () => {};
 
       let raf = 0;
+      const observedChildren = new Set<Element>();
 
       const notify = () => {
         const next: ScrollSnapshot = {
@@ -53,15 +54,37 @@ export function useScrollState(containerRef: RefObject<HTMLDivElement | null>): 
         }
       };
 
+      const observeChildren = (ro: ResizeObserver) => {
+        for (const child of Array.from(el.children)) {
+          if (observedChildren.has(child)) {
+            continue;
+          }
+
+          observedChildren.add(child);
+          ro.observe(child);
+        }
+      };
+
       el.addEventListener('scroll', notify, { passive: true });
       const ro = new ResizeObserver(notify);
       ro.observe(el);
+      observeChildren(ro);
+
+      const mo =
+        typeof MutationObserver === 'undefined'
+          ? null
+          : new MutationObserver(() => {
+              observeChildren(ro);
+              notify();
+            });
+      mo?.observe(el, { childList: true });
 
       notify();
 
       return () => {
         if (raf) cancelAnimationFrame(raf);
         el.removeEventListener('scroll', notify);
+        mo?.disconnect();
         ro.disconnect();
       };
     },

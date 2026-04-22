@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { type ReactElement, useRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { TableGrid, useTableGridVirtual } from './index';
@@ -63,7 +63,7 @@ describe('TableGrid', () => {
   });
 
   describe('Cell width / flex', () => {
-    it('width 지정 시 flex: 0 0 auto + 고정 width 가 적용된다', () => {
+    it('width 지정 시 flex: 0 0 auto + 고정 width/minWidth 가 적용된다', () => {
       render(
         <TableGrid.Root>
           <TableGrid.Body>
@@ -83,11 +83,83 @@ describe('TableGrid', () => {
       const flexible = document.querySelector('.cell-flex') as HTMLElement;
 
       expect(fixed.style.width).toBe('120px');
+      expect(fixed.style.minWidth).toBe('120px');
       expect(fixed.style.flex).toBe('0 0 auto');
       // jsdom 의 flex shorthand 직렬화는 환경에 따라 다름 — style attribute 원문으로 검증
       const flexInline = flexible.getAttribute('style') ?? '';
       expect(flexInline).toMatch(/flex:\s*1 1 0%/);
       expect(flexInline).toMatch(/min-width:\s*0/);
+    });
+
+    it('width 지정 컬럼은 긴 내용이 나타나면 같은 컬럼 전체가 함께 확장된다', async () => {
+      const scrollWidthSpy = vi
+        .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          if (this.classList.contains('grow-col') && this.textContent?.includes('LONG-CONTENT')) {
+            return 220;
+          }
+
+          return 80;
+        });
+
+      render(
+        <TableGrid.Root>
+          <TableGrid.Header>
+            <TableGrid.Cell width={80} className="grow-col">
+              헤더
+            </TableGrid.Cell>
+            <TableGrid.Cell width={80}>고정</TableGrid.Cell>
+          </TableGrid.Header>
+          <TableGrid.Body>
+            <TableGrid.Row>
+              <TableGrid.Cell width={80} className="grow-col">
+                LONG-CONTENT
+              </TableGrid.Cell>
+              <TableGrid.Cell width={80}>A</TableGrid.Cell>
+            </TableGrid.Row>
+            <TableGrid.Row>
+              <TableGrid.Cell width={80} className="grow-col">
+                short
+              </TableGrid.Cell>
+              <TableGrid.Cell width={80}>B</TableGrid.Cell>
+            </TableGrid.Row>
+          </TableGrid.Body>
+        </TableGrid.Root>,
+      );
+
+      const growCells = Array.from(document.querySelectorAll('.grow-col')) as [
+        HTMLElement,
+        HTMLElement,
+        HTMLElement,
+      ];
+
+      await waitFor(() => {
+        expect(growCells[0].style.width).toBe('220px');
+        expect(growCells[1].style.width).toBe('220px');
+        expect(growCells[2].style.width).toBe('220px');
+      });
+
+      scrollWidthSpy.mockRestore();
+    });
+
+    it('horizontalScroll=true 면 scroll content 가 max-content + min-width:100% 로 렌더된다', () => {
+      render(
+        <TableGrid.Root horizontalScroll aria-label="hscroll">
+          <TableGrid.Header>
+            <TableGrid.Cell width={120}>이름</TableGrid.Cell>
+          </TableGrid.Header>
+          <TableGrid.Body>
+            <TableGrid.Row>
+              <TableGrid.Cell width={120}>A</TableGrid.Cell>
+            </TableGrid.Row>
+          </TableGrid.Body>
+        </TableGrid.Root>,
+      );
+
+      const content = document.querySelector('.table-grid-hscroll-content') as HTMLElement;
+      expect(content).toBeInTheDocument();
+      expect(content.style.width).toBe('max-content');
+      expect(content.style.minWidth).toBe('100%');
     });
   });
 

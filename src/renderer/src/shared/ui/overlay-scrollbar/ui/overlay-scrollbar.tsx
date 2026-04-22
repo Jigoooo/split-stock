@@ -1,4 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 
 import type { OverlayScrollbarProps } from '../model/overlay-scrollbar-types';
 import { useScrollState } from '../model/use-scroll-state';
@@ -41,6 +42,7 @@ export function OverlayScrollbar({
 
   const hasScroll = isHorizontal ? hasHorizontalScroll : hasVerticalScroll;
   const scrollPos = isHorizontal ? scrollLeft : scrollTop;
+  const [isHovered, setIsHovered] = useState(false);
 
   const { isDragging, isVisible, handleThumbPointerDown, handleTrackPointerDown } =
     useScrollbarInteraction(
@@ -49,15 +51,26 @@ export function OverlayScrollbar({
       scrollPos,
       autoHideDelay,
       orientation,
+      isHovered,
     );
+
+  useEffect(() => {
+    if (!isVisible && isHovered) {
+      setIsHovered(false);
+    }
+  }, [isHovered, isVisible]);
 
   if (!hasScroll) return null;
 
-  const thumbColor = isDragging ? 'var(--accent)' : 'var(--fg-3)';
-  const trackBg = isDragging ? 'var(--surface-hover)' : 'transparent';
+  const thumbColor = isDragging ? 'var(--accent)' : isHovered ? 'var(--fg-2)' : 'var(--fg-3)';
+  const trackBg = isDragging
+    ? 'var(--surface-active)'
+    : isHovered
+      ? 'var(--surface-hover)'
+      : 'transparent';
 
   if (isHorizontal) {
-    const thumbHeightStr = isDragging ? '0.7rem' : '0.4rem';
+    const thumbHeightStr = isDragging ? '0.7rem' : isHovered ? '0.55rem' : '0.4rem';
 
     const motionProps = shouldReduceMotion
       ? {
@@ -100,15 +113,22 @@ export function OverlayScrollbar({
                 backgroundColor: trackBg,
                 borderRadius: '0.4rem',
                 transformOrigin: 'bottom',
+                transition: shouldReduceMotion ? undefined : 'background-color 160ms ease',
                 touchAction: 'none',
                 pointerEvents: 'auto',
                 display: 'flex',
                 alignItems: 'center',
               }}
+              onPointerEnter={() => setIsHovered(true)}
+              onPointerLeave={() => setIsHovered(false)}
               onPointerDown={handleTrackPointerDown}
             >
               <motion.div
-                animate={{ height: thumbHeightStr }}
+                animate={{
+                  height: thumbHeightStr,
+                  backgroundColor: thumbColor,
+                  opacity: isDragging ? 1 : isHovered ? 0.96 : 0.84,
+                }}
                 transition={
                   shouldReduceMotion
                     ? { duration: 0 }
@@ -116,9 +136,8 @@ export function OverlayScrollbar({
                 }
                 style={{
                   position: 'absolute',
-                  left: thumbLeft + 4,
-                  width: thumbWidth - 8,
-                  backgroundColor: thumbColor,
+                  left: thumbLeft,
+                  width: thumbWidth,
                   borderRadius: '0.4rem',
                   cursor: 'pointer',
                   touchAction: 'none',
@@ -133,7 +152,7 @@ export function OverlayScrollbar({
   }
 
   // vertical (기존 로직)
-  const thumbWidthStr = isDragging ? '0.7rem' : '0.4rem';
+  const thumbWidthStr = isDragging ? '0.7rem' : isHovered ? '0.55rem' : '0.4rem';
 
   const motionProps = shouldReduceMotion
     ? {
@@ -176,15 +195,22 @@ export function OverlayScrollbar({
               backgroundColor: trackBg,
               borderRadius: '0.4rem',
               transformOrigin: 'right',
+              transition: shouldReduceMotion ? undefined : 'background-color 160ms ease',
               touchAction: 'none',
               pointerEvents: 'auto',
               display: 'flex',
               justifyContent: 'center',
             }}
+            onPointerEnter={() => setIsHovered(true)}
+            onPointerLeave={() => setIsHovered(false)}
             onPointerDown={handleTrackPointerDown}
           >
             <motion.div
-              animate={{ width: thumbWidthStr }}
+              animate={{
+                width: thumbWidthStr,
+                backgroundColor: thumbColor,
+                opacity: isDragging ? 1 : isHovered ? 0.96 : 0.84,
+              }}
               transition={
                 shouldReduceMotion
                   ? { duration: 0 }
@@ -192,9 +218,8 @@ export function OverlayScrollbar({
               }
               style={{
                 position: 'absolute',
-                top: thumbTop + 4,
-                height: thumbHeight - 8,
-                backgroundColor: thumbColor,
+                top: thumbTop,
+                height: thumbHeight,
                 borderRadius: '0.4rem',
                 cursor: 'pointer',
                 touchAction: 'none',

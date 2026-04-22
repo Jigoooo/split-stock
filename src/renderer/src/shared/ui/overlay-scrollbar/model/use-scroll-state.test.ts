@@ -122,4 +122,35 @@ describe('useScrollState', () => {
 
     expect(rafMock.mock.calls.length).toBe(rafCallsBefore);
   });
+
+  it('직계 자식이 추가되어 scrollHeight 가 바뀌면 스냅샷을 다시 계산한다', async () => {
+    const div = document.createElement('div');
+    Object.defineProperty(div, 'scrollTop', { value: 0, writable: true, configurable: true });
+    Object.defineProperty(div, 'scrollHeight', { value: 120, writable: true, configurable: true });
+    Object.defineProperty(div, 'clientHeight', { value: 120, writable: true, configurable: true });
+
+    const { result } = renderHook(() => {
+      const ref = useRef<HTMLDivElement>(div as HTMLDivElement);
+      return useScrollState(ref);
+    });
+
+    act(() => {
+      flushRaf();
+    });
+
+    expect(result.current.scrollHeight).toBe(120);
+
+    await act(async () => {
+      Object.defineProperty(div, 'scrollHeight', {
+        value: 360,
+        writable: true,
+        configurable: true,
+      });
+      div.appendChild(document.createElement('div'));
+      await Promise.resolve();
+      flushRaf();
+    });
+
+    expect(result.current.scrollHeight).toBe(360);
+  });
 });

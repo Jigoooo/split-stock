@@ -4,6 +4,13 @@ import { TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import type { LiveTick } from '../model/use-live-feed';
 
+const TRADE_FEED_COLUMN_WIDTHS = {
+  time: 100,
+  price: 112,
+  volume: 104,
+  accumVolume: 200,
+} as const;
+
 function flashKindFromTick(direction: LiveTick['tickDirection']): 'up' | 'down' | undefined {
   if (direction === 'UP' || direction === 'UPPER_LIMIT') return 'up';
   if (direction === 'DOWN' || direction === 'LOWER_LIMIT') return 'down';
@@ -51,18 +58,19 @@ export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
       <TableGrid.Root
         variant="hts"
         stickyHeader
+        horizontalScroll
         aria-label="실시간 체결"
         style={{ flex: 1, minHeight: 0 }}
       >
         <TableGrid.Header>
-          <TableGrid.Cell width={70}>시각</TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
+          <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.time}>시각</TableGrid.Cell>
+          <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.price} numeric>
             체결가
           </TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
+          <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.volume} numeric>
             수량
           </TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
+          <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.accumVolume} numeric>
             누적
           </TableGrid.Cell>
         </TableGrid.Header>
@@ -78,16 +86,24 @@ export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
             const flashKind = flashSet.has(key) ? flashKindFromTick(t.tickDirection) : null;
             return (
               <TableGrid.Row key={key} flash={flashKind ?? null}>
-                <TableGrid.Cell width={70} numeric>
+                <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.time} numeric>
                   {formatTime(t.time)}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric className={colorClass}>
+                <TableGrid.Cell
+                  width={TRADE_FEED_COLUMN_WIDTHS.price}
+                  numeric
+                  className={colorClass}
+                >
                   {thousandSeparator(t.price)}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric>
+                <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.volume} numeric>
                   {thousandSeparator(t.volume)}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric className="muted">
+                <TableGrid.Cell
+                  width={TRADE_FEED_COLUMN_WIDTHS.accumVolume}
+                  numeric
+                  className="muted"
+                >
                   {thousandSeparator(t.accumVolume)}
                 </TableGrid.Cell>
               </TableGrid.Row>

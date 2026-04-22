@@ -1,5 +1,6 @@
-import type { CSSProperties, ReactElement } from 'react';
+import { type CSSProperties, type ReactElement, useLayoutEffect, useRef } from 'react';
 import type { CellProps, OverflowMode } from '../model/types';
+import { useTableGridContext } from './table-grid-root';
 
 const overflowStyle = (mode: OverflowMode): CSSProperties => {
   switch (mode) {
@@ -18,14 +19,18 @@ const overflowClass = (mode: OverflowMode): string => `table-grid-cell--ovf-${mo
 
 /**
  * TableGrid.Cell — flex item.
- * - width 고정 (number→px) 또는 flex grow.
+ * - width 는 컬럼 기준 폭(number→px). 실제 콘텐츠가 더 넓으면 컬럼 전체가 함께 확장.
  * - align/overflow/numeric 옵션.
  * - numeric=true → align right + mono + tabular-nums.
  * - sticky="right" → 가로 스크롤 시 우측 고정 (액션 컬럼 등)
  *
  * 셀 내부 인터랙션이 필요하면 children 에 <button> 등 시맨틱 요소를 직접 배치.
  */
-export function TableGridCell(props: CellProps): ReactElement {
+interface TableGridCellInternalProps extends CellProps {
+  columnIndex?: number;
+}
+
+export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
   const {
     width,
     flex,
@@ -39,11 +44,17 @@ export function TableGridCell(props: CellProps): ReactElement {
     style,
     title,
     children,
+    columnIndex,
   } = props;
+  const { columnWidths, reportColumnWidth } = useTableGridContext();
+  const cellRef = useRef<HTMLDivElement | null>(null);
+
+  const resolvedWidth =
+    width !== undefined ? Math.max(width, columnWidths[columnIndex ?? -1] ?? 0) : undefined;
 
   const flexBasis: CSSProperties =
-    width !== undefined
-      ? { width, flex: '0 0 auto' }
+    resolvedWidth !== undefined
+      ? { width: resolvedWidth, minWidth: minWidth ?? resolvedWidth, flex: '0 0 auto' }
       : flex !== undefined
         ? { flex: `${flex} ${flex} 0%`, minWidth: 0 }
         : { flex: '1 1 0%', minWidth: 0 };
@@ -65,8 +76,22 @@ export function TableGridCell(props: CellProps): ReactElement {
       }
     : {};
 
+  useLayoutEffect(() => {
+    if (width === undefined || columnIndex === undefined) {
+      return;
+    }
+
+    const el = cellRef.current;
+    if (!el) {
+      return;
+    }
+
+    reportColumnWidth(columnIndex, Math.max(width, el.scrollWidth));
+  });
+
   return (
     <div
+      ref={cellRef}
       data-grid-role="cell"
       data-numeric={numeric || undefined}
       data-overflow={overflow}
@@ -84,7 +109,7 @@ export function TableGridCell(props: CellProps): ReactElement {
       style={{
         boxSizing: 'border-box',
         ...flexBasis,
-        ...(minWidth !== undefined ? { minWidth } : {}),
+        ...(width === undefined && minWidth !== undefined ? { minWidth } : {}),
         ...(maxWidth !== undefined ? { maxWidth } : {}),
         ...(finalAlign ? { textAlign: finalAlign } : {}),
         ...overflowStyle(overflow),

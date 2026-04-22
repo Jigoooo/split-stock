@@ -31,6 +31,27 @@ function makeDiv(scrollTop = 0, scrollHeight = 500, clientHeight = 200) {
   return div;
 }
 
+function makeHorizontalDiv(scrollLeft = 0, scrollWidth = 520, clientWidth = 200) {
+  const div = document.createElement('div');
+  Object.defineProperty(div, 'scrollLeft', {
+    value: scrollLeft,
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(div, 'scrollWidth', {
+    value: scrollWidth,
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(div, 'clientWidth', {
+    value: clientWidth,
+    writable: true,
+    configurable: true,
+  });
+  document.body.appendChild(div);
+  return div;
+}
+
 describe('useScrollbarInteraction', () => {
   it('초기 상태: isDragging=false, isVisible=false', () => {
     const div = makeDiv();
@@ -91,6 +112,39 @@ describe('useScrollbarInteraction', () => {
     expect(result.current.isVisible).toBe(true);
   });
 
+  it('hover 중에는 자동 숨김이 멈추고 hover 종료 후 다시 동작한다', () => {
+    const div = makeDiv();
+    const { result, rerender } = renderHook(
+      ({ isPointerOver }: { isPointerOver: boolean }) => {
+        const ref = useRef<HTMLDivElement>(div);
+        return useScrollbarInteraction(ref, 40, 0, 1000, 'vertical', isPointerOver);
+      },
+      { initialProps: { isPointerOver: false } },
+    );
+
+    act(() => {
+      div.dispatchEvent(new Event('wheel', { bubbles: true }));
+    });
+
+    expect(result.current.isVisible).toBe(true);
+
+    rerender({ isPointerOver: true });
+
+    act(() => {
+      vi.advanceTimersByTime(1001);
+    });
+
+    expect(result.current.isVisible).toBe(true);
+
+    rerender({ isPointerOver: false });
+
+    act(() => {
+      vi.advanceTimersByTime(1001);
+    });
+
+    expect(result.current.isVisible).toBe(false);
+  });
+
   it('handleThumbPointerDown 호출 시 isDragging=true', () => {
     const div = makeDiv();
     div.setPointerCapture = vi.fn();
@@ -147,5 +201,37 @@ describe('useScrollbarInteraction', () => {
 
     // clickRatio = 100/200 = 0.5, maxScrollTop = 500-200 = 300, scrollTop = 0.5*300 = 150
     expect(div.scrollTop).toBe(150);
+  });
+
+  it('horizontal track 클릭 시 el.scrollLeft 를 끝까지 이동시킬 수 있다', () => {
+    const div = makeHorizontalDiv(0, 520, 200);
+    const { result } = renderHook(() => {
+      const ref = useRef<HTMLDivElement>(div);
+      return useScrollbarInteraction(ref, 40, 0, 1500, 'horizontal');
+    });
+
+    const trackEl = document.createElement('div');
+    vi.spyOn(trackEl, 'getBoundingClientRect').mockReturnValue({
+      top: 0,
+      height: 10,
+      left: 0,
+      right: 200,
+      bottom: 10,
+      width: 200,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+
+    act(() => {
+      const fakeEvent = {
+        clientX: 200,
+        currentTarget: trackEl,
+      } as unknown as React.PointerEvent;
+
+      result.current.handleTrackPointerDown(fakeEvent);
+    });
+
+    expect(div.scrollLeft).toBe(320);
   });
 });

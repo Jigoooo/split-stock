@@ -10,7 +10,7 @@ export type FlashDirection = 'up' | 'down';
 
 /** Cell 공통 props — Header/Body 모두 사용 */
 export interface CellProps {
-  /** 고정 width (px). flex 와 함께 쓰면 width 우선. */
+  /** 컬럼 기준 폭 (px). 실제 내용이 더 길면 같은 컬럼 전체가 함께 확장된다. */
   width?: number;
   /** flex grow 비율. width 미지정 시 적용. */
   flex?: number;

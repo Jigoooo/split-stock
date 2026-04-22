@@ -1,4 +1,13 @@
-import { forwardRef, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react';
+import {
+  Children,
+  cloneElement,
+  Fragment,
+  forwardRef,
+  isValidElement,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactElement,
+} from 'react';
 import type { RowProps } from '../model/types';
 
 /**
@@ -25,6 +34,13 @@ export const TableGridRow = forwardRef<HTMLDivElement, RowProps>(
     } = props;
 
     const hasInteraction = Boolean(onClick || onContextMenu);
+    const indexedChildren = Children.map(children, (child, columnIndex) => {
+      if (!isValidElement(child) || child.type === Fragment) {
+        return child;
+      }
+
+      return cloneElement(child as ReactElement<{ columnIndex?: number }>, { columnIndex });
+    });
 
     const interactiveProps = onClick
       ? {
@@ -70,7 +86,7 @@ export const TableGridRow = forwardRef<HTMLDivElement, RowProps>(
           ...style,
         }}
       >
-        {children}
+        {indexedChildren}
       </div>
     );
   },

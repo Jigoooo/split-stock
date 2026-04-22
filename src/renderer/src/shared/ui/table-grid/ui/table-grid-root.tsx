@@ -1,4 +1,12 @@
-import { createContext, type ReactElement, useContext, useMemo, useRef } from 'react';
+import {
+  createContext,
+  type ReactElement,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { OverlayScrollbar } from '../../overlay-scrollbar';
 import type { RootProps, Variant } from '../model/types';
 
@@ -13,6 +21,9 @@ interface TableGridContextValue {
   bodyRef: React.RefObject<HTMLDivElement | null>;
   /** horizontalScroll=true 시 Header+Body 를 감싸는 가로 스크롤 wrapper ref */
   hScrollRef: React.RefObject<HTMLDivElement | null>;
+  /** width prop 을 min-width 로 보고, 실제 더 넓은 콘텐츠를 컬럼 전체에 공유 */
+  columnWidths: Record<number, number>;
+  reportColumnWidth: (columnIndex: number, width: number) => void;
 }
 
 const TableGridContext = createContext<TableGridContextValue | null>(null);
@@ -49,6 +60,23 @@ export function TableGridRoot(props: RootProps): ReactElement {
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const hScrollRef = useRef<HTMLDivElement | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
+
+  const reportColumnWidth = useCallback((columnIndex: number, width: number) => {
+    if (!Number.isFinite(width) || width <= 0) return;
+
+    setColumnWidths((prev) => {
+      const nextWidth = Math.ceil(width);
+      if ((prev[columnIndex] ?? 0) >= nextWidth) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [columnIndex]: nextWidth,
+      };
+    });
+  }, []);
 
   const ctx = useMemo<TableGridContextValue>(
     () => ({
@@ -60,8 +88,19 @@ export function TableGridRoot(props: RootProps): ReactElement {
       horizontalScroll,
       bodyRef,
       hScrollRef,
+      columnWidths,
+      reportColumnWidth,
     }),
-    [variant, stickyHeader, zebra, columnDividers, overlayScrollbar, horizontalScroll],
+    [
+      variant,
+      stickyHeader,
+      zebra,
+      columnDividers,
+      overlayScrollbar,
+      horizontalScroll,
+      columnWidths,
+      reportColumnWidth,
+    ],
   );
 
   return (
@@ -103,18 +142,18 @@ export function TableGridRoot(props: RootProps): ReactElement {
             }}
           >
             {/*
-             * inner content — min-width: max-content 로 Header/Body 폭을 통일.
-             * wrapper 자체에 min-width:max-content 를 두면 root overflow:hidden 으로
-             * 가로 스크롤이 죽으므로, 내부에 content div 를 두어 그 안에서만 max-content
-             * 로 늘어나게 한다. 이렇게 하면 Body 가 비어("없음" 등) 있어도 Header 의
-             * 컬럼 합계 너비만큼 stretch 되어 가로 스크롤 시 Body 끝이 잘리지 않는다.
+             * inner content — width:max-content 로 Header/Body 폭을 실제 컬럼 합계까지
+             * 확장하고, min-width:100% 로 viewport 보다 좁을 때만 stretch 한다.
+             * fit-content 는 브라우저에 따라 가용 폭 기준으로 clamp 되어 scrollWidth 가
+             * 마지막 컬럼까지 잡히지 않는 경우가 있어, max-content 로 고정한다.
              */}
             <div
               className="table-grid-hscroll-content"
               style={{
                 display: 'flex',
                 flexDirection: 'column',
-                minWidth: 'max-content',
+                width: 'max-content',
+                minWidth: '100%',
                 minHeight: '100%',
               }}
             >
