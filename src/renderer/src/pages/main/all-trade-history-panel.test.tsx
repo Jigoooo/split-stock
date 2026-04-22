@@ -172,6 +172,38 @@ describe('AllTradeHistoryPanel', () => {
     expect(screen.getByText('0.00%')).toBeInTheDocument();
   });
 
+  it('국내주식 금액과 단가는 소수점 없이 반올림해 표시한다', () => {
+    mockTradeHistoryUseQuery.mockReturnValue({
+      data: {
+        lots: [
+          {
+            id: 21,
+            pdno: '123456',
+            name: '테스트종목',
+            nth: 6,
+            qty: 6,
+            amountKrw: 40_479.996,
+            status: 'SOLD',
+            buyPrice: 6_746.666,
+            boughtAt: Date.parse('2026-04-01T00:00:00Z'),
+            soldAt: Date.parse('2026-04-02T00:00:00Z'),
+            sellPrice: 7_020,
+          },
+        ],
+      },
+      isPending: false,
+      error: null,
+    });
+
+    render(<AllTradeHistoryPanel accountId={1} />);
+
+    expect(screen.getByText('40,480')).toBeInTheDocument();
+    expect(screen.getByText('42,120')).toBeInTheDocument();
+    expect(screen.getAllByText('+1,640')).toHaveLength(2);
+    expect(screen.getAllByText('6,747')).toHaveLength(2);
+    expect(screen.getByText('7,020')).toBeInTheDocument();
+  });
+
   it('결과가 비면 empty state를 표시한다', () => {
     render(<AllTradeHistoryPanel accountId={1} />);
 

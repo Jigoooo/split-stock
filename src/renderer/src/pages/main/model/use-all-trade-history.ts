@@ -205,7 +205,7 @@ function buildRows(lots: TradeHistoryLot[]): AllTradeHistoryRow[] {
       nameText,
       pdnoText,
       qtyText: thousandSeparator(lot.qty),
-      buyPriceText: thousandSeparator(lot.buyPrice),
+      buyPriceText: formatKrw(lot.buyPrice),
       sideText: '매수',
       sellPriceText: '',
       pnlText: '',
@@ -226,10 +226,10 @@ function buildRows(lots: TradeHistoryLot[]): AllTradeHistoryRow[] {
       nameText,
       pdnoText,
       qtyText: thousandSeparator(lot.qty),
-      buyPriceText: thousandSeparator(lot.buyPrice),
+      buyPriceText: formatKrw(lot.buyPrice),
       sideText: '매도',
-      sellPriceText: lot.sellPrice !== undefined ? thousandSeparator(lot.sellPrice) : '',
-      pnlText: formatSigned(pnl),
+      sellPriceText: lot.sellPrice !== undefined ? formatKrw(lot.sellPrice) : '',
+      pnlText: formatSignedKrw(pnl),
       pnlRateText: `${pnlRate.toFixed(2)}%`,
       pnlClassName: getNumberClassName(pnl),
     });
@@ -267,9 +267,13 @@ function formatDate(epochMs: number): string {
   return `${year}.${month}.${day}`;
 }
 
-function formatSigned(value: number): string {
+function formatKrw(value: number): string {
+  return thousandSeparator(Math.round(value));
+}
+
+function formatSignedKrw(value: number): string {
   const sign = value > 0 ? '+' : value < 0 ? '-' : '';
-  return `${sign}${thousandSeparator(Math.abs(value))}`;
+  return `${sign}${formatKrw(Math.abs(value))}`;
 }
 
 function getNumberClassName(value: number): string {

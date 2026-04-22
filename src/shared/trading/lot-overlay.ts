@@ -37,12 +37,13 @@ export function buildLotOverlay(
 ): LotOverlayLine[] {
   const lines: LotOverlayLine[] = [];
   for (const lot of lots) {
+    const roundedBuyPrice = Math.round(lot.buyPrice);
     if (lot.status === 'OPEN') {
       lines.push({
         kind: 'buy',
         nth: lot.nth,
-        price: lot.buyPrice,
-        label: `${lot.nth}차 매수 ${lot.buyPrice.toLocaleString('ko-KR')}`,
+        price: roundedBuyPrice,
+        label: `${lot.nth}차 매수 ${roundedBuyPrice.toLocaleString('ko-KR')}`,
       });
       const target = Math.round(lot.buyPrice * (1 + config.profitPct));
       lines.push({
@@ -55,8 +56,8 @@ export function buildLotOverlay(
       lines.push({
         kind: 'buy',
         nth: lot.nth,
-        price: lot.buyPrice,
-        label: `${lot.nth}차 매수(청산) ${lot.buyPrice.toLocaleString('ko-KR')}`,
+        price: roundedBuyPrice,
+        label: `${lot.nth}차 매수(청산) ${roundedBuyPrice.toLocaleString('ko-KR')}`,
       });
     }
   }

@@ -33,6 +33,17 @@ describe('buildLotOverlay', () => {
     expect(prices).toEqual([...prices].sort((a, b) => a - b));
   });
 
+  it('매수 라벨과 가격은 정수 원으로 반올림한다', () => {
+    const lines = buildLotOverlay([{ nth: 1, buyPrice: 6_746.666, qty: 6, status: 'OPEN' }], {
+      profitPct: 0.05,
+    });
+    const buy = lines.find((line) => line.kind === 'buy');
+    expect(buy).toMatchObject({
+      price: 6747,
+      label: '1차 매수 6,747',
+    });
+  });
+
   it('BUYING/SELLING 상태는 라인 미생성', () => {
     const lines = buildLotOverlay(
       [

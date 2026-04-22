@@ -103,7 +103,8 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
         );
         continue;
       }
-      const stagePnlRate = lot.buyPrice > 0 ? ((position.currentPrice - lot.buyPrice) / lot.buyPrice) * 100 : null;
+      const stagePnlRate =
+        lot.buyPrice > 0 ? ((position.currentPrice - lot.buyPrice) / lot.buyPrice) * 100 : null;
       const stagePnlClass =
         stagePnlRate === null
           ? 'num-flat'
@@ -167,10 +168,10 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
             {thousandSeparator(position.qty)}
           </TableGrid.Cell>
           <TableGrid.Cell width={POSITION_COLS.avgPrice} numeric>
-            {thousandSeparator(position.avgPrice)}
+            {formatKrw(position.avgPrice)}
           </TableGrid.Cell>
           <TableGrid.Cell width={POSITION_COLS.curPrice} numeric>
-            {thousandSeparator(position.currentPrice)}
+            {formatKrw(position.currentPrice)}
           </TableGrid.Cell>
           <TableGrid.Cell width={POSITION_COLS.pnlAmount} numeric className={pnlColorClass}>
             {formatSigned(position.pnlAmount)}
@@ -221,6 +222,11 @@ function formatSigned(value: number): string {
   if (!Number.isFinite(value)) return '-';
   const sign = value > 0 ? '+' : '';
   return `${sign}${thousandSeparator(Math.round(value))}`;
+}
+
+function formatKrw(value: number): string {
+  if (!Number.isFinite(value)) return '-';
+  return thousandSeparator(Math.round(value));
 }
 
 const expandBtnStyle: CSSProperties = {
@@ -306,7 +312,7 @@ const ExpandedLots = ({ lots }: ExpandedLotsProps): ReactElement => {
             <TableGrid.Row key={`${lot.nth}-${lot.boughtAt}`}>
               <TableGrid.Cell width={EXPANDED_LOTS_COLS.nth}>{lot.nth}차</TableGrid.Cell>
               <TableGrid.Cell width={EXPANDED_LOTS_COLS.buyPrice} numeric>
-                {thousandSeparator(lot.buyPrice)}
+                {formatKrw(lot.buyPrice)}
               </TableGrid.Cell>
               <TableGrid.Cell width={EXPANDED_LOTS_COLS.qty} numeric>
                 {thousandSeparator(lot.qty)}

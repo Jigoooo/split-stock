@@ -6,6 +6,7 @@ const {
   fetchChartMock,
   addSeriesMock,
   createChartMock,
+  createPriceLineMock,
   removePriceLineMock,
   detachPrimitiveMock,
   trpcUtilsMock,
@@ -72,6 +73,7 @@ const {
     fetchChartMock,
     addSeriesMock,
     createChartMock,
+    createPriceLineMock,
     removePriceLineMock,
     detachPrimitiveMock,
     trpcUtilsMock,
@@ -205,6 +207,65 @@ describe('PositionChart', () => {
 
     expect(chartOptions.localization.priceFormatter(12345)).toBe('12,345');
     expect(seriesOptions.priceFormat.formatter(12345)).toBe('12,345');
+  });
+
+  it('거래량 시리즈의 마지막 값 라벨과 가격선을 숨긴다', async () => {
+    fetchChartMock.mockResolvedValueOnce({
+      candles: [
+        {
+          date: '2026-04-18',
+          open: 10000,
+          high: 12345,
+          low: 9800,
+          close: 12000,
+          volume: 123456,
+        },
+      ],
+      toMs: Date.UTC(2026, 3, 19),
+    });
+
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+
+    await waitFor(() => expect(addSeriesMock).toHaveBeenCalledTimes(5));
+
+    const volumeCall = addSeriesMock.mock.calls[1];
+    expect(volumeCall?.[1]).toMatchObject({
+      priceScaleId: 'volume',
+      priceLineVisible: false,
+      lastValueVisible: false,
+    });
+  });
+
+  it('오버레이 라인은 캐시된 소수점 값이 와도 차트에서 반올림해 렌더한다', async () => {
+    fetchChartMock.mockResolvedValueOnce({
+      candles: [
+        {
+          date: '2026-04-18',
+          open: 10000,
+          high: 12345,
+          low: 9800,
+          close: 12000,
+          volume: 123456,
+        },
+      ],
+      toMs: Date.UTC(2026, 3, 19),
+    });
+
+    render(
+      <PositionChart
+        pdno="005930"
+        name="삼성전자"
+        lines={[{ kind: 'buy', nth: 1, price: 6746.666, label: '1차 매수 6,746.666' }]}
+      />,
+    );
+
+    await waitFor(() => expect(createPriceLineMock).toHaveBeenCalled());
+    expect(createPriceLineMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        price: 6747,
+        title: '1차 매수 6,747',
+      }),
+    );
   });
 
   it('전체 삭제 버튼은 차트 remount 없이 플러그인 removeAllLineTools 를 호출하고 저장본을 비운다', async () => {

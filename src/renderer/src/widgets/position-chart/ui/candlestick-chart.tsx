@@ -106,6 +106,13 @@ const formatCrosshairDateKr = (time: Time): string => {
   return `${y}-${m}-${dd}`;
 };
 
+function formatOverlayLineTitle(line: { kind: 'buy' | 'sell-target'; nth: number; price: number }): string {
+  const roundedPrice = Math.round(line.price).toLocaleString('ko-KR');
+  return line.kind === 'buy'
+    ? `${line.nth}차 매수 ${roundedPrice}`
+    : `${line.nth}차 익절선 ${roundedPrice}`;
+}
+
 function computeMa(candles: Candle[], period: MaPeriod): Array<{ time: string; value: number }> {
   const result: Array<{ time: string; value: number }> = [];
   for (let i = period - 1; i < candles.length; i++) {
@@ -125,7 +132,7 @@ export interface CandlestickChartProps {
   candles: Candle[];
   enableDrawingTools?: boolean;
   liveCandle: Candle | null;
-  lines: Array<{ kind: 'buy' | 'sell-target'; label: string; price: number }>;
+  lines: Array<{ kind: 'buy' | 'sell-target'; nth: number; label: string; price: number }>;
   onFetchMore: () => Promise<void>;
   pdno: string;
   reachedEnd: boolean;
@@ -398,6 +405,8 @@ export const CandlestickChart = ({
       volSeries = chart.addSeries(HistogramSeries, {
         priceScaleId: 'volume',
         priceFormat: { type: 'volume' },
+        priceLineVisible: false,
+        lastValueVisible: false,
       });
       volSeries.priceScale().applyOptions({
         scaleMargins: { top: 1 - volumeBottom, bottom: 0 },
@@ -515,16 +524,17 @@ export const CandlestickChart = ({
       series.removePriceLine(priceLine);
     }
 
-    priceLinesRef.current = lines.map((line) =>
-      series.createPriceLine({
-        price: line.price,
+    priceLinesRef.current = lines.map((line) => {
+      const roundedPrice = Math.round(line.price);
+      return series.createPriceLine({
+        price: roundedPrice,
         color: line.kind === 'buy' ? '#d73333' : '#2d4fca',
         lineWidth: 1,
         lineStyle: line.kind === 'buy' ? LineStyle.Solid : LineStyle.Dashed,
         axisLabelVisible: true,
-        title: line.label,
-      }),
-    );
+        title: formatOverlayLineTitle({ ...line, price: roundedPrice }),
+      });
+    });
 
     return () => {
       for (const priceLine of priceLinesRef.current) {

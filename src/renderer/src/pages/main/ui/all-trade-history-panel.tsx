@@ -287,7 +287,7 @@ function formatNumber(value: number): string {
 
 function formatSigned(value: number): string {
   const sign = value > 0 ? '+' : value < 0 ? '-' : '';
-  return `${sign}${Math.abs(value).toLocaleString('ko-KR')}`;
+  return `${sign}${Math.round(Math.abs(value)).toLocaleString('ko-KR')}`;
 }
 
 function numberClassName(value: number): string {

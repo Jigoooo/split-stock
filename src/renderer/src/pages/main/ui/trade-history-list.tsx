@@ -102,13 +102,13 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
                   </span>
                 </TableGrid.Cell>
                 <TableGrid.Cell width={TRADE_HISTORY_COLS.buyPrice} numeric>
-                  {thousandSeparator(cycle.buyPrice)}
+                  {formatKrw(cycle.buyPrice)}
                 </TableGrid.Cell>
                 <TableGrid.Cell width={TRADE_HISTORY_COLS.qty} numeric>
                   {thousandSeparator(cycle.qty)}
                 </TableGrid.Cell>
                 <TableGrid.Cell width={TRADE_HISTORY_COLS.sellPrice} numeric>
-                  {cycle.sellPrice !== undefined ? thousandSeparator(cycle.sellPrice) : '-'}
+                  {cycle.sellPrice !== undefined ? formatKrw(cycle.sellPrice) : '-'}
                 </TableGrid.Cell>
                 <TableGrid.Cell width={TRADE_HISTORY_COLS.pnl} numeric className={cls}>
                   {pnl !== undefined ? formatSigned(Math.round(pnl)) : '-'}
@@ -137,4 +137,8 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
 function formatSigned(value: number): string {
   const sign = value > 0 ? '+' : '';
   return `${sign}${thousandSeparator(value)}`;
+}
+
+function formatKrw(value: number): string {
+  return thousandSeparator(Math.round(value));
 }
