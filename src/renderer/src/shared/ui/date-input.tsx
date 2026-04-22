@@ -16,10 +16,12 @@ import type {
 import {
   createContext,
   Fragment,
+  memo,
   useContext,
   useEffect,
   useEffectEvent,
   useId,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -41,7 +43,23 @@ interface DateDraftParts {
   year: string;
 }
 
-interface DateInputContextValue {
+interface DateInputFieldContextValue {
+  commitDraft: (options?: { restoreFocus?: boolean; shouldClose?: boolean }) => void;
+  disabled: boolean;
+  dismissPopup: (reason: DismissReason) => void;
+  draftParts: DateDraftParts;
+  focusSegment: (segment: DateSegmentName) => void;
+  inputId: string;
+  inputRefs: Record<DateSegmentName, RefObject<HTMLInputElement | null>>;
+  open: boolean;
+  popupRef: RefObject<HTMLDivElement | null>;
+  rootRef: RefObject<HTMLSpanElement | null>;
+  setActiveSegment: (segment: DateSegmentName) => void;
+  setDraftPart: (segment: DateSegmentName, nextDraft: string) => void;
+  value: string;
+}
+
+interface DateInputPopupContextValue {
   closeCalendar: (shouldRestoreFocus: boolean) => void;
   commitDraft: (options?: { restoreFocus?: boolean; shouldClose?: boolean }) => void;
   commitValue: (
@@ -51,18 +69,12 @@ interface DateInputContextValue {
   dense: boolean;
   disabled: boolean;
   dismissPopup: (reason: DismissReason) => void;
-  draftParts: DateDraftParts;
-  focusSegment: (segment: DateSegmentName) => void;
   inputId: string;
-  inputRefs: Record<DateSegmentName, RefObject<HTMLInputElement | null>>;
-  invalid: boolean;
   max: string | undefined;
   min: string | undefined;
   open: boolean;
   popupRef: RefObject<HTMLDivElement | null>;
   rootRef: RefObject<HTMLSpanElement | null>;
-  setActiveSegment: (segment: DateSegmentName) => void;
-  setDraftPart: (segment: DateSegmentName, nextDraft: string) => void;
   setOpen: (nextOpen: boolean) => void;
   setViewMode: (nextMode: DateViewMode) => void;
   setVisibleMonth: (nextMonth: Date) => void;
@@ -74,13 +86,16 @@ interface DateInputContextValue {
   shiftYearPage: (offset: number) => void;
 }
 
-const DateInputContext = createContext<DateInputContextValue | null>(null);
+const DateInputFieldContext = createContext<DateInputFieldContextValue | null>(null);
+const DateInputPopupContext = createContext<DateInputPopupContextValue | null>(null);
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'] as const;
 const DATE_SEGMENT_ORDER = [
   'year',
   'month',
   'day',
 ] as const satisfies ReadonlyArray<DateSegmentName>;
+const YEAR_PAGE_SIZE = 12;
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, monthIndex) => monthIndex);
 const DATE_SEGMENT_LENGTH: Record<DateSegmentName, number> = {
   day: 2,
   month: 2,
@@ -97,8 +112,16 @@ const DATE_SEGMENT_SUFFIX: Record<DateSegmentName, string> = {
   year: '연도',
 };
 
-function useDateInputContext(component: string): DateInputContextValue {
-  const context = useContext(DateInputContext);
+function useDateInputFieldContext(component: string): DateInputFieldContextValue {
+  const context = useContext(DateInputFieldContext);
+  if (!context) {
+    throw new Error(`${component} must be used within DateInput.Root`);
+  }
+  return context;
+}
+
+function useDateInputPopupContext(component: string): DateInputPopupContextValue {
+  const context = useContext(DateInputPopupContext);
   if (!context) {
     throw new Error(`${component} must be used within DateInput.Root`);
   }
@@ -318,21 +341,33 @@ function canSelectYear(year: number, min?: string, max?: string): boolean {
 }
 
 function canSelectYearPage(yearPageStart: number, min?: string, max?: string): boolean {
-  return Array.from({ length: 12 }, (_, index) => yearPageStart + index).some((year) =>
+  return Array.from({ length: YEAR_PAGE_SIZE }, (_, index) => yearPageStart + index).some((year) =>
     canSelectYear(year, min, max),
   );
 }
 
-function buildCalendarDays(visibleMonth: Date): Array<{ inCurrentMonth: boolean; iso: string }> {
+interface CalendarDayCell {
+  dayLabel: number;
+  inCurrentMonth: boolean;
+  isDisabled: boolean;
+  isSelected: boolean;
+  isToday: boolean;
+  iso: string;
+}
+
+function buildCalendarDays(
+  visibleMonth: Date,
+): Array<{ dayLabel: number; inCurrentMonth: boolean; iso: string }> {
   const year = visibleMonth.getFullYear();
   const month = visibleMonth.getMonth();
   const firstDay = new Date(year, month, 1);
   const firstWeekday = firstDay.getDay();
-  const days: Array<{ inCurrentMonth: boolean; iso: string }> = [];
+  const days: Array<{ dayLabel: number; inCurrentMonth: boolean; iso: string }> = [];
 
   for (let index = 0; index < 42; index += 1) {
     const date = new Date(year, month, index - firstWeekday + 1);
     days.push({
+      dayLabel: date.getDate(),
       inCurrentMonth: date.getMonth() === month,
       iso: toIsoDate({
         day: date.getDate(),
@@ -343,6 +378,14 @@ function buildCalendarDays(visibleMonth: Date): Array<{ inCurrentMonth: boolean;
   }
 
   return days;
+}
+
+function getTodayIso(now: Date = new Date()): string {
+  return toIsoDate({
+    day: now.getDate(),
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
+  });
 }
 
 function isFocusableTarget(node: Node | null, ...containers: Array<HTMLElement | null>): boolean {
@@ -425,23 +468,26 @@ const DateInputRoot = ({
   const popupRef = useRef<HTMLDivElement>(null);
   const lastFocusedSegmentRef = useRef<DateSegmentName>('year');
   const inputId = useId();
-  const inputRefs: Record<DateSegmentName, RefObject<HTMLInputElement | null>> = {
-    day: dayInputRef,
-    month: monthInputRef,
-    year: yearInputRef,
-  };
+  const inputRefs = useMemo<Record<DateSegmentName, RefObject<HTMLInputElement | null>>>(
+    () => ({
+      day: dayInputRef,
+      month: monthInputRef,
+      year: yearInputRef,
+    }),
+    [],
+  );
 
   const currentValue = value ?? internalValue;
   const isOpen = open ?? internalOpen;
 
-  const applyOpenChange = (nextOpen: boolean): void => {
+  const applyOpenChange = useEffectEvent((nextOpen: boolean): void => {
     if (open === undefined) {
       setInternalOpen(nextOpen);
     }
     onOpenChange?.(nextOpen);
-  };
+  });
 
-  const closeCalendar = (shouldRestoreFocus: boolean): void => {
+  const closeCalendar = useEffectEvent((shouldRestoreFocus: boolean): void => {
     applyOpenChange(false);
 
     if (!shouldRestoreFocus) return;
@@ -451,7 +497,7 @@ const DateInputRoot = ({
       target?.focus();
       target?.select();
     });
-  };
+  });
 
   const commitValue = useEffectEvent(
     (nextValue: string, options?: { restoreFocus?: boolean; shouldClose?: boolean }) => {
@@ -542,64 +588,105 @@ const DateInputRoot = ({
     setYearPageStart((prev) => prev + offset);
   });
 
+  const setViewModeWithPageSync = useEffectEvent((nextMode: DateViewMode) => {
+    if (nextMode === 'year') {
+      setYearPageStart(getYearPageStart(visibleMonth.getFullYear()));
+    }
+    setViewMode(nextMode);
+  });
+
   useEffect(() => {
     if (value === undefined) return;
+    const nextVisibleMonth = toCalendarMonth(value);
     setDraftParts(toDraftParts(value));
-    setVisibleMonth(toCalendarMonth(value));
+    setVisibleMonth(nextVisibleMonth);
   }, [value]);
 
   useEffect(() => {
-    setYearPageStart(getYearPageStart(visibleMonth.getFullYear()));
-  }, [visibleMonth]);
+    if (value === undefined || !isOpen || viewMode !== 'year') return;
+    const nextVisibleMonth = toCalendarMonth(value);
+    if (isOpen && viewMode === 'year') {
+      setYearPageStart(getYearPageStart(nextVisibleMonth.getFullYear()));
+    }
+  }, [isOpen, value, viewMode]);
 
-  const contextValue: DateInputContextValue = {
-    closeCalendar,
-    commitDraft,
-    commitValue,
-    dense,
-    disabled,
-    dismissPopup,
-    draftParts,
-    focusSegment,
-    inputId,
-    inputRefs,
-    invalid,
-    max,
-    min,
-    open: isOpen,
-    popupRef,
-    rootRef,
-    setActiveSegment,
-    setDraftPart,
-    setOpen: applyOpenChange,
-    setViewMode,
-    setVisibleMonth,
-    shiftVisibleMonth,
-    shiftYearPage,
-    value: currentValue,
-    viewMode,
-    visibleMonth,
-    yearPageStart,
-  };
+  const fieldContextValue = useMemo<DateInputFieldContextValue>(
+    () => ({
+      commitDraft,
+      disabled,
+      dismissPopup,
+      draftParts,
+      focusSegment,
+      inputId,
+      inputRefs,
+      open: isOpen,
+      popupRef,
+      rootRef,
+      setActiveSegment,
+      setDraftPart,
+      value: currentValue,
+    }),
+    [disabled, draftParts, inputId, inputRefs, isOpen, currentValue],
+  );
+
+  const popupContextValue = useMemo<DateInputPopupContextValue>(
+    () => ({
+      closeCalendar,
+      commitDraft,
+      commitValue,
+      dense,
+      disabled,
+      dismissPopup,
+      inputId,
+      max,
+      min,
+      open: isOpen,
+      popupRef,
+      rootRef,
+      setOpen: applyOpenChange,
+      setViewMode: setViewModeWithPageSync,
+      setVisibleMonth,
+      shiftVisibleMonth,
+      shiftYearPage,
+      value: currentValue,
+      viewMode,
+      visibleMonth,
+      yearPageStart,
+    }),
+    [
+      dense,
+      disabled,
+      inputId,
+      max,
+      min,
+      isOpen,
+      currentValue,
+      viewMode,
+      visibleMonth,
+      yearPageStart,
+    ],
+  );
 
   return (
-    <DateInputContext.Provider value={contextValue}>
-      <span
-        ref={rootRef}
-        className={joinClasses(
-          'hts-date-root',
-          'hts-date-input',
-          'hts-date-shell',
-          dense && 'hts-date-input--dense',
-          disabled && 'hts-date-shell--disabled',
-          invalid && 'hts-date-shell--invalid',
-          className,
-        )}
-        style={style}
-      >
-        {children}
-      </span>
-    </DateInputContext.Provider>
+    <DateInputFieldContext.Provider value={fieldContextValue}>
+      <DateInputPopupContext.Provider value={popupContextValue}>
+        <span
+          ref={rootRef}
+          className={joinClasses(
+            'hts-date-root',
+            'hts-date-input',
+            'hts-date-shell',
+            dense && 'hts-date-input--dense',
+            disabled && 'hts-date-shell--disabled',
+            invalid && 'hts-date-shell--invalid',
+            className,
+          )}
+          style={style}
+        >
+          {children}
+        </span>
+      </DateInputPopupContext.Provider>
+    </DateInputFieldContext.Provider>
   );
 };
 
@@ -609,239 +696,247 @@ export interface DateInputFieldProps
     'defaultValue' | 'onChange' | 'type' | 'value'
   > {}
 
-const DateInputField = ({
-  'aria-label': ariaLabel,
-  autoFocus,
-  className,
-  id,
-  name,
-  onBlur,
-  onFocus,
-  onKeyDown,
-  placeholder = 'YYYY-MM-DD',
-  required,
-  title,
-  ...props
-}: DateInputFieldProps): ReactElement => {
-  const context = useDateInputContext('DateInput.Field');
-  const separator = placeholder?.includes('.') ? '.' : '-';
+const DateInputField = memo(
+  ({
+    'aria-label': ariaLabel,
+    autoFocus,
+    className,
+    id,
+    name,
+    onBlur,
+    onFocus,
+    onKeyDown,
+    placeholder = 'YYYY-MM-DD',
+    required,
+    title,
+    ...props
+  }: DateInputFieldProps): ReactElement => {
+    const context = useDateInputFieldContext('DateInput.Field');
+    const separator = placeholder?.includes('.') ? '.' : '-';
 
-  useEffect(() => {
-    if (!autoFocus) return;
-    context.focusSegment('year');
-  }, [autoFocus, context.focusSegment]);
+    useEffect(() => {
+      if (!autoFocus) return;
+      context.focusSegment('year');
+    }, [autoFocus, context.focusSegment]);
 
-  const handleBlur =
-    (segment: DateSegmentName): FocusEventHandler<HTMLInputElement> =>
-    (event) => {
-      onBlur?.(event);
+    const handleBlur =
+      (segment: DateSegmentName): FocusEventHandler<HTMLInputElement> =>
+      (event) => {
+        onBlur?.(event);
 
-      const nextSegment = findSegmentFromTarget(event.relatedTarget, context.inputRefs);
-      if (nextSegment) {
-        context.commitDraft();
-        if (nextSegment !== segment) {
-          window.requestAnimationFrame(() => {
-            const target = context.inputRefs[nextSegment].current;
-            if (target && document.activeElement === target) {
-              target.select();
-            }
-          });
+        const nextSegment = findSegmentFromTarget(event.relatedTarget, context.inputRefs);
+        if (nextSegment) {
+          context.commitDraft();
+          if (nextSegment !== segment) {
+            window.requestAnimationFrame(() => {
+              const target = context.inputRefs[nextSegment].current;
+              if (target && document.activeElement === target) {
+                target.select();
+              }
+            });
+          }
+          return;
         }
-        return;
-      }
 
-      if (isFocusableTarget(event.relatedTarget, context.popupRef.current)) {
-        return;
-      }
+        if (isFocusableTarget(event.relatedTarget, context.popupRef.current)) {
+          return;
+        }
 
-      if (isFocusableTarget(event.relatedTarget, context.rootRef.current)) {
-        context.commitDraft();
-        return;
-      }
+        if (isFocusableTarget(event.relatedTarget, context.rootRef.current)) {
+          context.commitDraft();
+          return;
+        }
 
-      context.commitDraft({ shouldClose: context.open });
-    };
+        context.commitDraft({ shouldClose: context.open });
+      };
 
-  const handleKeyDown =
-    (segment: DateSegmentName) =>
-    (event: KeyboardEvent<HTMLInputElement>): void => {
-      onKeyDown?.(event);
-      if (event.defaultPrevented) return;
+    const handleKeyDown =
+      (segment: DateSegmentName) =>
+      (event: KeyboardEvent<HTMLInputElement>): void => {
+        onKeyDown?.(event);
+        if (event.defaultPrevented) return;
 
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        context.commitDraft({ shouldClose: true });
-        return;
-      }
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          context.commitDraft({ shouldClose: true });
+          return;
+        }
 
-      if (event.key === 'Escape' && context.open) {
-        event.preventDefault();
-        context.dismissPopup('escape');
-        return;
-      }
+        if (event.key === 'Escape' && context.open) {
+          event.preventDefault();
+          context.dismissPopup('escape');
+          return;
+        }
 
-      if (event.key === '.' || event.key === '-' || event.key === '/') {
+        if (event.key === '.' || event.key === '-' || event.key === '/') {
+          const next = getAdjacentSegment(segment, 1);
+          if (!next) return;
+          event.preventDefault();
+          context.focusSegment(next);
+          return;
+        }
+
+        if (event.key === 'ArrowLeft') {
+          const previous = getAdjacentSegment(segment, -1);
+          if (!previous) return;
+          event.preventDefault();
+          context.focusSegment(previous);
+          return;
+        }
+
+        if (event.key === 'ArrowRight') {
+          const next = getAdjacentSegment(segment, 1);
+          if (!next) return;
+          event.preventDefault();
+          context.focusSegment(next);
+          return;
+        }
+
+        if (event.key === 'Backspace' && context.draftParts[segment] === '') {
+          const previous = getAdjacentSegment(segment, -1);
+          if (!previous) return;
+          event.preventDefault();
+          context.focusSegment(previous);
+        }
+      };
+
+    const handleChange =
+      (segment: DateSegmentName) =>
+      (event: ChangeEvent<HTMLInputElement>): void => {
+        const nextValue = sanitizeSegmentDraft(event.target.value, segment);
+        context.setDraftPart(segment, nextValue);
+
+        if (nextValue.length !== DATE_SEGMENT_LENGTH[segment]) return;
+
         const next = getAdjacentSegment(segment, 1);
-        if (!next) return;
-        event.preventDefault();
-        context.focusSegment(next);
-        return;
-      }
+        if (next) {
+          context.focusSegment(next);
+        }
+      };
 
-      if (event.key === 'ArrowLeft') {
-        const previous = getAdjacentSegment(segment, -1);
-        if (!previous) return;
-        event.preventDefault();
-        context.focusSegment(previous);
-        return;
-      }
+    const handleFocus =
+      (segment: DateSegmentName) =>
+      (event: FocusEvent<HTMLInputElement>): void => {
+        context.setActiveSegment(segment);
+        onFocus?.(event);
+        const input = event.currentTarget;
+        window.requestAnimationFrame(() => {
+          if (!input.isConnected) return;
+          input.select();
+        });
+      };
 
-      if (event.key === 'ArrowRight') {
-        const next = getAdjacentSegment(segment, 1);
-        if (!next) return;
-        event.preventDefault();
-        context.focusSegment(next);
-        return;
-      }
-
-      if (event.key === 'Backspace' && context.draftParts[segment] === '') {
-        const previous = getAdjacentSegment(segment, -1);
-        if (!previous) return;
-        event.preventDefault();
-        context.focusSegment(previous);
-      }
-    };
-
-  const handleChange =
-    (segment: DateSegmentName) =>
-    (event: ChangeEvent<HTMLInputElement>): void => {
-      const nextValue = sanitizeSegmentDraft(event.target.value, segment);
-      context.setDraftPart(segment, nextValue);
-
-      if (nextValue.length !== DATE_SEGMENT_LENGTH[segment]) return;
-
-      const next = getAdjacentSegment(segment, 1);
-      if (next) {
-        context.focusSegment(next);
-      }
-    };
-
-  const handleFocus =
-    (segment: DateSegmentName) =>
-    (event: FocusEvent<HTMLInputElement>): void => {
-      context.setActiveSegment(segment);
-      onFocus?.(event);
-      const input = event.currentTarget;
-      window.requestAnimationFrame(() => {
-        if (!input.isConnected) return;
-        input.select();
-      });
-    };
-
-  const handleMouseUp = (event: ReactMouseEvent<HTMLInputElement>): void => {
-    event.preventDefault();
-  };
-
-  const handlePaste =
-    (segment: DateSegmentName) =>
-    (event: ClipboardEvent<HTMLInputElement>): void => {
-      const pasted = event.clipboardData.getData('text');
-      const recoverable = parseRecoverableDraft(pasted);
-      if (!recoverable) return;
-
+    const handleMouseUp = (event: ReactMouseEvent<HTMLInputElement>): void => {
       event.preventDefault();
-      const normalized = clampPartsToValidDate(recoverable);
-      context.setDraftPart('year', sanitizeSegmentDraft(String(normalized.year), 'year'));
-      context.setDraftPart('month', sanitizeSegmentDraft(String(normalized.month), 'month'));
-      context.setDraftPart('day', sanitizeSegmentDraft(String(normalized.day), 'day'));
-
-      const next = getAdjacentSegment(segment, 1) ?? 'day';
-      context.focusSegment(next);
     };
 
-  return (
-    <fieldset className={joinClasses('hts-date-shell__fields', className)} aria-label={ariaLabel}>
-      {name ? <input name={name} readOnly type="hidden" value={context.value} /> : null}
-      {DATE_SEGMENT_ORDER.map((segment, index) => (
-        <Fragment key={segment}>
-          <input
-            {...props}
-            ref={context.inputRefs[segment]}
-            aria-label={createSegmentLabel(ariaLabel, segment)}
-            className={joinClasses(
-              'hts-date-shell__field',
-              'hts-date-shell__field--part',
-              `hts-date-shell__field--${segment}`,
-            )}
-            disabled={context.disabled}
-            id={segment === 'year' ? (id ?? context.inputId) : undefined}
-            inputMode="numeric"
-            maxLength={DATE_SEGMENT_LENGTH[segment]}
-            placeholder={DATE_SEGMENT_PLACEHOLDER[segment]}
-            required={required}
-            title={title}
-            type="text"
-            value={context.draftParts[segment]}
-            onBlur={handleBlur(segment)}
-            onChange={handleChange(segment)}
-            onFocus={handleFocus(segment)}
-            onKeyDown={handleKeyDown(segment)}
-            onMouseUp={handleMouseUp}
-            onPaste={handlePaste(segment)}
-          />
-          {index < DATE_SEGMENT_ORDER.length - 1 ? (
-            <span className="hts-date-shell__separator" aria-hidden>
-              {separator}
-            </span>
-          ) : null}
-        </Fragment>
-      ))}
-    </fieldset>
-  );
-};
+    const handlePaste =
+      (segment: DateSegmentName) =>
+      (event: ClipboardEvent<HTMLInputElement>): void => {
+        const pasted = event.clipboardData.getData('text');
+        const recoverable = parseRecoverableDraft(pasted);
+        if (!recoverable) return;
+
+        event.preventDefault();
+        const normalized = clampPartsToValidDate(recoverable);
+        context.setDraftPart('year', sanitizeSegmentDraft(String(normalized.year), 'year'));
+        context.setDraftPart('month', sanitizeSegmentDraft(String(normalized.month), 'month'));
+        context.setDraftPart('day', sanitizeSegmentDraft(String(normalized.day), 'day'));
+
+        const next = getAdjacentSegment(segment, 1) ?? 'day';
+        context.focusSegment(next);
+      };
+
+    return (
+      <fieldset className={joinClasses('hts-date-shell__fields', className)} aria-label={ariaLabel}>
+        {name ? <input name={name} readOnly type="hidden" value={context.value} /> : null}
+        {DATE_SEGMENT_ORDER.map((segment, index) => (
+          <Fragment key={segment}>
+            <input
+              {...props}
+              ref={context.inputRefs[segment]}
+              aria-label={createSegmentLabel(ariaLabel, segment)}
+              className={joinClasses(
+                'hts-date-shell__field',
+                'hts-date-shell__field--part',
+                `hts-date-shell__field--${segment}`,
+              )}
+              disabled={context.disabled}
+              id={segment === 'year' ? (id ?? context.inputId) : undefined}
+              inputMode="numeric"
+              maxLength={DATE_SEGMENT_LENGTH[segment]}
+              placeholder={DATE_SEGMENT_PLACEHOLDER[segment]}
+              required={required}
+              title={title}
+              type="text"
+              value={context.draftParts[segment]}
+              onBlur={handleBlur(segment)}
+              onChange={handleChange(segment)}
+              onFocus={handleFocus(segment)}
+              onKeyDown={handleKeyDown(segment)}
+              onMouseUp={handleMouseUp}
+              onPaste={handlePaste(segment)}
+            />
+            {index < DATE_SEGMENT_ORDER.length - 1 ? (
+              <span className="hts-date-shell__separator" aria-hidden>
+                {separator}
+              </span>
+            ) : null}
+          </Fragment>
+        ))}
+      </fieldset>
+    );
+  },
+);
+
+DateInputField.displayName = 'DateInputField';
 
 export interface DateInputTriggerProps
   extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   children?: ReactNode;
 }
 
-const DateInputTrigger = ({
-  'aria-label': ariaLabel,
-  className,
-  onClick,
-  title = '날짜 선택기 열기',
-  ...props
-}: DateInputTriggerProps): ReactElement => {
-  const context = useDateInputContext('DateInput.Trigger');
+const DateInputTrigger = memo(
+  ({
+    'aria-label': ariaLabel,
+    className,
+    onClick,
+    title = '날짜 선택기 열기',
+    ...props
+  }: DateInputTriggerProps): ReactElement => {
+    const context = useDateInputPopupContext('DateInput.Trigger');
 
-  return (
-    <button
-      {...props}
-      className={joinClasses('hts-date-shell__trigger', className)}
-      disabled={context.disabled}
-      title={title}
-      type="button"
-      aria-label={ariaLabel ?? '날짜 선택기 열기'}
-      aria-controls={`${context.inputId}-calendar`}
-      aria-expanded={context.open}
-      aria-haspopup="dialog"
-      onClick={(event) => {
-        onClick?.(event);
-        if (event.defaultPrevented || context.disabled) return;
+    return (
+      <button
+        {...props}
+        className={joinClasses('hts-date-shell__trigger', className)}
+        disabled={context.disabled}
+        title={title}
+        type="button"
+        aria-label={ariaLabel ?? '날짜 선택기 열기'}
+        aria-controls={`${context.inputId}-calendar`}
+        aria-expanded={context.open}
+        aria-haspopup="dialog"
+        onClick={(event) => {
+          onClick?.(event);
+          if (event.defaultPrevented || context.disabled) return;
 
-        if (context.open) {
-          context.commitDraft({ shouldClose: true });
-          return;
-        }
+          if (context.open) {
+            context.commitDraft({ shouldClose: true });
+            return;
+          }
 
-        context.setViewMode('day');
-        context.setOpen(true);
-      }}
-    >
-      {props.children ?? <CalendarDays size={15} aria-hidden />}
-    </button>
-  );
-};
+          context.setViewMode('day');
+          context.setOpen(true);
+        }}
+      >
+        {props.children ?? <CalendarDays size={15} aria-hidden />}
+      </button>
+    );
+  },
+);
+
+DateInputTrigger.displayName = 'DateInputTrigger';
 
 export interface DateInputContentProps {
   children: ReactNode;
@@ -849,76 +944,132 @@ export interface DateInputContentProps {
   style?: CSSProperties | undefined;
 }
 
-const DateInputContent = ({ children, className, style }: DateInputContentProps): ReactElement => {
-  const context = useDateInputContext('DateInput.Content');
+const DateInputContent = memo(
+  ({ children, className, style }: DateInputContentProps): ReactElement => {
+    const context = useDateInputPopupContext('DateInput.Content');
 
-  return (
-    <ControlPopup
-      anchorRef={context.rootRef}
-      className={joinClasses('hts-control-popup', 'hts-control-popup--date', className)}
-      id={`${context.inputId}-calendar`}
-      onDismiss={(reason) => context.dismissPopup(reason)}
-      open={context.open}
-      portalMode="body"
-      popupRef={context.popupRef}
-      role="dialog"
-      style={style}
-      widthMode="content"
-      minWidth={296}
-    >
-      {children}
-    </ControlPopup>
-  );
-};
+    return (
+      <ControlPopup
+        anchorRef={context.rootRef}
+        className={joinClasses('hts-control-popup', 'hts-control-popup--date', className)}
+        id={`${context.inputId}-calendar`}
+        onDismiss={(reason) => context.dismissPopup(reason)}
+        open={context.open}
+        portalMode="body"
+        popupRef={context.popupRef}
+        role="dialog"
+        style={style}
+        widthMode="content"
+        minWidth={296}
+        animate={false}
+      >
+        {children}
+      </ControlPopup>
+    );
+  },
+);
+
+DateInputContent.displayName = 'DateInputContent';
 
 export interface DateInputCalendarProps {
   className?: string | undefined;
 }
 
-const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement => {
-  const context = useDateInputContext('DateInput.Calendar');
+const DateInputCalendar = memo(({ className }: DateInputCalendarProps): ReactElement => {
+  const context = useDateInputPopupContext('DateInput.Calendar');
   const year = context.visibleMonth.getFullYear();
   const month = context.visibleMonth.getMonth();
-  const calendarDays = buildCalendarDays(context.visibleMonth);
-  const previousMonthDate = new Date(year, month - 1, 1);
-  const nextMonthDate = new Date(year, month + 1, 1);
+  const todayIso = useMemo(() => getTodayIso(), []);
+  const previousMonthDate = useMemo(() => new Date(year, month - 1, 1), [year, month]);
+  const nextMonthDate = useMemo(() => new Date(year, month + 1, 1), [year, month]);
   const previousYear = year - 1;
   const nextYear = year + 1;
-  const previousYearPageStart = context.yearPageStart - 12;
-  const nextYearPageStart = context.yearPageStart + 12;
-  const todayIso = toIsoDate({
-    day: new Date().getDate(),
-    month: new Date().getMonth() + 1,
-    year: new Date().getFullYear(),
-  });
-  const canGoPrev =
-    context.viewMode === 'year'
-      ? canSelectYearPage(previousYearPageStart, context.min, context.max)
-      : context.viewMode === 'month'
-        ? canSelectYear(previousYear, context.min, context.max)
-        : canSelectMonth(
-            previousMonthDate.getFullYear(),
-            previousMonthDate.getMonth(),
-            context.min,
-            context.max,
-          );
-  const canGoNext =
-    context.viewMode === 'year'
-      ? canSelectYearPage(nextYearPageStart, context.min, context.max)
-      : context.viewMode === 'month'
-        ? canSelectYear(nextYear, context.min, context.max)
-        : canSelectMonth(
-            nextMonthDate.getFullYear(),
-            nextMonthDate.getMonth(),
-            context.min,
-            context.max,
-          );
+  const previousYearPageStart = context.yearPageStart - YEAR_PAGE_SIZE;
+  const nextYearPageStart = context.yearPageStart + YEAR_PAGE_SIZE;
+  const yearCells = useMemo(
+    () =>
+      Array.from({ length: YEAR_PAGE_SIZE }, (_, index) => {
+        const gridYear = context.yearPageStart + index;
+        const isDisabled = !canSelectYear(gridYear, context.min, context.max);
+
+        return {
+          gridYear,
+          isDisabled,
+          isSelected: !isDisabled && gridYear === year,
+        };
+      }),
+    [context.yearPageStart, context.min, context.max, year],
+  );
+  const monthCells = useMemo(
+    () =>
+      MONTH_OPTIONS.map((monthIndex) => {
+        const isDisabled = !canSelectMonth(year, monthIndex, context.min, context.max);
+
+        return {
+          isDisabled,
+          isSelected: !isDisabled && monthIndex === month,
+          monthIndex,
+        };
+      }),
+    [context.min, context.max, month, year],
+  );
+  const calendarDays = useMemo<CalendarDayCell[]>(
+    () =>
+      buildCalendarDays(context.visibleMonth).map((dayItem) => {
+        const isDisabled =
+          (context.min !== undefined && dayItem.iso < context.min) ||
+          (context.max !== undefined && dayItem.iso > context.max);
+
+        return {
+          ...dayItem,
+          isDisabled,
+          isSelected: !isDisabled && context.value === dayItem.iso,
+          isToday: dayItem.iso === todayIso,
+        };
+      }),
+    [context.max, context.min, context.value, context.visibleMonth, todayIso],
+  );
+  const canGoPrev = useMemo(() => {
+    if (context.viewMode === 'year') {
+      return canSelectYearPage(previousYearPageStart, context.min, context.max);
+    }
+    if (context.viewMode === 'month') {
+      return canSelectYear(previousYear, context.min, context.max);
+    }
+    return canSelectMonth(
+      previousMonthDate.getFullYear(),
+      previousMonthDate.getMonth(),
+      context.min,
+      context.max,
+    );
+  }, [
+    context.max,
+    context.min,
+    context.viewMode,
+    previousMonthDate,
+    previousYear,
+    previousYearPageStart,
+  ]);
+  const canGoNext = useMemo(() => {
+    if (context.viewMode === 'year') {
+      return canSelectYearPage(nextYearPageStart, context.min, context.max);
+    }
+    if (context.viewMode === 'month') {
+      return canSelectYear(nextYear, context.min, context.max);
+    }
+    return canSelectMonth(
+      nextMonthDate.getFullYear(),
+      nextMonthDate.getMonth(),
+      context.min,
+      context.max,
+    );
+  }, [context.max, context.min, context.viewMode, nextMonthDate, nextYear, nextYearPageStart]);
 
   const handlePrev = (): void => {
     if (!canGoPrev) return;
 
     if (context.viewMode === 'year') {
-      context.shiftYearPage(-12);
+      context.shiftYearPage(-YEAR_PAGE_SIZE);
       return;
     }
 
@@ -934,7 +1085,7 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
     if (!canGoNext) return;
 
     if (context.viewMode === 'year') {
-      context.shiftYearPage(12);
+      context.shiftYearPage(YEAR_PAGE_SIZE);
       return;
     }
 
@@ -1013,61 +1164,49 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
 
       {context.viewMode === 'year' ? (
         <div className="hts-date-popup__year-grid">
-          {Array.from({ length: 12 }, (_, index) => context.yearPageStart + index).map(
-            (gridYear) => {
-              const isDisabled = !canSelectYear(gridYear, context.min, context.max);
-              const isSelected = !isDisabled && gridYear === year;
-
-              return (
-                <button
-                  key={gridYear}
-                  aria-label={`${gridYear}년 선택`}
-                  className={joinClasses(
-                    'hts-date-popup__month-cell',
-                    isSelected && 'hts-date-popup__month-cell--selected',
-                    isDisabled && 'hts-date-popup__day--disabled',
-                  )}
-                  disabled={isDisabled}
-                  type="button"
-                  onClick={() => {
-                    context.setVisibleMonth(new Date(gridYear, month, 1));
-                    context.setViewMode('month');
-                  }}
-                >
-                  {gridYear}
-                </button>
-              );
-            },
-          )}
+          {yearCells.map((yearCell) => (
+            <button
+              key={yearCell.gridYear}
+              aria-label={`${yearCell.gridYear}년 선택`}
+              className={joinClasses(
+                'hts-date-popup__month-cell',
+                yearCell.isSelected && 'hts-date-popup__month-cell--selected',
+                yearCell.isDisabled && 'hts-date-popup__day--disabled',
+              )}
+              disabled={yearCell.isDisabled}
+              type="button"
+              onClick={() => {
+                context.setVisibleMonth(new Date(yearCell.gridYear, month, 1));
+                context.setViewMode('month');
+              }}
+            >
+              {yearCell.gridYear}
+            </button>
+          ))}
         </div>
       ) : null}
 
       {context.viewMode === 'month' ? (
         <div className="hts-date-popup__month-grid">
-          {Array.from({ length: 12 }, (_, monthIndex) => monthIndex).map((monthIndex) => {
-            const isDisabled = !canSelectMonth(year, monthIndex, context.min, context.max);
-            const isSelected = !isDisabled && monthIndex === month;
-
-            return (
-              <button
-                key={monthIndex}
-                aria-label={`${monthIndex + 1}월 선택`}
-                className={joinClasses(
-                  'hts-date-popup__month-cell',
-                  isSelected && 'hts-date-popup__month-cell--selected',
-                  isDisabled && 'hts-date-popup__day--disabled',
-                )}
-                disabled={isDisabled}
-                type="button"
-                onClick={() => {
-                  context.setVisibleMonth(new Date(year, monthIndex, 1));
-                  context.setViewMode('day');
-                }}
-              >
-                {monthIndex + 1}월
-              </button>
-            );
-          })}
+          {monthCells.map((monthCell) => (
+            <button
+              key={monthCell.monthIndex}
+              aria-label={`${monthCell.monthIndex + 1}월 선택`}
+              className={joinClasses(
+                'hts-date-popup__month-cell',
+                monthCell.isSelected && 'hts-date-popup__month-cell--selected',
+                monthCell.isDisabled && 'hts-date-popup__day--disabled',
+              )}
+              disabled={monthCell.isDisabled}
+              type="button"
+              onClick={() => {
+                context.setVisibleMonth(new Date(year, monthCell.monthIndex, 1));
+                context.setViewMode('day');
+              }}
+            >
+              {monthCell.monthIndex + 1}월
+            </button>
+          ))}
         </div>
       ) : null}
 
@@ -1082,13 +1221,6 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
           </div>
           <div className="hts-date-popup__days">
             {calendarDays.map((dayItem) => {
-              const dayParts = parseCanonicalIso(dayItem.iso);
-              const isDisabled =
-                (context.min !== undefined && dayItem.iso < context.min) ||
-                (context.max !== undefined && dayItem.iso > context.max);
-              const isSelected = !isDisabled && context.value === dayItem.iso;
-              const isToday = dayItem.iso === todayIso;
-
               return (
                 <button
                   key={dayItem.iso}
@@ -1096,11 +1228,11 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
                   className={joinClasses(
                     'hts-date-popup__day',
                     !dayItem.inCurrentMonth && 'hts-date-popup__day--adjacent',
-                    isSelected && 'hts-date-popup__day--selected',
-                    isToday && 'hts-date-popup__day--today',
-                    isDisabled && 'hts-date-popup__day--disabled',
+                    dayItem.isSelected && 'hts-date-popup__day--selected',
+                    dayItem.isToday && 'hts-date-popup__day--today',
+                    dayItem.isDisabled && 'hts-date-popup__day--disabled',
                   )}
-                  disabled={isDisabled}
+                  disabled={dayItem.isDisabled}
                   type="button"
                   onClick={() => {
                     context.commitValue(dayItem.iso, {
@@ -1109,7 +1241,7 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
                     });
                   }}
                 >
-                  {dayParts?.day ?? ''}
+                  {dayItem.dayLabel}
                 </button>
               );
             })}
@@ -1118,7 +1250,9 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
       ) : null}
     </div>
   );
-};
+});
+
+DateInputCalendar.displayName = 'DateInputCalendar';
 
 type NativeDateInputProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,

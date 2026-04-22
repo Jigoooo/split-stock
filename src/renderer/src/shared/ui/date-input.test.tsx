@@ -140,6 +140,38 @@ describe('DateInput', () => {
     });
   });
 
+  it('year view가 열린 상태에서 외부 controlled value가 바뀌면 연도 페이지도 새 값으로 동기화된다', async () => {
+    function YearPageSyncHarness(): ReactElement {
+      const [value, setValue] = useState('2026-04-10');
+
+      return (
+        <div>
+          <DateInput aria-label="기준일" value={value} onChange={() => undefined} />
+          <button type="button" onClick={() => setValue('2035-05-20')}>
+            먼 미래로 변경
+          </button>
+        </div>
+      );
+    }
+
+    render(<YearPageSyncHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: '날짜 선택기 열기' }));
+    fireEvent.click(screen.getByRole('button', { name: '연도 선택 열기' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '2027년 선택' })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '먼 미래로 변경' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '2028년 선택' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '2039년 선택' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '2027년 선택' })).not.toBeInTheDocument();
+    });
+  });
+
   it('세그먼트 입력은 자동 다음 칸 이동과 구분자 키 이동을 지원한다', async () => {
     render(<DateHarness initial="2026-04-10" />);
 
@@ -243,6 +275,29 @@ describe('DateInput', () => {
       expect(onCommit).toHaveBeenCalledWith('2026-04-01');
       expect(day).toHaveValue('01');
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('첫 오픈에서도 추가 tick 없이 dialog를 바로 렌더한다', () => {
+    render(<DateHarness initial="2026-04-10" />);
+
+    fireEvent.click(screen.getByRole('button', { name: '날짜 선택기 열기' }));
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('popup이 열린 상태에서 draft를 수정해도 calendar는 열린 채 유지된다', async () => {
+    render(<DateHarness initial="2026-04-10" />);
+
+    fireEvent.click(screen.getByRole('button', { name: '날짜 선택기 열기' }));
+
+    const { day } = getDateSegments();
+    fireEvent.change(day, { target: { value: '11' } });
+
+    await waitFor(() => {
+      expect(day).toHaveValue('11');
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '2026-04-10 선택' })).toBeInTheDocument();
     });
   });
 
