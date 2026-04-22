@@ -29,6 +29,13 @@ export interface UseBalanceWithLotsResult {
   deposit: number;
   totalEval: number;
   lotsByPdno: Record<string, LotEntry[]>;
+  mismatches: Array<{
+    pdno: string;
+    kisQty: number;
+    lotQty: number;
+    reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH';
+  }>;
+  syncStatus: 'IN_SYNC' | 'MISMATCH';
   strategiesByPdno: Record<string, { maxStages: number }>;
   isPending: boolean;
   error: { message: string } | null;
@@ -44,7 +51,7 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
 
   const query = trpc.account.getBalanceWithLots.useQuery(
     accountId !== null ? { accountId } : undefined,
-    { enabled: accountId !== null },
+    { enabled: accountId !== null, refetchInterval: 3000, staleTime: 0 },
   );
 
   return {
@@ -52,6 +59,8 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
     deposit: query.data?.deposit ?? 0,
     totalEval: query.data?.totalEval ?? 0,
     lotsByPdno: (query.data?.lotsByPdno ?? {}) as Record<string, LotEntry[]>,
+    mismatches: query.data?.mismatches ?? [],
+    syncStatus: (query.data?.syncStatus ?? 'IN_SYNC') as 'IN_SYNC' | 'MISMATCH',
     strategiesByPdno: query.data?.strategiesByPdno ?? {},
     isPending: query.isPending,
     error: query.error ? { message: query.error.message } : null,

@@ -1,7 +1,7 @@
 import type { AppEnv } from '@shared/contracts';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { orders } from '../db/schema';
+import { lots, orders } from '../db/schema';
 import {
   readPendingCancelConfig,
   readPriceCorrectionConfig,
@@ -15,6 +15,8 @@ import type { EventLogger } from '../logging/event-logger';
 import type { SafetyStateRegistry } from '../safety/safety-state';
 import type { CredentialsRepo } from '../security/credentials-repo';
 import { assertCredMatchesEnv } from '../trpc/router-helpers';
+import type { LotsRepo } from './lots-repo';
+import { createPendingBuyLot, linkPendingSellLot } from './order-lot-link';
 import type { PendingOrderWatcher } from './pending-order-watcher';
 import type { WatchOrder } from './watch-engine';
 
@@ -28,6 +30,7 @@ export interface WatchOrderExecutorDeps {
   pendingOrderWatcher: PendingOrderWatcher | null;
   logger: EventLogger;
   getCurrentEnv: () => AppEnv | null;
+  lotsRepo: LotsRepo;
 }
 
 export async function executeWatchOrder(
@@ -101,11 +104,39 @@ export async function executeWatchOrder(
   }
 
   const now = new Date();
+  const linkedLot =
+    order.side === 'BUY'
+      ? createPendingBuyLot(
+          {
+            logger: deps.logger,
+            lotsRepo: deps.lotsRepo,
+          },
+          {
+            accountId: order.accountId,
+            pdno: order.pdno,
+            placedAt: now,
+            price: division === 'LIMIT' ? limitPrice : 0,
+            qty,
+            requestedNth: order.nth,
+            source: order.source,
+          },
+        )
+      : linkPendingSellLot(
+          {
+            logger: deps.logger,
+            lotsRepo: deps.lotsRepo,
+          },
+          {
+            accountId: order.accountId,
+            pdno: order.pdno,
+            requestedNth: order.nth,
+          },
+        );
   deps.db
     .insert(orders)
     .values({
       accountId: order.accountId,
-      lotId: null,
+      lotId: linkedLot.lotId,
       odno: result.value.odno,
       orgNo: result.value.orgNo ?? null,
       pdno: order.pdno,
@@ -128,7 +159,7 @@ export async function executeWatchOrder(
     deps.pendingOrderWatcher.register({
       pdno: order.pdno,
       side: order.side,
-      nth: order.nth ?? Date.now() % 1_000_000,
+      nth: linkedLot.nth ?? order.nth ?? Date.now() % 1_000_000,
       odno: result.value.odno,
       orgNo: result.value.orgNo,
       qty,
@@ -143,10 +174,25 @@ export function cancelPendingByOdno(
   accountId: number,
   odno: string,
 ): void {
+  const row = db
+    .select()
+    .from(orders)
+    .where(and(eq(orders.odno, odno), eq(orders.accountId, accountId)))
+    .get();
   db.update(orders)
     .set({ status: 'CANCELLED' })
     .where(and(eq(orders.odno, odno), eq(orders.accountId, accountId)))
     .run();
+  if (row?.lotId !== null && row?.lotId !== undefined) {
+    if (row.side === 'BUY') {
+      db.delete(lots).where(eq(lots.id, row.lotId)).run();
+    } else if (row.side === 'SELL') {
+      db.update(lots)
+        .set({ status: 'OPEN', soldAt: null, sellPrice: null })
+        .where(eq(lots.id, row.lotId))
+        .run();
+    }
+  }
   if (!pendingOrderWatcher) return;
   const active = pendingOrderWatcher.listActive();
   for (const entry of active) {

@@ -19,11 +19,17 @@ interface UseTradeCyclesResult {
  * - status: 'all' | 'open'(OPEN|BUYING) | 'closed'(SOLD).
  */
 export function useTradeCycles(options: UseTradeCyclesOptions): UseTradeCyclesResult {
-  const query = trpc.lots.cyclesByPdno.useQuery({
-    accountId: options.accountId,
-    ...(options.pdno !== undefined ? { pdno: options.pdno } : {}),
-    status: options.status,
-  });
+  const query = trpc.lots.cyclesByPdno.useQuery(
+    {
+      accountId: options.accountId,
+      ...(options.pdno !== undefined ? { pdno: options.pdno } : {}),
+      status: options.status,
+    },
+    {
+      refetchInterval: 3000,
+      staleTime: 0,
+    },
+  );
 
   return {
     cycles: (query.data?.cycles ?? []) as TradeCycle[],

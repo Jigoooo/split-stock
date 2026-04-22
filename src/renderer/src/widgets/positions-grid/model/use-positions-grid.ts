@@ -14,7 +14,14 @@ export interface PositionsGridRow {
 export interface UsePositionsGridResult {
   isPending: boolean;
   error: { message: string } | null;
+  mismatches: Array<{
+    pdno: string;
+    kisQty: number;
+    lotQty: number;
+    reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH';
+  }>;
   rows: PositionsGridRow[];
+  syncStatus: 'IN_SYNC' | 'MISMATCH';
   /** 그리드 전체 차수 컬럼 수 — 모든 rows 의 max 와 1 중 큰 값. 헤더/셀 컬럼 안정성 보장. */
   gridMaxStages: number;
 }
@@ -26,7 +33,8 @@ export interface UsePositionsGridResult {
  *  - 정렬은 서버 응답 순서 유지 (W6 에서 컬럼 정렬 추가 예정)
  */
 export function usePositionsGrid(): UsePositionsGridResult {
-  const { error, isPending, lotsByPdno, positions, strategiesByPdno } = useBalanceWithLots();
+  const { error, isPending, lotsByPdno, mismatches, positions, strategiesByPdno, syncStatus } =
+    useBalanceWithLots();
 
   const rows: PositionsGridRow[] = positions.map((position) => ({
     position,
@@ -44,5 +52,5 @@ export function usePositionsGrid(): UsePositionsGridResult {
     }
   }
 
-  return { error, gridMaxStages, isPending, rows };
+  return { error, gridMaxStages, isPending, mismatches, rows, syncStatus };
 }

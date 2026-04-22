@@ -22,7 +22,7 @@ export interface PositionsGridProps {
  */
 export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
   const { onSelect, selectedPdno = null } = props;
-  const { error, gridMaxStages, isPending, rows } = usePositionsGrid();
+  const { error, gridMaxStages, isPending, mismatches, rows, syncStatus } = usePositionsGrid();
 
   // 종목별 자동매매 상태 — grid 레벨 1회 조회
   const safetyState = trpc.safety.getState.useQuery(
@@ -67,6 +67,13 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
       <div className="panel__title" style={{ flexShrink: 0 }}>
         보유 종목 ({thousandSeparator(rows.length)}건)
       </div>
+      {syncStatus === 'MISMATCH' ? (
+        <div className="panel__body" style={{ flexShrink: 0 }}>
+          <span className="chip chip--down" role="status">
+            KIS 잔고와 차수 장부 불일치 {thousandSeparator(mismatches.length)}건
+          </span>
+        </div>
+      ) : null}
 
       <TableGrid.Root
         variant="hts"

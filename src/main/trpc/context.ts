@@ -14,6 +14,7 @@ import type { RateGuardRepo } from '../safety/rate-guard';
 import type { SafetyState, SafetyStateRegistry } from '../safety/safety-state';
 import type { TimeWindowRepo } from '../safety/time-window';
 import type { CredentialsRepo } from '../security/credentials-repo';
+import type { CurrentStateSync } from '../trading/current-state-sync';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import type { LotsRepo } from '../trading/lots-repo';
 import type { PendingOrderWatcher } from '../trading/pending-order-watcher';
@@ -52,6 +53,7 @@ export interface Context {
   rateGuardRepo: RateGuardRepo;
   protectionLimitsRepo: ProtectionLimitsRepo;
   watchEngine: WatchEngine | null;
+  currentStateSync: CurrentStateSync | undefined;
   prebuyRepo: PrebuyRepo;
   /** 미체결 자동취소(F6) 감시 인스턴스 — 부팅 시 주입, 미활성화 시 null. */
   pendingOrderWatcher: PendingOrderWatcher | null;
@@ -81,6 +83,7 @@ export interface ContextFactoryOptions
     | 'setActiveAccountId'
     | 'setEnvAndAccount'
     | 'backupScheduler'
+    | 'currentStateSync'
   > {
   /** env 전환 시 realtime 재생성을 호출측에 위임. 반환값이 현재 RealtimeService. */
   realtimeFactory?: (env: AppEnv | null) => RealtimeService | null;
@@ -100,6 +103,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
    */
   setEnvAndAccount: (next: { env: AppEnv | null; accountId: number | null }) => void;
   setBackupScheduler: (scheduler: BackupScheduler | null) => void;
+  setCurrentStateSync: (sync: CurrentStateSync | null) => void;
   getRealtime: () => RealtimeService | null;
   getActiveAccountId: () => number | null;
   /** 현재 활성 env. 부트스트랩 외부에서 lazy 로 끌어 쓸 때 사용. */
@@ -110,6 +114,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   let activeAccountId: number | null = initialActiveAccountId ?? null;
   let realtime: RealtimeService | null = null;
   let backupScheduler: BackupScheduler | null = null;
+  let currentStateSync: CurrentStateSync | null = null;
 
   const syncWatchEngine = (accountId: number | null): void => {
     deps.watchEngine?.setActiveAccountId(accountId);
@@ -144,6 +149,9 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   const setBackupScheduler = (scheduler: BackupScheduler | null): void => {
     backupScheduler = scheduler;
   };
+  const setCurrentStateSync = (sync: CurrentStateSync | null): void => {
+    currentStateSync = sync;
+  };
 
   syncWatchEngine(activeAccountId);
 
@@ -166,6 +174,9 @@ export function createContextFactory(opts: ContextFactoryOptions): {
       get backupScheduler() {
         return backupScheduler;
       },
+      get currentStateSync() {
+        return currentStateSync ?? undefined;
+      },
       setCurrentEnv,
       setActiveAccountId,
       setEnvAndAccount,
@@ -174,6 +185,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     setActiveAccountId,
     setEnvAndAccount,
     setBackupScheduler,
+    setCurrentStateSync,
     getRealtime: () => realtime,
     getActiveAccountId: () => activeAccountId,
     getCurrentEnv: () => currentEnv,

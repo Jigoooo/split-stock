@@ -93,6 +93,8 @@ export const TradeExecutionEventSchema = z.object({
   filledQty: z.number().int().positive(),
   totalFilledQty: z.number().int().positive(),
   remainingQty: z.number().int().nonnegative(),
+  lotId: z.number().int().positive().nullable().optional(),
+  nth: z.number().int().positive().nullable().optional(),
   price: z.number().int().positive(),
   occurredAt: z.number().int().positive(),
 });

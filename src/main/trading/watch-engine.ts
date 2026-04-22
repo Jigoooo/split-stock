@@ -109,6 +109,7 @@ export interface WatchEngineOptions {
   onExpired?: (order: WatchOrder) => void;
   onExecuted?: (order: WatchOrder) => void;
   onFailed?: (order: WatchOrder, reason: string) => void;
+  onWatchingPdnosChanged?: (pdnos: string[]) => void;
 }
 
 interface QueueEntry {
@@ -220,6 +221,7 @@ export class WatchEngine {
     for (const row of rows) {
       this.enqueueFromOrder(rowToOrder(row));
     }
+    this.notifyWatchingPdnosChanged();
   }
 
   register(input: WatchOrderInput): Result<WatchOrder, WatchError> {
@@ -279,6 +281,7 @@ export class WatchEngine {
         const order = rowToOrder(row);
         if (order.status === 'WATCHING') this.enqueueFromOrder(order);
         else this.dequeue(order.id);
+        this.notifyWatchingPdnosChanged();
         return ok(order);
       }
 
@@ -311,6 +314,7 @@ export class WatchEngine {
 
       const order = rowToOrder(row);
       this.enqueueFromOrder(order);
+      this.notifyWatchingPdnosChanged();
       return ok(order);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
@@ -327,6 +331,7 @@ export class WatchEngine {
         .run();
       if (res.changes === 0) return err({ kind: 'NOT_FOUND', id });
       this.dequeue(id);
+      this.notifyWatchingPdnosChanged();
       return ok(undefined);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
@@ -342,6 +347,7 @@ export class WatchEngine {
         .run();
       if (res.changes === 0) return err({ kind: 'NOT_FOUND', id });
       this.dequeue(id);
+      this.notifyWatchingPdnosChanged();
       return ok(undefined);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
@@ -386,6 +392,7 @@ export class WatchEngine {
       const order = rowToOrder(row);
       if (order.status === 'WATCHING') this.enqueueFromOrder(order);
       else this.dequeue(order.id);
+      this.notifyWatchingPdnosChanged();
       return ok(order);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
@@ -403,6 +410,7 @@ export class WatchEngine {
       if (!row) return err({ kind: 'NOT_FOUND', id });
       const order = rowToOrder(row);
       this.enqueueFromOrder(order);
+      this.notifyWatchingPdnosChanged();
       return ok(order);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
@@ -464,6 +472,7 @@ export class WatchEngine {
     this.intervalHandle?.clear();
     this.intervalHandle = null;
     this.queue.clear();
+    this.notifyWatchingPdnosChanged();
   }
 
   size(): number {
@@ -515,6 +524,7 @@ export class WatchEngine {
         .where(eq(watchOrders.id, order.id))
         .run();
       this.dequeue(order.id);
+      this.notifyWatchingPdnosChanged();
       this.opts.onExecuted?.({ ...order, status: 'EXECUTED', executedAt: now, updatedAt: now });
     } else {
       const reason = result.reason ?? 'unknown';
@@ -524,6 +534,7 @@ export class WatchEngine {
         .where(eq(watchOrders.id, order.id))
         .run();
       this.dequeue(order.id);
+      this.notifyWatchingPdnosChanged();
       this.opts.onFailed?.(
         { ...order, status: 'FAILED', lastFailureReason: reason, updatedAt: now },
         reason,
@@ -549,6 +560,7 @@ export class WatchEngine {
         )
         .run();
       this.dequeue(row.id);
+      this.notifyWatchingPdnosChanged();
       if (res.changes > 0) {
         const next = this.opts.db
           .select()
@@ -588,6 +600,12 @@ export class WatchEngine {
       if (next.length === 0) this.queue.delete(pdno);
       else if (next.length !== list.length) this.queue.set(pdno, next);
     }
+  }
+
+  private notifyWatchingPdnosChanged(): void {
+    this.opts.onWatchingPdnosChanged?.(
+      Array.from(this.queue.keys()).sort((a, b) => a.localeCompare(b)),
+    );
   }
 
   private isExecutionAllowed(accountId: number): boolean {

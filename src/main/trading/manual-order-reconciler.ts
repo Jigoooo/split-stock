@@ -1,7 +1,7 @@
 import type { AppEnv, TradeExecutionEvent } from '@shared/contracts';
 import { eq, inArray } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { orders, trades } from '../db/schema';
+import { lots, orders, trades } from '../db/schema';
 import type { AuthService } from '../kis/auth';
 import { type DailyCcldOrder, inquireDailyCcld } from '../kis/domestic-stock';
 import type { KisHttpClient } from '../kis/http-client';
@@ -14,6 +14,7 @@ type OrderStatus = 'PENDING' | 'PARTIAL' | 'FILLED' | 'CANCELLED' | 'REJECTED';
 interface PendingOrderRow {
   id: number;
   accountId: number;
+  lotId: number | null;
   odno: string;
   pdno: string;
   side: string;
@@ -360,8 +361,19 @@ export class ManualOrderReconciler {
             filledQty: decision.deltaFilledQty,
             totalFilledQty: decision.totalFilledQty,
             remainingQty: decision.remainingQty,
+            lotId: row.lotId,
+            nth: row.lotId !== null ? readLotNth(this.opts.db, row.lotId) : null,
             price: decision.executionPrice,
             occurredAt: now.getTime(),
+          });
+        }
+
+        if (row.lotId !== null) {
+          reconcileLinkedLot(this.opts.db, {
+            decision,
+            lotId: row.lotId,
+            side: row.side === 'SELL' ? 'SELL' : 'BUY',
+            now,
           });
         }
 
@@ -402,4 +414,60 @@ export class ManualOrderReconciler {
 
 function toDate(value: Date | number | string): Date {
   return value instanceof Date ? value : new Date(value);
+}
+
+function readLotNth(db: Db, lotId: number): number | null {
+  const row = db.select({ nth: lots.nth }).from(lots).where(eq(lots.id, lotId)).get();
+  return row?.nth ?? null;
+}
+
+function reconcileLinkedLot(
+  db: Db,
+  input: {
+    decision: ReconcileDecision;
+    lotId: number;
+    now: Date;
+    side: 'BUY' | 'SELL';
+  },
+): void {
+  if (input.side === 'BUY') {
+    if (input.decision.nextStatus === 'CANCELLED' && input.decision.totalFilledQty === 0) {
+      db.delete(lots).where(eq(lots.id, input.lotId)).run();
+      return;
+    }
+
+    db.update(lots)
+      .set({
+        buyPrice: input.decision.executionPrice,
+        qty: input.decision.totalFilledQty,
+        amountKrw: input.decision.executionPrice * input.decision.totalFilledQty,
+        status: input.decision.nextStatus === 'PARTIAL' ? 'BUYING' : 'OPEN',
+      })
+      .where(eq(lots.id, input.lotId))
+      .run();
+    return;
+  }
+
+  if (input.decision.nextStatus === 'FILLED') {
+    db.update(lots)
+      .set({
+        status: 'SOLD',
+        soldAt: input.now,
+        sellPrice: input.decision.executionPrice,
+      })
+      .where(eq(lots.id, input.lotId))
+      .run();
+    return;
+  }
+
+  if (input.decision.nextStatus === 'CANCELLED') {
+    db.update(lots)
+      .set({
+        status: 'OPEN',
+        soldAt: null,
+        sellPrice: null,
+      })
+      .where(eq(lots.id, input.lotId))
+      .run();
+  }
 }

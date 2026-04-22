@@ -71,6 +71,7 @@ import { createTimeWindowRepo } from './safety/time-window';
 import { CredentialsRepo } from './security/credentials-repo';
 import { BalanceSync } from './trading/balance-sync';
 import { BoosterWatcher } from './trading/booster-watcher';
+import { CurrentStateSync } from './trading/current-state-sync';
 import { DailyCandlesRepo } from './trading/daily-candles-repo';
 import { createEnvAwarePricePoller } from './trading/env-aware-price-poller';
 import { LotsRepo } from './trading/lots-repo';
@@ -199,11 +200,30 @@ function bootstrapDeps(userDataDir: string) {
     }
   };
   quarantineLegacyWatchRows(db, eventLogger);
+  const watchPriceFeedRef: { feed: RotatingQuoteFeed | null } = { feed: null };
+  const watchedPdnosRef = new Set<string>();
+  const currentStateSyncRef: { sync: CurrentStateSync | null } = { sync: null };
+  const syncWatchPriceFeed = (pdnos: string[]): void => {
+    const next = new Set(pdnos);
+    const feed = watchPriceFeedRef.feed;
+    if (!feed) {
+      return;
+    }
+    for (const pdno of Array.from(watchedPdnosRef)) {
+      if (!next.has(pdno)) feed.unsubscribe(pdno);
+    }
+    for (const pdno of next) {
+      if (!watchedPdnosRef.has(pdno)) feed.subscribe(pdno);
+    }
+    watchedPdnosRef.clear();
+    for (const pdno of next) watchedPdnosRef.add(pdno);
+  };
   // 통합 자동감시주문 엔진 — booster/prebuy/custom을 단일 큐로 관리.
   // BOOSTER/PREBUY 핸들러는 어댑터(BoosterWatcher/PrebuyWatcher) 생성 시 registerHandler로 주입됨.
   const watchEngine = new WatchEngine({
     db,
     timer: realTimer,
+    onWatchingPdnosChanged: syncWatchPriceFeed,
     onExecuted: (order) => {
       eventLogger.log({
         level: 'INFO',
@@ -289,6 +309,21 @@ function bootstrapDeps(userDataDir: string) {
     });
     watchEngine.onPrice(pdno, price);
   });
+  const watchPriceFeed = new RotatingQuoteFeed({
+    timer: realTimer,
+    poller: createEnvAwarePricePoller({
+      getEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
+      credentialsRepo,
+      auth,
+      httpByEnv,
+    }),
+    logger: eventLogger,
+  });
+  watchPriceFeed.on('quote', ({ pdno, price }) => {
+    watchEngine.onPrice(pdno, price);
+  });
+  watchPriceFeedRef.feed = watchPriceFeed;
+  syncWatchPriceFeed(watchEngine.list({ status: 'WATCHING' }).map((order) => order.pdno));
 
   // RealtimeService 가 capacity 초과 종목을 RotatingQuoteFeed 에 위임하도록 어댑터 wiring.
   const restFallbackAdapter = {
@@ -418,6 +453,7 @@ function bootstrapDeps(userDataDir: string) {
         pendingOrderWatcher,
         logger: eventLogger,
         getCurrentEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
+        lotsRepo,
       },
       order,
       triggerPrice,
@@ -484,7 +520,7 @@ function bootstrapDeps(userDataDir: string) {
             qtyOrAmountMode: 'AMOUNT',
             qty: null,
             amountKrw: source.amountKrw,
-            nth: 1,
+            nth: null,
             sourceRefId: String(source.id),
             expiresAt: source.validUntil,
             status: 'WATCHING',
@@ -676,12 +712,22 @@ function bootstrapDeps(userDataDir: string) {
         },
       });
       broadcastTradeExecution(event);
+      void currentStateSyncRef.sync?.refresh('trade-event');
     },
   });
   manualOrderReconciler.start();
+  const currentStateSync = new CurrentStateSync({
+    balanceSync,
+    logger: eventLogger,
+    manualOrderReconciler,
+  });
+  currentStateSyncRef.sync = currentStateSync;
+  factory.setCurrentStateSync(currentStateSync);
+  void currentStateSync.refresh('startup');
 
   return {
     factory,
+    currentStateSync,
     safetyRegistry,
     eventLogger,
     settingsRepo,

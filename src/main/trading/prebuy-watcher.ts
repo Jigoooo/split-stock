@@ -180,7 +180,7 @@ export class PrebuyWatcher {
       orderType: 'LIMIT',
       qtyOrAmountMode: 'AMOUNT',
       amountKrw: order.amountKrw,
-      nth: 1,
+      nth: undefined,
       sourceRefId: String(order.id),
       expiresAt: order.validUntil,
     });

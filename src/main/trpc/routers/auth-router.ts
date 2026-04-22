@@ -53,6 +53,7 @@ export const authRouter = router({
       message: input === 'PROD' ? 'env.switch-to-prod' : 'env.switch-to-mock',
       payload: { from: prev, to: input, accountId: accId },
     });
+    void ctx.currentStateSync?.refresh('env-switch');
     // 로그인 직후 종목 마스터가 비어있거나 24h 초과면 백그라운드 동기화.
     void ctx.stockMasterSync.syncIfStaleWithLog(ctx.logger);
     return { env: input, accountId: accId };

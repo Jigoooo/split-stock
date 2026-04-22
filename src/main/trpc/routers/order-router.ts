@@ -3,9 +3,10 @@ import { TRPCError } from '@trpc/server';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client';
-import { orders, trades } from '../../db/schema';
+import { lots, orders, trades } from '../../db/schema';
 import { readPendingCancelConfig } from '../../db/settings-repo';
 import { cancelOrRevise, orderCash } from '../../kis/order';
+import { createPendingBuyLot } from '../../trading/order-lot-link';
 import { assertCredMatchesEnv, requireAccountId, resolveAccountId } from '../router-helpers';
 import { authedProcedure, router } from '../trpc-core';
 
@@ -97,11 +98,28 @@ export const orderRouter = router({
       }
       // PENDING 기록 — orgNo는 정정/취소 시 필수이므로 KIS 응답값을 저장
       const now = new Date();
+      const linkedBuyLot =
+        input.side === 'BUY'
+          ? createPendingBuyLot(
+              {
+                logger: ctx.logger,
+                lotsRepo: ctx.lotsRepo,
+              },
+              {
+                accountId,
+                pdno: input.pdno,
+                placedAt: now,
+                price: input.division === 'LIMIT' ? input.price : 0,
+                qty: input.qty,
+                source: 'MANUAL',
+              },
+            )
+          : { lotId: null, nth: null };
       ctx.db
         .insert(orders)
         .values({
           accountId,
-          lotId: null,
+          lotId: linkedBuyLot.lotId,
           odno: result.value.odno,
           orgNo: result.value.orgNo ?? null,
           pdno: input.pdno,
@@ -130,7 +148,7 @@ export const orderRouter = router({
           side: input.side,
           // nth: 매직스플릿 차수 개념이나 수동 주문에서는 (pdno, side) 중복 등록 방지용 키로만 사용.
           // odno 기반 숫자 파싱이 안정적이지 않아 타임스탬프 기반 유사-유일 값 사용.
-          nth: Date.now() % 1_000_000,
+          nth: linkedBuyLot.nth ?? Date.now() % 1_000_000,
           odno: result.value.odno,
           orgNo: result.value.orgNo,
           qty: input.qty,
@@ -253,19 +271,28 @@ export const orderRouter = router({
       const accountId = resolveAccountId(ctx, input ?? {});
       const pdno = input?.pdno;
       const limit = input?.limit ?? 100;
-      const conditions = [
-        eq(orders.accountId, accountId),
-        inArray(orders.status, ['FILLED', 'PARTIAL']),
-      ];
+      const conditions = [eq(orders.accountId, accountId)];
       if (pdno) conditions.push(eq(orders.pdno, pdno));
       const rows = ctx.db
         .select()
         .from(orders)
         .where(and(...conditions))
         .orderBy(desc(orders.filledAt), desc(orders.placedAt))
-        .limit(limit)
         .all();
-      return { orders: rows };
+      const filledQtyByOrderId = readFilledQtyByOrderId(
+        ctx.db,
+        rows.map((row) => row.id),
+      );
+      return {
+        orders: rows
+          .filter(
+            (row) =>
+              row.status === 'FILLED' ||
+              row.status === 'PARTIAL' ||
+              (filledQtyByOrderId.get(row.id) ?? 0) > 0,
+          )
+          .slice(0, limit),
+      };
     }),
 
   /**
@@ -352,6 +379,30 @@ export const orderRouter = router({
             .set({ status: 'CANCELLED' })
             .where(and(eq(orders.odno, row.odno), eq(orders.accountId, accountId)))
             .run();
+          if (row.lotId !== null) {
+            if (row.side === 'BUY') {
+              if (filledQty === 0) {
+                ctx.db.delete(lots).where(eq(lots.id, row.lotId)).run();
+              } else {
+                ctx.db
+                  .update(lots)
+                  .set({
+                    status: 'OPEN',
+                    buyPrice: row.price,
+                    qty: filledQty,
+                    amountKrw: row.price * filledQty,
+                  })
+                  .where(eq(lots.id, row.lotId))
+                  .run();
+              }
+            } else if (row.side === 'SELL' && filledQty === 0) {
+              ctx.db
+                .update(lots)
+                .set({ status: 'OPEN', soldAt: null, sellPrice: null })
+                .where(eq(lots.id, row.lotId))
+                .run();
+            }
+          }
           // NM-001: 수동 일괄 취소된 주문은 자동취소 감시에서도 제거.
           if (ctx.pendingOrderWatcher) {
             const active = ctx.pendingOrderWatcher.listActive();

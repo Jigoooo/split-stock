@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { lots as lotsTable } from '../../db/schema';
 import { SETTING_KEYS } from '../../db/settings-repo';
 import { inquireBalance } from '../../kis/domestic-stock';
+import { buildLotSyncMismatches } from '../../trading/current-state-sync';
 import type { LotStatus } from '../../trading/fsm';
 import type { LotSnapshotEntry } from '../../trading/lots-repo';
 import { assertCredMatchesEnv, resolveAccountId } from '../router-helpers';
@@ -127,6 +128,7 @@ export const accountRouter = router({
         message: 'account.active.changed',
         payload: { accountId: input.accountId, env: target.env, prevEnv },
       });
+      void ctx.currentStateSync?.refresh('account-switch');
       return {
         ok: true as const,
         accountId: input.accountId,
@@ -510,11 +512,20 @@ export const accountRouter = router({
         });
         strategiesByPdno = {};
       }
+      const mismatches = buildLotSyncMismatches({
+        positions: balance.value.positions.map((position) => ({
+          code: position.code,
+          qty: position.qty,
+        })),
+        lotsByPdno,
+      });
       return {
         positions: balance.value.positions,
         deposit: balance.value.deposit,
         totalEval: balance.value.totalEval,
         lotsByPdno,
+        syncStatus: mismatches.length > 0 ? 'MISMATCH' : 'IN_SYNC',
+        mismatches,
         strategiesByPdno,
       };
     }),

@@ -1,3 +1,4 @@
+import { trpc } from '@renderer/shared/api/trpc';
 import type { TradeExecutionEvent } from '@shared/contracts';
 import type { CniNotice } from '@shared/contracts/kis';
 import { useEffect } from 'react';
@@ -11,12 +12,22 @@ import { toast } from 'sonner';
  * - useOnTradeEvent로 deps 오염 방지 (React 19 useEffectEvent)
  */
 export function useTradeNotifications(): void {
+  const utils = trpc.useUtils();
+
   useEffect(() => {
     const unsubscribe = window.appShell?.onTradeEvent?.((event) => {
       processTradeExecutionEvent(event);
+      void Promise.all([
+        utils.account.getBalanceWithLots.invalidate(),
+        utils.account.getPositionOverlay.invalidate(),
+        utils.lots.cyclesByPdno.invalidate(),
+        utils.lots.tradeHistory.invalidate(),
+        utils.order.listActive.invalidate(),
+        utils.order.listMyFills.invalidate(),
+      ]);
     });
     return () => unsubscribe?.();
-  }, []);
+  }, [utils]);
 }
 
 /**

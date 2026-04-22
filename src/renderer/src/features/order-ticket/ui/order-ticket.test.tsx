@@ -178,6 +178,20 @@ describe('OrderTicket', () => {
     expect(screen.getByText('3차')).toBeInTheDocument();
   });
 
+  it('SOLD 차수는 무시하고 현재 OPEN/BUYING 최대 차수 다음 번호를 표시한다', () => {
+    render(
+      wrap(
+        <OrderTicket
+          selection={{ pdno: '005930', name: '삼성전자' }}
+          isProd={false}
+          oneClick={false}
+        />,
+      ),
+    );
+
+    expect(screen.getByText('3차')).toBeInTheDocument();
+  });
+
   it('현재 선택 요약은 버튼 누르기 전 방향을 미리 보여주지 않는다', () => {
     render(
       wrap(

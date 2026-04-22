@@ -71,9 +71,9 @@ export const MainPositionsPane = (props: MainPositionsPaneProps): ReactElement =
                 onSelect={onSelect}
               />
             ) : l2 === 'filled' ? (
-              <FilledPane selectedPdno={selectedPdno} />
+              <FilledPane selectedPdno={null} />
             ) : l2 === 'unfilled' ? (
-              <ActiveOrdersPanel pdnoFilter={selectedPdno} />
+              <ActiveOrdersPanel />
             ) : (
               <PastTradesPane accountId={accountId} onSelect={onSelect} />
             )}

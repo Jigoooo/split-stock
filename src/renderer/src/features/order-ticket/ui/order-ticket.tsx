@@ -2,6 +2,7 @@ import { useBalanceWithLots } from '@renderer/entities/account';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, dialog, NumberInput, Select } from '@renderer/shared/ui';
+import { deriveNextBuyNth } from '@shared/trading/next-nth';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { useOrderActions } from '../model/use-order-actions';
@@ -46,8 +47,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const safetyQuery = trpc.safety.getState.useQuery(undefined, { staleTime: 0 });
 
   const lots = lotsByPdno[selection.pdno] ?? [];
-  const openCount = lots.filter((l) => l.status === 'OPEN' || l.status === 'BUYING').length;
-  const nextNth = openCount + 1;
+  const nextNth = deriveNextBuyNth(lots);
 
   if (appliedSuggestionKey !== suggestionKey) {
     setAppliedSuggestionKey(suggestionKey);
