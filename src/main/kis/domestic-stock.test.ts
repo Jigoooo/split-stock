@@ -1,6 +1,6 @@
 import { MockAgent, setGlobalDispatcher } from 'undici';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { inquireBalance, inquirePrice } from './domestic-stock';
+import { inquireBalance, inquireDailyCcld, inquirePrice } from './domestic-stock';
 import { KIS_BASE_URL } from './endpoints';
 import { KisHttpClient } from './http-client';
 
@@ -175,6 +175,66 @@ describe('inquirePrice', () => {
       expect(v.upperLimit).toBe(89_700);
       expect(v.lowerLimit).toBe(48_300);
       expect(v.prevClose).toBe(69_000);
+    }
+  });
+});
+
+describe('inquireDailyCcld', () => {
+  let agent: MockAgent;
+
+  beforeEach(() => {
+    agent = setupMock();
+  });
+
+  it('주문체결 조회 응답을 정규화한다', async () => {
+    const pool = agent.get(BASE);
+    pool.intercept({ path: /inquire-daily-ccld/, method: 'GET' }).reply(200, {
+      rt_cd: '0',
+      msg_cd: 'OK',
+      msg1: 'success',
+      output1: [
+        {
+          odno: '0001',
+          pdno: '005930',
+          prdt_name: '삼성전자',
+          sll_buy_dvsn_cd: '02',
+          ord_qty: '10',
+          ord_unpr: '70000',
+          ord_tmd: '093000',
+          tot_ccld_qty: '10',
+          avg_prvs: '69900',
+          rmn_qty: '0',
+          cncl_yn: 'N',
+          rjct_qty: '0',
+        },
+      ],
+    });
+
+    const r = await inquireDailyCcld(baseDeps(agent), {
+      from: new Date('2026-04-22T09:00:00+09:00'),
+      to: new Date('2026-04-22T09:05:00+09:00'),
+      orderNo: '0001',
+      side: 'BUY',
+    });
+
+    expect(r.isOk()).toBe(true);
+    if (r.isOk()) {
+      expect(r.value).toEqual([
+        {
+          odno: '0001',
+          pdno: '005930',
+          name: '삼성전자',
+          side: 'BUY',
+          orderQty: 10,
+          orderPrice: 70000,
+          orderedAt: '093000',
+          totalFilledQty: 10,
+          remainingQty: 0,
+          avgFillPrice: 69900,
+          cancelled: false,
+          rejectedQty: 0,
+        },
+      ]);
     }
   });
 });

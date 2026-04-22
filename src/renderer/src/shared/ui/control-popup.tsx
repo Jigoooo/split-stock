@@ -110,7 +110,7 @@ export function ControlPopup({
   }, [anchorRef, open]);
 
   useLayoutEffect(() => {
-    if (!open) return;
+    if (!open || !portalTarget) return;
     updatePosition();
 
     const frame = window.requestAnimationFrame(() => {
@@ -129,7 +129,7 @@ export function ControlPopup({
       window.removeEventListener('resize', onWindowChange);
       window.removeEventListener('scroll', onWindowChange, true);
     };
-  }, [open]);
+  }, [open, portalTarget]);
 
   useEffect(() => {
     if (!open) return;

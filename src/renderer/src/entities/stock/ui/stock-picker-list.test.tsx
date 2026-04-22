@@ -73,6 +73,29 @@ describe('StockPickerList', () => {
     });
   });
 
+  it('한글 IME 조합 중 Enter 선택 후 뒤늦은 마지막 글자 change 이벤트가 와도 input이 비워진다', () => {
+    const onSelect = vi.fn();
+    render(<StockPickerList onSelect={onSelect} hideSyncButton hidePopoutButton />);
+
+    const input = screen.getByRole('textbox', { name: '종목 검색' });
+    fireEvent.focus(input);
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: '삼성' } });
+
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+    expect(onSelect).not.toHaveBeenCalled();
+
+    fireEvent.compositionEnd(input, { data: '성' });
+    fireEvent.change(input, { target: { value: '성' } });
+
+    expect(onSelect).toHaveBeenCalledWith({
+      pdno: '005930',
+      name: '삼성전자',
+      sector: 'KOSPI',
+    });
+    expect(input).toHaveValue('');
+  });
+
   it('maxVisible 만큼만 표시하고 나머지는 요약한다', async () => {
     render(<StockPickerList onSelect={vi.fn()} hideSyncButton hidePopoutButton maxVisible={1} />);
 

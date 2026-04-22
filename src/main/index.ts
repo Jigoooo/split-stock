@@ -33,7 +33,7 @@ if (!app.isPackaged) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 }
 
-import type { AppEnv, WatchOutcomeEvent } from '@shared/contracts';
+import type { AppEnv, TradeExecutionEvent, WatchOutcomeEvent } from '@shared/contracts';
 import {
   getPopoutRouteConfig,
   getPopoutWindowTitle,
@@ -61,7 +61,7 @@ import { realTimer, type WsLike } from './kis/ws-client';
 import { createEventLogger, teeLoggers } from './logging/event-logger';
 import { createFileLogger } from './logging/file-logger';
 import { initSentryFromSettings } from './monitoring/sentry';
-import { notifyWatchOutcome } from './notification/trade-notifier';
+import { notifyTrade, notifyWatchOutcome } from './notification/trade-notifier';
 import { FeedBus } from './realtime/feed-bus';
 import { RealtimeService } from './realtime/realtime-service';
 import { ProtectionLimitsRepo } from './safety/protection-limits-repo';
@@ -74,6 +74,7 @@ import { BoosterWatcher } from './trading/booster-watcher';
 import { DailyCandlesRepo } from './trading/daily-candles-repo';
 import { createEnvAwarePricePoller } from './trading/env-aware-price-poller';
 import { LotsRepo } from './trading/lots-repo';
+import { ManualOrderReconciler } from './trading/manual-order-reconciler';
 import { PendingOrderWatcher } from './trading/pending-order-watcher';
 import { PrebuyRepo } from './trading/prebuy-repo';
 import { PrebuyWatcher } from './trading/prebuy-watcher';
@@ -180,6 +181,21 @@ function bootstrapDeps(userDataDir: string) {
     for (const target of BrowserWindow.getAllWindows()) {
       if (target.isDestroyed()) continue;
       target.webContents.send('appShell:watch-event', event);
+    }
+  };
+  const broadcastTradeExecution = (event: TradeExecutionEvent): void => {
+    if (settingsRepo.get('notifications.osEnabled') !== 'false') {
+      notifyTrade({
+        pdno: event.pdno,
+        side: event.side === 'BUY' ? 'buy' : 'sell',
+        qty: event.filledQty,
+        price: event.price,
+        name: event.name,
+      });
+    }
+    for (const target of BrowserWindow.getAllWindows()) {
+      if (target.isDestroyed()) continue;
+      target.webContents.send('appShell:trade-event', event);
     }
   };
   quarantineLegacyWatchRows(db, eventLogger);
@@ -636,6 +652,33 @@ function bootstrapDeps(userDataDir: string) {
   // 자격증명이 복원된 상태에서만 시작 (env 복원 블록 이후에도 start는 유효).
   // start() 자체는 no-op이므로 env가 없어도 safe.
   balanceSync.start();
+  const manualOrderReconciler = new ManualOrderReconciler({
+    db,
+    credentialsRepo,
+    auth,
+    httpByEnv,
+    logger: eventLogger,
+    onTradeExecution: (event) => {
+      eventLogger.log({
+        level: 'INFO',
+        category: 'ORDER',
+        message: 'manual-order-reconciler.trade-executed',
+        payload: {
+          accountId: event.accountId,
+          odno: event.odno,
+          pdno: event.pdno,
+          side: event.side,
+          status: event.status,
+          filledQty: event.filledQty,
+          totalFilledQty: event.totalFilledQty,
+          remainingQty: event.remainingQty,
+          price: event.price,
+        },
+      });
+      broadcastTradeExecution(event);
+    },
+  });
+  manualOrderReconciler.start();
 
   return {
     factory,
@@ -645,6 +688,7 @@ function bootstrapDeps(userDataDir: string) {
     prebuyWatchers,
     boosterWatchers,
     balanceSync,
+    manualOrderReconciler,
     dbPath: defaultDbPath(userDataDir),
   };
 }

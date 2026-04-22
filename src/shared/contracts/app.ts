@@ -79,3 +79,21 @@ export const WatchOutcomeEventSchema = z.object({
   occurredAt: z.number().int().positive(),
 });
 export type WatchOutcomeEvent = z.infer<typeof WatchOutcomeEventSchema>;
+
+export const TradeExecutionStatusSchema = z.enum(['PARTIAL', 'FILLED']);
+export type TradeExecutionStatus = z.infer<typeof TradeExecutionStatusSchema>;
+
+export const TradeExecutionEventSchema = z.object({
+  accountId: z.number().int().positive(),
+  odno: z.string().min(1),
+  pdno: z.string().regex(/^\d{6}$/),
+  name: z.string().min(1),
+  side: z.enum(['BUY', 'SELL']),
+  status: TradeExecutionStatusSchema,
+  filledQty: z.number().int().positive(),
+  totalFilledQty: z.number().int().positive(),
+  remainingQty: z.number().int().nonnegative(),
+  price: z.number().int().positive(),
+  occurredAt: z.number().int().positive(),
+});
+export type TradeExecutionEvent = z.infer<typeof TradeExecutionEventSchema>;

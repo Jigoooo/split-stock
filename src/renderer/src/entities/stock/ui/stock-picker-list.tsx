@@ -3,7 +3,7 @@ import { highlightMatches } from '@renderer/shared/lib/search';
 import { Button, TextInput } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ExternalLink, RefreshCw, Search } from 'lucide-react';
-import type { KeyboardEvent, ReactElement } from 'react';
+import type { ChangeEvent, CompositionEvent, KeyboardEvent, ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { StockListEntry } from '../model/use-stock-list';
 import { useStockList } from '../model/use-stock-list';
@@ -52,6 +52,9 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
   const list = useStockList(keyword);
   const { isEmpty, sync, syncError, syncPending } = useStockMasterSync();
   const containerRef = useRef<HTMLDivElement>(null);
+  const isComposingRef = useRef(false);
+  const pendingEnterSelectionRef = useRef<StockListEntry | null>(null);
+  const suppressNextChangeRef = useRef(false);
   const rowHeightPx = dense ? 34 : 40;
 
   // 문서 다른 곳 클릭 시 드롭다운 닫힘
@@ -76,12 +79,23 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
       };
 
   const commit = (entry: StockListEntry): void => {
+    pendingEnterSelectionRef.current = null;
     onSelect(entry);
     if (!alwaysOpen) {
       setKeyword('');
       setFocused(false);
       setActiveIndex(0);
     }
+  };
+
+  const handleKeywordChange = (event: ChangeEvent<HTMLInputElement>): void => {
+    if (suppressNextChangeRef.current) {
+      suppressNextChangeRef.current = false;
+      return;
+    }
+
+    setKeyword(event.target.value);
+    setActiveIndex(0);
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>): void => {
@@ -93,6 +107,15 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
       e.preventDefault();
       setActiveIndex((i) => Math.max(0, i - 1));
     } else if (e.key === 'Enter') {
+      const nativeEvent = e.nativeEvent as KeyboardEvent<HTMLInputElement>['nativeEvent'] & {
+        isComposing?: boolean;
+        keyCode?: number;
+      };
+      if (isComposingRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) {
+        e.preventDefault();
+        pendingEnterSelectionRef.current = visible[activeIndex] ?? null;
+        return;
+      }
       e.preventDefault();
       const hit = visible[activeIndex];
       if (hit) commit(hit);
@@ -110,9 +133,19 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
         <TextInput
           type="text"
           value={keyword}
-          onChange={(e) => {
-            setKeyword(e.target.value);
-            setActiveIndex(0);
+          onChange={handleKeywordChange}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={(event: CompositionEvent<HTMLInputElement>) => {
+            isComposingRef.current = false;
+            handleKeywordChange(event as unknown as ChangeEvent<HTMLInputElement>);
+
+            const pendingEntry = pendingEnterSelectionRef.current;
+            if (!pendingEntry) return;
+
+            suppressNextChangeRef.current = true;
+            commit(pendingEntry);
           }}
           onFocus={() => setFocused(true)}
           onKeyDown={onKey}

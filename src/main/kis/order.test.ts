@@ -34,6 +34,7 @@ function baseDeps(agent: MockAgent, logger: EventLogger) {
     accountNo8: '12345678',
     accountProdCd: '01',
     logger,
+    rateLimitRetryDelayMs: 0,
   };
 }
 
@@ -47,13 +48,17 @@ describe('orderCash — 매수', () => {
   it('지정가 매수 성공 → ODNO 정규화 + 수락 이벤트 로그', async () => {
     const logger = createFakeLogger();
     const pool = agent.get(BASE);
+    let capturedBody = '';
     const intercept = pool.intercept({ path: /order-cash/, method: 'POST' }).reply(
       200,
-      {
-        rt_cd: '0',
-        msg_cd: 'OPSP0000',
-        msg1: 'OK',
-        output: { KRX_FWDG_ORD_ORGNO: '01790', ODNO: '0000123456', ORD_TMD: '093015' },
+      (opts) => {
+        capturedBody = typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body ?? {});
+        return {
+          rt_cd: '0',
+          msg_cd: 'OPSP0000',
+          msg1: 'OK',
+          output: { KRX_FWDG_ORD_ORGNO: '01790', ODNO: '0000123456', ORD_TMD: '093015' },
+        };
       },
       { headers: { 'content-type': 'application/json' } },
     );
@@ -74,6 +79,7 @@ describe('orderCash — 매수', () => {
     }
     // intercept가 한 번 실행됐는지 확인
     expect(intercept).toBeDefined();
+    expect(capturedBody).toContain('"EXCG_ID_DVSN_CD":"KRX"');
 
     const accepted = logger.entries.find(
       (e): e is { message: string; payload: { odnoHash: string } } =>
@@ -94,7 +100,6 @@ describe('orderCash — 매수', () => {
       rt_cd: '1',
       msg_cd: 'OPSP1234',
       msg1: '주문가능금액 부족',
-      output: { ODNO: '' },
     });
 
     const r = await orderCash(baseDeps(agent, logger), {
@@ -144,6 +149,42 @@ describe('orderCash — 매수', () => {
     expect(r.isOk()).toBe(true);
     expect(capturedBody).toContain('"ORD_DVSN":"01"');
     expect(capturedBody).toContain('"ORD_UNPR":"0"');
+  });
+
+  it('mock 환경에서 RATE_LIMITED 1회는 대기 후 자동 재시도한다', async () => {
+    const logger = createFakeLogger();
+    const pool = agent.get(BASE);
+    pool.intercept({ path: /order-cash/, method: 'POST' }).reply(200, {
+      rt_cd: '1',
+      msg_cd: 'EGW00201',
+      msg1: '초당 거래건수를 초과하였습니다.',
+    });
+    pool.intercept({ path: /order-cash/, method: 'POST' }).reply(200, {
+      rt_cd: '0',
+      msg_cd: 'OPSP0000',
+      msg1: 'OK',
+      output: { KRX_FWDG_ORD_ORGNO: '01790', ODNO: '0000000001', ORD_TMD: '100001' },
+    });
+
+    const r = await orderCash(baseDeps(agent, logger), {
+      side: 'BUY',
+      pdno: '005930',
+      qty: 1,
+      price: 70000,
+      division: 'LIMIT',
+    });
+
+    expect(r.isOk()).toBe(true);
+    if (r.isOk()) {
+      expect(r.value.odno).toBe('0000000001');
+    }
+    const retryLog = logger.entries.find(
+      (e): e is { message: string } =>
+        typeof e === 'object' &&
+        e !== null &&
+        (e as { message: string }).message === 'order.cash.rate_limited_retry',
+    );
+    expect(retryLog).toBeTruthy();
   });
 });
 
@@ -253,7 +294,6 @@ describe('cancelOrRevise', () => {
       rt_cd: '1',
       msg_cd: 'OPSP9999',
       msg1: '이미 체결된 주문',
-      output: { ODNO: '' },
     });
 
     const r = await cancelOrRevise(baseDeps(agent, logger), {

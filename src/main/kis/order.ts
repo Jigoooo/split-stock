@@ -1,5 +1,6 @@
 import type { AppEnv, KisError, NormalizedOrderAck } from '@shared/contracts';
 import {
+  KisCommonHeaderSchema,
   KisOrderAmendRequestSchema,
   KisOrderRequestSchema,
   KisOrderResponseSchema,
@@ -20,6 +21,8 @@ export interface OrderDeps {
   accountNo8: string;
   accountProdCd: string;
   logger: EventLogger;
+  /** 테스트 단축 및 mock rolling-window 대응용 rate limit 재시도 대기(ms). */
+  rateLimitRetryDelayMs?: number;
 }
 
 export interface OrderCashParams {
@@ -58,6 +61,19 @@ function priceString(price: number, division: 'LIMIT' | 'MARKET'): string {
   return division === 'MARKET' ? '0' : String(price);
 }
 
+function shouldRetryRateLimitedOrder(deps: OrderDeps): boolean {
+  return deps.env === 'MOCK';
+}
+
+function getRateLimitRetryDelayMs(deps: OrderDeps): number {
+  return deps.rateLimitRetryDelayMs ?? 1100;
+}
+
+async function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * 현금 매수/매도 — POST /uapi/domestic-stock/v1/trading/order-cash.
  *
@@ -90,6 +106,7 @@ export async function orderCash(
     CANO: deps.accountNo8,
     ACNT_PRDT_CD: deps.accountProdCd,
     PDNO: req.pdno,
+    EXCG_ID_DVSN_CD: 'KRX',
     ORD_DVSN: divisionCode(req.division),
     ORD_QTY: String(req.qty),
     ORD_UNPR: priceString(req.price, req.division),
@@ -111,71 +128,118 @@ export async function orderCash(
     },
   });
 
-  const res = await deps.http.post<unknown>(KIS_PATH.ORDER_CASH, body, headers);
-  if (res.isErr()) {
-    deps.logger.log({
-      level: 'ERROR',
-      category: 'ORDER',
-      message: 'order.cash.network_error',
-      payload: { kind: res.error.kind, msg: res.error.msg, pdno: req.pdno },
-    });
-    return err(res.error);
-  }
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const res = await deps.http.post<unknown>(KIS_PATH.ORDER_CASH, body, headers);
+    if (res.isErr()) {
+      if (attempt === 0 && res.error.kind === 'RATE_LIMITED' && shouldRetryRateLimitedOrder(deps)) {
+        const retryDelayMs = getRateLimitRetryDelayMs(deps);
+        deps.logger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'order.cash.rate_limited_retry',
+          payload: { pdno: req.pdno, retryDelayMs },
+        });
+        await sleep(retryDelayMs);
+        continue;
+      }
 
-  const parsedRes = KisOrderResponseSchema.safeParse(res.value.body);
-  if (!parsedRes.success) {
-    deps.logger.log({
-      level: 'ERROR',
-      category: 'ORDER',
-      message: 'order.cash.response_malformed',
-      payload: { pdno: req.pdno },
-    });
-    return err(
-      makeKisError('VALIDATION', 'order-cash 응답 파싱 실패', {
-        cause: parsedRes.error.message,
-      }),
+      deps.logger.log({
+        level: 'ERROR',
+        category: 'ORDER',
+        message: 'order.cash.network_error',
+        payload: { kind: res.error.kind, msg: res.error.msg, pdno: req.pdno },
+      });
+      return err(res.error);
+    }
+
+    const parsedHeader = KisCommonHeaderSchema.safeParse(res.value.body);
+    if (!parsedHeader.success) {
+      deps.logger.log({
+        level: 'ERROR',
+        category: 'ORDER',
+        message: 'order.cash.response_malformed',
+        payload: { pdno: req.pdno },
+      });
+      return err(
+        makeKisError('VALIDATION', 'order-cash 응답 파싱 실패', {
+          cause: parsedHeader.error.message,
+        }),
+      );
+    }
+
+    const bizErr = interpretRtCd(
+      parsedHeader.data.rt_cd,
+      parsedHeader.data.msg_cd,
+      parsedHeader.data.msg1,
     );
-  }
+    if (bizErr) {
+      if (attempt === 0 && bizErr.kind === 'RATE_LIMITED' && shouldRetryRateLimitedOrder(deps)) {
+        const retryDelayMs = getRateLimitRetryDelayMs(deps);
+        deps.logger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'order.cash.rate_limited_retry',
+          payload: { pdno: req.pdno, retryDelayMs },
+        });
+        await sleep(retryDelayMs);
+        continue;
+      }
 
-  const bizErr = interpretRtCd(parsedRes.data.rt_cd, parsedRes.data.msg_cd, parsedRes.data.msg1);
-  if (bizErr) {
+      deps.logger.log({
+        level: 'WARN',
+        category: 'ORDER',
+        message: 'order.cash.business_error',
+        payload: {
+          kind: bizErr.kind,
+          rt_cd: bizErr.rt_cd,
+          msg_cd: bizErr.msg_cd,
+          msg: bizErr.msg,
+          pdno: req.pdno,
+        },
+      });
+      return err(bizErr);
+    }
+
+    const parsedRes = KisOrderResponseSchema.safeParse(res.value.body);
+    if (!parsedRes.success) {
+      deps.logger.log({
+        level: 'ERROR',
+        category: 'ORDER',
+        message: 'order.cash.response_malformed',
+        payload: { pdno: req.pdno },
+      });
+      return err(
+        makeKisError('VALIDATION', 'order-cash 응답 파싱 실패', {
+          cause: parsedRes.error.message,
+        }),
+      );
+    }
+
+    const ack: NormalizedOrderAck = {
+      odno: parsedRes.data.output.ODNO,
+      ...(parsedRes.data.output.KRX_FWDG_ORD_ORGNO !== undefined && {
+        orgNo: parsedRes.data.output.KRX_FWDG_ORD_ORGNO,
+      }),
+      ...(parsedRes.data.output.ORD_TMD !== undefined && {
+        orderedAt: parsedRes.data.output.ORD_TMD,
+      }),
+    };
+
     deps.logger.log({
-      level: 'WARN',
+      level: 'INFO',
       category: 'ORDER',
-      message: 'order.cash.business_error',
+      message: 'order.cash.accepted',
       payload: {
-        kind: bizErr.kind,
-        rt_cd: bizErr.rt_cd,
-        msg_cd: bizErr.msg_cd,
-        msg: bizErr.msg,
+        odnoHash: hashIdentifier(ack.odno),
+        orgNo: ack.orgNo ?? null,
         pdno: req.pdno,
       },
     });
-    return err(bizErr);
+
+    return ok(ack);
   }
 
-  const ack: NormalizedOrderAck = {
-    odno: parsedRes.data.output.ODNO,
-    ...(parsedRes.data.output.KRX_FWDG_ORD_ORGNO !== undefined && {
-      orgNo: parsedRes.data.output.KRX_FWDG_ORD_ORGNO,
-    }),
-    ...(parsedRes.data.output.ORD_TMD !== undefined && {
-      orderedAt: parsedRes.data.output.ORD_TMD,
-    }),
-  };
-
-  deps.logger.log({
-    level: 'INFO',
-    category: 'ORDER',
-    message: 'order.cash.accepted',
-    payload: {
-      odnoHash: hashIdentifier(ack.odno),
-      orgNo: ack.orgNo ?? null,
-      pdno: req.pdno,
-    },
-  });
-
-  return ok(ack);
+  return err(makeKisError('RATE_LIMITED', '주문 재시도 한도를 초과했습니다'));
 }
 
 /**
@@ -237,69 +301,116 @@ export async function cancelOrRevise(
     },
   });
 
-  const res = await deps.http.post<unknown>(KIS_PATH.ORDER_CANCEL_REVISE, body, headers);
-  if (res.isErr()) {
-    deps.logger.log({
-      level: 'ERROR',
-      category: 'ORDER',
-      message: 'order.amend.network_error',
-      payload: { kind: res.error.kind, action: req.action },
-    });
-    return err(res.error);
-  }
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const res = await deps.http.post<unknown>(KIS_PATH.ORDER_CANCEL_REVISE, body, headers);
+    if (res.isErr()) {
+      if (attempt === 0 && res.error.kind === 'RATE_LIMITED' && shouldRetryRateLimitedOrder(deps)) {
+        const retryDelayMs = getRateLimitRetryDelayMs(deps);
+        deps.logger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'order.amend.rate_limited_retry',
+          payload: { action: req.action, retryDelayMs },
+        });
+        await sleep(retryDelayMs);
+        continue;
+      }
 
-  const parsedRes = KisOrderResponseSchema.safeParse(res.value.body);
-  if (!parsedRes.success) {
-    deps.logger.log({
-      level: 'ERROR',
-      category: 'ORDER',
-      message: 'order.amend.response_malformed',
-      payload: { action: req.action },
-    });
-    return err(
-      makeKisError('VALIDATION', 'order-rvsecncl 응답 파싱 실패', {
-        cause: parsedRes.error.message,
-      }),
+      deps.logger.log({
+        level: 'ERROR',
+        category: 'ORDER',
+        message: 'order.amend.network_error',
+        payload: { kind: res.error.kind, action: req.action },
+      });
+      return err(res.error);
+    }
+
+    const parsedHeader = KisCommonHeaderSchema.safeParse(res.value.body);
+    if (!parsedHeader.success) {
+      deps.logger.log({
+        level: 'ERROR',
+        category: 'ORDER',
+        message: 'order.amend.response_malformed',
+        payload: { action: req.action },
+      });
+      return err(
+        makeKisError('VALIDATION', 'order-rvsecncl 응답 파싱 실패', {
+          cause: parsedHeader.error.message,
+        }),
+      );
+    }
+
+    const bizErr = interpretRtCd(
+      parsedHeader.data.rt_cd,
+      parsedHeader.data.msg_cd,
+      parsedHeader.data.msg1,
     );
-  }
+    if (bizErr) {
+      if (attempt === 0 && bizErr.kind === 'RATE_LIMITED' && shouldRetryRateLimitedOrder(deps)) {
+        const retryDelayMs = getRateLimitRetryDelayMs(deps);
+        deps.logger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'order.amend.rate_limited_retry',
+          payload: { action: req.action, retryDelayMs },
+        });
+        await sleep(retryDelayMs);
+        continue;
+      }
 
-  const bizErr = interpretRtCd(parsedRes.data.rt_cd, parsedRes.data.msg_cd, parsedRes.data.msg1);
-  if (bizErr) {
+      deps.logger.log({
+        level: 'WARN',
+        category: 'ORDER',
+        message: 'order.amend.business_error',
+        payload: {
+          kind: bizErr.kind,
+          rt_cd: bizErr.rt_cd,
+          msg_cd: bizErr.msg_cd,
+          msg: bizErr.msg,
+          action: req.action,
+        },
+      });
+      return err(bizErr);
+    }
+
+    const parsedRes = KisOrderResponseSchema.safeParse(res.value.body);
+    if (!parsedRes.success) {
+      deps.logger.log({
+        level: 'ERROR',
+        category: 'ORDER',
+        message: 'order.amend.response_malformed',
+        payload: { action: req.action },
+      });
+      return err(
+        makeKisError('VALIDATION', 'order-rvsecncl 응답 파싱 실패', {
+          cause: parsedRes.error.message,
+        }),
+      );
+    }
+
+    const ack: NormalizedOrderAck = {
+      odno: parsedRes.data.output.ODNO,
+      ...(parsedRes.data.output.KRX_FWDG_ORD_ORGNO !== undefined && {
+        orgNo: parsedRes.data.output.KRX_FWDG_ORD_ORGNO,
+      }),
+      ...(parsedRes.data.output.ORD_TMD !== undefined && {
+        orderedAt: parsedRes.data.output.ORD_TMD,
+      }),
+    };
+
     deps.logger.log({
-      level: 'WARN',
+      level: 'INFO',
       category: 'ORDER',
-      message: 'order.amend.business_error',
+      message: 'order.amend.accepted',
       payload: {
-        kind: bizErr.kind,
-        rt_cd: bizErr.rt_cd,
-        msg_cd: bizErr.msg_cd,
-        msg: bizErr.msg,
         action: req.action,
+        odnoHash: hashIdentifier(ack.odno),
+        orgNo: ack.orgNo ?? null,
       },
     });
-    return err(bizErr);
+
+    return ok(ack);
   }
 
-  const ack: NormalizedOrderAck = {
-    odno: parsedRes.data.output.ODNO,
-    ...(parsedRes.data.output.KRX_FWDG_ORD_ORGNO !== undefined && {
-      orgNo: parsedRes.data.output.KRX_FWDG_ORD_ORGNO,
-    }),
-    ...(parsedRes.data.output.ORD_TMD !== undefined && {
-      orderedAt: parsedRes.data.output.ORD_TMD,
-    }),
-  };
-
-  deps.logger.log({
-    level: 'INFO',
-    category: 'ORDER',
-    message: 'order.amend.accepted',
-    payload: {
-      action: req.action,
-      odnoHash: hashIdentifier(ack.odno),
-      orgNo: ack.orgNo ?? null,
-    },
-  });
-
-  return ok(ack);
+  return err(makeKisError('RATE_LIMITED', '주문 정정/취소 재시도 한도를 초과했습니다'));
 }

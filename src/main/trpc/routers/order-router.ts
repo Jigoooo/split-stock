@@ -2,13 +2,43 @@ import { KisOrderAmendRequestSchema, KisOrderRequestSchema } from '@shared/contr
 import { TRPCError } from '@trpc/server';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
-import { orders } from '../../db/schema';
+import type { Db } from '../../db/client';
+import { orders, trades } from '../../db/schema';
 import { readPendingCancelConfig } from '../../db/settings-repo';
 import { cancelOrRevise, orderCash } from '../../kis/order';
 import { assertCredMatchesEnv, requireAccountId, resolveAccountId } from '../router-helpers';
 import { authedProcedure, router } from '../trpc-core';
 
 const AccountIdField = z.number().int().positive();
+
+function readFilledQtyByOrderId(db: Db, orderIds: number[]): Map<number, number> {
+  if (orderIds.length === 0) return new Map();
+  const tradeRows = db.select().from(trades).where(inArray(trades.orderId, orderIds)).all();
+  const filledQtyByOrderId = new Map<number, number>();
+  for (const trade of tradeRows) {
+    const prev = filledQtyByOrderId.get(trade.orderId) ?? 0;
+    filledQtyByOrderId.set(trade.orderId, prev + trade.qty);
+  }
+  return filledQtyByOrderId;
+}
+
+function buildActiveOrderViews<
+  T extends Array<typeof orders.$inferSelect & { id: number; qty: number; status: string }>,
+>(rows: T, filledQtyByOrderId: Map<number, number>) {
+  return rows
+    .map((row) => {
+      const filledQty = Math.min(row.qty, filledQtyByOrderId.get(row.id) ?? 0);
+      const remainingQty = Math.max(0, row.qty - filledQty);
+      const status = filledQty > 0 && remainingQty > 0 ? 'PARTIAL' : row.status;
+      return {
+        ...row,
+        status,
+        filledQty,
+        remainingQty,
+      };
+    })
+    .filter((row) => row.remainingQty > 0);
+}
 
 export const orderRouter = router({
   /**
@@ -189,7 +219,13 @@ export const orderRouter = router({
         .where(and(eq(orders.accountId, accountId), inArray(orders.status, ['PENDING', 'PARTIAL'])))
         .orderBy(asc(orders.placedAt))
         .all();
-      return { orders: rows };
+      const filledQtyByOrderId = readFilledQtyByOrderId(
+        ctx.db,
+        rows.map((row) => row.id),
+      );
+      return {
+        orders: buildActiveOrderViews(rows, filledQtyByOrderId),
+      };
     }),
 
   /**
@@ -261,7 +297,26 @@ export const orderRouter = router({
         });
       }
       const results: Array<{ odno: string; ok: boolean; reason?: string }> = [];
+      const filledQtyByOrderId = readFilledQtyByOrderId(
+        ctx.db,
+        rows.map((row) => row.id),
+      );
       for (const row of rows) {
+        const filledQty = Math.min(row.qty, filledQtyByOrderId.get(row.id) ?? 0);
+        const remainingQty = Math.max(0, row.qty - filledQty);
+        if (remainingQty <= 0) {
+          ctx.db
+            .update(orders)
+            .set({ status: 'FILLED', filledAt: row.filledAt ?? new Date() })
+            .where(and(eq(orders.odno, row.odno), eq(orders.accountId, accountId)))
+            .run();
+          results.push({
+            odno: row.odno,
+            ok: false,
+            reason: '이미 전량 체결되어 취소할 수 없습니다',
+          });
+          continue;
+        }
         if (!row.orgNo) {
           results.push({
             odno: row.odno,
@@ -286,7 +341,7 @@ export const orderRouter = router({
             orgOrgNo: row.orgNo,
             orgOdno: row.odno,
             division: row.division as 'LIMIT' | 'MARKET',
-            qty: row.qty,
+            qty: remainingQty,
             price: 0,
             qtyAllOrder: true,
           },

@@ -64,11 +64,12 @@ export class KisHttpClient {
 
   constructor(private readonly config: KisHttpConfig) {
     const rps = config.rateLimitRps ?? 15;
+    // KIS 서버는 최근 1초 rolling window 기준으로 유량을 계산하는 경향이 있어,
+    // 1초 단위 reservoir reset 방식은 초 경계에서 burst를 만들 수 있다.
+    // 고정 간격(minTime) + 단일 동시성으로 요청을 직렬화해 burst를 제거한다.
     this.limiter = new Bottleneck({
-      reservoir: rps,
-      reservoirRefreshAmount: rps,
-      reservoirRefreshInterval: 1000,
-      maxConcurrent: 10,
+      minTime: Math.ceil(1000 / rps),
+      maxConcurrent: 1,
     });
   }
 

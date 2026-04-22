@@ -91,6 +91,24 @@ describe('Select', () => {
     expect(screen.getByRole('combobox', { name: '환경 선택' })).toHaveTextContent('Alpha');
   });
 
+  it('열린 상태에서도 option register effect가 무한 루프에 빠지지 않는다', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      render(<SelectHarness />);
+
+      fireEvent.click(screen.getByRole('combobox', { name: '환경 선택' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('listbox')).toBeInTheDocument();
+      });
+
+      expect(errorSpy.mock.calls.flat().join(' ')).not.toContain('Maximum update depth exceeded');
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it('label htmlFor로 포커스되고 hidden input과 runtime change payload를 유지한다', async () => {
     const onValueChange = vi.fn();
     const { container } = render(<SelectHarness onValueChange={onValueChange} />);

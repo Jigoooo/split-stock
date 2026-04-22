@@ -54,7 +54,7 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
           <TableGrid.Cell flex={1}>종목</TableGrid.Cell>
           <TableGrid.Cell flex={1}>구분</TableGrid.Cell>
           <TableGrid.Cell flex={1} numeric>
-            수량
+            남은/원주문
           </TableGrid.Cell>
           <TableGrid.Cell flex={1} numeric>
             가격
@@ -87,12 +87,30 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
                 </span>
               </TableGrid.Cell>
               <TableGrid.Cell flex={1} numeric>
-                {thousandSeparator(o.qty)}
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: '0.15rem',
+                    justifyItems: 'end',
+                    lineHeight: 1.15,
+                  }}
+                >
+                  <span className="num">
+                    {thousandSeparator(o.remainingQty)} / {thousandSeparator(o.qty)}
+                  </span>
+                  <span className="muted" style={{ fontSize: '1rem' }}>
+                    체결 {thousandSeparator(o.filledQty)}주
+                  </span>
+                </div>
               </TableGrid.Cell>
               <TableGrid.Cell flex={1} numeric>
                 {o.division === 'MARKET' ? '시장가' : thousandSeparator(o.price)}
               </TableGrid.Cell>
-              <TableGrid.Cell flex={1}>{o.status}</TableGrid.Cell>
+              <TableGrid.Cell flex={1}>
+                <span className={`chip ${o.status === 'PARTIAL' ? 'chip--up' : ''}`}>
+                  {o.status === 'PARTIAL' ? '부분체결' : '미체결'}
+                </span>
+              </TableGrid.Cell>
               <TableGrid.Cell flex={1} numeric className="muted">
                 {formatTs(o.placedAt)}
               </TableGrid.Cell>

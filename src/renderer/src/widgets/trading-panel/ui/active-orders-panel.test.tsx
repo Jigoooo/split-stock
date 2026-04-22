@@ -14,8 +14,10 @@ const useActiveOrdersMock = vi.fn(() => ({
       side: 'BUY',
       division: 'LIMIT',
       qty: 10,
+      filledQty: 0,
+      remainingQty: 10,
       price: 70000,
-      status: 'OPEN',
+      status: 'PENDING',
       placedAt: new Date('2026-04-20T10:00:00+09:00').toISOString(),
     },
   ],
@@ -36,5 +38,35 @@ describe('ActiveOrdersPanel', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: '선택 ODN-1' }));
 
     expect(toggleMock).toHaveBeenCalledWith('ODN-1');
+  });
+
+  it('부분체결 주문은 남은 수량과 체결 수량을 함께 표시한다', () => {
+    useActiveOrdersMock.mockReturnValueOnce({
+      cancelError: null,
+      cancelPending: false,
+      cancelSelected: vi.fn(),
+      orders: [
+        {
+          odno: 'ODN-2',
+          pdno: '005930',
+          side: 'BUY',
+          division: 'LIMIT',
+          qty: 10,
+          filledQty: 3,
+          remainingQty: 7,
+          price: 70000,
+          status: 'PARTIAL',
+          placedAt: new Date('2026-04-20T10:00:00+09:00').toISOString(),
+        },
+      ],
+      selected: new Set<string>(),
+      toggle: vi.fn(),
+    });
+
+    render(<ActiveOrdersPanel pdnoFilter="005930" nameFilter="삼성전자" />);
+
+    expect(screen.getByText('7 / 10')).toBeInTheDocument();
+    expect(screen.getByText('체결 3주')).toBeInTheDocument();
+    expect(screen.getByText('부분체결')).toBeInTheDocument();
   });
 });

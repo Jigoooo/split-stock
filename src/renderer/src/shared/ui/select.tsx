@@ -230,6 +230,16 @@ const SelectRoot = ({
         return [...prev, meta];
       }
 
+      const current = prev[existingIndex];
+      if (
+        current?.disabled === meta.disabled &&
+        current.id === meta.id &&
+        current.label === meta.label &&
+        current.value === meta.value
+      ) {
+        return prev;
+      }
+
       const next = [...prev];
       next[existingIndex] = meta;
       return next;
@@ -504,12 +514,17 @@ const SelectOption = ({ children, disabled = false, value }: SelectOptionProps):
   const registerOption = context.registerOption;
   const shouldPersistOnUnmount = context.optionSnapshot !== undefined;
   const unregisterOption = context.unregisterOption;
+  const registerOptionRef = useRef(registerOption);
+  const unregisterOptionRef = useRef(unregisterOption);
   const optionId = useId();
   const isActive = context.activeValue === value;
   const isSelected = context.value === value;
 
+  registerOptionRef.current = registerOption;
+  unregisterOptionRef.current = unregisterOption;
+
   useEffect(() => {
-    registerOption({
+    registerOptionRef.current({
       disabled,
       id: optionId,
       label: children,
@@ -518,18 +533,10 @@ const SelectOption = ({ children, disabled = false, value }: SelectOptionProps):
 
     return () => {
       if (!shouldPersistOnUnmount) {
-        unregisterOption(value);
+        unregisterOptionRef.current(value);
       }
     };
-  }, [
-    children,
-    disabled,
-    optionId,
-    registerOption,
-    shouldPersistOnUnmount,
-    unregisterOption,
-    value,
-  ]);
+  }, [children, disabled, optionId, shouldPersistOnUnmount, value]);
 
   return (
     <button

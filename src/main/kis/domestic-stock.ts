@@ -1,6 +1,7 @@
 import type { AppEnv, KisError } from '@shared/contracts';
 import {
   KisBalanceResponseSchema,
+  KisDailyCcldResponseSchema,
   KisDailyChartResponseSchema,
   KisPriceResponseSchema,
 } from '@shared/contracts';
@@ -24,6 +25,21 @@ export interface BalanceResult {
   positions: Position[];
   deposit: number; // 예수금 총액
   totalEval: number; // 총평가금액
+}
+
+export interface DailyCcldOrder {
+  odno: string;
+  pdno: string;
+  name: string;
+  side: 'BUY' | 'SELL';
+  orderQty: number;
+  orderPrice: number;
+  orderedAt: string;
+  totalFilledQty: number;
+  remainingQty: number;
+  avgFillPrice: number;
+  cancelled: boolean;
+  rejectedQty: number;
 }
 
 export interface QuoteResult {
@@ -79,6 +95,16 @@ function parseNum(x: string | undefined): number {
   if (!x) return 0;
   const n = Number(x);
   return Number.isFinite(n) ? n : 0;
+}
+
+function resolveDailyCcldTrId(
+  env: AppEnv,
+  period: 'before' | 'inner',
+): 'CTSC9215R' | 'TTTC0081R' | 'VTSC9215R' | 'VTTC0081R' {
+  if (period === 'before') {
+    return env === 'PROD' ? 'CTSC9215R' : 'VTSC9215R';
+  }
+  return env === 'PROD' ? 'TTTC0081R' : 'VTTC0081R';
 }
 
 /**
@@ -138,6 +164,72 @@ export async function inquireBalance(
     deposit: parseNum(summary?.dnca_tot_amt),
     totalEval: parseNum(summary?.tot_evlu_amt),
   });
+}
+
+export async function inquireDailyCcld(
+  deps: DomesticStockDeps,
+  params: {
+    from: Date;
+    to: Date;
+    orderNo?: string;
+    code?: string;
+    side?: 'ALL' | 'BUY' | 'SELL';
+    filledOnly?: boolean;
+    ccldDvsn?: '00' | '01' | '02';
+    exchange?: 'KRX' | 'NXT' | 'SOR' | 'ALL';
+  },
+): Promise<Result<DailyCcldOrder[], KisError>> {
+  const now = params.to;
+  const diffMs = Math.max(0, now.getTime() - params.from.getTime());
+  const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+  const period = diffMs > ninetyDaysMs ? 'before' : 'inner';
+  const headers = authHeaders(deps, resolveDailyCcldTrId(deps.env, period));
+  const query = {
+    CANO: deps.accountNo8,
+    ACNT_PRDT_CD: deps.accountProdCd,
+    INQR_STRT_DT: yyyymmdd(params.from),
+    INQR_END_DT: yyyymmdd(params.to),
+    SLL_BUY_DVSN_CD: params.side === 'BUY' ? '02' : params.side === 'SELL' ? '01' : '00',
+    PDNO: params.code ?? '',
+    CCLD_DVSN: params.ccldDvsn ?? (params.filledOnly ? '01' : '00'),
+    INQR_DVSN: '00',
+    INQR_DVSN_3: '01',
+    ORD_GNO_BRNO: '',
+    ODNO: params.orderNo ?? '',
+    INQR_DVSN_1: '',
+    CTX_AREA_FK100: '',
+    CTX_AREA_NK100: '',
+    EXCG_ID_DVSN_CD: params.exchange ?? 'KRX',
+  };
+  const res = await deps.http.get<unknown>(KIS_PATH.INQUIRE_CCNL, query, headers);
+  if (res.isErr()) return err(res.error);
+  const parsed = KisDailyCcldResponseSchema.safeParse(res.value.body);
+  if (!parsed.success) {
+    return err(
+      makeKisError('VALIDATION', 'daily ccld response malformed', {
+        cause: parsed.error.message,
+      }),
+    );
+  }
+  const bizErr = interpretRtCd(parsed.data.rt_cd, parsed.data.msg_cd, parsed.data.msg1);
+  if (bizErr) return err(bizErr);
+
+  return ok(
+    parsed.data.output1.map((row) => ({
+      odno: row.odno,
+      pdno: row.pdno,
+      name: row.prdt_name?.trim() || row.pdno,
+      side: row.sll_buy_dvsn_cd === '01' ? 'SELL' : 'BUY',
+      orderQty: parseNum(row.ord_qty),
+      orderPrice: parseNum(row.ord_unpr),
+      orderedAt: row.ord_tmd ?? '',
+      totalFilledQty: parseNum(row.tot_ccld_qty),
+      remainingQty: parseNum(row.rmn_qty),
+      avgFillPrice: parseNum(row.avg_prvs),
+      cancelled: row.cncl_yn === 'Y',
+      rejectedQty: parseNum(row.rjct_qty),
+    })),
+  );
 }
 
 /**

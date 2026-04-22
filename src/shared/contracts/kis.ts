@@ -60,6 +60,40 @@ export const KisBalanceResponseSchema = z.object({
 export type KisBalanceResponse = z.infer<typeof KisBalanceResponseSchema>;
 
 /**
+ * 국내주식 일별 주문체결조회 — output1(주문별 상세).
+ * GET /uapi/domestic-stock/v1/trading/inquire-daily-ccld
+ */
+export const KisDailyCcldItemSchema = z.object({
+  odno: z.string(),
+  pdno: z.string(),
+  prdt_name: z.string().optional(),
+  sll_buy_dvsn_cd: z.string().optional(),
+  ord_qty: z.string().optional(),
+  ord_unpr: z.string().optional(),
+  ord_tmd: z.string().optional(),
+  tot_ccld_qty: z.string().optional(),
+  avg_prvs: z.string().optional(),
+  rmn_qty: z.string().optional(),
+  cncl_yn: z.string().optional(),
+  rjct_qty: z.string().optional(),
+});
+export type KisDailyCcldItem = z.infer<typeof KisDailyCcldItemSchema>;
+
+export const KisDailyCcldSummarySchema = z.record(z.string(), z.string()).default({});
+export type KisDailyCcldSummary = z.infer<typeof KisDailyCcldSummarySchema>;
+
+export const KisDailyCcldResponseSchema = z.object({
+  rt_cd: z.string(),
+  msg_cd: z.string(),
+  msg1: z.string(),
+  output1: z.array(KisDailyCcldItemSchema).default([]),
+  output2: KisDailyCcldSummarySchema.optional(),
+  ctx_area_fk100: z.string().optional(),
+  ctx_area_nk100: z.string().optional(),
+});
+export type KisDailyCcldResponse = z.infer<typeof KisDailyCcldResponseSchema>;
+
+/**
  * 국내주식 현재가 시세.
  * GET /uapi/domestic-stock/v1/quotations/inquire-price
  */

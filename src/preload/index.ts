@@ -1,4 +1,4 @@
-import type { WatchOutcomeEvent } from '@shared/contracts';
+import type { TradeExecutionEvent, WatchOutcomeEvent } from '@shared/contracts';
 import { contextBridge, ipcRenderer } from 'electron';
 import { exposeElectronTRPC } from 'trpc-electron/main';
 
@@ -44,6 +44,11 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:watch-event', handler);
     return () => ipcRenderer.off('appShell:watch-event', handler);
   },
+  onTradeEvent: (listener: (event: TradeExecutionEvent) => void): (() => void) => {
+    const handler = (_: unknown, event: TradeExecutionEvent): void => listener(event);
+    ipcRenderer.on('appShell:trade-event', handler);
+    return () => ipcRenderer.off('appShell:trade-event', handler);
+  },
   setAlwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('appShell:setAlwaysOnTop', on),
   fitContentHeight: (height: number): Promise<void> =>
     ipcRenderer.invoke('appShell:fitContentHeight', height),
@@ -62,6 +67,7 @@ export type AppShellBridge = {
   broadcastAccountChanged: (accountId: number) => void;
   onAccountChanged: (listener: (accountId: number) => void) => () => void;
   onWatchEvent?: (listener: (event: WatchOutcomeEvent) => void) => () => void;
+  onTradeEvent?: (listener: (event: TradeExecutionEvent) => void) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;
   fitContentHeight: (height: number) => Promise<void>;
 };

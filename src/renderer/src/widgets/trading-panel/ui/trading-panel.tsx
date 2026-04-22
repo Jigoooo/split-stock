@@ -142,10 +142,10 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
   const [selection, setSelection] = useState<OrderTicketSelection>({ pdno, name });
   // 상단 종목 검색에서 종목이 바뀌면 티켓의 selection 도 초기화 — suggestedPrice/side 를 지워
   // 이전 종목의 호가 클릭 값이 잔상처럼 남지 않게 한다.
-  const [appliedPdno, setAppliedPdno] = useState(pdno);
-  if (appliedPdno !== pdno) {
-    setAppliedPdno(pdno);
+  if (selection.pdno !== pdno) {
     setSelection({ pdno, name });
+  } else if (selection.name !== name) {
+    setSelection((current) => ({ ...current, name }));
   }
 
   const onPriceClick = (price: number, side: 'BUY' | 'SELL'): void => {

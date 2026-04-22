@@ -1,6 +1,9 @@
 import { CredentialsReentryBanner } from '@renderer/features/backup-restore';
 import { SwitchEnvDialog } from '@renderer/features/switch-env';
-import { useWatchEventNotifications } from '@renderer/features/trade-notifications';
+import {
+  useTradeNotifications,
+  useWatchEventNotifications,
+} from '@renderer/features/trade-notifications';
 import { LoginPage } from '@renderer/pages/login';
 import { Button } from '@renderer/shared/ui';
 import { AccountBar } from '@renderer/widgets/account-bar';
@@ -17,7 +20,6 @@ import './app.css';
 
 const AppShell = ({ popout }: { popout: PopoutApi }): ReactElement => {
   const shell = useAppShell();
-  useWatchEventNotifications();
 
   return (
     <div className="app-root" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
@@ -101,11 +103,18 @@ const AppShell = ({ popout }: { popout: PopoutApi }): ReactElement => {
   );
 };
 
+const AppNotifications = (): null => {
+  useWatchEventNotifications();
+  useTradeNotifications();
+  return null;
+};
+
 export const App = (): ReactElement => {
   const popout = usePopoutState();
   const popoutRoute = readPopoutRoute();
   return (
     <AppProviders>
+      <AppNotifications />
       {popoutRoute ? (
         <PopoutPage route={popoutRoute} popout={popout} />
       ) : (

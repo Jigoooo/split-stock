@@ -1,5 +1,6 @@
 import { useActiveAccountId } from '@renderer/entities/account';
 import { trpc } from '@renderer/shared/api/trpc';
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { useState } from 'react';
 
 export function useActiveOrders(pdnoFilter?: string | null) {
@@ -13,6 +14,8 @@ export function useActiveOrders(pdnoFilter?: string | null) {
 
   const allOrders = query.data?.orders ?? [];
   const orders = pdnoFilter ? allOrders.filter((order) => order.pdno === pdnoFilter) : allOrders;
+  const selectedOrders = orders.filter((order) => selected.has(order.odno));
+  const selectedRemainingQty = selectedOrders.reduce((sum, order) => sum + order.remainingQty, 0);
 
   const toggle = (odno: string): void => {
     setSelected((prev) => {
@@ -27,7 +30,13 @@ export function useActiveOrders(pdnoFilter?: string | null) {
     const odnos = Array.from(selected);
     if (odnos.length === 0) return;
     if (accountId === null) return;
-    if (!window.confirm(`${odnos.length}건 일괄 취소하시겠습니까?`)) return;
+    if (
+      !window.confirm(
+        `${odnos.length}건 일괄 취소하시겠습니까?\n남은 수량 합계: ${thousandSeparator(selectedRemainingQty)}주`,
+      )
+    ) {
+      return;
+    }
     await cancelMany.mutateAsync({ odnos, accountId });
     setSelected(new Set());
   };
