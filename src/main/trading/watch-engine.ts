@@ -78,6 +78,8 @@ export interface ExecutionResult {
   ok: boolean;
   /** 실패 시 사유 (FAILED 상태에 기록). */
   reason?: string;
+  /** true면 상태를 바꾸지 않고 WATCHING 유지. */
+  keepWatching?: boolean;
 }
 
 /**
@@ -527,6 +529,10 @@ export class WatchEngine {
       this.notifyWatchingPdnosChanged();
       this.opts.onExecuted?.({ ...order, status: 'EXECUTED', executedAt: now, updatedAt: now });
     } else {
+      if (result.keepWatching) {
+        entry.inFlight = false;
+        return;
+      }
       const reason = result.reason ?? 'unknown';
       this.opts.db
         .update(watchOrders)

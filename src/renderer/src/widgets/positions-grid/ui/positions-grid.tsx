@@ -1,6 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { TableGrid, useTableGridVirtual } from '@renderer/shared/ui';
+import { Button, TableGrid, useTableGridVirtual } from '@renderer/shared/ui';
 import { type ReactElement, useRef, useState } from 'react';
 import { usePositionsGrid } from '../model/use-positions-grid';
 import { POSITION_COLS, PositionRow } from './position-row';
@@ -23,13 +23,36 @@ export interface PositionsGridProps {
 export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
   const { onSelect, selectedPdno = null } = props;
   const { error, gridMaxStages, isPending, mismatches, rows, syncStatus } = usePositionsGrid();
+  const utils = trpc.useUtils();
 
   // 종목별 자동매매 상태 — grid 레벨 1회 조회
   const safetyState = trpc.safety.getState.useQuery(
     { accountId: props.accountId },
     { refetchInterval: 3000 },
   );
+  const syncCurrentState = trpc.account.syncCurrentState.useMutation({
+    onMutate: () => {
+      console.info('[PositionsGrid] syncCurrentState requested', {
+        accountId: props.accountId,
+      });
+    },
+    onSuccess: (result) => {
+      console.info('[PositionsGrid] syncCurrentState accepted', result);
+      void Promise.all([
+        utils.account.getBalanceWithLots.invalidate(),
+        utils.account.getPositionOverlay.invalidate(),
+        utils.lots.cyclesByPdno.invalidate(),
+        utils.lots.tradeHistory.invalidate(),
+        utils.order.listActive.invalidate(),
+        utils.order.listMyFills.invalidate(),
+      ]);
+    },
+    onError: (error) => {
+      console.error('[PositionsGrid] syncCurrentState failed', error);
+    },
+  });
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [showMismatchDetails, setShowMismatchDetails] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtual = useTableGridVirtual({
@@ -68,10 +91,44 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
         보유 종목 ({thousandSeparator(rows.length)}건)
       </div>
       {syncStatus === 'MISMATCH' ? (
-        <div className="panel__body" style={{ flexShrink: 0 }}>
-          <span className="chip chip--down" role="status">
-            KIS 잔고와 차수 장부 불일치 {thousandSeparator(mismatches.length)}건
-          </span>
+        <div style={{ flexShrink: 0 }}>
+          <div
+            className="panel__body"
+            style={{ alignItems: 'center', display: 'flex', flexShrink: 0, gap: '0.6rem' }}
+          >
+            <span className="chip chip--down" role="status">
+              KIS 잔고와 차수 장부 불일치 {thousandSeparator(mismatches.length)}건
+            </span>
+            <Button
+              dense
+              disabled={syncCurrentState.isPending}
+              onClick={() => void syncCurrentState.mutateAsync({ accountId: props.accountId })}
+            >
+              {syncCurrentState.isPending ? '동기화 중…' : '동기화'}
+            </Button>
+            <Button
+              dense
+              onClick={() => setShowMismatchDetails((current) => !current)}
+              aria-expanded={showMismatchDetails}
+            >
+              {showMismatchDetails ? '상세 숨기기' : '상세 보기'}
+            </Button>
+          </div>
+          {showMismatchDetails ? (
+            <div className="panel__body muted" style={{ display: 'grid', gap: '0.3rem' }}>
+              {mismatches.map((mismatch) => (
+                <div key={`${mismatch.pdno}:${mismatch.reason}`}>
+                  <span className="num">{mismatch.pdno}</span>
+                  {' · '}
+                  {describeMismatchReason(mismatch.reason)}
+                  {' · KIS '}
+                  <span className="num">{thousandSeparator(mismatch.kisQty)}주</span>
+                  {' / lot '}
+                  <span className="num">{thousandSeparator(mismatch.lotQty)}주</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -169,4 +226,15 @@ function stageNumbers(count: number): number[] {
   const out: number[] = [];
   for (let n = 1; n <= count; n += 1) out.push(n);
   return out;
+}
+
+function describeMismatchReason(reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH'): string {
+  switch (reason) {
+    case 'NO_LOTS':
+      return '잔고는 있는데 차수 장부가 없음';
+    case 'STALE_LOTS':
+      return '차수 장부만 남아 있음';
+    case 'QTY_MISMATCH':
+      return '수량 불일치';
+  }
 }

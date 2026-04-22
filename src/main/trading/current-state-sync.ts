@@ -15,6 +15,7 @@ export interface CurrentStateSyncOptions {
   balanceSync: Pick<BalanceSync, 'refresh'>;
   logger: EventLogger;
   manualOrderReconciler: Pick<ManualOrderReconciler, 'poll'>;
+  onRefreshed?: (() => void) | undefined;
 }
 
 export function buildLotSyncMismatches(input: {
@@ -59,20 +60,90 @@ export class CurrentStateSync {
 
   constructor(private readonly opts: CurrentStateSyncOptions) {}
 
+  trigger(
+    reason: 'startup' | 'account-switch' | 'env-switch' | 'trade-event' | 'manual',
+  ): { started: boolean } {
+    if (this.running) {
+      this.opts.logger.log({
+        level: 'INFO',
+        category: 'BALANCE',
+        message: 'current-state-sync.skip-already-running',
+        payload: { reason },
+      });
+      return { started: false };
+    }
+
+    void this.refresh(reason).catch((error: unknown) => {
+      this.opts.logger.log({
+        level: 'ERROR',
+        category: 'BALANCE',
+        message: 'current-state-sync.background-failed',
+        payload: {
+          reason,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    });
+    return { started: true };
+  }
+
   async refresh(
-    reason: 'startup' | 'account-switch' | 'env-switch' | 'trade-event',
+    reason: 'startup' | 'account-switch' | 'env-switch' | 'trade-event' | 'manual',
   ): Promise<void> {
     if (this.running) return;
     this.running = true;
+    const startedAt = Date.now();
     try {
+      this.opts.logger.log({
+        level: 'INFO',
+        category: 'BALANCE',
+        message: 'current-state-sync.start',
+        payload: { reason },
+      });
+      const manualStartedAt = Date.now();
       await this.opts.manualOrderReconciler.poll();
+      this.opts.logger.log({
+        level: 'INFO',
+        category: 'BALANCE',
+        message: 'current-state-sync.manual-orders.done',
+        payload: {
+          reason,
+          durationMs: Date.now() - manualStartedAt,
+        },
+      });
+      const balanceStartedAt = Date.now();
       await this.opts.balanceSync.refresh();
       this.opts.logger.log({
         level: 'INFO',
         category: 'BALANCE',
-        message: 'current-state-sync.refreshed',
-        payload: { reason },
+        message: 'current-state-sync.balance.done',
+        payload: {
+          reason,
+          durationMs: Date.now() - balanceStartedAt,
+        },
       });
+      this.opts.logger.log({
+        level: 'INFO',
+        category: 'BALANCE',
+        message: 'current-state-sync.refreshed',
+        payload: {
+          reason,
+          durationMs: Date.now() - startedAt,
+        },
+      });
+      this.opts.onRefreshed?.();
+    } catch (error) {
+      this.opts.logger.log({
+        level: 'ERROR',
+        category: 'BALANCE',
+        message: 'current-state-sync.failed',
+        payload: {
+          reason,
+          durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      throw error;
     } finally {
       this.running = false;
     }

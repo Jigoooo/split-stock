@@ -1,4 +1,4 @@
-import { Button, NumberInput, TextInput } from '@renderer/shared/ui';
+import { Button, NumberInput, Select, TextInput } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
@@ -17,6 +17,13 @@ type FormBaseRaw = {
   maxStages: string;
 };
 
+type FormTradingRaw = {
+  autoBuyEnabled: boolean;
+  autoBuyOrderType: 'LIMIT' | 'MARKET';
+  autoSellEnabled: boolean;
+  autoSellOrderType: 'LIMIT' | 'MARKET';
+};
+
 function toBaseRaw(profile: StrategyProfile | null): FormBaseRaw {
   const p = profile ?? DEFAULT_PROFILE;
   return {
@@ -33,6 +40,16 @@ function toStageRaw(profile: StrategyProfile | null) {
   };
 }
 
+function toTradingRaw(profile: StrategyProfile | null): FormTradingRaw {
+  const p = profile ?? DEFAULT_PROFILE;
+  return {
+    autoBuyEnabled: p.autoBuyEnabled,
+    autoBuyOrderType: p.autoBuyOrderType,
+    autoSellEnabled: p.autoSellEnabled,
+    autoSellOrderType: p.autoSellOrderType,
+  };
+}
+
 function toBoosterRaw(profile: StrategyProfile | null) {
   const p = profile ?? DEFAULT_PROFILE;
   return {
@@ -43,6 +60,7 @@ function toBoosterRaw(profile: StrategyProfile | null) {
 
 function toProfile(
   base: FormBaseRaw,
+  trading: FormTradingRaw,
   stage: ReturnType<typeof toStageRaw>,
   booster: ReturnType<typeof toBoosterRaw>,
 ): Record<string, unknown> {
@@ -51,6 +69,10 @@ function toProfile(
     maxStages: Number(base.maxStages),
     dropPct: Number(stage.dropPct) / 100,
     profitPct: Number(stage.profitPct) / 100,
+    autoBuyEnabled: trading.autoBuyEnabled,
+    autoBuyOrderType: trading.autoBuyOrderType,
+    autoSellEnabled: trading.autoSellEnabled,
+    autoSellOrderType: trading.autoSellOrderType,
   };
   if (booster.boosterPct.trim().length > 0) out.boosterPct = Number(booster.boosterPct) / 100;
   if (booster.boosterAmountKrw.trim().length > 0)
@@ -78,6 +100,7 @@ export interface StrategyFormProps {
 export const StrategyForm = (props: StrategyFormProps): ReactElement => {
   // form-level 상태 (totalAmountKrw, maxStages)
   const [base, setBase] = useState<FormBaseRaw>(() => toBaseRaw(props.initial));
+  const [trading, setTrading] = useState<FormTradingRaw>(() => toTradingRaw(props.initial));
 
   // sub-hooks: 각각 독립 상태 보유.
   //
@@ -94,7 +117,7 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
     setBase((prev) => ({ ...prev, [key]: value }));
   };
 
-  const validated = validateProfile(toProfile(base, stageGrid.raw, boosterSection.raw));
+  const validated = validateProfile(toProfile(base, trading, stageGrid.raw, boosterSection.raw));
 
   const onSubmit = (): void => {
     if (!validated.ok) {
@@ -136,6 +159,12 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
           onValueChange={updateBase('maxStages')}
           error={errors.maxStages}
           inputMode="numeric"
+        />
+
+        <TradingToggleSection
+          disabled={props.disabled}
+          raw={trading}
+          onChange={(patch) => setTrading((prev) => ({ ...prev, ...patch }))}
         />
 
         {/* 차수별 그리드 + 감지% 자동입력 도구 (E3) */}
@@ -209,6 +238,78 @@ interface FieldProps {
   allowDecimal?: boolean;
   inputMode?: 'numeric' | 'decimal';
 }
+
+interface TradingToggleSectionProps {
+  raw: FormTradingRaw;
+  disabled?: boolean | undefined;
+  onChange: (patch: Partial<FormTradingRaw>) => void;
+}
+
+const TradingToggleSection = (props: TradingToggleSectionProps): ReactElement => (
+  <section aria-label="자동매매 설정" style={{ display: 'grid', gap: '0.6rem' }}>
+    <span className="muted" style={{ fontSize: '1.1rem' }}>
+      자동매매 설정
+    </span>
+    <TradingToggleRow
+      label="자동매수"
+      enabled={props.raw.autoBuyEnabled}
+      orderType={props.raw.autoBuyOrderType}
+      disabled={props.disabled}
+      onEnabledChange={(enabled) => props.onChange({ autoBuyEnabled: enabled })}
+      onOrderTypeChange={(orderType) => props.onChange({ autoBuyOrderType: orderType })}
+    />
+    <TradingToggleRow
+      label="자동매도"
+      enabled={props.raw.autoSellEnabled}
+      orderType={props.raw.autoSellOrderType}
+      disabled={props.disabled}
+      onEnabledChange={(enabled) => props.onChange({ autoSellEnabled: enabled })}
+      onOrderTypeChange={(orderType) => props.onChange({ autoSellOrderType: orderType })}
+    />
+  </section>
+);
+
+interface TradingToggleRowProps {
+  label: string;
+  enabled: boolean;
+  orderType: 'LIMIT' | 'MARKET';
+  disabled?: boolean | undefined;
+  onEnabledChange: (enabled: boolean) => void;
+  onOrderTypeChange: (orderType: 'LIMIT' | 'MARKET') => void;
+}
+
+const TradingToggleRow = (props: TradingToggleRowProps): ReactElement => (
+  <div
+    style={{
+      display: 'grid',
+      gap: '0.4rem',
+      padding: '0.6rem',
+      border: '1px solid var(--border)',
+      borderRadius: '0.4rem',
+    }}
+  >
+    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <input
+        type="checkbox"
+        checked={props.enabled}
+        disabled={props.disabled}
+        onChange={(event) => props.onEnabledChange(event.target.checked)}
+        aria-label={`${props.label} 사용`}
+      />
+      <span>{props.label}</span>
+    </label>
+    <Select
+      dense
+      value={props.orderType}
+      disabled={props.disabled || !props.enabled}
+      onChange={(event) => props.onOrderTypeChange(event.target.value as 'LIMIT' | 'MARKET')}
+      aria-label={`${props.label} 주문방식`}
+    >
+      <option value="LIMIT">지정가</option>
+      <option value="MARKET">시장가</option>
+    </Select>
+  </div>
+);
 
 const Field = (p: FieldProps): ReactElement => (
   <label htmlFor={p.id} style={{ display: 'grid', gap: '0.3rem' }}>

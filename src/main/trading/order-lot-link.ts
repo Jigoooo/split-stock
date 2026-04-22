@@ -16,7 +16,7 @@ export function createPendingBuyLot(
     price: number;
     qty: number;
     requestedNth?: number | null;
-    source: 'MANUAL' | 'PREBUY' | 'BOOSTER' | 'CUSTOM';
+    source: 'MANUAL' | 'PREBUY' | 'BOOSTER' | 'CUSTOM' | 'STRATEGY';
   },
 ): {
   lotId: number | null;
@@ -34,7 +34,9 @@ export function createPendingBuyLot(
   }
 
   const nth =
-    input.source === 'BOOSTER' ? (input.requestedNth ?? 1) : deriveNextBuyNth(snapshot.value.lots);
+    input.source === 'BOOSTER' || input.source === 'STRATEGY'
+      ? (input.requestedNth ?? 1)
+      : deriveNextBuyNth(snapshot.value.lots);
   const inserted = deps.lotsRepo.insertLot({
     accountId: input.accountId,
     pdno: input.pdno,
@@ -98,5 +100,38 @@ export function linkPendingSellLot(
     return { lotId: null, nth: input.requestedNth };
   }
 
+  return { lotId: target.id, nth: target.nth };
+}
+
+export function linkHighestPendingSellLot(
+  deps: OrderLotLinkDeps,
+  input: {
+    accountId: number;
+    pdno: string;
+    qty: number;
+  },
+): {
+  lotId: number | null;
+  nth: number | null;
+} {
+  const rows = deps.lotsRepo.listRows(input.accountId, input.pdno);
+  if (rows.isErr()) {
+    deps.logger.log({
+      level: 'ERROR',
+      category: 'ORDER',
+      message: 'order.selling-lot.lookup-failed',
+      payload: { accountId: input.accountId, pdno: input.pdno },
+    });
+    return { lotId: null, nth: null };
+  }
+
+  const target = rows.value.filter((lot) => lot.status === 'OPEN').sort((a, b) => b.nth - a.nth)[0];
+  if (!target) return { lotId: null, nth: null };
+  if (input.qty > target.qty) return { lotId: null, nth: null };
+
+  const updated = deps.lotsRepo.updateLotStatus({ lotId: target.id, status: 'SELLING' });
+  if (updated.isErr()) {
+    return { lotId: null, nth: null };
+  }
   return { lotId: target.id, nth: target.nth };
 }

@@ -25,9 +25,21 @@ vi.mock('./model/use-positions-grid', () => ({
 
 const toggleSymbolMutate = vi.fn();
 const getStateInvalidate = vi.fn();
+const syncCurrentStateMutateAsync = vi.fn();
 
 vi.mock('@renderer/shared/api/trpc', () => ({
   trpc: {
+    account: {
+      syncCurrentState: {
+        useMutation: ({ onSuccess }: { onSuccess: () => Promise<void> | void }) => ({
+          mutateAsync: async (args: unknown) => {
+            syncCurrentStateMutateAsync(args);
+            await onSuccess();
+          },
+          isPending: false,
+        }),
+      },
+    },
     safety: {
       getState: {
         useQuery: () => ({ data: { bySymbol: {} } }),
@@ -43,6 +55,18 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       },
     },
     useUtils: () => ({
+      account: {
+        getBalanceWithLots: { invalidate: vi.fn() },
+        getPositionOverlay: { invalidate: vi.fn() },
+      },
+      lots: {
+        cyclesByPdno: { invalidate: vi.fn() },
+        tradeHistory: { invalidate: vi.fn() },
+      },
+      order: {
+        listActive: { invalidate: vi.fn() },
+        listMyFills: { invalidate: vi.fn() },
+      },
       safety: {
         getState: { invalidate: getStateInvalidate },
       },
@@ -65,12 +89,28 @@ const makeRow = (code: string, name: string) => ({
   rowMaxStages: 2,
 });
 
+const makeRowWithLot = (code: string, name: string) => ({
+  ...makeRow(code, name),
+  lots: [
+    {
+      nth: 1,
+      buyPrice: 50000,
+      qty: 6,
+      amountKrw: 300000,
+      status: 'OPEN',
+      boughtAt: Date.now(),
+    },
+  ],
+});
+
 describe('PositionsGrid', () => {
   it('마운트 + 기본 컬럼 헤더 렌더링', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
+      mismatches: [],
       rows: [],
+      syncStatus: 'IN_SYNC',
       gridMaxStages: 1,
     });
 
@@ -87,7 +127,9 @@ describe('PositionsGrid', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
+      mismatches: [],
       rows: [makeRow('005930', '삼성전자')],
+      syncStatus: 'IN_SYNC',
       gridMaxStages: 2,
     });
 
@@ -103,7 +145,9 @@ describe('PositionsGrid', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
+      mismatches: [],
       rows: [makeRow('005930', '삼성전자')],
+      syncStatus: 'IN_SYNC',
       gridMaxStages: 2,
     });
 
@@ -118,7 +162,9 @@ describe('PositionsGrid', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
+      mismatches: [],
       rows: [makeRow('005930', '삼성전자')],
+      syncStatus: 'IN_SYNC',
       gridMaxStages: 2,
     });
 
@@ -133,7 +179,9 @@ describe('PositionsGrid', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
+      mismatches: [],
       rows: [makeRow('005930', '삼성전자')],
+      syncStatus: 'IN_SYNC',
       gridMaxStages: 2,
     });
 
@@ -154,7 +202,9 @@ describe('PositionsGrid', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
+      mismatches: [],
       rows: [makeRow('005930', '삼성전자')],
+      syncStatus: 'IN_SYNC',
       gridMaxStages: 2,
     });
 
@@ -173,5 +223,65 @@ describe('PositionsGrid', () => {
       on: false,
     });
     expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('불일치 경고가 있으면 수동 동기화 버튼을 노출하고 현재 계좌로 sync를 호출한다', async () => {
+    mockUsePositionsGrid.mockReturnValue({
+      isPending: false,
+      error: null,
+      mismatches: [{ pdno: '005930', kisQty: 10, lotQty: 9, reason: 'QTY_MISMATCH' }],
+      rows: [makeRow('005930', '삼성전자')],
+      syncStatus: 'MISMATCH',
+      gridMaxStages: 2,
+    });
+    syncCurrentStateMutateAsync.mockClear();
+
+    render(<PositionsGrid accountId={7} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '동기화' }));
+
+    expect(syncCurrentStateMutateAsync).toHaveBeenCalledWith({ accountId: 7 });
+  });
+
+  it('불일치 상세 보기 클릭 시 종목별 원인을 펼쳐 보여준다', () => {
+    mockUsePositionsGrid.mockReturnValue({
+      isPending: false,
+      error: null,
+      mismatches: [
+        { pdno: '005930', kisQty: 10, lotQty: 9, reason: 'QTY_MISMATCH' },
+        { pdno: '000660', kisQty: 3, lotQty: 0, reason: 'NO_LOTS' },
+      ],
+      rows: [makeRow('005930', '삼성전자')],
+      syncStatus: 'MISMATCH',
+      gridMaxStages: 2,
+    });
+
+    render(<PositionsGrid accountId={7} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
+
+    expect(screen.getByText('005930').closest('div')).toHaveTextContent(
+      '005930 · 수량 불일치 · KIS 10주 / lot 9주',
+    );
+    expect(screen.getByText('000660').closest('div')).toHaveTextContent(
+      '000660 · 잔고는 있는데 차수 장부가 없음 · KIS 3주 / lot 0주',
+    );
+  });
+
+  it('차수 컬럼은 매입가/수량 대신 차수별 현재 수익률만 표시한다', () => {
+    mockUsePositionsGrid.mockReturnValue({
+      isPending: false,
+      error: null,
+      mismatches: [],
+      rows: [makeRowWithLot('005930', '삼성전자')],
+      syncStatus: 'IN_SYNC',
+      gridMaxStages: 2,
+    });
+
+    render(<PositionsGrid accountId={1} />);
+
+    expect(screen.getByText('4.00')).toBeInTheDocument();
+    expect(screen.getByTitle('1차 · OPEN · 수익률 4.00%')).toHaveTextContent('4.00');
+    expect(screen.queryByText('×6')).toBeNull();
   });
 });

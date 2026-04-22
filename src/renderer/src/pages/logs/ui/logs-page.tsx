@@ -3,6 +3,14 @@ import { Select, TableGrid, useTableGridVirtual } from '@renderer/shared/ui';
 import { type ReactElement, useRef, useTransition } from 'react';
 import { LOG_CATEGORIES, LOG_LEVELS, useLogTail } from '../model/use-log-tail';
 
+const LOG_TABLE_COLUMN_WIDTHS = {
+  timestamp: 200,
+  level: 80,
+  category: 96,
+  message: 320,
+  payload: 520,
+} as const;
+
 export const LogsPage = (): ReactElement => {
   const {
     level,
@@ -169,19 +177,20 @@ export const LogsPage = (): ReactElement => {
       <TableGrid.Root
         variant="hts"
         stickyHeader
+        horizontalScroll
         aria-label="이벤트 로그"
         style={{ flex: 1, minHeight: 0 }}
       >
         <TableGrid.Header>
-          <TableGrid.Cell width={200} numeric>
+          <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.timestamp} numeric>
             시각
           </TableGrid.Cell>
-          <TableGrid.Cell width={80}>레벨</TableGrid.Cell>
-          <TableGrid.Cell width={96}>카테고리</TableGrid.Cell>
-          <TableGrid.Cell flex={2} overflow="ellipsis">
+          <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.level}>레벨</TableGrid.Cell>
+          <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.category}>카테고리</TableGrid.Cell>
+          <TableGrid.Cell flex={2} minWidth={LOG_TABLE_COLUMN_WIDTHS.message} overflow="ellipsis">
             메시지
           </TableGrid.Cell>
-          <TableGrid.Cell flex={3} overflow="ellipsis">
+          <TableGrid.Cell flex={3} minWidth={LOG_TABLE_COLUMN_WIDTHS.payload} overflow="ellipsis">
             payload
           </TableGrid.Cell>
         </TableGrid.Header>
@@ -221,18 +230,26 @@ export const LogsPage = (): ReactElement => {
                       right: 0,
                     }}
                   >
-                    <TableGrid.Cell width={200} numeric>
+                    <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.timestamp} numeric>
                       {formatTs(e.ts)}
                     </TableGrid.Cell>
-                    <TableGrid.Cell width={80}>
+                    <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.level}>
                       <span className={levelClass(e.level)}>{e.level}</span>
                     </TableGrid.Cell>
-                    <TableGrid.Cell width={96}>{e.category}</TableGrid.Cell>
-                    <TableGrid.Cell flex={2} overflow="ellipsis" title={e.message}>
+                    <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.category}>
+                      {e.category}
+                    </TableGrid.Cell>
+                    <TableGrid.Cell
+                      flex={2}
+                      minWidth={LOG_TABLE_COLUMN_WIDTHS.message}
+                      overflow="ellipsis"
+                      title={e.message}
+                    >
                       {e.message}
                     </TableGrid.Cell>
                     <TableGrid.Cell
                       flex={3}
+                      minWidth={LOG_TABLE_COLUMN_WIDTHS.payload}
                       overflow="ellipsis"
                       className="muted"
                       style={{ fontFamily: 'monospace', fontSize: '1.05rem' }}

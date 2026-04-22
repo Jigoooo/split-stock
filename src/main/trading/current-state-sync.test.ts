@@ -31,6 +31,28 @@ describe('buildLotSyncMismatches', () => {
 });
 
 describe('CurrentStateSync', () => {
+  it('trigger는 이미 실행 중이면 다시 시작하지 않는다', async () => {
+    let release = () => {};
+    const sync = new CurrentStateSync({
+      manualOrderReconciler: {
+        poll: async () =>
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      },
+      balanceSync: {
+        refresh: async () => undefined,
+      },
+      logger: { log: vi.fn() } as never,
+    });
+
+    expect(sync.trigger('manual')).toEqual({ started: true });
+    expect(sync.trigger('manual')).toEqual({ started: false });
+
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
   it('refresh는 reconciler 후 balance sync를 순차 실행한다', async () => {
     const callOrder: string[] = [];
     const sync = new CurrentStateSync({

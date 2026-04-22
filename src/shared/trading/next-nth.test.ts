@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveNextBuyNth } from './next-nth';
+import { deriveNextBuyNth, hasActiveCycle } from './next-nth';
 
 describe('deriveNextBuyNth', () => {
   it('활성 차수가 없으면 1차를 반환한다', () => {
@@ -29,5 +29,14 @@ describe('deriveNextBuyNth', () => {
         { nth: 4, status: 'SOLD' },
       ]),
     ).toBe(3);
+  });
+
+  it('SELLING도 active cycle로 본다', () => {
+    expect(
+      hasActiveCycle([
+        { status: 'SOLD' },
+        { status: 'SELLING' },
+      ]),
+    ).toBe(true);
   });
 });

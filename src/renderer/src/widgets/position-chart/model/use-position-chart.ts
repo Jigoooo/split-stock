@@ -1,4 +1,4 @@
-import { useLiveTick } from '@renderer/entities/realtime';
+import { type LiveTick, useLiveTick } from '@renderer/entities/realtime';
 import { trpc } from '@renderer/shared/api/trpc';
 import { useEffect, useRef, useState } from 'react';
 
@@ -55,6 +55,67 @@ function mergeOlderCandles(current: Candle[], older: Candle[]) {
   };
 }
 
+function findTodayCandle(candles: Candle[], date: string): Candle | null {
+  for (let index = candles.length - 1; index >= 0; index -= 1) {
+    const candle = candles[index];
+    if (candle?.date === date) return candle;
+  }
+  return null;
+}
+
+/**
+ * 일봉 live candle 계산.
+ * - WS tick 이 장중 OHLC를 제대로 주면 그대로 사용
+ * - REST fallback quote 처럼 open/high/low 가 0이면 오늘 일봉(base)을 기준으로 보정
+ * - 오늘 일봉 자체가 없으면 close=price 기준의 1점 캔들로만 생성
+ */
+export function buildDailyLiveCandle(
+  candles: Candle[],
+  tick: LiveTick | null,
+  period: ChartPeriod,
+): Candle | null {
+  if (period !== 'D' || tick === null) return null;
+  if (!Number.isFinite(tick.price) || tick.price <= 0) return null;
+
+  const date = todayKst();
+  const base = findTodayCandle(candles, date);
+  const hasValidOhlc = tick.open > 0 && tick.high > 0 && tick.low > 0;
+
+  if (hasValidOhlc) {
+    return {
+      date,
+      open: tick.open,
+      high: tick.high,
+      low: tick.low,
+      close: tick.price,
+      volume: Math.max(tick.accumVolume, 0),
+    };
+  }
+
+  if (base) {
+    const open = base.open > 0 ? base.open : tick.price;
+    const high = Math.max(base.high, tick.price, open);
+    const low = Math.min(base.low, tick.price, open);
+    return {
+      date,
+      open,
+      high,
+      low,
+      close: tick.price,
+      volume: Math.max(base.volume, tick.accumVolume, tick.volume, 0),
+    };
+  }
+
+  return {
+    date,
+    open: tick.price,
+    high: tick.price,
+    low: tick.price,
+    close: tick.price,
+    volume: Math.max(tick.accumVolume, tick.volume, 0),
+  };
+}
+
 export function usePositionChart(pdno: string): UsePositionChartResult {
   const [period, setPeriod] = useState<ChartPeriod>('D');
   const [candles, setCandles] = useState<Candle[]>([]);
@@ -74,21 +135,7 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
 
   // 일봉 전용 실시간 tick (period !== 'D' 이면 null 로 처리)
   const rawTick = useLiveTick(pdno, 1000);
-  const tick = period === 'D' ? rawTick : null;
-
-  // tick → 오늘 캔들 계산
-  // KIS WS tick 에는 당일 세션 open/high/low/accumVolume 이 포함됨
-  const liveCandle: Candle | null =
-    tick !== null
-      ? {
-          date: todayKst(),
-          open: tick.open,
-          high: tick.high,
-          low: tick.low,
-          close: tick.price,
-          volume: tick.accumVolume,
-        }
-      : null;
+  const liveCandle = buildDailyLiveCandle(candles, rawTick, period);
 
   useEffect(() => {
     candlesRef.current = candles;

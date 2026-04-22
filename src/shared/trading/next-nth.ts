@@ -1,10 +1,16 @@
 export const ACTIVE_STAGE_STATUSES = ['OPEN', 'BUYING'] as const;
+export const ACTIVE_CYCLE_STATUSES = ['OPEN', 'BUYING', 'SELLING'] as const;
 
 export type ActiveStageStatus = (typeof ACTIVE_STAGE_STATUSES)[number];
+export type ActiveCycleStatus = (typeof ACTIVE_CYCLE_STATUSES)[number];
 
 export interface StageLike {
   nth: number;
   status: string;
+}
+
+export function hasActiveCycle(lots: ReadonlyArray<Pick<StageLike, 'status'>>): boolean {
+  return lots.some((lot) => ACTIVE_CYCLE_STATUSES.includes(lot.status as ActiveCycleStatus));
 }
 
 /**

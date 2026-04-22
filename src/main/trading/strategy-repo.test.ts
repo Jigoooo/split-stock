@@ -30,6 +30,10 @@ const baseProfile = (overrides: Partial<StrategyProfile> = {}): StrategyProfile 
   maxStages: 5,
   dropPct: 0.03,
   profitPct: 0.05,
+  autoBuyEnabled: true,
+  autoBuyOrderType: 'LIMIT',
+  autoSellEnabled: true,
+  autoSellOrderType: 'LIMIT',
   ...overrides,
 });
 
@@ -91,6 +95,28 @@ describe('StrategyRepo — active', () => {
     expect(repo.getActive(ACC_A, null)._unsafeUnwrap()).not.toBeNull();
     repo.clearActive(ACC_A, null);
     expect(repo.getActive(ACC_A, null)._unsafeUnwrap()).toBeNull();
+  });
+
+  it('ensureSeededActive: 종목별 전략이 없으면 글로벌 active를 복사한다', () => {
+    const { repo } = setup();
+    repo.setActive(ACC_A, null, baseProfile({ dropPct: 0.07 }));
+
+    const seeded = repo.ensureSeededActive(ACC_A, '005930');
+    expect(seeded.isOk()).toBe(true);
+    if (seeded.isErr()) throw new Error('seed failed');
+    expect(seeded.value.seeded).toBe(true);
+    expect(seeded.value.source).toBe('global');
+    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.dropPct).toBe(0.07);
+  });
+
+  it('ensureSeededActive: 글로벌 전략도 없으면 기본 프로필을 시드한다', () => {
+    const { repo } = setup();
+
+    const seeded = repo.ensureSeededActive(ACC_A, '005930');
+    expect(seeded.isOk()).toBe(true);
+    if (seeded.isErr()) throw new Error('seed failed');
+    expect(seeded.value.source).toBe('default');
+    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.maxStages).toBe(5);
   });
 });
 

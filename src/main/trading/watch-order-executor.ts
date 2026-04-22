@@ -1,4 +1,5 @@
 import type { AppEnv } from '@shared/contracts';
+import { hasActiveCycle } from '@shared/trading/next-nth';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { lots, orders } from '../db/schema';
@@ -18,6 +19,7 @@ import { assertCredMatchesEnv } from '../trpc/router-helpers';
 import type { LotsRepo } from './lots-repo';
 import { createPendingBuyLot, linkPendingSellLot } from './order-lot-link';
 import type { PendingOrderWatcher } from './pending-order-watcher';
+import type { StrategyRepo } from './strategy-repo';
 import type { WatchOrder } from './watch-engine';
 
 export interface WatchOrderExecutorDeps {
@@ -31,6 +33,18 @@ export interface WatchOrderExecutorDeps {
   logger: EventLogger;
   getCurrentEnv: () => AppEnv | null;
   lotsRepo: LotsRepo;
+  strategyRepo: StrategyRepo;
+}
+
+export interface StrategyOrderInput {
+  accountId: number;
+  pdno: string;
+  side: 'BUY' | 'SELL';
+  division: 'LIMIT' | 'MARKET';
+  nth: number;
+  price: number;
+  qty: number;
+  triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
 }
 
 export async function executeWatchOrder(
@@ -38,6 +52,17 @@ export async function executeWatchOrder(
   order: WatchOrder,
   triggerPrice: number,
 ): Promise<void> {
+  const snapshot = deps.lotsRepo.snapshot(order.accountId, order.pdno);
+  if (snapshot.isErr()) {
+    throw new Error('차수 스냅샷 조회 실패');
+  }
+  const activeCycleExists = hasActiveCycle(snapshot.value.lots);
+  if ((order.source === 'PREBUY' || order.source === 'CUSTOM') && order.side === 'BUY') {
+    if (activeCycleExists) {
+      throw new Error('이미 활성 차수가 있어 신규 1차 자동진입을 생략합니다.');
+    }
+  }
+
   const env = deps.getCurrentEnv();
   if (!env) throw new Error('환경 미선택');
 
@@ -102,6 +127,34 @@ export async function executeWatchOrder(
   if (result.isErr()) {
     throw new Error(`주문 실패: ${result.error.kind} - ${result.error.msg}`);
   }
+  if ((order.source === 'PREBUY' || order.source === 'CUSTOM') && order.side === 'BUY') {
+    const seeded = deps.strategyRepo.ensureSeededActive(order.accountId, order.pdno);
+    if (seeded.isErr()) {
+      deps.logger.log({
+        level: 'ERROR',
+        category: 'WATCH',
+        message: 'watch.first-entry.seed-failed',
+        payload: {
+          accountId: order.accountId,
+          pdno: order.pdno,
+          source: order.source,
+          reason: seeded.error.kind,
+        },
+      });
+    } else {
+      deps.logger.log({
+        level: 'INFO',
+        category: 'WATCH',
+        message: 'watch.first-entry.seeded',
+        payload: {
+          accountId: order.accountId,
+          pdno: order.pdno,
+          source: order.source,
+          templateSource: seeded.value.source,
+        },
+      });
+    }
+  }
 
   const now = new Date();
   const linkedLot =
@@ -149,6 +202,21 @@ export async function executeWatchOrder(
     })
     .run();
 
+  deps.logger.log({
+    level: 'INFO',
+    category: 'WATCH',
+    message: 'watch.order-submitted',
+    payload: {
+      accountId: order.accountId,
+      pdno: order.pdno,
+      side: order.side,
+      source: order.source,
+      nth: linkedLot.nth ?? order.nth ?? null,
+      qty,
+      triggerPrice,
+    },
+  });
+
   const pendingCfg = readPendingCancelConfig(deps.settingsRepo);
   if (
     pendingCfg.enabled &&
@@ -166,6 +234,134 @@ export async function executeWatchOrder(
       accountId: order.accountId,
     });
   }
+}
+
+export async function executeStrategyOrder(
+  deps: WatchOrderExecutorDeps,
+  input: StrategyOrderInput,
+): Promise<void> {
+  const env = deps.getCurrentEnv();
+  if (!env) throw new Error('환경 미선택');
+
+  const credResult = deps.credentialsRepo.loadCredentials(input.accountId);
+  if (credResult.isErr() || !credResult.value) {
+    throw new Error('자격증명 없음');
+  }
+  const cred = credResult.value;
+  assertCredMatchesEnv(cred, env);
+
+  const safety = deps.safetyRegistry.get(input.accountId);
+  if (!safety.canTrade(input.pdno)) {
+    throw new Error('안전 스위치에 의해 해당 종목 거래가 차단됨');
+  }
+
+  const tokenResult = await deps.auth.getValidToken(env, cred.appKey, cred.appSecret);
+  if (tokenResult.isErr()) {
+    throw new Error(`토큰 발급 실패: ${tokenResult.error.kind}`);
+  }
+
+  const result = await orderCash(
+    {
+      http: deps.httpByEnv[env],
+      env,
+      token: tokenResult.value.token,
+      appKey: cred.appKey,
+      appSecret: cred.appSecret,
+      accountNo8: cred.accountNo8,
+      accountProdCd: cred.accountProdCd,
+      logger: deps.logger,
+    },
+    {
+      side: input.side,
+      pdno: input.pdno,
+      qty: input.qty,
+      price: input.division === 'LIMIT' ? input.price : 0,
+      division: input.division,
+    },
+  );
+  if (result.isErr()) {
+    throw new Error(`주문 실패: ${result.error.kind} - ${result.error.msg}`);
+  }
+
+  const now = new Date();
+  const linkedLot =
+    input.side === 'BUY'
+      ? createPendingBuyLot(
+          {
+            logger: deps.logger,
+            lotsRepo: deps.lotsRepo,
+          },
+          {
+            accountId: input.accountId,
+            pdno: input.pdno,
+            placedAt: now,
+            price: input.division === 'LIMIT' ? input.price : 0,
+            qty: input.qty,
+            requestedNth: input.nth,
+            source: 'STRATEGY',
+          },
+        )
+      : linkPendingSellLot(
+          {
+            logger: deps.logger,
+            lotsRepo: deps.lotsRepo,
+          },
+          {
+            accountId: input.accountId,
+            pdno: input.pdno,
+            requestedNth: input.nth,
+          },
+        );
+
+  deps.db
+    .insert(orders)
+    .values({
+      accountId: input.accountId,
+      lotId: linkedLot.lotId,
+      odno: result.value.odno,
+      orgNo: result.value.orgNo ?? null,
+      pdno: input.pdno,
+      side: input.side,
+      division: input.division,
+      qty: input.qty,
+      price: input.division === 'LIMIT' ? input.price : 0,
+      status: 'PENDING',
+      placedAt: now,
+    })
+    .run();
+
+  const pendingCfg = readPendingCancelConfig(deps.settingsRepo);
+  if (
+    pendingCfg.enabled &&
+    input.division === 'LIMIT' &&
+    result.value.orgNo &&
+    deps.pendingOrderWatcher
+  ) {
+    deps.pendingOrderWatcher.register({
+      pdno: input.pdno,
+      side: input.side,
+      nth: linkedLot.nth ?? input.nth,
+      odno: result.value.odno,
+      orgNo: result.value.orgNo,
+      qty: input.qty,
+      accountId: input.accountId,
+    });
+  }
+
+  deps.logger.log({
+    level: 'INFO',
+    category: 'FSM',
+    message: 'strategy.order-submitted',
+    payload: {
+      accountId: input.accountId,
+      pdno: input.pdno,
+      side: input.side,
+      nth: linkedLot.nth ?? input.nth,
+      triggerReason: input.triggerReason,
+      qty: input.qty,
+      price: input.price,
+    },
+  });
 }
 
 export function cancelPendingByOdno(

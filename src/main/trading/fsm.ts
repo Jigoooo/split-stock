@@ -1,3 +1,4 @@
+import { ACTIVE_CYCLE_STATUSES, type ActiveCycleStatus } from '@shared/trading/next-nth';
 import { z } from 'zod';
 
 export const TradingConfigSchema = z.object({
@@ -73,10 +74,14 @@ export function evaluate(
   if (position.pdno !== cfg.pdno) return [];
 
   const orders: FsmOrder[] = [];
+  const activeLots = position.lots.filter((l) =>
+    ACTIVE_CYCLE_STATUSES.includes(l.status as ActiveCycleStatus),
+  );
+  const buyBaseLots = position.lots.filter((l) => l.status === 'OPEN' || l.status === 'BUYING');
   const openLots = position.lots.filter((l) => l.status === 'OPEN');
 
-  // 1) 시드 매수 — 어떤 차수도 존재하지 않을 때만
-  if (position.lots.length === 0) {
+  // 1) 시드 매수 — active cycle이 없을 때만
+  if (activeLots.length === 0) {
     const amount = amountPerStage(cfg);
     const qty = qtyForPrice(amount, price);
     if (qty > 0) {
@@ -86,7 +91,7 @@ export function evaluate(
   }
 
   // 2) 추가매수: 가장 높은 차수 기준으로만 1회
-  const top = highestLot(position.lots);
+  const top = highestLot(buyBaseLots);
   const hasPendingBuy = position.lots.some((l) => l.status === 'BUYING');
   if (top && !hasPendingBuy) {
     if (top.nth < cfg.maxStages) {

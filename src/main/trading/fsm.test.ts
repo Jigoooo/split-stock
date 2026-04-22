@@ -99,6 +99,15 @@ describe('evaluate — 반등 후 2차 익절', () => {
     expect(sells).toHaveLength(1);
     expect(sells[0]?.nth).toBe(2);
   });
+
+  it('SOLD 이력만 남은 종목은 새 1차로 재진입한다', () => {
+    const snapshot = pos([{ nth: 1, buyPrice: 70000, qty: 14, status: 'SOLD' }]);
+    const orders = evaluate(65000, snapshot, cfg);
+
+    const buys = orders.filter((o) => o.kind === 'BUY');
+    expect(buys).toHaveLength(1);
+    expect(buys[0]?.nth).toBe(1);
+  });
 });
 
 describe('evaluate — 주수 산출', () => {

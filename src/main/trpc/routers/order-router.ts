@@ -6,7 +6,7 @@ import type { Db } from '../../db/client';
 import { lots, orders, trades } from '../../db/schema';
 import { readPendingCancelConfig } from '../../db/settings-repo';
 import { cancelOrRevise, orderCash } from '../../kis/order';
-import { createPendingBuyLot } from '../../trading/order-lot-link';
+import { createPendingBuyLot, linkHighestPendingSellLot } from '../../trading/order-lot-link';
 import { assertCredMatchesEnv, requireAccountId, resolveAccountId } from '../router-helpers';
 import { authedProcedure, router } from '../trpc-core';
 
@@ -98,7 +98,7 @@ export const orderRouter = router({
       }
       // PENDING 기록 — orgNo는 정정/취소 시 필수이므로 KIS 응답값을 저장
       const now = new Date();
-      const linkedBuyLot =
+      const linkedLot =
         input.side === 'BUY'
           ? createPendingBuyLot(
               {
@@ -114,12 +114,22 @@ export const orderRouter = router({
                 source: 'MANUAL',
               },
             )
-          : { lotId: null, nth: null };
+          : linkHighestPendingSellLot(
+              {
+                logger: ctx.logger,
+                lotsRepo: ctx.lotsRepo,
+              },
+              {
+                accountId,
+                pdno: input.pdno,
+                qty: input.qty,
+              },
+            );
       ctx.db
         .insert(orders)
         .values({
           accountId,
-          lotId: linkedBuyLot.lotId,
+          lotId: linkedLot.lotId,
           odno: result.value.odno,
           orgNo: result.value.orgNo ?? null,
           pdno: input.pdno,
@@ -148,7 +158,7 @@ export const orderRouter = router({
           side: input.side,
           // nth: 매직스플릿 차수 개념이나 수동 주문에서는 (pdno, side) 중복 등록 방지용 키로만 사용.
           // odno 기반 숫자 파싱이 안정적이지 않아 타임스탬프 기반 유사-유일 값 사용.
-          nth: linkedBuyLot.nth ?? Date.now() % 1_000_000,
+          nth: linkedLot.nth ?? Date.now() % 1_000_000,
           odno: result.value.odno,
           orgNo: result.value.orgNo,
           qty: input.qty,

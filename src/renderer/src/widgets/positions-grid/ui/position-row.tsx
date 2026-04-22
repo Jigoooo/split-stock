@@ -103,19 +103,28 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
         );
         continue;
       }
+      const stagePnlRate = lot.buyPrice > 0 ? ((position.currentPrice - lot.buyPrice) / lot.buyPrice) * 100 : null;
+      const stagePnlClass =
+        stagePnlRate === null
+          ? 'num-flat'
+          : stagePnlRate > 0
+            ? 'num-up'
+            : stagePnlRate < 0
+              ? 'num-down'
+              : 'num-flat';
       stageCells.push(
         <TableGrid.Cell
           key={`stage-${nth}`}
           width={POSITION_COLS.stage}
           numeric
-          title={`${nth}차 · ${lot.status}`}
+          title={
+            stagePnlRate === null
+              ? `${nth}차 · ${lot.status}`
+              : `${nth}차 · ${lot.status} · 수익률 ${stagePnlRate.toFixed(2)}%`
+          }
+          className={stagePnlClass}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-            <span>{thousandSeparator(lot.buyPrice)}</span>
-            <span className="muted" style={{ fontSize: '0.95em' }}>
-              ×{thousandSeparator(lot.qty)}
-            </span>
-          </div>
+          {stagePnlRate === null ? '-' : stagePnlRate.toFixed(2)}
         </TableGrid.Cell>,
       );
     }

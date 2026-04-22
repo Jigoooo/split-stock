@@ -282,6 +282,46 @@ describe('BalanceSync', () => {
     expect(payload.diff).toBe(6);
   });
 
+  it('KIS 보유는 있는데 lot row가 없으면 OPEN 1차를 자동 복구한다', async () => {
+    const pool = agent.get(BASE);
+    pool
+      .intercept({ path: new RegExp(KIS_PATH.INQUIRE_BALANCE.replace('/', '\\/')), method: 'GET' })
+      .reply(200, makeBalanceReply([{ pdno: '452450', qty: 6 }]));
+
+    const timer = createFakeTimer();
+    const logger = createFakeLogger();
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const lotsRepo = new LotsRepo(db);
+    const { httpByEnv, credentialsRepo, auth } = makeAuthDeps('MOCK', BASE);
+    const sync = new BalanceSync({
+      getEnv: () => 'MOCK',
+      getAccountId: () => 1,
+      credentialsRepo,
+      auth,
+      httpByEnv,
+      lotsRepo,
+      logger,
+      timer,
+    });
+
+    await sync.refresh();
+
+    const recovered = lotsRepo.listRows(1, '452450');
+    expect(recovered.isOk()).toBe(true);
+    if (recovered.isErr()) throw new Error('rows failed');
+    expect(recovered.value).toHaveLength(1);
+    expect(recovered.value[0]).toMatchObject({
+      nth: 1,
+      pdno: '452450',
+      qty: 6,
+      status: 'OPEN',
+    });
+    expect(logger.entries.some((entry) => entry.message === 'balance-sync.orphan_recovered')).toBe(
+      true,
+    );
+  });
+
   it('env null → poll skip (auth 호출 없음)', async () => {
     const timer = createFakeTimer();
     const logger = createFakeLogger();

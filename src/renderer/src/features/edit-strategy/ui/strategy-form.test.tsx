@@ -47,6 +47,10 @@ const initial: StrategyProfile = {
   maxStages: 5,
   dropPct: 0.03,
   profitPct: 0.05,
+  autoBuyEnabled: true,
+  autoBuyOrderType: 'LIMIT',
+  autoSellEnabled: true,
+  autoSellOrderType: 'LIMIT',
 };
 
 describe('StrategyForm', () => {
@@ -61,6 +65,8 @@ describe('StrategyForm', () => {
     expect((screen.getByRole('textbox', { name: '익절 비율 (%)' }) as HTMLInputElement).value).toBe(
       '5',
     );
+    expect(screen.getByRole('checkbox', { name: '자동매수 사용' })).toBeChecked();
+    expect(screen.getByRole('combobox', { name: '자동매수 주문방식' })).toBeInTheDocument();
   });
 
   it('콤마 표시 상태에서도 저장 payload는 숫자 shape 유지', () => {

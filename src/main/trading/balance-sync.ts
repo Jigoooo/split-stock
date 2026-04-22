@@ -152,7 +152,7 @@ export class BalanceSync {
       },
     });
 
-    // lots-repo OPEN 차수와 KIS 잔고 qty 괴리 감지
+    // lots-repo OPEN 차수와 KIS 잔고 qty 괴리 감지 + orphan holding 복구
     this.detectDrift(accountId, balanceResult.value.positions);
   }
 
@@ -160,15 +160,18 @@ export class BalanceSync {
    * lots-repo의 OPEN 차수 qty 합과 KIS 잔고 qty 비교.
    * 차이가 있으면 WARN 로그. 자동 조정은 하지 않음.
    */
-  private detectDrift(accountId: number, kisPositions: Array<{ code: string; qty: number }>): void {
+  private detectDrift(
+    accountId: number,
+    kisPositions: Array<{ code: string; qty: number; avgPrice: number }>,
+  ): void {
     // KIS 잔고 기준 pdno → qty 맵
-    const kisQtyByPdno = new Map<string, number>();
+    const kisPositionByPdno = new Map<string, { qty: number; avgPrice: number }>();
     for (const pos of kisPositions) {
-      if (pos.qty > 0) kisQtyByPdno.set(pos.code, pos.qty);
+      if (pos.qty > 0) kisPositionByPdno.set(pos.code, { qty: pos.qty, avgPrice: pos.avgPrice });
     }
 
     // lots-repo에서 KIS 보유 종목의 OPEN 차수 qty 합 조회
-    for (const [pdno, kisQty] of kisQtyByPdno) {
+    for (const [pdno, position] of kisPositionByPdno) {
       const snapResult = this.opts.lotsRepo.snapshot(accountId, pdno);
       if (snapResult.isErr()) continue;
 
@@ -176,6 +179,39 @@ export class BalanceSync {
         .filter((l) => l.status === 'OPEN' || l.status === 'BUYING')
         .reduce((sum, l) => sum + l.qty, 0);
 
+      if (lotsQty === 0) {
+        const rows = this.opts.lotsRepo.listRows(accountId, pdno);
+        if (rows.isOk() && rows.value.length === 0) {
+          const price = Math.max(1, position.avgPrice);
+          const inserted = this.opts.lotsRepo.insertLot({
+            accountId,
+            pdno,
+            nth: 1,
+            buyPrice: price,
+            qty: position.qty,
+            amountKrw: price * position.qty,
+            status: 'OPEN',
+            boughtAt: new Date(),
+          });
+          if (inserted.isOk()) {
+            this.opts.logger.log({
+              level: 'WARN',
+              category: 'BALANCE',
+              message: 'balance-sync.orphan_recovered',
+              payload: {
+                accountId,
+                pdno,
+                qty: position.qty,
+                avgPrice: price,
+                nth: 1,
+              },
+            });
+            continue;
+          }
+        }
+      }
+
+      const kisQty = position.qty;
       if (lotsQty !== kisQty) {
         this.opts.logger.log({
           level: 'WARN',

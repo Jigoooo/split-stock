@@ -1,13 +1,12 @@
-import { type StrategyProfile, StrategyProfileSchema } from '@shared/contracts';
+import {
+  DEFAULT_STRATEGY_PROFILE,
+  type StrategyProfile,
+  StrategyProfileSchema,
+} from '@shared/contracts';
 
 export type StrategyFormErrors = Partial<Record<keyof StrategyProfile, string>>;
 
-export const DEFAULT_PROFILE: StrategyProfile = {
-  totalAmountKrw: 5_000_000,
-  maxStages: 5,
-  dropPct: 0.03,
-  profitPct: 0.05,
-};
+export const DEFAULT_PROFILE: StrategyProfile = DEFAULT_STRATEGY_PROFILE;
 
 /**
  * 폼 값 → StrategyProfile 검증 결과.

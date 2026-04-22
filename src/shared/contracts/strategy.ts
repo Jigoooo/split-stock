@@ -33,12 +33,27 @@ export const StrategyProfileSchema = z.object({
   maxStages: z.number().int().min(1).max(20),
   dropPct: z.number().positive().max(0.5),
   profitPct: z.number().positive().max(0.5),
+  autoBuyEnabled: z.boolean().default(true),
+  autoBuyOrderType: z.enum(['LIMIT', 'MARKET']).default('LIMIT'),
+  autoSellEnabled: z.boolean().default(true),
+  autoSellOrderType: z.enum(['LIMIT', 'MARKET']).default('LIMIT'),
   boosterPct: z.number().min(-0.1).max(0.5).optional(),
   boosterAmountKrw: z.number().int().positive().optional(),
   respiitPlan: RespiitPlanSchema.optional(),
   autoTradingEnabled: z.boolean().optional(),
 });
 export type StrategyProfile = z.infer<typeof StrategyProfileSchema>;
+
+export const DEFAULT_STRATEGY_PROFILE: StrategyProfile = {
+  totalAmountKrw: 5_000_000,
+  maxStages: 5,
+  dropPct: 0.03,
+  profitPct: 0.05,
+  autoBuyEnabled: true,
+  autoBuyOrderType: 'LIMIT',
+  autoSellEnabled: true,
+  autoSellOrderType: 'LIMIT',
+};
 
 export const StrategyPresetSchema = z.object({
   name: z.string().min(1).max(50),

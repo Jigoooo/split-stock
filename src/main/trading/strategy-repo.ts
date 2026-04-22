@@ -1,5 +1,8 @@
-import type { StrategyProfile } from '@shared/contracts';
-import { StrategyProfileSchema } from '@shared/contracts';
+import {
+  DEFAULT_STRATEGY_PROFILE,
+  type StrategyProfile,
+  StrategyProfileSchema,
+} from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import type { SettingsRepo } from '../db/settings-repo';
 import type { EventLogger } from '../logging/event-logger';
@@ -90,6 +93,38 @@ export class StrategyRepo {
         payload: { accountId, pdno: pdno ?? '__global__', before: before.value },
       });
     }
+  }
+
+  /**
+   * 종목별 active 전략이 없으면 글로벌 active → 기본 프로필 순서로 시드한다.
+   * 이미 종목별 전략이 있으면 기존 값을 그대로 사용한다.
+   */
+  ensureSeededActive(
+    accountId: number,
+    pdno: string,
+  ): Result<
+    { profile: StrategyProfile; source: 'existing' | 'global' | 'default'; seeded: boolean },
+    StrategyRepoError
+  > {
+    const existing = this.getActive(accountId, pdno);
+    if (existing.isErr()) return err(existing.error);
+    if (existing.value) {
+      return ok({ profile: existing.value, source: 'existing', seeded: false });
+    }
+
+    const globalActive = this.getActive(accountId, null);
+    if (globalActive.isErr()) return err(globalActive.error);
+    const profile = globalActive.value ?? DEFAULT_STRATEGY_PROFILE;
+    const source: 'global' | 'default' = globalActive.value ? 'global' : 'default';
+    const saved = this.setActive(accountId, pdno, profile);
+    if (saved.isErr()) return err(saved.error);
+    this.logger.log({
+      level: 'INFO',
+      category: 'FSM',
+      message: 'strategy.seeded',
+      payload: { accountId, pdno, source },
+    });
+    return ok({ profile, source, seeded: true });
   }
 
   listPresets(accountId: number): Array<{ name: string; profile: StrategyProfile }> {

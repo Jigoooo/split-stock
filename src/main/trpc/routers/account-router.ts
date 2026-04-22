@@ -98,6 +98,31 @@ export const accountRouter = router({
     account: ctx.activeAccountId !== null ? ctx.activeAccounts.getById(ctx.activeAccountId) : null,
   })),
 
+  syncCurrentState: authedProcedure
+    .input(z.object({ accountId: z.number().int().positive().optional() }).optional())
+    .mutation(async ({ ctx, input }) => {
+      const activeAccountId = ctx.activeAccountId;
+      if (activeAccountId === null) {
+        throw new TRPCError({
+          code: 'PRECONDITION_FAILED',
+          message: '활성 계좌가 없습니다.',
+        });
+      }
+      if (input?.accountId !== undefined && input.accountId !== activeAccountId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: '다른 계좌 상태는 수동 동기화할 수 없습니다.',
+        });
+      }
+      if (!ctx.currentStateSync) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'currentStateSync가 초기화되지 않았습니다.',
+        });
+      }
+      return { ok: true as const, ...ctx.currentStateSync.trigger('manual') };
+    }),
+
   setActive: publicProcedure
     .input(z.object({ accountId: z.number().int().positive() }))
     .mutation(({ ctx, input }) => {
@@ -128,7 +153,7 @@ export const accountRouter = router({
         message: 'account.active.changed',
         payload: { accountId: input.accountId, env: target.env, prevEnv },
       });
-      void ctx.currentStateSync?.refresh('account-switch');
+      ctx.currentStateSync?.trigger('account-switch');
       return {
         ok: true as const,
         accountId: input.accountId,

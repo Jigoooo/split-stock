@@ -81,11 +81,12 @@ import { PrebuyRepo } from './trading/prebuy-repo';
 import { PrebuyWatcher } from './trading/prebuy-watcher';
 import { StockMasterRepo } from './trading/stock-master-repo';
 import { StockMasterSyncService } from './trading/stock-master-sync';
+import { StrategyExecutionEngine } from './trading/strategy-execution-engine';
 import { StrategyRepo } from './trading/strategy-repo';
 import { RotatingQuoteFeed } from './trading/tiered-quote-feed';
 import { WatchEngine, type WatchOrder } from './trading/watch-engine';
 import { quarantineLegacyWatchRows } from './trading/watch-legacy-quarantine';
-import { executeWatchOrder } from './trading/watch-order-executor';
+import { executeStrategyOrder, executeWatchOrder } from './trading/watch-order-executor';
 import { appRouter } from './trpc/app-router';
 import { createContextFactory } from './trpc/context';
 import { initAutoUpdater } from './updater';
@@ -200,23 +201,45 @@ function bootstrapDeps(userDataDir: string) {
     }
   };
   quarantineLegacyWatchRows(db, eventLogger);
-  const watchPriceFeedRef: { feed: RotatingQuoteFeed | null } = { feed: null };
-  const watchedPdnosRef = new Set<string>();
+  const sharedPriceFeedRef: { feed: RotatingQuoteFeed | null } = { feed: null };
+  const priceFeedRefCounts = new Map<string, number>();
+  const watchTrackedPdnosRef = new Set<string>();
+  const strategyTrackedPdnosRef = new Set<string>();
   const currentStateSyncRef: { sync: CurrentStateSync | null } = { sync: null };
-  const syncWatchPriceFeed = (pdnos: string[]): void => {
-    const next = new Set(pdnos);
-    const feed = watchPriceFeedRef.feed;
-    if (!feed) {
+  const acquireSharedPriceFeed = (pdno: string): void => {
+    const nextCount = (priceFeedRefCounts.get(pdno) ?? 0) + 1;
+    priceFeedRefCounts.set(pdno, nextCount);
+    if (nextCount === 1) {
+      sharedPriceFeedRef.feed?.subscribe(pdno);
+    }
+  };
+  const releaseSharedPriceFeed = (pdno: string): void => {
+    const prevCount = priceFeedRefCounts.get(pdno) ?? 0;
+    if (prevCount <= 1) {
+      priceFeedRefCounts.delete(pdno);
+      sharedPriceFeedRef.feed?.unsubscribe(pdno);
       return;
     }
-    for (const pdno of Array.from(watchedPdnosRef)) {
-      if (!next.has(pdno)) feed.unsubscribe(pdno);
+    priceFeedRefCounts.set(pdno, prevCount - 1);
+  };
+  const syncTrackedPdnos = (tracked: Set<string>, pdnos: string[]): void => {
+    const next = new Set(pdnos);
+    for (const pdno of Array.from(tracked)) {
+      if (next.has(pdno)) continue;
+      tracked.delete(pdno);
+      releaseSharedPriceFeed(pdno);
     }
     for (const pdno of next) {
-      if (!watchedPdnosRef.has(pdno)) feed.subscribe(pdno);
+      if (tracked.has(pdno)) continue;
+      tracked.add(pdno);
+      acquireSharedPriceFeed(pdno);
     }
-    watchedPdnosRef.clear();
-    for (const pdno of next) watchedPdnosRef.add(pdno);
+  };
+  const syncWatchPriceFeed = (pdnos: string[]): void => {
+    syncTrackedPdnos(watchTrackedPdnosRef, pdnos);
+  };
+  const syncStrategyPriceFeed = (pdnos: string[]): void => {
+    syncTrackedPdnos(strategyTrackedPdnosRef, pdnos);
   };
   // 통합 자동감시주문 엔진 — booster/prebuy/custom을 단일 큐로 관리.
   // BOOSTER/PREBUY 핸들러는 어댑터(BoosterWatcher/PrebuyWatcher) 생성 시 registerHandler로 주입됨.
@@ -309,26 +332,17 @@ function bootstrapDeps(userDataDir: string) {
     });
     watchEngine.onPrice(pdno, price);
   });
-  const watchPriceFeed = new RotatingQuoteFeed({
-    timer: realTimer,
-    poller: createEnvAwarePricePoller({
-      getEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
-      credentialsRepo,
-      auth,
-      httpByEnv,
-    }),
-    logger: eventLogger,
-  });
-  watchPriceFeed.on('quote', ({ pdno, price }) => {
-    watchEngine.onPrice(pdno, price);
-  });
-  watchPriceFeedRef.feed = watchPriceFeed;
-  syncWatchPriceFeed(watchEngine.list({ status: 'WATCHING' }).map((order) => order.pdno));
+  sharedPriceFeedRef.feed = tieredFeed;
+  for (const [pdno, count] of priceFeedRefCounts) {
+    if (count > 0) {
+      tieredFeed.subscribe(pdno);
+    }
+  }
 
   // RealtimeService 가 capacity 초과 종목을 RotatingQuoteFeed 에 위임하도록 어댑터 wiring.
   const restFallbackAdapter = {
-    subscribe: (pdno: string) => tieredFeed.subscribe(pdno),
-    unsubscribe: (pdno: string) => tieredFeed.unsubscribe(pdno),
+    subscribe: (pdno: string) => acquireSharedPriceFeed(pdno),
+    unsubscribe: (pdno: string) => releaseSharedPriceFeed(pdno),
   };
 
   // factory 참조를 closure 로 빼는 래퍼 — RealtimeService 초기화 시점이 factory 생성 전이라 필요.
@@ -454,18 +468,25 @@ function bootstrapDeps(userDataDir: string) {
         logger: eventLogger,
         getCurrentEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
         lotsRepo,
+        strategyRepo,
       },
       order,
       triggerPrice,
     );
   };
+  const isKeepWatchingError = (error: unknown): boolean =>
+    error instanceof Error && /이미 활성 차수가 있어 신규 1차 자동진입을 생략/.test(error.message);
 
   watchEngine.setFallbackHandler('CUSTOM', async (order, ctx) => {
     try {
       await runWatchedOrder(order, ctx.price);
       return { ok: true };
     } catch (error) {
-      return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+      return {
+        ok: false,
+        reason: error instanceof Error ? error.message : String(error),
+        ...(isKeepWatchingError(error) ? { keepWatching: true } : {}),
+      };
     }
   });
   watchEngine.setFallbackHandler('PREBUY', async (order, ctx) => {
@@ -486,7 +507,11 @@ function bootstrapDeps(userDataDir: string) {
       prebuyRepo.markFilled(source.id);
       return { ok: true };
     } catch (error) {
-      return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+      return {
+        ok: false,
+        reason: error instanceof Error ? error.message : String(error),
+        ...(isKeepWatchingError(error) ? { keepWatching: true } : {}),
+      };
     }
   });
   watchEngine.setFallbackHandler('BOOSTER', async (order, ctx) => {
@@ -497,6 +522,44 @@ function bootstrapDeps(userDataDir: string) {
       return { ok: false, reason: error instanceof Error ? error.message : String(error) };
     }
   });
+  const strategyEngine = new StrategyExecutionEngine({
+    bus,
+    logger: eventLogger,
+    lotsRepo,
+    strategyRepo,
+    safetyRegistry,
+    getActiveAccountId: () => factoryRef.factory?.getActiveAccountId() ?? null,
+    onTrackedPdnosChanged: syncStrategyPriceFeed,
+    executeOrder: async (input) => {
+      await executeStrategyOrder(
+        {
+          db,
+          settingsRepo,
+          credentialsRepo,
+          auth,
+          httpByEnv,
+          safetyRegistry,
+          pendingOrderWatcher,
+          logger: eventLogger,
+          getCurrentEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
+          lotsRepo,
+          strategyRepo,
+        },
+        {
+          accountId: input.accountId,
+          pdno: input.pdno,
+          side: input.side,
+          division: input.division,
+          nth: input.nth,
+          price: input.price,
+          qty: input.qty,
+          triggerReason: input.triggerReason,
+        },
+      );
+    },
+  });
+  syncWatchPriceFeed(watchEngine.list({ status: 'WATCHING' }).map((order) => order.pdno));
+  strategyEngine.refreshTrackedSymbols();
 
   const prebuyWatchers = new Map<number, PrebuyWatcher>();
   const boosterWatchers = new Map<number, BoosterWatcher>();
@@ -712,7 +775,7 @@ function bootstrapDeps(userDataDir: string) {
         },
       });
       broadcastTradeExecution(event);
-      void currentStateSyncRef.sync?.refresh('trade-event');
+      currentStateSyncRef.sync?.trigger('trade-event');
     },
   });
   manualOrderReconciler.start();
@@ -720,10 +783,13 @@ function bootstrapDeps(userDataDir: string) {
     balanceSync,
     logger: eventLogger,
     manualOrderReconciler,
+    onRefreshed: () => {
+      strategyEngine.refreshTrackedSymbols();
+    },
   });
   currentStateSyncRef.sync = currentStateSync;
   factory.setCurrentStateSync(currentStateSync);
-  void currentStateSync.refresh('startup');
+  currentStateSync.trigger('startup');
 
   return {
     factory,
@@ -827,17 +893,60 @@ function resolveWindowBounds(
   return { x, y, width, height, minWidth, minHeight, maxWidth, maxHeight };
 }
 
-function applyDisplayConstraints(win: BrowserWindowType, layout: WindowLayoutSpec): void {
+function constrainWindowBounds(input: {
+  area: Electron.Rectangle;
+  current: Electron.Rectangle;
+  minWidth: number | undefined;
+  minHeight: number | undefined;
+  maxWidth: number;
+  maxHeight: number;
+  clampPosition: boolean;
+}): {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+} {
+  const width = clampWindowSize(input.current.width, input.minWidth, input.maxWidth);
+  const height = clampWindowSize(input.current.height, input.minHeight, input.maxHeight);
+
+  if (!input.clampPosition) {
+    return {
+      x: input.current.x,
+      y: input.current.y,
+      width,
+      height,
+    };
+  }
+
+  const maxX = input.area.x + input.area.width - width;
+  const maxY = input.area.y + input.area.height - height;
+  return {
+    x: Math.min(Math.max(input.current.x, input.area.x), maxX),
+    y: Math.min(Math.max(input.current.y, input.area.y), maxY),
+    width,
+    height,
+  };
+}
+
+function applyDisplayConstraints(
+  win: BrowserWindowType,
+  layout: WindowLayoutSpec,
+  options: { clampPosition: boolean } = { clampPosition: true },
+): void {
   const display = screen.getDisplayMatching(win.getBounds());
   const area = display.workArea;
   const { minWidth, minHeight, maxWidth, maxHeight } = resolveWindowConstraints(layout, display);
   const current = win.getBounds();
-  const width = clampWindowSize(current.width, minWidth, maxWidth);
-  const height = clampWindowSize(current.height, minHeight, maxHeight);
-  const maxX = area.x + area.width - width;
-  const maxY = area.y + area.height - height;
-  const x = Math.min(Math.max(current.x, area.x), maxX);
-  const y = Math.min(Math.max(current.y, area.y), maxY);
+  const { x, y, width, height } = constrainWindowBounds({
+    area,
+    current,
+    minWidth,
+    minHeight,
+    maxWidth,
+    maxHeight,
+    clampPosition: options.clampPosition,
+  });
 
   win.setMinimumSize(minWidth ?? 0, minHeight ?? 0);
   win.setMaximumSize(maxWidth, maxHeight);
@@ -849,19 +958,19 @@ function applyDisplayConstraints(win: BrowserWindowType, layout: WindowLayoutSpe
 
 function bindDisplayConstraints(win: BrowserWindowType, layout: WindowLayoutSpec): void {
   let syncing = false;
-  const sync = (): void => {
+  const sync = (options: { clampPosition: boolean }): void => {
     if (syncing || win.isDestroyed()) return;
     syncing = true;
     try {
-      applyDisplayConstraints(win, layout);
+      applyDisplayConstraints(win, layout, options);
     } finally {
       syncing = false;
     }
   };
 
-  const handleDisplayChange = (): void => sync();
-  win.on('move', sync);
-  win.on('resize', sync);
+  const handleDisplayChange = (): void => sync({ clampPosition: true });
+  win.on('move', () => sync({ clampPosition: false }));
+  win.on('resize', () => sync({ clampPosition: true }));
   screen.on('display-metrics-changed', handleDisplayChange);
   screen.on('display-added', handleDisplayChange);
   screen.on('display-removed', handleDisplayChange);
