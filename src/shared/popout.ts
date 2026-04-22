@@ -25,14 +25,6 @@ export const POPOUT_ROUTE_CONFIG = {
     minWidth: 720,
     minHeight: 540,
   },
-  'lots-log': {
-    label: '잔고(차수) 로그',
-    title: 'Split Stock · 잔고(차수) 로그',
-    defaultWidth: 1040,
-    defaultHeight: 740,
-    minWidth: 720,
-    minHeight: 540,
-  },
   reports: {
     label: '리포트',
     title: 'Split Stock · 리포트',
