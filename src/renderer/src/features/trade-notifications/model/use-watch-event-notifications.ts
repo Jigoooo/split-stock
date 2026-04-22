@@ -1,9 +1,16 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import { toast } from 'sonner';
 
 export function useWatchEventNotifications(): void {
   const utils = trpc.useUtils();
+  const invalidateWatchQueries = useEffectEvent(() => {
+    void Promise.all([
+      utils.watch.list.invalidate(),
+      utils.watch.getControlState.invalidate(),
+      utils.watch.history.invalidate(),
+    ]);
+  });
 
   useEffect(() => {
     const unsubscribe = window.appShell?.onWatchEvent?.((event) => {
@@ -35,4 +42,14 @@ export function useWatchEventNotifications(): void {
     });
     return () => unsubscribe?.();
   }, [utils]);
+
+  useEffect(() => {
+    const unsubscribe = window.appShell?.onPopoutClosed?.((route) => {
+      if (route !== 'add-watch-order') {
+        return;
+      }
+      invalidateWatchQueries();
+    });
+    return () => unsubscribe?.();
+  }, []);
 }

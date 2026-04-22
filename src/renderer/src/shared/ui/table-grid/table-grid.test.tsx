@@ -249,6 +249,35 @@ describe('TableGrid', () => {
       fireEvent.click(screen.getByText('clickme'));
       expect(onClick).toHaveBeenCalledOnce();
     });
+
+    it('Cell 이 아닌 자식에는 columnIndex prop 을 주입하지 않는다', () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      render(
+        <TableGrid.Root>
+          <TableGrid.Header>
+            <TableGrid.Cell>헤더</TableGrid.Cell>
+            <button type="button" className="header-action">
+              header
+            </button>
+          </TableGrid.Header>
+          <TableGrid.Body>
+            <TableGrid.Row>
+              <TableGrid.Cell>row</TableGrid.Cell>
+              <button type="button" className="row-action">
+                row-action
+              </button>
+            </TableGrid.Row>
+          </TableGrid.Body>
+        </TableGrid.Root>,
+      );
+
+      expect(document.querySelector('.header-action')).not.toHaveAttribute('columnindex');
+      expect(document.querySelector('.row-action')).not.toHaveAttribute('columnindex');
+      expect(errSpy).not.toHaveBeenCalled();
+
+      errSpy.mockRestore();
+    });
   });
 
   describe('Numeric cell', () => {

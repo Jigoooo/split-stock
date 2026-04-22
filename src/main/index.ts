@@ -40,6 +40,7 @@ import {
   POPOUT_ROUTES,
   type PopoutRoute,
 } from '@shared/popout';
+import { isRegularMarketOpenKst } from '@shared/trading/market-session';
 import { and, eq } from 'drizzle-orm';
 import WebSocket from 'ws';
 import { ActiveAccountRepo } from './account/active-account';
@@ -206,6 +207,8 @@ function bootstrapDeps(userDataDir: string) {
   const watchTrackedPdnosRef = new Set<string>();
   const strategyTrackedPdnosRef = new Set<string>();
   const currentStateSyncRef: { sync: CurrentStateSync | null } = { sync: null };
+  // factory 참조를 closure 로 빼는 래퍼 — RealtimeService/price poller 초기화 시점이 factory 생성 전이라 필요.
+  const factoryRef: { factory: ReturnType<typeof createContextFactory> | null } = { factory: null };
   const acquireSharedPriceFeed = (pdno: string): void => {
     const nextCount = (priceFeedRefCounts.get(pdno) ?? 0) + 1;
     priceFeedRefCounts.set(pdno, nextCount);
@@ -313,6 +316,11 @@ function bootstrapDeps(userDataDir: string) {
       httpByEnv,
     }),
     logger: eventLogger,
+    getRatePerSec: () => {
+      const env = factoryRef.factory?.getCurrentEnv() ?? null;
+      if (env === 'MOCK') return isRegularMarketOpenKst() ? 4 : 2;
+      return isRegularMarketOpenKst() ? 18 : 6;
+    },
   });
   tieredFeed.on('quote', ({ pdno, price }) => {
     bus.emitTick({
@@ -345,8 +353,6 @@ function bootstrapDeps(userDataDir: string) {
     unsubscribe: (pdno: string) => releaseSharedPriceFeed(pdno),
   };
 
-  // factory 참조를 closure 로 빼는 래퍼 — RealtimeService 초기화 시점이 factory 생성 전이라 필요.
-  const factoryRef: { factory: ReturnType<typeof createContextFactory> | null } = { factory: null };
   let lastRealtime: RealtimeService | null = null;
 
   // NM-001: 미체결 자동취소 — 타임아웃 시 KIS cancel 호출.

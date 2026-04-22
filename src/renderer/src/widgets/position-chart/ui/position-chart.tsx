@@ -4,6 +4,7 @@ import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import type { LotOverlayLine } from '@shared/trading/lot-overlay';
 import type { ReactElement } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { type ChartPeriod, usePositionChart } from '../model/use-position-chart';
 import { CandlestickChart } from './candlestick-chart';
 
@@ -32,11 +33,54 @@ const formatSigned = (value: number): string => {
   return `${sign}${thousandSeparator(value, { allowNegative: true })}`;
 };
 
+interface PriceSnapshot {
+  price: number;
+  dayChange: number;
+  dayChangeRate: number;
+  high: number;
+  low: number;
+  upperLimit: number;
+  lowerLimit: number;
+}
+
+function priceCacheKey(pdno: string): string {
+  return `split-stock.position-chart.price.${pdno}`;
+}
+
 const PriceChips = ({ pdno }: { pdno: string }): ReactElement => {
+  const cached = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem(priceCacheKey(pdno));
+      return raw ? (JSON.parse(raw) as PriceSnapshot) : null;
+    } catch {
+      return null;
+    }
+  }, [pdno]);
+  const [queryReady, setQueryReady] = useState(cached === null);
+  useEffect(() => {
+    if (cached === null) {
+      setQueryReady(true);
+      return;
+    }
+    setQueryReady(false);
+    const id = window.setTimeout(() => setQueryReady(true), 900);
+    return () => window.clearTimeout(id);
+  }, [cached]);
   // 상한가/하한가/고가/저가 는 KIS inquire-price REST 응답에서만 제공 — WS tick 에는 없음.
-  // 15초 주기로 refresh: 헤더 칩은 실시간성 크리티컬하지 않고, API 쿼터를 아끼는 편이 낫다.
-  const q = trpc.market.getPrice.useQuery({ code: pdno }, { refetchInterval: 15_000 });
-  const data = q.data;
+  const q = trpc.market.getPrice.useQuery(
+    { code: pdno },
+    { enabled: queryReady, refetchInterval: 8_000, staleTime: 0 },
+  );
+  const data = (q.data as PriceSnapshot | undefined) ?? cached;
+  useEffect(() => {
+    if (!q.data || typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(priceCacheKey(pdno), JSON.stringify(q.data as PriceSnapshot));
+    } catch {
+      // ignore cache failures
+    }
+  }, [pdno, q.data]);
   const changeClass =
     !data || data.dayChange === 0 ? 'num' : data.dayChange > 0 ? 'num-up' : 'num-down';
   const rateLabel = data

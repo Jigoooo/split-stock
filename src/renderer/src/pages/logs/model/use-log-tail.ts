@@ -12,6 +12,7 @@ export const LOG_CATEGORIES = [
   'BALANCE',
   'CANCEL',
 ] as const;
+export const LOG_EXPORT_FORMATS = ['csv', 'json'] as const;
 
 export interface LogEntry {
   id: number | string;
@@ -34,6 +35,14 @@ export interface UseLogTailResult {
   isPending: boolean;
   error: { message: string } | null;
   entries: LogEntry[];
+  exportPending: boolean;
+  exportLogs: (format: (typeof LOG_EXPORT_FORMATS)[number]) => Promise<{
+    canceled: boolean;
+    count?: number;
+    filename?: string;
+    format?: (typeof LOG_EXPORT_FORMATS)[number];
+    path?: string;
+  }>;
 }
 
 export function useLogTail(): UseLogTailResult {
@@ -43,23 +52,26 @@ export function useLogTail(): UseLogTailResult {
   const [dateRange, setDateRange] = useState<
     'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' | ''
   >('');
+  const exportMutation = trpc.logs.export.useMutation();
+
+  const selectedCategories =
+    categories.size > 0
+      ? (Array.from(categories).filter((c) => c !== '') as (
+          | 'AUTH'
+          | 'ORDER'
+          | 'FSM'
+          | 'WS'
+          | 'SYS'
+          | 'BALANCE'
+          | 'CANCEL'
+        )[])
+      : undefined;
 
   const tail = trpc.logs.tail.useQuery(
     {
       limit: 200,
       ...(level ? { level: level as 'INFO' | 'WARN' | 'ERROR' } : {}),
-      ...(categories.size > 0
-        ? {
-            categories: Array.from(categories).filter((c) => c !== '') as (
-              | 'AUTH'
-              | 'ORDER'
-              | 'FSM'
-              | 'WS'
-              | 'SYS'
-              | 'BALANCE'
-            )[],
-          }
-        : {}),
+      ...(selectedCategories ? { categories: selectedCategories } : {}),
       ...(search ? { search } : {}),
       ...(dateRange
         ? { dateRange: dateRange as 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' }
@@ -69,6 +81,25 @@ export function useLogTail(): UseLogTailResult {
       refetchInterval: 2000,
     },
   );
+
+  const exportLogs = async (
+    format: (typeof LOG_EXPORT_FORMATS)[number],
+  ): Promise<{
+    canceled: boolean;
+    count?: number;
+    filename?: string;
+    format?: (typeof LOG_EXPORT_FORMATS)[number];
+    path?: string;
+  }> =>
+    exportMutation.mutateAsync({
+      format,
+      ...(level ? { level: level as 'INFO' | 'WARN' | 'ERROR' } : {}),
+      ...(selectedCategories ? { categories: selectedCategories } : {}),
+      ...(search ? { search } : {}),
+      ...(dateRange
+        ? { dateRange: dateRange as 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' }
+        : {}),
+    });
 
   return {
     level,
@@ -82,5 +113,7 @@ export function useLogTail(): UseLogTailResult {
     isPending: tail.isPending,
     error: tail.error ? { message: tail.error.message } : null,
     entries: tail.data?.entries ?? [],
+    exportPending: exportMutation.isPending,
+    exportLogs,
   };
 }

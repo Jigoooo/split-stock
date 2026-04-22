@@ -49,6 +49,8 @@ export interface QuoteFeedOptions {
   logger: EventLogger;
   /** KIS REST 글로벌 한도 (기본 15rps). minTimeMs = ⌊1000/ratePerSec⌋. */
   ratePerSec?: number;
+  /** 런타임 시점별 동적 RPS override. */
+  getRatePerSec?: (() => number) | undefined;
   /** 연속 실패 임계값. 도달 시 cooldownCycles 만큼 skip (기본 5). */
   maxConsecutiveFailures?: number;
   /** 쿨다운 시 skip 사이클 수 (기본 1). */
@@ -85,7 +87,7 @@ interface SymbolState {
 export class RotatingQuoteFeed implements QuoteFeed {
   private readonly emitter = new EventEmitter();
   private readonly symbols = new Map<string, SymbolState>();
-  private readonly minTimeMs: number;
+  private readonly baseRatePerSec: number;
   private readonly maxFailures: number;
   private readonly cooldownCycles: number;
 
@@ -98,7 +100,7 @@ export class RotatingQuoteFeed implements QuoteFeed {
   constructor(private readonly opts: QuoteFeedOptions) {
     const rps = opts.ratePerSec ?? 15;
     if (rps <= 0) throw new Error('ratePerSec must be > 0');
-    this.minTimeMs = Math.floor(1000 / rps);
+    this.baseRatePerSec = rps;
     this.maxFailures = opts.maxConsecutiveFailures ?? 5;
     this.cooldownCycles = opts.cooldownCycles ?? 1;
   }
@@ -160,6 +162,8 @@ export class RotatingQuoteFeed implements QuoteFeed {
 
   private scheduleNextTick(): void {
     if (this.disposed) return;
+    const currentRps = Math.max(1, Math.floor(this.opts.getRatePerSec?.() ?? this.baseRatePerSec));
+    const minTimeMs = Math.floor(1000 / currentRps);
 
     this.tickHandle = this.opts.timer.setTimeout(() => {
       this.tickHandle = null;
@@ -185,7 +189,7 @@ export class RotatingQuoteFeed implements QuoteFeed {
       // fetch는 비동기로 띄우고, 타이머는 바로 다음 tick 예약
       void this.pollOne(pdno);
       this.scheduleNextTick();
-    }, this.minTimeMs);
+    }, minTimeMs);
   }
 
   private async pollOne(pdno: string): Promise<void> {

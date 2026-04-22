@@ -25,6 +25,31 @@ export interface UsePositionChartResult {
   setPeriod: (period: ChartPeriod) => void;
 }
 
+function chartCacheKey(pdno: string, period: ChartPeriod): string {
+  return `split-stock.position-chart.${pdno}.${period}`;
+}
+
+function readCachedCandles(pdno: string, period: ChartPeriod): Candle[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(chartCacheKey(pdno, period));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as Candle[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedCandles(pdno: string, period: ChartPeriod, candles: Candle[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(chartCacheKey(pdno, period), JSON.stringify(candles));
+  } catch {
+    // ignore cache failures
+  }
+}
+
 /** KST 기준 오늘 날짜를 YYYY-MM-DD 로 반환 */
 function todayKst(): string {
   const now = new Date();
@@ -118,7 +143,7 @@ export function buildDailyLiveCandle(
 
 export function usePositionChart(pdno: string): UsePositionChartResult {
   const [period, setPeriod] = useState<ChartPeriod>('D');
-  const [candles, setCandles] = useState<Candle[]>([]);
+  const [candles, setCandles] = useState<Candle[]>(() => readCachedCandles(pdno, 'D'));
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [reachedEnd, setReachedEnd] = useState(false);
@@ -142,6 +167,10 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
   }, [candles]);
 
   useEffect(() => {
+    writeCachedCandles(pdno, period, candles);
+  }, [candles, pdno, period]);
+
+  useEffect(() => {
     reachedEndRef.current = reachedEnd;
   }, [reachedEnd]);
 
@@ -153,57 +182,71 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
       loadingRef.current = false;
       setIsLoading(true);
       setError(null);
-      setCandles([]);
-      candlesRef.current = [];
+      const cached = readCachedCandles(pdno, period);
+      if (cached.length === 0) {
+        setCandles([]);
+        candlesRef.current = [];
+      } else {
+        setCandles(cached);
+        candlesRef.current = cached;
+      }
       setReachedEnd(false);
       reachedEndRef.current = false;
 
       try {
-        const first = await fetchDailyChartRef.current({ code: pdno, period });
-        if (cancelled) return;
+        const fetchInitial = async (): Promise<void> => {
+          const first = await fetchDailyChartRef.current({ code: pdno, period });
+          if (cancelled) return;
 
-        if (first.candles.length === 0) {
-          setReachedEnd(true);
-          reachedEndRef.current = true;
-          return;
-        }
-
-        let merged = [...first.candles];
-        setCandles(merged);
-        candlesRef.current = merged;
-
-        let toMs = getPreviousDayMs(first.candles[0]?.date ?? '');
-        for (let index = 0; index < 2; index += 1) {
-          if (cancelled || !Number.isFinite(toMs)) break;
-
-          try {
-            const older = await fetchDailyChartRef.current({ code: pdno, period, toMs });
-            if (cancelled) return;
-
-            if (older.candles.length === 0) {
-              setReachedEnd(true);
-              reachedEndRef.current = true;
-              break;
-            }
-
-            const mergedResult = mergeOlderCandles(merged, older.candles);
-            merged = mergedResult.next;
-            setCandles(merged);
-            candlesRef.current = merged;
-
-            if (mergedResult.reachedEnd) {
-              setReachedEnd(true);
-              reachedEndRef.current = true;
-              break;
-            }
-
-            const nextOldest = merged[0]?.date;
-            if (!nextOldest) break;
-            toMs = getPreviousDayMs(nextOldest);
-          } catch {
-            break;
+          if (first.candles.length === 0) {
+            setReachedEnd(true);
+            reachedEndRef.current = true;
+            return;
           }
+
+          let merged = [...first.candles];
+          setCandles(merged);
+          candlesRef.current = merged;
+
+          let toMs = getPreviousDayMs(first.candles[0]?.date ?? '');
+          for (let index = 0; index < 2; index += 1) {
+            if (cancelled || !Number.isFinite(toMs)) break;
+
+            try {
+              const older = await fetchDailyChartRef.current({ code: pdno, period, toMs });
+              if (cancelled) return;
+
+              if (older.candles.length === 0) {
+                setReachedEnd(true);
+                reachedEndRef.current = true;
+                break;
+              }
+
+              const mergedResult = mergeOlderCandles(merged, older.candles);
+              merged = mergedResult.next;
+              setCandles(merged);
+              candlesRef.current = merged;
+
+              if (mergedResult.reachedEnd) {
+                setReachedEnd(true);
+                reachedEndRef.current = true;
+                break;
+              }
+
+              const nextOldest = merged[0]?.date;
+              if (!nextOldest) break;
+              toMs = getPreviousDayMs(nextOldest);
+            } catch {
+              break;
+            }
+          }
+        };
+
+        if (cached.length > 0) {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          if (cancelled) return;
         }
+        await fetchInitial();
       } catch (fetchError) {
         if (cancelled) return;
         setError(fetchError instanceof Error ? fetchError.message : String(fetchError));

@@ -9,6 +9,7 @@ import {
   type ReactElement,
 } from 'react';
 import type { RowProps } from '../model/types';
+import { TableGridCell } from './table-grid-cell';
 
 /**
  * TableGrid.Row — flex row.
@@ -35,7 +36,7 @@ export const TableGridRow = forwardRef<HTMLDivElement, RowProps>(
 
     const hasInteraction = Boolean(onClick || onContextMenu);
     const indexedChildren = Children.map(children, (child, columnIndex) => {
-      if (!isValidElement(child) || child.type === Fragment) {
+      if (!isValidElement(child) || child.type === Fragment || child.type !== TableGridCell) {
         return child;
       }
 

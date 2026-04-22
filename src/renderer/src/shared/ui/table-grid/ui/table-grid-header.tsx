@@ -1,5 +1,6 @@
 import { Children, cloneElement, Fragment, isValidElement, type ReactElement } from 'react';
 import type { HeaderProps } from '../model/types';
+import { TableGridCell } from './table-grid-cell';
 import { useTableGridContext } from './table-grid-root';
 
 /**
@@ -11,7 +12,7 @@ export function TableGridHeader(props: HeaderProps): ReactElement {
   const { className, style, children } = props;
   const { stickyHeader } = useTableGridContext();
   const indexedChildren = Children.map(children, (child, columnIndex) => {
-    if (!isValidElement(child) || child.type === Fragment) {
+    if (!isValidElement(child) || child.type === Fragment || child.type !== TableGridCell) {
       return child;
     }
 
