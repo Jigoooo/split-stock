@@ -200,4 +200,24 @@ describe('OrderTicket', () => {
     expect(screen.getByLabelText('주문 가격')).toBeDisabled();
     expect(screen.getByLabelText('주문 가격')).toHaveValue('시장가');
   });
+
+  it('구분 라벨을 눌러도 셀렉트가 열리지 않는다', () => {
+    render(
+      wrap(
+        <OrderTicket
+          selection={{ pdno: '005930', name: '삼성전자' }}
+          isProd={false}
+          oneClick={false}
+        />,
+      ),
+    );
+
+    fireEvent.click(screen.getByText('구분'));
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '주문 구분' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
 });

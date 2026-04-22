@@ -50,6 +50,8 @@ export interface RowProps {
   style?: CSSProperties;
   /** 가상화 시 react key 보조 — DOM data-key */
   'data-key'?: string;
+  /** @tanstack/react-virtual 측정용 index */
+  'data-index'?: number;
   children?: ReactNode;
 }
 

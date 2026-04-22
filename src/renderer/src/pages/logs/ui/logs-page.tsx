@@ -212,6 +212,7 @@ export const LogsPage = (): ReactElement => {
                   <TableGrid.Row
                     key={e.id}
                     ref={virtual.measureElement}
+                    data-index={vItem.index}
                     data-key={String(e.id)}
                     style={{
                       position: 'absolute',

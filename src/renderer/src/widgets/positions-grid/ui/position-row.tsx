@@ -8,6 +8,8 @@ import type { PositionsGridRow } from '../model/use-positions-grid';
 
 export interface PositionRowProps {
   row: PositionsGridRow;
+  /** @tanstack/react-virtual 측정용 index */
+  virtualIndex: number;
   /** 그리드 전체 차수 컬럼 수. */
   gridMaxStages: number;
   /** 현재 선택된 종목 코드 (시각적 강조용). */
@@ -66,6 +68,7 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
       row,
       selectedPdno,
       style,
+      virtualIndex,
     } = props;
     const [isPending, startTransition] = useTransition();
 
@@ -123,7 +126,7 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
     }
 
     return (
-      <div ref={ref} style={style} data-position-row={position.code}>
+      <div ref={ref} style={style} data-index={virtualIndex} data-position-row={position.code}>
         <TableGrid.Row
           selected={isSelected}
           expanded={expanded}

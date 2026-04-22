@@ -109,6 +109,14 @@ describe('Select', () => {
     }
   });
 
+  it('첫 오픈에서도 추가 layout tick 없이 listbox를 바로 렌더한다', () => {
+    render(<SelectHarness />);
+
+    fireEvent.click(screen.getByRole('combobox', { name: '환경 선택' }));
+
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
   it('label htmlFor로 포커스되고 hidden input과 runtime change payload를 유지한다', async () => {
     const onValueChange = vi.fn();
     const { container } = render(<SelectHarness onValueChange={onValueChange} />);

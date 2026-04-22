@@ -140,6 +140,7 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
                     key={vItem.key}
                     ref={virtual.measureElement}
                     row={row}
+                    virtualIndex={vItem.index}
                     gridMaxStages={gridMaxStages}
                     selectedPdno={selectedPdno}
                     expanded={expanded.has(row.position.code)}

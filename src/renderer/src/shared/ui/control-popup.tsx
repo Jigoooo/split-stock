@@ -12,6 +12,9 @@ import {
 import { createPortal } from 'react-dom';
 
 type WidthMode = 'anchor' | 'content';
+type PortalMode = 'body' | 'overlay';
+type PopupAlign = 'end' | 'start';
+type PopupSide = 'bottom' | 'top';
 
 interface ControlPopupProps {
   open: boolean;
@@ -26,6 +29,7 @@ interface ControlPopupProps {
   widthMode?: WidthMode | undefined;
   minWidth?: number | undefined;
   offset?: number | undefined;
+  portalMode?: PortalMode | undefined;
   zIndex?: number | undefined;
 }
 
@@ -44,13 +48,23 @@ export function ControlPopup({
   widthMode = 'anchor',
   minWidth,
   offset = 6,
+  portalMode = 'overlay',
   zIndex = 1080,
 }: ControlPopupProps): ReactElement | null {
   const shouldReduceMotion = useReducedMotion();
-  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  const [placement, setPlacement] = useState<{ align: PopupAlign; side: PopupSide }>({
+    align: 'start',
+    side: 'bottom',
+  });
   const [popupStyle, setPopupStyle] = useState<CSSProperties>({
     visibility: 'hidden',
   });
+  const portalTarget =
+    typeof document === 'undefined'
+      ? null
+      : portalMode === 'body'
+        ? document.body
+        : ((anchorRef.current?.closest('.modal-overlay') as HTMLElement | null) ?? document.body);
 
   const updatePosition = useEffectEvent(() => {
     const anchor = anchorRef.current;
@@ -66,16 +80,25 @@ export function ControlPopup({
         ? Math.max(anchorRect.width, minWidth ?? 0)
         : Math.max(minWidth ?? 0, popupWidth || anchorRect.width);
 
-    let left = anchorRect.left;
-    if (left + nextWidth > window.innerWidth - VIEWPORT_PADDING) {
-      left = Math.max(VIEWPORT_PADDING, window.innerWidth - VIEWPORT_PADDING - nextWidth);
-    }
-    left = Math.max(VIEWPORT_PADDING, left);
+    const availableBelow = window.innerHeight - anchorRect.bottom - offset - VIEWPORT_PADDING;
+    const availableAbove = anchorRect.top - offset - VIEWPORT_PADDING;
+    const side: PopupSide =
+      popupHeight <= availableBelow || availableBelow >= availableAbove ? 'bottom' : 'top';
+
+    const availableRight = window.innerWidth - anchorRect.left - VIEWPORT_PADDING;
+    const availableLeft = anchorRect.right - VIEWPORT_PADDING;
+    const align: PopupAlign =
+      nextWidth <= availableRight || availableRight >= availableLeft ? 'start' : 'end';
+
+    let left = align === 'start' ? anchorRect.left : anchorRect.right - nextWidth;
+    const maxLeft = Math.max(VIEWPORT_PADDING, window.innerWidth - VIEWPORT_PADDING - nextWidth);
+    left = Math.min(maxLeft, Math.max(VIEWPORT_PADDING, left));
 
     const preferredTop = anchorRect.bottom + offset;
-    const fitsBelow = preferredTop + popupHeight <= window.innerHeight - VIEWPORT_PADDING;
     const aboveTop = anchorRect.top - popupHeight - offset;
-    const top = !fitsBelow && aboveTop >= VIEWPORT_PADDING ? aboveTop : preferredTop;
+    const unclampedTop = side === 'bottom' ? preferredTop : aboveTop;
+    const maxTop = Math.max(VIEWPORT_PADDING, window.innerHeight - VIEWPORT_PADDING - popupHeight);
+    const top = Math.min(maxTop, Math.max(VIEWPORT_PADDING, unclampedTop));
 
     const nextStyle: CSSProperties = {
       left,
@@ -86,8 +109,10 @@ export function ControlPopup({
       width: widthMode === 'anchor' ? nextWidth : undefined,
       zIndex,
     };
+    const placementChanged = placement.align !== align || placement.side !== side;
 
     if (
+      !placementChanged &&
       popupStyle.left === nextStyle.left &&
       popupStyle.minWidth === nextStyle.minWidth &&
       popupStyle.position === nextStyle.position &&
@@ -98,16 +123,12 @@ export function ControlPopup({
     ) {
       return;
     }
+
+    if (placementChanged) {
+      setPlacement({ align, side });
+    }
     setPopupStyle(nextStyle);
   });
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    const anchor = anchorRef.current;
-    if (!anchor) return;
-
-    setPortalTarget((anchor.closest('.modal-overlay') as HTMLElement | null) ?? document.body);
-  }, [anchorRef, open]);
 
   useLayoutEffect(() => {
     if (!open || !portalTarget) return;
@@ -124,12 +145,24 @@ export function ControlPopup({
     window.addEventListener('resize', onWindowChange);
     window.addEventListener('scroll', onWindowChange, true);
 
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => updatePosition());
+    if (resizeObserver) {
+      if (anchorRef.current) {
+        resizeObserver.observe(anchorRef.current);
+      }
+      if (popupRef.current) {
+        resizeObserver.observe(popupRef.current);
+      }
+    }
+
     return () => {
       window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', onWindowChange);
       window.removeEventListener('scroll', onWindowChange, true);
+      resizeObserver?.disconnect();
     };
-  }, [open, portalTarget]);
+  }, [anchorRef, open, popupRef, portalTarget]);
 
   useEffect(() => {
     if (!open) return;
@@ -178,6 +211,8 @@ export function ControlPopup({
         <motion.div
           {...motionProps}
           ref={popupRef}
+          data-align={placement.align}
+          data-side={placement.side}
           className={className}
           id={id}
           role={role}

@@ -2,16 +2,20 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-rea
 import type {
   ButtonHTMLAttributes,
   ChangeEvent,
+  ClipboardEvent,
   CSSProperties,
+  FocusEvent,
   FocusEventHandler,
   InputHTMLAttributes,
   KeyboardEvent,
   ReactElement,
+  MouseEvent as ReactMouseEvent,
   ReactNode,
   RefObject,
 } from 'react';
 import {
   createContext,
+  Fragment,
   useContext,
   useEffect,
   useEffectEvent,
@@ -23,11 +27,18 @@ import { ControlPopup } from './control-popup';
 
 type DateViewMode = 'day' | 'month' | 'year';
 type DismissReason = 'escape' | 'outside-pointer';
+type DateSegmentName = 'year' | 'month' | 'day';
 
 interface CalendarDateParts {
   day: number;
   month: number;
   year: number;
+}
+
+interface DateDraftParts {
+  day: string;
+  month: string;
+  year: string;
 }
 
 interface DateInputContextValue {
@@ -40,16 +51,18 @@ interface DateInputContextValue {
   dense: boolean;
   disabled: boolean;
   dismissPopup: (reason: DismissReason) => void;
-  draft: string;
+  draftParts: DateDraftParts;
+  focusSegment: (segment: DateSegmentName) => void;
   inputId: string;
-  inputRef: RefObject<HTMLInputElement | null>;
+  inputRefs: Record<DateSegmentName, RefObject<HTMLInputElement | null>>;
   invalid: boolean;
   max: string | undefined;
   min: string | undefined;
   open: boolean;
   popupRef: RefObject<HTMLDivElement | null>;
   rootRef: RefObject<HTMLSpanElement | null>;
-  setDraft: (nextDraft: string) => void;
+  setActiveSegment: (segment: DateSegmentName) => void;
+  setDraftPart: (segment: DateSegmentName, nextDraft: string) => void;
   setOpen: (nextOpen: boolean) => void;
   setViewMode: (nextMode: DateViewMode) => void;
   setVisibleMonth: (nextMonth: Date) => void;
@@ -63,6 +76,26 @@ interface DateInputContextValue {
 
 const DateInputContext = createContext<DateInputContextValue | null>(null);
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'] as const;
+const DATE_SEGMENT_ORDER = [
+  'year',
+  'month',
+  'day',
+] as const satisfies ReadonlyArray<DateSegmentName>;
+const DATE_SEGMENT_LENGTH: Record<DateSegmentName, number> = {
+  day: 2,
+  month: 2,
+  year: 4,
+};
+const DATE_SEGMENT_PLACEHOLDER: Record<DateSegmentName, string> = {
+  day: 'DD',
+  month: 'MM',
+  year: 'YYYY',
+};
+const DATE_SEGMENT_SUFFIX: Record<DateSegmentName, string> = {
+  day: '일',
+  month: '월',
+  year: '연도',
+};
 
 function useDateInputContext(component: string): DateInputContextValue {
   const context = useContext(DateInputContext);
@@ -78,6 +111,14 @@ function joinClasses(...parts: Array<string | false | null | undefined>): string
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
+}
+
+function emptyDraftParts(): DateDraftParts {
+  return {
+    day: '',
+    month: '',
+    year: '',
+  };
 }
 
 function toIsoDate(parts: CalendarDateParts): string {
@@ -165,6 +206,78 @@ function normalizeDraftValue(
   return clampIsoToBounds(toIsoDate(clampPartsToValidDate(recoverable)), min, max);
 }
 
+function sanitizeSegmentDraft(value: string, segment: DateSegmentName): string {
+  return value.replace(/\D/g, '').slice(0, DATE_SEGMENT_LENGTH[segment]);
+}
+
+function toDraftParts(value: string): DateDraftParts {
+  const trimmed = value.trim();
+  if (trimmed === '') return emptyDraftParts();
+
+  const canonical = parseCanonicalIso(trimmed);
+  if (canonical) {
+    return {
+      day: pad2(canonical.day),
+      month: pad2(canonical.month),
+      year: String(canonical.year).padStart(4, '0'),
+    };
+  }
+
+  const recoverable = parseRecoverableDraft(trimmed);
+  if (!recoverable) return emptyDraftParts();
+
+  return {
+    day: sanitizeSegmentDraft(String(recoverable.day), 'day'),
+    month: sanitizeSegmentDraft(String(recoverable.month), 'month'),
+    year: sanitizeSegmentDraft(String(recoverable.year), 'year'),
+  };
+}
+
+function normalizeDraftParts(
+  draftParts: DateDraftParts,
+  committedValue: string,
+  min?: string,
+  max?: string,
+): string {
+  if (
+    draftParts.year.trim() === '' &&
+    draftParts.month.trim() === '' &&
+    draftParts.day.trim() === ''
+  ) {
+    return '';
+  }
+
+  return normalizeDraftValue(
+    `${draftParts.year}-${draftParts.month}-${draftParts.day}`,
+    committedValue,
+    min,
+    max,
+  );
+}
+
+function hasDraftPartsValue(draftParts: DateDraftParts): boolean {
+  return (
+    draftParts.year.trim() !== '' || draftParts.month.trim() !== '' || draftParts.day.trim() !== ''
+  );
+}
+
+function getAdjacentSegment(segment: DateSegmentName, offset: -1 | 1): DateSegmentName | null {
+  const nextIndex = DATE_SEGMENT_ORDER.indexOf(segment) + offset;
+  return DATE_SEGMENT_ORDER[nextIndex] ?? null;
+}
+
+function createSegmentLabel(label: string | undefined, segment: DateSegmentName): string {
+  const suffix = DATE_SEGMENT_SUFFIX[segment];
+  return label ? `${label} ${suffix}` : suffix;
+}
+
+function findSegmentFromTarget(
+  target: EventTarget | null,
+  inputRefs: Record<DateSegmentName, RefObject<HTMLInputElement | null>>,
+): DateSegmentName | null {
+  return DATE_SEGMENT_ORDER.find((segment) => inputRefs[segment].current === target) ?? null;
+}
+
 function toCalendarMonth(value: string): Date {
   const parts = parseCanonicalIso(value);
   if (parts) {
@@ -177,6 +290,37 @@ function toCalendarMonth(value: string): Date {
 
 function getYearPageStart(year: number): number {
   return Math.floor(year / 12) * 12;
+}
+
+function canSelectRange(startIso: string, endIso: string, min?: string, max?: string): boolean {
+  if (min !== undefined && endIso < min) return false;
+  if (max !== undefined && startIso > max) return false;
+  return true;
+}
+
+function canSelectMonth(year: number, monthIndex: number, min?: string, max?: string): boolean {
+  const month = monthIndex + 1;
+  return canSelectRange(
+    toIsoDate({ day: 1, month, year }),
+    toIsoDate({ day: getDaysInMonth(year, month), month, year }),
+    min,
+    max,
+  );
+}
+
+function canSelectYear(year: number, min?: string, max?: string): boolean {
+  return canSelectRange(
+    toIsoDate({ day: 1, month: 1, year }),
+    toIsoDate({ day: 31, month: 12, year }),
+    min,
+    max,
+  );
+}
+
+function canSelectYearPage(yearPageStart: number, min?: string, max?: string): boolean {
+  return Array.from({ length: 12 }, (_, index) => yearPageStart + index).some((year) =>
+    canSelectYear(year, min, max),
+  );
 }
 
 function buildCalendarDays(visibleMonth: Date): Array<{ inCurrentMonth: boolean; iso: string }> {
@@ -268,16 +412,24 @@ const DateInputRoot = ({
 }: DateInputRootProps): ReactElement => {
   const [internalValue, setInternalValue] = useState(defaultValue);
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
-  const [draft, setDraft] = useState(value ?? defaultValue);
+  const [draftParts, setDraftParts] = useState(() => toDraftParts(value ?? defaultValue));
   const [visibleMonth, setVisibleMonth] = useState(() => toCalendarMonth(value ?? defaultValue));
   const [viewMode, setViewMode] = useState<DateViewMode>('day');
   const [yearPageStart, setYearPageStart] = useState(() =>
     getYearPageStart(toCalendarMonth(value ?? defaultValue).getFullYear()),
   );
   const rootRef = useRef<HTMLSpanElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const yearInputRef = useRef<HTMLInputElement>(null);
+  const monthInputRef = useRef<HTMLInputElement>(null);
+  const dayInputRef = useRef<HTMLInputElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+  const lastFocusedSegmentRef = useRef<DateSegmentName>('year');
   const inputId = useId();
+  const inputRefs: Record<DateSegmentName, RefObject<HTMLInputElement | null>> = {
+    day: dayInputRef,
+    month: monthInputRef,
+    year: yearInputRef,
+  };
 
   const currentValue = value ?? internalValue;
   const isOpen = open ?? internalOpen;
@@ -291,11 +443,13 @@ const DateInputRoot = ({
 
   const closeCalendar = (shouldRestoreFocus: boolean): void => {
     applyOpenChange(false);
-    setViewMode('day');
 
     if (!shouldRestoreFocus) return;
     window.requestAnimationFrame(() => {
-      inputRef.current?.focus();
+      const segment = lastFocusedSegmentRef.current;
+      const target = inputRefs[segment].current ?? yearInputRef.current;
+      target?.focus();
+      target?.select();
     });
   };
 
@@ -308,9 +462,10 @@ const DateInputRoot = ({
         onValueChange?.(nextValue);
       }
 
-      setDraft(nextValue);
-      setVisibleMonth(toCalendarMonth(nextValue));
-      setYearPageStart(getYearPageStart(toCalendarMonth(nextValue).getFullYear()));
+      setDraftParts(toDraftParts(nextValue));
+      if (nextValue !== '') {
+        setVisibleMonth(toCalendarMonth(nextValue));
+      }
 
       if (options?.shouldClose) {
         closeCalendar(Boolean(options.restoreFocus));
@@ -320,19 +475,34 @@ const DateInputRoot = ({
 
   const commitDraft = useEffectEvent(
     (options?: { restoreFocus?: boolean; shouldClose?: boolean }) => {
-      const normalized = normalizeDraftValue(draft, currentValue, min, max);
+      if (currentValue === '' && hasDraftPartsValue(draftParts)) {
+        const recoverable = parseRecoverableDraft(
+          `${draftParts.year}-${draftParts.month}-${draftParts.day}`,
+        );
+
+        if (!recoverable) {
+          if (options?.shouldClose) {
+            closeCalendar(Boolean(options.restoreFocus));
+          }
+          return;
+        }
+      }
+
+      const normalized = normalizeDraftParts(draftParts, currentValue, min, max);
       commitValue(normalized, options);
     },
   );
 
   const dismissPopup = useEffectEvent((reason: DismissReason) => {
     if (reason === 'escape') {
-      setDraft(currentValue);
+      setDraftParts(toDraftParts(currentValue));
       closeCalendar(true);
       return;
     }
 
-    if (document.activeElement === inputRef.current) {
+    if (
+      DATE_SEGMENT_ORDER.some((segment) => document.activeElement === inputRefs[segment].current)
+    ) {
       closeCalendar(false);
       return;
     }
@@ -340,11 +510,31 @@ const DateInputRoot = ({
     commitDraft({ shouldClose: true });
   });
 
+  const focusSegment = useEffectEvent((segment: DateSegmentName) => {
+    lastFocusedSegmentRef.current = segment;
+    const target = inputRefs[segment].current;
+    if (!target) return;
+
+    window.requestAnimationFrame(() => {
+      target.focus();
+      target.select();
+    });
+  });
+
+  const setActiveSegment = useEffectEvent((segment: DateSegmentName) => {
+    lastFocusedSegmentRef.current = segment;
+  });
+
+  const setDraftPart = useEffectEvent((segment: DateSegmentName, nextDraft: string) => {
+    setDraftParts((prev) => ({
+      ...prev,
+      [segment]: nextDraft,
+    }));
+  });
+
   const shiftVisibleMonth = useEffectEvent((offset: number) => {
     setVisibleMonth((prev) => {
-      const next = new Date(prev.getFullYear(), prev.getMonth() + offset, 1);
-      setYearPageStart(getYearPageStart(next.getFullYear()));
-      return next;
+      return new Date(prev.getFullYear(), prev.getMonth() + offset, 1);
     });
   });
 
@@ -354,10 +544,13 @@ const DateInputRoot = ({
 
   useEffect(() => {
     if (value === undefined) return;
-    setDraft(value);
+    setDraftParts(toDraftParts(value));
     setVisibleMonth(toCalendarMonth(value));
-    setYearPageStart(getYearPageStart(toCalendarMonth(value).getFullYear()));
   }, [value]);
+
+  useEffect(() => {
+    setYearPageStart(getYearPageStart(visibleMonth.getFullYear()));
+  }, [visibleMonth]);
 
   const contextValue: DateInputContextValue = {
     closeCalendar,
@@ -366,16 +559,18 @@ const DateInputRoot = ({
     dense,
     disabled,
     dismissPopup,
-    draft,
+    draftParts,
+    focusSegment,
     inputId,
-    inputRef,
+    inputRefs,
     invalid,
     max,
     min,
     open: isOpen,
     popupRef,
     rootRef,
-    setDraft,
+    setActiveSegment,
+    setDraftPart,
     setOpen: applyOpenChange,
     setViewMode,
     setVisibleMonth,
@@ -415,6 +610,7 @@ export interface DateInputFieldProps
   > {}
 
 const DateInputField = ({
+  'aria-label': ariaLabel,
   autoFocus,
   className,
   id,
@@ -428,58 +624,179 @@ const DateInputField = ({
   ...props
 }: DateInputFieldProps): ReactElement => {
   const context = useDateInputContext('DateInput.Field');
+  const separator = placeholder?.includes('.') ? '.' : '-';
 
   useEffect(() => {
     if (!autoFocus) return;
-    context.inputRef.current?.focus();
-  }, [autoFocus, context.inputRef]);
+    context.focusSegment('year');
+  }, [autoFocus, context.focusSegment]);
 
-  const handleBlur: FocusEventHandler<HTMLInputElement> = (event) => {
-    onBlur?.(event);
-    if (isFocusableTarget(event.relatedTarget, context.rootRef.current, context.popupRef.current)) {
-      return;
-    }
+  const handleBlur =
+    (segment: DateSegmentName): FocusEventHandler<HTMLInputElement> =>
+    (event) => {
+      onBlur?.(event);
 
-    context.commitDraft({ shouldClose: context.open });
+      const nextSegment = findSegmentFromTarget(event.relatedTarget, context.inputRefs);
+      if (nextSegment) {
+        context.commitDraft();
+        if (nextSegment !== segment) {
+          window.requestAnimationFrame(() => {
+            const target = context.inputRefs[nextSegment].current;
+            if (target && document.activeElement === target) {
+              target.select();
+            }
+          });
+        }
+        return;
+      }
+
+      if (isFocusableTarget(event.relatedTarget, context.popupRef.current)) {
+        return;
+      }
+
+      if (isFocusableTarget(event.relatedTarget, context.rootRef.current)) {
+        context.commitDraft();
+        return;
+      }
+
+      context.commitDraft({ shouldClose: context.open });
+    };
+
+  const handleKeyDown =
+    (segment: DateSegmentName) =>
+    (event: KeyboardEvent<HTMLInputElement>): void => {
+      onKeyDown?.(event);
+      if (event.defaultPrevented) return;
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        context.commitDraft({ shouldClose: true });
+        return;
+      }
+
+      if (event.key === 'Escape' && context.open) {
+        event.preventDefault();
+        context.dismissPopup('escape');
+        return;
+      }
+
+      if (event.key === '.' || event.key === '-' || event.key === '/') {
+        const next = getAdjacentSegment(segment, 1);
+        if (!next) return;
+        event.preventDefault();
+        context.focusSegment(next);
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        const previous = getAdjacentSegment(segment, -1);
+        if (!previous) return;
+        event.preventDefault();
+        context.focusSegment(previous);
+        return;
+      }
+
+      if (event.key === 'ArrowRight') {
+        const next = getAdjacentSegment(segment, 1);
+        if (!next) return;
+        event.preventDefault();
+        context.focusSegment(next);
+        return;
+      }
+
+      if (event.key === 'Backspace' && context.draftParts[segment] === '') {
+        const previous = getAdjacentSegment(segment, -1);
+        if (!previous) return;
+        event.preventDefault();
+        context.focusSegment(previous);
+      }
+    };
+
+  const handleChange =
+    (segment: DateSegmentName) =>
+    (event: ChangeEvent<HTMLInputElement>): void => {
+      const nextValue = sanitizeSegmentDraft(event.target.value, segment);
+      context.setDraftPart(segment, nextValue);
+
+      if (nextValue.length !== DATE_SEGMENT_LENGTH[segment]) return;
+
+      const next = getAdjacentSegment(segment, 1);
+      if (next) {
+        context.focusSegment(next);
+      }
+    };
+
+  const handleFocus =
+    (segment: DateSegmentName) =>
+    (event: FocusEvent<HTMLInputElement>): void => {
+      context.setActiveSegment(segment);
+      onFocus?.(event);
+      const input = event.currentTarget;
+      window.requestAnimationFrame(() => {
+        if (!input.isConnected) return;
+        input.select();
+      });
+    };
+
+  const handleMouseUp = (event: ReactMouseEvent<HTMLInputElement>): void => {
+    event.preventDefault();
   };
 
+  const handlePaste =
+    (segment: DateSegmentName) =>
+    (event: ClipboardEvent<HTMLInputElement>): void => {
+      const pasted = event.clipboardData.getData('text');
+      const recoverable = parseRecoverableDraft(pasted);
+      if (!recoverable) return;
+
+      event.preventDefault();
+      const normalized = clampPartsToValidDate(recoverable);
+      context.setDraftPart('year', sanitizeSegmentDraft(String(normalized.year), 'year'));
+      context.setDraftPart('month', sanitizeSegmentDraft(String(normalized.month), 'month'));
+      context.setDraftPart('day', sanitizeSegmentDraft(String(normalized.day), 'day'));
+
+      const next = getAdjacentSegment(segment, 1) ?? 'day';
+      context.focusSegment(next);
+    };
+
   return (
-    <input
-      {...props}
-      ref={context.inputRef}
-      className={joinClasses('hts-date-input__field', className)}
-      disabled={context.disabled}
-      id={id ?? context.inputId}
-      inputMode="numeric"
-      name={name}
-      placeholder={placeholder}
-      required={required}
-      title={title}
-      type="text"
-      value={context.draft}
-      onBlur={handleBlur}
-      onChange={(event) => {
-        context.setDraft(event.target.value);
-      }}
-      onFocus={(event) => {
-        onFocus?.(event);
-      }}
-      onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-        onKeyDown?.(event);
-        if (event.defaultPrevented) return;
-
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          context.commitDraft({ shouldClose: true });
-          return;
-        }
-
-        if (event.key === 'Escape' && context.open) {
-          event.preventDefault();
-          context.dismissPopup('escape');
-        }
-      }}
-    />
+    <fieldset className={joinClasses('hts-date-shell__fields', className)} aria-label={ariaLabel}>
+      {name ? <input name={name} readOnly type="hidden" value={context.value} /> : null}
+      {DATE_SEGMENT_ORDER.map((segment, index) => (
+        <Fragment key={segment}>
+          <input
+            {...props}
+            ref={context.inputRefs[segment]}
+            aria-label={createSegmentLabel(ariaLabel, segment)}
+            className={joinClasses(
+              'hts-date-shell__field',
+              'hts-date-shell__field--part',
+              `hts-date-shell__field--${segment}`,
+            )}
+            disabled={context.disabled}
+            id={segment === 'year' ? (id ?? context.inputId) : undefined}
+            inputMode="numeric"
+            maxLength={DATE_SEGMENT_LENGTH[segment]}
+            placeholder={DATE_SEGMENT_PLACEHOLDER[segment]}
+            required={required}
+            title={title}
+            type="text"
+            value={context.draftParts[segment]}
+            onBlur={handleBlur(segment)}
+            onChange={handleChange(segment)}
+            onFocus={handleFocus(segment)}
+            onKeyDown={handleKeyDown(segment)}
+            onMouseUp={handleMouseUp}
+            onPaste={handlePaste(segment)}
+          />
+          {index < DATE_SEGMENT_ORDER.length - 1 ? (
+            <span className="hts-date-shell__separator" aria-hidden>
+              {separator}
+            </span>
+          ) : null}
+        </Fragment>
+      ))}
+    </fieldset>
   );
 };
 
@@ -513,11 +830,10 @@ const DateInputTrigger = ({
         if (event.defaultPrevented || context.disabled) return;
 
         if (context.open) {
-          context.setOpen(false);
+          context.commitDraft({ shouldClose: true });
           return;
         }
 
-        context.setVisibleMonth(toCalendarMonth(context.value || context.draft));
         context.setViewMode('day');
         context.setOpen(true);
       }}
@@ -543,6 +859,7 @@ const DateInputContent = ({ children, className, style }: DateInputContentProps)
       id={`${context.inputId}-calendar`}
       onDismiss={(reason) => context.dismissPopup(reason)}
       open={context.open}
+      portalMode="body"
       popupRef={context.popupRef}
       role="dialog"
       style={style}
@@ -563,13 +880,43 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
   const year = context.visibleMonth.getFullYear();
   const month = context.visibleMonth.getMonth();
   const calendarDays = buildCalendarDays(context.visibleMonth);
+  const previousMonthDate = new Date(year, month - 1, 1);
+  const nextMonthDate = new Date(year, month + 1, 1);
+  const previousYear = year - 1;
+  const nextYear = year + 1;
+  const previousYearPageStart = context.yearPageStart - 12;
+  const nextYearPageStart = context.yearPageStart + 12;
   const todayIso = toIsoDate({
     day: new Date().getDate(),
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
   });
+  const canGoPrev =
+    context.viewMode === 'year'
+      ? canSelectYearPage(previousYearPageStart, context.min, context.max)
+      : context.viewMode === 'month'
+        ? canSelectYear(previousYear, context.min, context.max)
+        : canSelectMonth(
+            previousMonthDate.getFullYear(),
+            previousMonthDate.getMonth(),
+            context.min,
+            context.max,
+          );
+  const canGoNext =
+    context.viewMode === 'year'
+      ? canSelectYearPage(nextYearPageStart, context.min, context.max)
+      : context.viewMode === 'month'
+        ? canSelectYear(nextYear, context.min, context.max)
+        : canSelectMonth(
+            nextMonthDate.getFullYear(),
+            nextMonthDate.getMonth(),
+            context.min,
+            context.max,
+          );
 
   const handlePrev = (): void => {
+    if (!canGoPrev) return;
+
     if (context.viewMode === 'year') {
       context.shiftYearPage(-12);
       return;
@@ -584,6 +931,8 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
   };
 
   const handleNext = (): void => {
+    if (!canGoNext) return;
+
     if (context.viewMode === 'year') {
       context.shiftYearPage(12);
       return;
@@ -602,6 +951,7 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
       <div className="hts-date-popup__header">
         <button
           className="hts-date-popup__nav"
+          disabled={!canGoPrev}
           type="button"
           aria-label={
             context.viewMode === 'year'
@@ -646,6 +996,7 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
         </div>
         <button
           className="hts-date-popup__nav"
+          disabled={!canGoNext}
           type="button"
           aria-label={
             context.viewMode === 'year'
@@ -663,46 +1014,60 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
       {context.viewMode === 'year' ? (
         <div className="hts-date-popup__year-grid">
           {Array.from({ length: 12 }, (_, index) => context.yearPageStart + index).map(
-            (gridYear) => (
-              <button
-                key={gridYear}
-                aria-label={`${gridYear}년 선택`}
-                className={joinClasses(
-                  'hts-date-popup__month-cell',
-                  gridYear === year && 'hts-date-popup__month-cell--selected',
-                )}
-                type="button"
-                onClick={() => {
-                  context.setVisibleMonth(new Date(gridYear, month, 1));
-                  context.setViewMode('day');
-                }}
-              >
-                {gridYear}
-              </button>
-            ),
+            (gridYear) => {
+              const isDisabled = !canSelectYear(gridYear, context.min, context.max);
+              const isSelected = !isDisabled && gridYear === year;
+
+              return (
+                <button
+                  key={gridYear}
+                  aria-label={`${gridYear}년 선택`}
+                  className={joinClasses(
+                    'hts-date-popup__month-cell',
+                    isSelected && 'hts-date-popup__month-cell--selected',
+                    isDisabled && 'hts-date-popup__day--disabled',
+                  )}
+                  disabled={isDisabled}
+                  type="button"
+                  onClick={() => {
+                    context.setVisibleMonth(new Date(gridYear, month, 1));
+                    context.setViewMode('month');
+                  }}
+                >
+                  {gridYear}
+                </button>
+              );
+            },
           )}
         </div>
       ) : null}
 
       {context.viewMode === 'month' ? (
         <div className="hts-date-popup__month-grid">
-          {Array.from({ length: 12 }, (_, monthIndex) => monthIndex).map((monthIndex) => (
-            <button
-              key={monthIndex}
-              aria-label={`${monthIndex + 1}월 선택`}
-              className={joinClasses(
-                'hts-date-popup__month-cell',
-                monthIndex === month && 'hts-date-popup__month-cell--selected',
-              )}
-              type="button"
-              onClick={() => {
-                context.setVisibleMonth(new Date(year, monthIndex, 1));
-                context.setViewMode('day');
-              }}
-            >
-              {monthIndex + 1}월
-            </button>
-          ))}
+          {Array.from({ length: 12 }, (_, monthIndex) => monthIndex).map((monthIndex) => {
+            const isDisabled = !canSelectMonth(year, monthIndex, context.min, context.max);
+            const isSelected = !isDisabled && monthIndex === month;
+
+            return (
+              <button
+                key={monthIndex}
+                aria-label={`${monthIndex + 1}월 선택`}
+                className={joinClasses(
+                  'hts-date-popup__month-cell',
+                  isSelected && 'hts-date-popup__month-cell--selected',
+                  isDisabled && 'hts-date-popup__day--disabled',
+                )}
+                disabled={isDisabled}
+                type="button"
+                onClick={() => {
+                  context.setVisibleMonth(new Date(year, monthIndex, 1));
+                  context.setViewMode('day');
+                }}
+              >
+                {monthIndex + 1}월
+              </button>
+            );
+          })}
         </div>
       ) : null}
 
@@ -721,7 +1086,7 @@ const DateInputCalendar = ({ className }: DateInputCalendarProps): ReactElement 
               const isDisabled =
                 (context.min !== undefined && dayItem.iso < context.min) ||
                 (context.max !== undefined && dayItem.iso > context.max);
-              const isSelected = context.value === dayItem.iso;
+              const isSelected = !isDisabled && context.value === dayItem.iso;
               const isToday = dayItem.iso === todayIso;
 
               return (

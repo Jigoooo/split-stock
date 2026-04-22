@@ -91,12 +91,18 @@ describe('AddWatchOrderDialog', () => {
       />,
     );
 
-    const input = screen.getByLabelText('유효일');
-    fireEvent.change(input, { target: { value: '2099-2-31' } });
-    fireEvent.blur(input);
+    const yearInput = screen.getByLabelText('유효일 연도');
+    const monthInput = screen.getByLabelText('유효일 월');
+    const dayInput = screen.getByLabelText('유효일 일');
+    fireEvent.change(yearInput, { target: { value: '2099' } });
+    fireEvent.change(monthInput, { target: { value: '2' } });
+    fireEvent.change(dayInput, { target: { value: '31' } });
+    fireEvent.blur(dayInput);
 
     await waitFor(() => {
-      expect(input).toHaveValue('2099-02-28');
+      expect(yearInput).toHaveValue('2099');
+      expect(monthInput).toHaveValue('02');
+      expect(dayInput).toHaveValue('28');
     });
 
     fireEvent.click(screen.getByRole('button', { name: '날짜 선택기 열기' }));
@@ -108,23 +114,25 @@ describe('AddWatchOrderDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '2099-06-18 선택' }));
 
     await waitFor(() => {
-      expect(input).toHaveValue('2099-06-18');
+      expect(yearInput).toHaveValue('2099');
+      expect(monthInput).toHaveValue('06');
+      expect(dayInput).toHaveValue('18');
     });
 
     fireEvent.click(screen.getByRole('button', { name: '추가' }));
 
     await waitFor(() => {
-        expect(createWatchOrder).toHaveBeenCalledWith(
-          expect.objectContaining({
-            accountId: 1,
-            amountKrw: 1000000,
-            expiresAt: Date.parse('2099-06-18T23:59:59'),
-            orderType: 'LIMIT',
-            pdno: '005930',
-            qtyOrAmountMode: 'AMOUNT',
-            targetPrice: 70000,
-          }),
-        );
+      expect(createWatchOrder).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accountId: 1,
+          amountKrw: 1000000,
+          expiresAt: Date.parse('2099-06-18T23:59:59'),
+          orderType: 'LIMIT',
+          pdno: '005930',
+          qtyOrAmountMode: 'AMOUNT',
+          targetPrice: 70000,
+        }),
+      );
     });
   });
 });

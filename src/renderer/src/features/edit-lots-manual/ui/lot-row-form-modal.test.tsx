@@ -13,9 +13,12 @@ describe('LotRowFormModal', () => {
     fireEvent.change(screen.getByLabelText('매입가 (원)'), { target: { value: '70000' } });
     fireEvent.change(screen.getByLabelText('수량'), { target: { value: '3' } });
 
-    const dateInput = screen.getByLabelText('매수일 (YYYY-MM-DD)');
-    fireEvent.change(dateInput, { target: { value: '2026-4-1' } });
-    fireEvent.blur(dateInput);
+    const monthInput = screen.getByLabelText('매수일 월');
+    const dayInput = screen.getByLabelText('매수일 일');
+    fireEvent.change(monthInput, { target: { value: '4' } });
+    fireEvent.blur(monthInput, { relatedTarget: dayInput });
+    fireEvent.change(dayInput, { target: { value: '1' } });
+    fireEvent.blur(dayInput);
 
     fireEvent.click(screen.getByRole('button', { name: '추가' }));
 

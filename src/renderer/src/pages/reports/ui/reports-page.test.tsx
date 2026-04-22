@@ -25,12 +25,15 @@ describe('ReportsPage', () => {
     setFromStr.mockReset();
     render(<ReportsPage />);
 
-    const input = screen.getByLabelText('리포트 시작일');
-    fireEvent.change(input, { target: { value: '2026-4-1' } });
+    const monthInput = screen.getByLabelText('리포트 시작일 월');
+    const dayInput = screen.getByLabelText('리포트 시작일 일');
+    fireEvent.change(monthInput, { target: { value: '4' } });
 
     expect(setFromStr).not.toHaveBeenCalled();
 
-    fireEvent.blur(input);
+    fireEvent.blur(monthInput, { relatedTarget: dayInput });
+    fireEvent.change(dayInput, { target: { value: '1' } });
+    fireEvent.blur(dayInput);
 
     await waitFor(() => {
       expect(setFromStr).toHaveBeenCalledWith('2026-04-01');

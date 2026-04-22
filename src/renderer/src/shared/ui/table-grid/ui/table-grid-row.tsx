@@ -51,6 +51,7 @@ export const TableGridRow = forwardRef<HTMLDivElement, RowProps>(
         data-expanded={expanded || undefined}
         data-flash={flash ?? undefined}
         data-placeholder={placeholder || undefined}
+        data-index={rest['data-index']}
         data-key={rest['data-key']}
         {...interactiveProps}
         className={[

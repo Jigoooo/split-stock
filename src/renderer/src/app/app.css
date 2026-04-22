@@ -300,16 +300,22 @@ body {
     background-color var(--motion-fast) var(--motion-crisp);
 }
 
-.hts-input,
-.hts-select {
+.hts-input {
   padding: 0.45rem 0.7rem;
 }
 
-.hts-select,
+.hts-select {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 0.45rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.7rem;
+}
+
 .hts-date-shell {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.3rem;
 }
 
 .hts-select {
@@ -328,15 +334,18 @@ body {
 .hts-select__label-wrap {
   flex: 1;
   min-width: 0;
-  display: inline-flex;
+  min-height: 1.6rem;
+  display: flex;
   align-items: center;
 }
 
 .hts-select__label {
+  display: block;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.25;
 }
 
 .hts-select__label--placeholder {
@@ -347,18 +356,26 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.4rem;
-  height: 1.4rem;
-  color: var(--fg-3);
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 0.35rem;
+  color: var(--fg-2);
+  background: var(--bg-2);
   flex-shrink: 0;
   transition:
+    background-color var(--motion-fast) var(--motion-crisp),
     color var(--motion-fast) var(--motion-crisp),
     transform var(--motion-fast) var(--motion-crisp);
 }
 
-.hts-select:hover:not(:disabled) {
+.hts-select[data-state="closed"]:hover:not(:disabled) {
   border-color: var(--border);
   background: var(--bg);
+}
+
+.hts-select[data-state="closed"]:hover:not(:disabled) .hts-select__icon {
+  color: var(--fg);
+  background: var(--surface-hover);
 }
 
 .hts-select[data-state="open"] {
@@ -369,31 +386,69 @@ body {
 
 .hts-select[data-state="open"] .hts-select__icon {
   color: var(--accent);
+  background: var(--accent-tint-8);
   transform: rotate(180deg);
 }
 
 .hts-date-shell {
-  padding: 0 0.4rem 0 0.7rem;
+  padding: 0 0.25rem 0 0.45rem;
+}
+
+.hts-date-shell__fields {
+  display: inline-flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 0.12rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .hts-date-shell__field {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   min-height: auto;
   padding: 0;
+  appearance: none;
   border: none;
   background: transparent;
   box-shadow: none;
   color: inherit;
   font: inherit;
+  line-height: inherit;
+}
+
+.hts-date-shell__field--part {
+  flex: none;
+  text-align: center;
+}
+
+.hts-date-shell__field--year {
+  width: 4.4ch;
+}
+
+.hts-date-shell__field--month,
+.hts-date-shell__field--day {
+  width: 2.4ch;
 }
 
 .hts-date-shell__field::placeholder {
   color: var(--fg-3);
+  font-size: 0.84em;
+  letter-spacing: -0.02em;
 }
 
 .hts-date-shell__field:focus {
   outline: none;
+  color: var(--accent-active);
+}
+
+.hts-date-shell__separator {
+  color: var(--fg-3);
+  line-height: 1;
+  user-select: none;
 }
 
 .hts-date-shell__trigger {
@@ -403,6 +458,7 @@ body {
   width: 2.4rem;
   min-width: 2.4rem;
   align-self: stretch;
+  padding: 0;
   border: none;
   border-radius: 0.25rem;
   background: transparent;
@@ -452,9 +508,17 @@ body {
   font-size: 1.1rem;
 }
 
-.hts-input--dense,
-.hts-select--dense {
+.hts-input--dense {
   padding: 0.35rem 0.55rem;
+}
+
+.hts-select--dense {
+  padding: 0.2rem 0.3rem 0.2rem 0.55rem;
+}
+
+.hts-select--dense .hts-select__icon {
+  width: 1.65rem;
+  height: 1.65rem;
 }
 
 .hts-input--num {
@@ -517,9 +581,13 @@ body {
 }
 
 .hts-control-popup--select {
+  display: grid;
+  align-content: start;
+  gap: 0.18rem;
   max-height: min(28rem, calc(100vh - 1.6rem));
   overflow: auto;
-  padding: 0.3rem;
+  padding: 0.35rem;
+  scroll-padding: 0.35rem;
   background: var(--bg);
 }
 
@@ -529,13 +597,14 @@ body {
 }
 
 .hts-control-option {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1.4rem minmax(0, 1fr);
   align-items: center;
-  gap: 0.55rem;
+  column-gap: 0.55rem;
   width: 100%;
   min-height: 2.8rem;
-  padding: 0.45rem 0.55rem;
-  border: none;
+  padding: 0.45rem 0.6rem;
+  border: 0.1rem solid transparent;
   border-radius: 0.35rem;
   background: transparent;
   cursor: pointer;
@@ -548,7 +617,7 @@ body {
 
 .hts-control-option--dense {
   min-height: 2.6rem;
-  padding: 0.35rem 0.55rem;
+  padding: 0.3rem 0.55rem;
   font-size: 1.1rem;
 }
 
@@ -557,21 +626,26 @@ body {
 }
 
 .hts-control-option--active {
+  border-color: var(--accent-tint-12);
   background: var(--accent-tint-6);
 }
 
 .hts-control-option--selected {
+  border-color: var(--accent-tint-18);
   background: var(--accent-tint-8);
   color: var(--accent-active);
-  font-weight: 500;
 }
 
 .hts-control-option__label {
+  display: flex;
+  align-items: center;
   flex: 1;
   min-width: 0;
+  min-height: 1.4rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.25;
 }
 
 .hts-control-option__check {
@@ -692,6 +766,14 @@ body {
   cursor: not-allowed;
 }
 
+.hts-date-popup__nav:disabled,
+.hts-date-popup__selector:disabled,
+.hts-date-popup__month-cell:disabled,
+.hts-date-popup__day:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .hts-date-popup__month-grid,
 .hts-date-popup__year-grid {
   display: grid;
@@ -713,10 +795,10 @@ body {
   font-weight: 700;
 }
 
-.hts-date-popup__nav:hover,
-.hts-date-popup__selector:hover,
-.hts-date-popup__month-cell:hover,
-.hts-date-popup__day:hover {
+.hts-date-popup__nav:hover:not(:disabled),
+.hts-date-popup__selector:hover:not(:disabled),
+.hts-date-popup__month-cell:hover:not(:disabled),
+.hts-date-popup__day:hover:not(:disabled) {
   background: var(--surface-hover);
 }
 
@@ -1131,6 +1213,60 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+.order-ticket-form__content {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 36rem;
+}
+
+.order-ticket-form__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.order-ticket-form__meta .chip,
+.order-ticket-form__meta .muted {
+  font-size: 0.9rem;
+}
+
+.order-ticket-form__field {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.order-ticket-form__label {
+  color: var(--fg-2);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.order-ticket-form__hint {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  row-gap: 0.2rem;
+  font-size: 0.95rem;
+}
+
+.order-ticket-form__actions {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+}
+
+.order-ticket-form__summary {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+
+.order-ticket-form__summary-alert {
+  line-height: 1.4;
 }
 
 /* ===== Dashboard ===== */

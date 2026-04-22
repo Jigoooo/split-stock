@@ -114,6 +114,21 @@ describe('PositionsGrid', () => {
     expect(onSelect).toHaveBeenCalledWith('005930');
   });
 
+  it('가상화 측정 row에 data-index를 노출한다', () => {
+    mockUsePositionsGrid.mockReturnValue({
+      isPending: false,
+      error: null,
+      rows: [makeRow('005930', '삼성전자')],
+      gridMaxStages: 2,
+    });
+
+    const { container } = render(<PositionsGrid accountId={1} />);
+    expect(container.querySelector('[data-position-row="005930"]')).toHaveAttribute(
+      'data-index',
+      '0',
+    );
+  });
+
   it('차트 아이콘 클릭 → openPopout("trade") + assignStock 호출, onSelect 미호출', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,

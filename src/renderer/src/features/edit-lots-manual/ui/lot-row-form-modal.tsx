@@ -109,6 +109,7 @@ export const LotRowFormModal = (props: LotRowFormModalProps): ReactElement => {
               id="lot-boughtat"
               value={boughtAt}
               onChange={(e) => setBoughtAt(e.target.value)}
+              aria-label="매수일"
               placeholder="2026-04-01"
               dense
             />

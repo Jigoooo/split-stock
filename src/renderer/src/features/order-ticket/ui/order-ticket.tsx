@@ -208,17 +208,13 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
           : selection.pdno}
       </div>
       <div className="order-ticket-form__scroll">
-        <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', maxWidth: 360 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span className="muted" style={{ fontSize: '0.9rem' }}>
-              매수 차수
-            </span>
-            <span className="chip" style={{ fontSize: '0.9rem' }}>
-              {nextNth}차
-            </span>
+        <div className="panel__body order-ticket-form__content">
+          <div className="order-ticket-form__meta">
+            <span className="muted">매수 차수</span>
+            <span className="chip">{nextNth}차</span>
           </div>
-          <label htmlFor="order-division" style={{ display: 'grid', gap: '0.25rem' }}>
-            <span className="muted">구분</span>
+          <div className="order-ticket-form__field">
+            <span className="order-ticket-form__label">구분</span>
             <Select
               id="order-division"
               value={division}
@@ -229,9 +225,9 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
               <option value="LIMIT">지정가</option>
               <option value="MARKET">시장가</option>
             </Select>
-          </label>
-          <label htmlFor="order-qty" style={{ display: 'grid', gap: '0.25rem' }}>
-            <span className="muted">수량</span>
+          </div>
+          <label className="order-ticket-form__field" htmlFor="order-qty">
+            <span className="order-ticket-form__label">수량</span>
             <NumberInput
               id="order-qty"
               value={qtyStr}
@@ -240,16 +236,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
               dense
               aria-invalid={overBuyCap || overSellCap}
             />
-            <span
-              className="muted"
-              style={{
-                fontSize: '0.95rem',
-                display: 'flex',
-                gap: '0.6rem',
-                flexWrap: 'wrap',
-                rowGap: '0.2rem',
-              }}
-            >
+            <span className="muted order-ticket-form__hint">
               <span>
                 매수가능 <span className="num">{thousandSeparator(deposit)}원</span>
                 {maxBuyQty !== null ? (
@@ -269,8 +256,8 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
               </span>
             </span>
           </label>
-          <label htmlFor="order-price" style={{ display: 'grid', gap: '0.25rem' }}>
-            <span className="muted">가격</span>
+          <label className="order-ticket-form__field" htmlFor="order-price">
+            <span className="order-ticket-form__label">가격</span>
             <NumberInput
               id="order-price"
               value={division === 'MARKET' ? '' : priceStr}
@@ -282,10 +269,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
             />
           </label>
         </div>
-        <div
-          className="panel__body"
-          style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
-        >
+        <div className="panel__body order-ticket-form__actions">
           <Button
             disabled={!canBuy}
             variant="danger"
@@ -325,19 +309,19 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
             <kbd className="kbd">F4</kbd>
           </Button>
         </div>
-        <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
+        <div className="panel__body muted order-ticket-form__summary">
           현재 선택: {side} · {division === 'MARKET' ? '시장가' : '지정가'} ·{' '}
           {qtyStr ? thousandSeparator(qtyStr) : '0'}주
           {division === 'LIMIT' && priceStr ? ` · ${thousandSeparator(priceStr)}원` : ''}
           {oneClick && !isProd ? ' · 원터치 ON' : ''}
           {overBuyCap ? (
-            <div className="num-down">
+            <div className="order-ticket-form__summary-alert num-down">
               매수 불가 — 예수금 부족 (최대{' '}
               {maxBuyQty === null ? '—' : thousandSeparator(maxBuyQty)}주)
             </div>
           ) : null}
           {overSellCap ? (
-            <div className="num-down">
+            <div className="order-ticket-form__summary-alert num-down">
               매도 불가 — 보유 수량 초과 (보유 {thousandSeparator(holdingQty)}주)
             </div>
           ) : null}
