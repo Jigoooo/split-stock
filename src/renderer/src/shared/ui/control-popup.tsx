@@ -7,6 +7,7 @@ import {
   useEffect,
   useEffectEvent,
   useLayoutEffect,
+  useRef,
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -27,6 +28,7 @@ interface ControlPopupProps {
   role?: string | undefined;
   style?: CSSProperties | undefined;
   widthMode?: WidthMode | undefined;
+  animate?: boolean | undefined;
   minWidth?: number | undefined;
   offset?: number | undefined;
   portalMode?: PortalMode | undefined;
@@ -46,12 +48,14 @@ export function ControlPopup({
   role,
   style,
   widthMode = 'anchor',
+  animate = true,
   minWidth,
   offset = 6,
   portalMode = 'overlay',
   zIndex = 1080,
 }: ControlPopupProps): ReactElement | null {
   const shouldReduceMotion = useReducedMotion();
+  const scheduledFrameRef = useRef<number | null>(null);
   const [placement, setPlacement] = useState<{ align: PopupAlign; side: PopupSide }>({
     align: 'start',
     side: 'bottom',
@@ -105,6 +109,9 @@ export function ControlPopup({
       minWidth: widthMode === 'content' ? nextWidth : undefined,
       position: 'fixed',
       top: Math.max(VIEWPORT_PADDING, top),
+      transformOrigin: `${align === 'start' ? 'left' : 'right'} ${
+        side === 'bottom' ? 'top' : 'bottom'
+      }`,
       visibility: popupHeight > 0 ? 'visible' : 'hidden',
       width: widthMode === 'anchor' ? nextWidth : undefined,
       zIndex,
@@ -130,23 +137,31 @@ export function ControlPopup({
     setPopupStyle(nextStyle);
   });
 
+  const schedulePositionUpdate = useEffectEvent(() => {
+    if (scheduledFrameRef.current !== null) return;
+
+    scheduledFrameRef.current = window.requestAnimationFrame(() => {
+      scheduledFrameRef.current = null;
+      updatePosition();
+    });
+  });
+
   useLayoutEffect(() => {
     if (!open || !portalTarget) return;
     updatePosition();
-
-    const frame = window.requestAnimationFrame(() => {
-      updatePosition();
-    });
+    schedulePositionUpdate();
 
     const onWindowChange = (): void => {
-      updatePosition();
+      schedulePositionUpdate();
     };
 
     window.addEventListener('resize', onWindowChange);
     window.addEventListener('scroll', onWindowChange, true);
 
     const resizeObserver =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => updatePosition());
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver(() => schedulePositionUpdate());
     if (resizeObserver) {
       if (anchorRef.current) {
         resizeObserver.observe(anchorRef.current);
@@ -157,7 +172,10 @@ export function ControlPopup({
     }
 
     return () => {
-      window.cancelAnimationFrame(frame);
+      if (scheduledFrameRef.current !== null) {
+        window.cancelAnimationFrame(scheduledFrameRef.current);
+        scheduledFrameRef.current = null;
+      }
       window.removeEventListener('resize', onWindowChange);
       window.removeEventListener('scroll', onWindowChange, true);
       resizeObserver?.disconnect();
@@ -191,19 +209,20 @@ export function ControlPopup({
 
   if (!portalTarget) return null;
 
-  const motionProps = shouldReduceMotion
-    ? {
-        animate: { opacity: 1 },
-        exit: { opacity: 0 },
-        initial: { opacity: 0 },
-        transition: { duration: 0 },
-      }
-    : {
-        animate: { opacity: 1, scale: 1, y: 0 },
-        exit: { opacity: 0, scale: 0.98, y: -4 },
-        initial: { opacity: 0, scale: 0.98, y: -4 },
-        transition: { duration: 0.14, ease: [0.2, 0, 0, 1] as [number, number, number, number] },
-      };
+  const motionProps =
+    !animate || shouldReduceMotion
+      ? {
+          animate: { opacity: 1 },
+          exit: { opacity: 0 },
+          initial: { opacity: 0 },
+          transition: { duration: 0 },
+        }
+      : {
+          animate: { opacity: 1, scale: 1, y: 0 },
+          exit: { opacity: 0, scale: 0.98, y: -4 },
+          initial: { opacity: 0, scale: 0.98, y: -4 },
+          transition: { duration: 0.14, ease: [0.2, 0, 0, 1] as [number, number, number, number] },
+        };
 
   return createPortal(
     <AnimatePresence>

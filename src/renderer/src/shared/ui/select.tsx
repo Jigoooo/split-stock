@@ -1,3 +1,4 @@
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Check, ChevronDown } from 'lucide-react';
 import type {
   ButtonHTMLAttributes,
@@ -15,6 +16,7 @@ import {
   createContext,
   Fragment,
   isValidElement,
+  memo,
   useContext,
   useEffect,
   useEffectEvent,
@@ -31,11 +33,19 @@ interface SelectOptionMeta {
   value: string;
 }
 
+interface SelectOptionLookup {
+  byValue: Map<string, SelectOptionMeta>;
+  enabledIndexByValue: Map<string, number>;
+  enabledValues: string[];
+  indexByValue: Map<string, number>;
+}
+
 interface SelectContextValue {
   activeValue: string;
   dense: boolean;
   disabled: boolean;
   listboxId: string;
+  optionLookup: SelectOptionLookup;
   optionSnapshot?: SelectOptionMeta[] | undefined;
   open: boolean;
   options: SelectOptionMeta[];
@@ -53,6 +63,10 @@ interface SelectContextValue {
 }
 
 const SelectContext = createContext<SelectContextValue | null>(null);
+const SELECT_OPTION_GAP_PX = 2;
+const SELECT_OPTION_HEIGHT_PX = 28;
+const SELECT_OPTION_DENSE_HEIGHT_PX = 26;
+const SELECT_VIRTUALIZE_THRESHOLD = 80;
 
 function useSelectContext(component: string): SelectContextValue {
   const context = useContext(SelectContext);
@@ -138,29 +152,67 @@ function extractSelectOptions(children: ReactNode): Array<{
 }
 
 function findSelectableOption(
-  options: SelectOptionMeta[],
+  lookup: SelectOptionLookup,
   currentValue: string,
   direction: 1 | -1,
 ): SelectOptionMeta | null {
-  const enabledOptions = options.filter((option) => !option.disabled);
-  if (enabledOptions.length === 0) return null;
+  if (lookup.enabledValues.length === 0) return null;
 
-  const currentIndex = enabledOptions.findIndex((option) => option.value === currentValue);
-  if (currentIndex === -1) {
-    return direction === 1 ? (enabledOptions[0] ?? null) : (enabledOptions.at(-1) ?? null);
+  const currentIndex = lookup.enabledIndexByValue.get(currentValue);
+  if (currentIndex === undefined) {
+    const fallbackValue = direction === 1 ? lookup.enabledValues[0] : lookup.enabledValues.at(-1);
+    return fallbackValue ? (lookup.byValue.get(fallbackValue) ?? null) : null;
   }
 
-  const nextIndex = Math.min(enabledOptions.length - 1, Math.max(0, currentIndex + direction));
-  return enabledOptions[nextIndex] ?? null;
+  const nextIndex = Math.min(
+    lookup.enabledValues.length - 1,
+    Math.max(0, currentIndex + direction),
+  );
+  const nextValue = lookup.enabledValues[nextIndex];
+  return nextValue ? (lookup.byValue.get(nextValue) ?? null) : null;
 }
 
 function findBoundaryOption(
-  options: SelectOptionMeta[],
+  lookup: SelectOptionLookup,
   boundary: 'first' | 'last',
 ): SelectOptionMeta | null {
-  const enabledOptions = options.filter((option) => !option.disabled);
-  if (enabledOptions.length === 0) return null;
-  return boundary === 'first' ? (enabledOptions[0] ?? null) : (enabledOptions.at(-1) ?? null);
+  const value = boundary === 'first' ? lookup.enabledValues[0] : lookup.enabledValues.at(-1);
+  return value ? (lookup.byValue.get(value) ?? null) : null;
+}
+
+function isSameOptionMeta(left: SelectOptionMeta, right: SelectOptionMeta): boolean {
+  return (
+    left.disabled === right.disabled &&
+    left.id === right.id &&
+    left.label === right.label &&
+    left.value === right.value
+  );
+}
+
+function buildOptionLookup(options: SelectOptionMeta[]): SelectOptionLookup {
+  const byValue = new Map<string, SelectOptionMeta>();
+  const enabledIndexByValue = new Map<string, number>();
+  const enabledValues: string[] = [];
+  const indexByValue = new Map<string, number>();
+
+  options.forEach((option, index) => {
+    byValue.set(option.value, option);
+    indexByValue.set(option.value, index);
+    if (option.disabled) return;
+    enabledIndexByValue.set(option.value, enabledValues.length);
+    enabledValues.push(option.value);
+  });
+
+  return {
+    byValue,
+    enabledIndexByValue,
+    enabledValues,
+    indexByValue,
+  };
+}
+
+function getSelectOptionEstimateSize(dense: boolean): number {
+  return (dense ? SELECT_OPTION_DENSE_HEIGHT_PX : SELECT_OPTION_HEIGHT_PX) + SELECT_OPTION_GAP_PX;
 }
 
 function joinClasses(...parts: Array<string | false | null | undefined>): string {
@@ -197,15 +249,18 @@ const SelectRoot = ({
   const [internalValue, setInternalValue] = useState(defaultValue);
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const [activeValue, setActiveValue] = useState(defaultValue);
-  const [options, setOptions] = useState<SelectOptionMeta[]>(optionSnapshot ?? []);
+  const [options, setOptions] = useState<SelectOptionMeta[]>([]);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxId = useId();
 
   const currentValue = value ?? internalValue;
   const isOpen = open ?? internalOpen;
-  // 닫힌 상태에서는 live option registry 대신 snapshot을 사용해
-  // parent rerender마다 option state를 다시 쓰는 루프를 피한다.
-  const resolvedOptions = isOpen ? options : (optionSnapshot ?? options);
+  // adapter path에서는 snapshot을 source of truth로 사용해
+  // 첫 오픈 시 option registration 비용을 피한다.
+  const resolvedOptions = optionSnapshot ?? options;
+  const optionLookup = buildOptionLookup(resolvedOptions);
+  const usesVirtualizedSnapshot =
+    optionSnapshot !== undefined && resolvedOptions.length >= SELECT_VIRTUALIZE_THRESHOLD;
 
   const applyOpenChange = (nextOpen: boolean): void => {
     if (open === undefined) {
@@ -231,12 +286,7 @@ const SelectRoot = ({
       }
 
       const current = prev[existingIndex];
-      if (
-        current?.disabled === meta.disabled &&
-        current.id === meta.id &&
-        current.label === meta.label &&
-        current.value === meta.value
-      ) {
+      if (current && isSameOptionMeta(current, meta)) {
         return prev;
       }
 
@@ -251,27 +301,29 @@ const SelectRoot = ({
   });
 
   const syncActiveToCurrent = useEffectEvent(() => {
-    const currentOption = resolvedOptions.find(
-      (option) => option.value === currentValue && !option.disabled,
-    );
+    const currentOption = optionLookup.byValue.get(currentValue);
     if (currentOption) {
-      setActiveValue(currentOption.value);
+      setActiveValue(
+        currentOption.disabled
+          ? (findBoundaryOption(optionLookup, 'first')?.value ?? '')
+          : currentOption.value,
+      );
       return;
     }
 
-    const firstEnabled = findBoundaryOption(resolvedOptions, 'first');
+    const firstEnabled = findBoundaryOption(optionLookup, 'first');
     setActiveValue(firstEnabled?.value ?? '');
   });
 
   const stepActiveValue = useEffectEvent((direction: 1 | -1) => {
-    const next = findSelectableOption(resolvedOptions, activeValue, direction);
+    const next = findSelectableOption(optionLookup, activeValue, direction);
     if (next) {
       setActiveValue(next.value);
     }
   });
 
   const syncActiveToBoundary = useEffectEvent((boundary: 'first' | 'last') => {
-    const next = findBoundaryOption(resolvedOptions, boundary);
+    const next = findBoundaryOption(optionLookup, boundary);
     if (next) {
       setActiveValue(next.value);
     }
@@ -299,22 +351,23 @@ const SelectRoot = ({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen || activeValue === '') return;
+    if (!isOpen || activeValue === '' || usesVirtualizedSnapshot) return;
 
-    const activeOption = resolvedOptions.find((option) => option.value === activeValue);
+    const activeOption = optionLookup.byValue.get(activeValue);
     if (!activeOption) return;
 
     window.requestAnimationFrame(() => {
       const optionElement = document.getElementById(activeOption.id);
       optionElement?.scrollIntoView?.({ block: 'nearest' });
     });
-  }, [activeValue, isOpen, resolvedOptions]);
+  }, [activeValue, isOpen, optionLookup, usesVirtualizedSnapshot]);
 
   const contextValue: SelectContextValue = {
     activeValue,
     dense,
     disabled,
     listboxId,
+    optionLookup,
     optionSnapshot,
     open: isOpen,
     options: resolvedOptions,
@@ -369,7 +422,7 @@ const SelectTrigger = ({
   ...props
 }: SelectTriggerProps): ReactElement => {
   const context = useSelectContext('Select.Trigger');
-  const activeOptionId = context.options.find((option) => option.value === context.activeValue)?.id;
+  const activeOptionId = context.optionLookup.byValue.get(context.activeValue)?.id;
   const isDisabled = context.disabled || disabled;
 
   useEffect(() => {
@@ -488,7 +541,7 @@ export interface SelectValueProps {
 
 const SelectValue = ({ placeholder = '선택하세요' }: SelectValueProps): ReactElement => {
   const context = useSelectContext('Select.Value');
-  const selectedOption = context.options.find((option) => option.value === context.value);
+  const selectedOption = context.optionLookup.byValue.get(context.value);
 
   if (!selectedOption) {
     return <span className="hts-select__label hts-select__label--placeholder">{placeholder}</span>;
@@ -498,7 +551,7 @@ const SelectValue = ({ placeholder = '선택하세요' }: SelectValueProps): Rea
 };
 
 export interface SelectContentProps {
-  children: ReactNode;
+  children?: ReactNode | undefined;
   className?: string | undefined;
   style?: CSSProperties | undefined;
 }
@@ -512,11 +565,15 @@ export interface SelectOptionProps {
 const SelectOption = ({ children, disabled = false, value }: SelectOptionProps): ReactElement => {
   const context = useSelectContext('Select.Option');
   const registerOption = context.registerOption;
-  const shouldPersistOnUnmount = context.optionSnapshot !== undefined;
   const unregisterOption = context.unregisterOption;
   const registerOptionRef = useRef(registerOption);
   const unregisterOptionRef = useRef(unregisterOption);
-  const optionId = useId();
+  const runtimeOptionId = useId();
+  const snapshotOption =
+    context.optionSnapshot === undefined
+      ? undefined
+      : (context.optionLookup.byValue.get(value) ?? undefined);
+  const optionId = snapshotOption?.id ?? runtimeOptionId;
   const isActive = context.activeValue === value;
   const isSelected = context.value === value;
 
@@ -524,6 +581,8 @@ const SelectOption = ({ children, disabled = false, value }: SelectOptionProps):
   unregisterOptionRef.current = unregisterOption;
 
   useEffect(() => {
+    if (snapshotOption) return;
+
     registerOptionRef.current({
       disabled,
       id: optionId,
@@ -532,11 +591,9 @@ const SelectOption = ({ children, disabled = false, value }: SelectOptionProps):
     });
 
     return () => {
-      if (!shouldPersistOnUnmount) {
-        unregisterOptionRef.current(value);
-      }
+      unregisterOptionRef.current(value);
     };
-  }, [children, disabled, optionId, shouldPersistOnUnmount, value]);
+  }, [children, disabled, optionId, snapshotOption, value]);
 
   return (
     <button
@@ -580,6 +637,73 @@ const SelectOption = ({ children, disabled = false, value }: SelectOptionProps):
   );
 };
 
+interface SelectOptionRowProps {
+  dense: boolean;
+  disabled: boolean;
+  id: string;
+  isActive: boolean;
+  isSelected: boolean;
+  label: ReactNode;
+  onActivate: (value: string) => void;
+  onSelect: (value: string, shouldRestoreFocus: boolean) => void;
+  value: string;
+}
+
+const SelectOptionRow = memo(
+  ({
+    dense,
+    disabled,
+    id,
+    isActive,
+    isSelected,
+    label,
+    onActivate,
+    onSelect,
+    value,
+  }: SelectOptionRowProps): ReactElement => (
+    <button
+      id={id}
+      aria-disabled={disabled}
+      aria-selected={isSelected}
+      className={joinClasses(
+        'hts-control-option',
+        dense && 'hts-control-option--dense',
+        isActive && 'hts-control-option--active',
+        isSelected && 'hts-control-option--selected',
+        disabled && 'hts-control-option--disabled',
+      )}
+      data-select-option
+      role="option"
+      tabIndex={-1}
+      type="button"
+      onClick={() => {
+        if (disabled) return;
+        onSelect(value, true);
+      }}
+      onMouseDown={(event) => {
+        event.preventDefault();
+      }}
+      onMouseEnter={() => {
+        if (disabled) return;
+        onActivate(value);
+      }}
+    >
+      <span
+        className={joinClasses(
+          'hts-control-option__check',
+          !isSelected && 'hts-control-option__check--hidden',
+        )}
+        aria-hidden
+      >
+        <Check size={13} />
+      </span>
+      <span className="hts-control-option__label">{label}</span>
+    </button>
+  ),
+);
+
+SelectOptionRow.displayName = 'SelectOptionRow';
+
 function SelectContentWithPopupRef({
   children,
   className,
@@ -587,6 +711,86 @@ function SelectContentWithPopupRef({
 }: SelectContentProps): ReactElement {
   const context = useSelectContext('Select.Content');
   const popupRef = useRef<HTMLDivElement>(null);
+  const snapshotOptions = context.optionSnapshot;
+  const shouldVirtualize =
+    snapshotOptions !== undefined && snapshotOptions.length >= SELECT_VIRTUALIZE_THRESHOLD;
+  const virtualizer = useVirtualizer({
+    count: shouldVirtualize ? snapshotOptions.length : 0,
+    estimateSize: () => getSelectOptionEstimateSize(context.dense),
+    getScrollElement: () => popupRef.current,
+    overscan: 8,
+  });
+  const activeIndex =
+    snapshotOptions === undefined
+      ? -1
+      : (context.optionLookup.indexByValue.get(context.activeValue) ?? -1);
+  const popupStyle: CSSProperties = {
+    maxWidth: 'min(32rem, calc(100vw - 1.6rem))',
+  };
+
+  useEffect(() => {
+    if (!context.open || !shouldVirtualize || activeIndex < 0) return;
+    virtualizer.scrollToIndex(activeIndex, { align: 'auto' });
+  }, [activeIndex, context.open, shouldVirtualize, virtualizer]);
+
+  const renderedOptions =
+    snapshotOptions === undefined ? (
+      children
+    ) : shouldVirtualize ? (
+      <div
+        data-select-virtualized
+        style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}
+      >
+        {virtualizer.getVirtualItems().map((virtualItem) => {
+          const option = snapshotOptions[virtualItem.index];
+          if (!option) return null;
+
+          return (
+            <div
+              key={virtualItem.key}
+              ref={virtualizer.measureElement}
+              data-index={virtualItem.index}
+              style={{
+                boxSizing: 'border-box',
+                left: 0,
+                paddingBottom: `${SELECT_OPTION_GAP_PX / 10}rem`,
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+            >
+              <SelectOptionRow
+                dense={context.dense}
+                disabled={option.disabled}
+                id={option.id}
+                isActive={context.activeValue === option.value}
+                isSelected={context.value === option.value}
+                label={option.label}
+                onActivate={context.setActiveValue}
+                onSelect={context.selectValue}
+                value={option.value}
+              />
+            </div>
+          );
+        })}
+      </div>
+    ) : (
+      snapshotOptions.map((option) => (
+        <SelectOptionRow
+          key={option.id}
+          dense={context.dense}
+          disabled={option.disabled}
+          id={option.id}
+          isActive={context.activeValue === option.value}
+          isSelected={context.value === option.value}
+          label={option.label}
+          onActivate={context.setActiveValue}
+          onSelect={context.selectValue}
+          value={option.value}
+        />
+      ))
+    );
 
   return (
     <ControlPopup
@@ -603,10 +807,11 @@ function SelectContentWithPopupRef({
       open={context.open}
       popupRef={popupRef}
       role="listbox"
-      style={style}
-      widthMode="anchor"
+      style={{ ...popupStyle, ...(style ?? {}) }}
+      animate={false}
+      widthMode="content"
     >
-      {children}
+      {renderedOptions}
     </ControlPopup>
   );
 }
@@ -683,17 +888,7 @@ const SelectAdapter = (props: SelectProps): ReactElement => {
       >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContentWithPopupRef>
-        {options.map((option) => (
-          <SelectOption
-            key={`${option.value}-${String(option.label)}`}
-            disabled={option.disabled}
-            value={option.value}
-          >
-            {option.label}
-          </SelectOption>
-        ))}
-      </SelectContentWithPopupRef>
+      <SelectContentWithPopupRef />
     </SelectRoot>
   );
 };
