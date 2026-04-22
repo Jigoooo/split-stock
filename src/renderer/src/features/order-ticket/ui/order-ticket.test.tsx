@@ -178,6 +178,22 @@ describe('OrderTicket', () => {
     expect(screen.getByText('3차')).toBeInTheDocument();
   });
 
+  it('현재 선택 요약은 버튼 누르기 전 방향을 미리 보여주지 않는다', () => {
+    render(
+      wrap(
+        <OrderTicket
+          selection={{ pdno: '005930', name: '삼성전자' }}
+          isProd={false}
+          oneClick={false}
+        />,
+      ),
+    );
+
+    expect(screen.getByText(/현재 선택: 지정가 · 1주/)).toBeInTheDocument();
+    expect(screen.queryByText(/현재 선택: 매도/)).toBeNull();
+    expect(screen.queryByText(/현재 선택: BUY/)).toBeNull();
+  });
+
   it('시장가 선택 시 가격 입력 disabled', () => {
     render(
       wrap(

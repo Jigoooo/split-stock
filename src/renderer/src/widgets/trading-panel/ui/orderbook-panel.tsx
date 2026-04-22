@@ -15,13 +15,6 @@ export interface OrderbookPanelProps {
 }
 
 const RoutingIndicator = ({ mode }: { mode: WsRoutingMode }): ReactElement | null => {
-  if (mode === 'WS') {
-    return (
-      <span className="chip chip--up" data-testid="orderbook-routing-ws">
-        실시간
-      </span>
-    );
-  }
   if (mode === 'POLLING') {
     return (
       <span className="chip chip--down" data-testid="orderbook-routing-polling">
@@ -212,7 +205,7 @@ export const OrderbookPanel = (props: OrderbookPanelProps): ReactElement => {
           총 매도 {thousandSeparator(orderbook.totalAskQty)} · 총 매수{' '}
           {thousandSeparator(orderbook.totalBidQty)}
         </span>
-        {routingMode ? <RoutingIndicator mode={routingMode} /> : null}
+        {routingMode === 'POLLING' ? <RoutingIndicator mode={routingMode} /> : null}
       </div>
     </div>
   );

@@ -105,6 +105,14 @@ vi.mock('./orderbook-panel', () => ({
 }));
 
 describe('TradingPanel', () => {
+  it('연결 상태 chip을 짧은 실시간 라벨로 노출한다', () => {
+    render(<TradingPanel pdno="005930" name="삼성전자" isProd={false} />);
+
+    const liveChip = screen.getByText('실시간');
+    expect(liveChip).toHaveClass('chip', 'chip--live');
+    expect(screen.queryByText('실시간 연결됨')).toBeNull();
+  });
+
   it('같은 종목에서 name만 늦게 들어와도 order ticket selection 제목을 바로 동기화한다', () => {
     const { rerender } = render(<TradingPanel pdno="005930" name="005930" isProd={false} />);
 

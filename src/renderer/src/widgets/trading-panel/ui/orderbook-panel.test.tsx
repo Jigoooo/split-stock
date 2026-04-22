@@ -74,7 +74,7 @@ describe('OrderbookPanel', () => {
     expect(screen.queryByTestId('orderbook-routing-ws')).toBeNull();
   });
 
-  it('routingMode="WS" 일 때 실시간 인디케이터 노출', () => {
+  it('routingMode="WS" 일 때 하단 실시간 인디케이터는 노출하지 않는다', () => {
     render(
       <OrderbookPanel
         orderbook={mkOrderbook()}
@@ -83,7 +83,7 @@ describe('OrderbookPanel', () => {
         routingMode="WS"
       />,
     );
-    expect(screen.getByTestId('orderbook-routing-ws')).toBeInTheDocument();
+    expect(screen.queryByTestId('orderbook-routing-ws')).toBeNull();
   });
 
   it('routingMode 미지정 시 인디케이터 미표시 (BC)', () => {

@@ -255,6 +255,12 @@ body {
   border-color: transparent;
 }
 
+.chip--live {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--status-connected);
+  border-color: transparent;
+}
+
 /* HTS 테이블 클래스는 shared/ui/table-grid 로 마이그레이션 완료 (NM-100~104). */
 
 /* ===== 폼 요소 HTS 감성 ===== */

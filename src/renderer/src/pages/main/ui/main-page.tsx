@@ -174,7 +174,7 @@ export const MainPage = (): ReactElement => {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'minmax(360px, 1fr) minmax(640px, 760px)',
+                  gridTemplateColumns: 'minmax(320px, 0.95fr) minmax(680px, 1.05fr)',
                   gap: '1.2rem',
                   flex: 1,
                   minHeight: 0,

@@ -16,7 +16,7 @@ import { ActiveOrdersPanel } from './active-orders-panel';
 import { ORDERBOOK_PANEL_MIN_WIDTH, OrderbookPanel } from './orderbook-panel';
 import { TradeFeedPanel } from './trade-feed-panel';
 
-const FEED_PANEL_MIN_WIDTH = 380;
+const FEED_PANEL_MIN_WIDTH = 340;
 
 function formatTime(hhmmss: string): string {
   if (hhmmss.length !== 6) return hhmmss;
@@ -75,8 +75,8 @@ const RealtimeStatusBar = ({
         minHeight: '2.4rem',
       }}
     >
-      <span className={started ? 'chip chip--up' : 'chip chip--down'} style={{ flexShrink: 0 }}>
-        {started ? '실시간 연결됨' : '실시간 미연결'}
+      <span className={started ? 'chip chip--live' : 'chip chip--down'} style={{ flexShrink: 0 }}>
+        {started ? '실시간' : '미연결'}
       </span>
       <span className="muted" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
         {mine

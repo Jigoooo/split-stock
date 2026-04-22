@@ -4,7 +4,7 @@ import type { ReactElement } from 'react';
 type DotState = 'connected' | 'stale' | 'disconnected';
 
 const STATE_LABEL: Record<DotState, string> = {
-  connected: '실시간 연결됨',
+  connected: '실시간',
   stale: '재연결 대기 중',
   disconnected: '실시간 연결 끊김',
 };

@@ -34,13 +34,12 @@ type Division = 'LIMIT' | 'MARKET';
  */
 export const OrderTicket = (props: OrderTicketProps): ReactElement => {
   const { selection, isProd, oneClick } = props;
-  const [side, setSide] = useState<'BUY' | 'SELL'>(selection.suggestedSide ?? 'BUY');
   const [division, setDivision] = useState<Division>('LIMIT');
   const [qtyStr, setQtyStr] = useState('1');
   const [priceStr, setPriceStr] = useState(
     selection.suggestedPrice ? String(selection.suggestedPrice) : '',
   );
-  const suggestionKey = `${selection.pdno}:${selection.suggestedPrice ?? ''}:${selection.suggestedSide ?? ''}`;
+  const suggestionKey = `${selection.pdno}:${selection.suggestedPrice ?? ''}`;
   const [appliedSuggestionKey, setAppliedSuggestionKey] = useState(suggestionKey);
   const actions = useOrderActions();
   const { lotsByPdno, positions, deposit } = useBalanceWithLots();
@@ -55,7 +54,6 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
     if (selection.suggestedPrice !== undefined) {
       setPriceStr(String(selection.suggestedPrice));
     }
-    if (selection.suggestedSide) setSide(selection.suggestedSide);
   }
 
   const qty = Number(qtyStr);
@@ -275,7 +273,6 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
             variant="danger"
             dense
             onClick={() => {
-              setSide('BUY');
               void submit('BUY');
             }}
             aria-label="매수 주문"
@@ -293,7 +290,6 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
             className="hts-btn--down"
             dense
             onClick={() => {
-              setSide('SELL');
               void submit('SELL');
             }}
             aria-label="매도 주문"
@@ -310,7 +306,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
           </Button>
         </div>
         <div className="panel__body muted order-ticket-form__summary">
-          현재 선택: {side} · {division === 'MARKET' ? '시장가' : '지정가'} ·{' '}
+          현재 선택: {division === 'MARKET' ? '시장가' : '지정가'} ·{' '}
           {qtyStr ? thousandSeparator(qtyStr) : '0'}주
           {division === 'LIMIT' && priceStr ? ` · ${thousandSeparator(priceStr)}원` : ''}
           {oneClick && !isProd ? ' · 원터치 ON' : ''}
