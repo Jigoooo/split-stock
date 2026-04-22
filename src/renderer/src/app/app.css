@@ -171,13 +171,6 @@ body {
   box-sizing: border-box;
 }
 
-.app-header h1 {
-  margin: 0;
-  font-size: 1.3rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
 .env-badge {
   display: inline-flex;
   align-items: center;
@@ -438,6 +431,11 @@ body {
   color: var(--fg-3);
   font-size: 0.84em;
   letter-spacing: -0.02em;
+}
+
+.hts-date-shell__field--month::placeholder,
+.hts-date-shell__field--day::placeholder {
+  font-size: 0.78em;
 }
 
 .hts-date-shell__field:focus {

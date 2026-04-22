@@ -69,4 +69,17 @@ describe('ActiveOrdersPanel', () => {
     expect(screen.getByText('체결 3주')).toBeInTheDocument();
     expect(screen.getByText('부분체결')).toBeInTheDocument();
   });
+
+  it('좁은 패널에서도 컬럼 최소 너비를 유지하도록 가로 스크롤 래퍼를 렌더링한다', () => {
+    render(<ActiveOrdersPanel pdnoFilter="005930" />);
+
+    const region = screen.getByRole('region', { name: '미체결 주문' });
+    const headerCells = region.querySelectorAll('.table-grid-header .table-grid-cell');
+
+    expect(region.querySelector('.table-grid-hscroll-wrapper')).toBeInTheDocument();
+    expect(headerCells).toHaveLength(7);
+    expect(headerCells[1]).toHaveStyle({ minWidth: '110px' });
+    expect(headerCells[3]).toHaveStyle({ minWidth: '148px' });
+    expect(headerCells[6]).toHaveStyle({ minWidth: '108px' });
+  });
 });

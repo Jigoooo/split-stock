@@ -16,6 +16,8 @@ import { ActiveOrdersPanel } from './active-orders-panel';
 import { ORDERBOOK_PANEL_MIN_WIDTH, OrderbookPanel } from './orderbook-panel';
 import { TradeFeedPanel } from './trade-feed-panel';
 
+const FEED_PANEL_MIN_WIDTH = 380;
+
 function formatTime(hhmmss: string): string {
   if (hhmmss.length !== 6) return hhmmss;
   return `${hhmmss.slice(0, 2)}:${hhmmss.slice(2, 4)}:${hhmmss.slice(4, 6)}`;
@@ -178,7 +180,7 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: `${ORDERBOOK_PANEL_MIN_WIDTH} minmax(180px, 210px) minmax(0, 1fr)`,
+          gridTemplateColumns: `${ORDERBOOK_PANEL_MIN_WIDTH} minmax(180px, 210px) minmax(${FEED_PANEL_MIN_WIDTH}px, 1fr)`,
           gap: '0.6rem',
           alignItems: 'stretch',
           flex: 1,

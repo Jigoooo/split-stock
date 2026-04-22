@@ -52,13 +52,6 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
     onSelect?.(pdno);
   };
 
-  const handleChartPopout = (pdno: string, name: string): void => {
-    const shell = window.appShell;
-    if (!shell) return;
-    void shell.openPopout('trade');
-    shell.assignStock(pdno, name);
-  };
-
   return (
     <section
       className="panel"
@@ -78,6 +71,7 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
       <TableGrid.Root
         variant="hts"
         stickyHeader
+        horizontalScroll
         aria-label="보유 종목 테이블"
         style={{ flex: 1, minHeight: 0 }}
       >
@@ -114,7 +108,6 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
               {nth}차
             </TableGrid.Cell>
           ))}
-          <TableGrid.Cell width={POSITION_COLS.chart} />
         </TableGrid.Header>
         <TableGrid.Body scrollRef={scrollRef}>
           {error ? (
@@ -146,7 +139,6 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
                     expanded={expanded.has(row.position.code)}
                     onToggleExpand={handleToggleExpand}
                     onSelect={handleSelect}
-                    onChartPopout={handleChartPopout}
                     accountId={props.accountId}
                     autoOn={safetyState.data?.bySymbol[row.position.code] ?? null}
                     style={{

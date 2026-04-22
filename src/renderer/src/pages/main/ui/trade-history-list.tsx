@@ -9,6 +9,19 @@ export interface TradeHistoryListProps {
   status: CycleStatusFilter;
 }
 
+const TRADE_HISTORY_COLS = {
+  nth: 52,
+  symbol: 176,
+  buyPrice: 96,
+  qty: 84,
+  sellPrice: 96,
+  pnl: 104,
+  pnlRate: 88,
+  status: 88,
+  boughtAt: 116,
+  soldAt: 116,
+} as const;
+
 /**
  * 매매 사이클 리스트 — 종목별/전체 진행중/종료/전체.
  *
@@ -26,6 +39,7 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
     <TableGrid.Root
       variant="hts"
       stickyHeader
+      horizontalScroll
       aria-label={pdno ? `${pdno} 매매 사이클` : '전체 매매 사이클'}
       style={{ flex: 1, minHeight: 0 }}
     >
@@ -35,30 +49,30 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
         </div>
       ) : null}
       <TableGrid.Header>
-        <TableGrid.Cell width={52} numeric>
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.nth} numeric>
           차수
         </TableGrid.Cell>
-        <TableGrid.Cell flex={2}>종목</TableGrid.Cell>
-        <TableGrid.Cell flex={1} numeric>
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.symbol}>종목</TableGrid.Cell>
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.buyPrice} numeric>
           매수가
         </TableGrid.Cell>
-        <TableGrid.Cell flex={1} numeric>
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.qty} numeric>
           수량
         </TableGrid.Cell>
-        <TableGrid.Cell flex={1} numeric>
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.sellPrice} numeric>
           매도가
         </TableGrid.Cell>
-        <TableGrid.Cell flex={1} numeric>
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.pnl} numeric>
           손익
         </TableGrid.Cell>
-        <TableGrid.Cell flex={1} numeric>
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.pnlRate} numeric>
           수익률
         </TableGrid.Cell>
-        <TableGrid.Cell flex={1}>상태</TableGrid.Cell>
-        <TableGrid.Cell flex={1} className="muted">
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.status}>상태</TableGrid.Cell>
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.boughtAt} className="muted">
           매수일
         </TableGrid.Cell>
-        <TableGrid.Cell flex={1} className="muted">
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.soldAt} className="muted">
           매도일
         </TableGrid.Cell>
       </TableGrid.Header>
@@ -78,35 +92,35 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
             const cls = sign === 'up' ? 'num-up' : sign === 'down' ? 'num-down' : 'num-flat';
             return (
               <TableGrid.Row key={cycle.id}>
-                <TableGrid.Cell width={52} numeric>
+                <TableGrid.Cell width={TRADE_HISTORY_COLS.nth} numeric>
                   {cycle.nth}차
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={2}>
+                <TableGrid.Cell width={TRADE_HISTORY_COLS.symbol}>
                   <span className="num">{cycle.pdno}</span>
                   <span className="muted" style={{ marginLeft: '0.4rem' }}>
                     {cycle.name}
                   </span>
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric>
+                <TableGrid.Cell width={TRADE_HISTORY_COLS.buyPrice} numeric>
                   {thousandSeparator(cycle.buyPrice)}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric>
+                <TableGrid.Cell width={TRADE_HISTORY_COLS.qty} numeric>
                   {thousandSeparator(cycle.qty)}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric>
+                <TableGrid.Cell width={TRADE_HISTORY_COLS.sellPrice} numeric>
                   {cycle.sellPrice !== undefined ? thousandSeparator(cycle.sellPrice) : '-'}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric className={cls}>
+                <TableGrid.Cell width={TRADE_HISTORY_COLS.pnl} numeric className={cls}>
                   {pnl !== undefined ? formatSigned(Math.round(pnl)) : '-'}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric className={cls}>
+                <TableGrid.Cell width={TRADE_HISTORY_COLS.pnlRate} numeric className={cls}>
                   {cycle.pnlRate !== undefined ? `${cycle.pnlRate.toFixed(2)}%` : '-'}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1}>{cycle.status}</TableGrid.Cell>
-                <TableGrid.Cell flex={1} className="muted">
+                <TableGrid.Cell width={TRADE_HISTORY_COLS.status}>{cycle.status}</TableGrid.Cell>
+                <TableGrid.Cell width={TRADE_HISTORY_COLS.boughtAt} className="muted">
                   {new Date(cycle.boughtAt).toLocaleDateString('ko-KR')}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} className="muted">
+                <TableGrid.Cell width={TRADE_HISTORY_COLS.soldAt} className="muted">
                   {cycle.soldAt !== undefined
                     ? new Date(cycle.soldAt).toLocaleDateString('ko-KR')
                     : '-'}

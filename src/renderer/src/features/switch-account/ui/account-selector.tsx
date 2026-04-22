@@ -3,7 +3,7 @@ import { Button } from '@renderer/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useSwitchAccount } from '../model/use-switch-account';
 
@@ -31,6 +31,7 @@ export const AccountSelector = (): ReactElement | null => {
   const { switchAccount, isPending: switching, error: switchError } = useSwitchAccount();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const deleteMutation = trpc.account.delete.useMutation({
     onSuccess: async (data, variables) => {
@@ -58,6 +59,31 @@ export const AccountSelector = (): ReactElement | null => {
       toast.success('계좌가 추가되었습니다');
     });
   }, [qc]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (rootRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setOpen(false);
+    };
+
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
 
   if (accountsQ.isPending) {
     return <span className="muted">계좌 로드 중…</span>;
@@ -98,7 +124,7 @@ export const AccountSelector = (): ReactElement | null => {
   const label = active ? formatAccountLabel(active) : '계좌 미선택';
 
   return (
-    <div style={{ position: 'relative', display: 'inline-flex', gap: '0.4rem' }}>
+    <div ref={rootRef} style={{ position: 'relative', display: 'inline-flex', gap: '0.4rem' }}>
       <Button
         type="button"
         onClick={() => setOpen((v) => !v)}

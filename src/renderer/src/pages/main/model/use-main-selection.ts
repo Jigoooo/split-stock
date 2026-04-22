@@ -1,29 +1,46 @@
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
+
+export interface MainSelectedStock {
+  pdno: string;
+  name: string | null;
+}
 
 export interface UseMainSelectionResult {
+  selectedStock: MainSelectedStock | null;
   selectedPdno: string | null;
   isPending: boolean;
   setSelectedPdno: (pdno: string | null) => void;
+  setSelectedStock: (stock: MainSelectedStock | null) => void;
 }
 
 const LAST_MAIN_PDNO_KEY = 'split-stock.main.last-pdno';
 
-const readPersistedPdno = (): string | null => {
+const readPersistedSelection = (): MainSelectedStock | null => {
   if (typeof window === 'undefined') return null;
   try {
-    return window.localStorage.getItem(LAST_MAIN_PDNO_KEY);
+    const raw = window.localStorage.getItem(LAST_MAIN_PDNO_KEY);
+    if (!raw) return null;
+    if (!raw.startsWith('{')) {
+      return { pdno: raw, name: null };
+    }
+    const parsed = JSON.parse(raw) as { pdno?: unknown; name?: unknown };
+    if (typeof parsed.pdno !== 'string' || parsed.pdno.length === 0) return null;
+    return {
+      pdno: parsed.pdno,
+      name: typeof parsed.name === 'string' ? parsed.name : null,
+    };
   } catch {
     return null;
   }
 };
 
-const persistPdno = (next: string | null): void => {
+const persistSelection = (next: MainSelectedStock | null): void => {
   if (typeof window === 'undefined') return;
   try {
     if (next === null) {
       window.localStorage.removeItem(LAST_MAIN_PDNO_KEY);
     } else {
-      window.localStorage.setItem(LAST_MAIN_PDNO_KEY, next);
+      window.localStorage.setItem(LAST_MAIN_PDNO_KEY, JSON.stringify(next));
     }
   } catch {
     // localStorage 차단/quota 등은 무시 (in-memory state로만 동작)
@@ -33,19 +50,37 @@ const persistPdno = (next: string | null): void => {
 /**
  * 메인 페이지의 좌/우 split 사이에서 공유되는 단일 selectedPdno source.
  *
- * 종료 전 마지막 선택 종목을 localStorage에 영속하여 재시작 시 자동 복원.
- * 좌측 PositionsGrid 의 선택이 우측 TradeHistoryPanel 의 pdno 필터로 흐르며,
- * 우측 query refetch 가 좌측 클릭 피드백을 막지 않도록 setSelectedPdno 는
- * useTransition 으로 deferred — 좌측 row highlight 는 즉시, 우측은 다음 frame.
+ * 종료 전 마지막 선택 종목(pdno + 검색 결과 name)을 localStorage에 영속한다.
+ * 좌측/우측/하단 주문 패널은 모두 이 selection source 를 공유한다.
  */
 export function useMainSelection(): UseMainSelectionResult {
-  const [selectedPdno, setSelectedPdnoRaw] = useState<string | null>(readPersistedPdno);
-  const [isPending, startTransition] = useTransition();
+  const [selectedStock, setSelectedStockRaw] = useState<MainSelectedStock | null>(
+    readPersistedSelection,
+  );
 
   const setSelectedPdno = (next: string | null): void => {
-    persistPdno(next);
-    startTransition(() => setSelectedPdnoRaw(next));
+    setSelectedStockRaw((prev) => {
+      const selection =
+        next === null
+          ? null
+          : prev?.pdno === next
+            ? { pdno: next, name: prev.name }
+            : { pdno: next, name: null };
+      persistSelection(selection);
+      return selection;
+    });
   };
 
-  return { isPending, selectedPdno, setSelectedPdno };
+  const setSelectedStock = (next: MainSelectedStock | null): void => {
+    persistSelection(next);
+    setSelectedStockRaw(next);
+  };
+
+  return {
+    selectedStock,
+    selectedPdno: selectedStock?.pdno ?? null,
+    isPending: false,
+    setSelectedPdno,
+    setSelectedStock,
+  };
 }

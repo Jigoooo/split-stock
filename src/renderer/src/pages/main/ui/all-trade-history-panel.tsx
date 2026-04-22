@@ -6,6 +6,18 @@ export interface AllTradeHistoryPanelProps {
   accountId: number;
 }
 
+const ALL_TRADE_HISTORY_COLS = {
+  nth: 60,
+  date: 110,
+  name: 180,
+  qty: 72,
+  buyPrice: 92,
+  side: 72,
+  sellPrice: 92,
+  pnl: 100,
+  pnlRate: 82,
+} as const;
+
 export const AllTradeHistoryPanel = ({ accountId }: AllTradeHistoryPanelProps): ReactElement => {
   const {
     applyFilters,
@@ -147,27 +159,28 @@ export const AllTradeHistoryPanel = ({ accountId }: AllTradeHistoryPanelProps): 
       <TableGrid.Root
         variant="hts"
         stickyHeader
+        horizontalScroll
         aria-label="모든 매매 내역 상세 목록"
         style={{ flex: 1, minHeight: 0 }}
       >
         <TableGrid.Header>
-          <TableGrid.Cell width={60}>차수</TableGrid.Cell>
-          <TableGrid.Cell width={110}>날짜</TableGrid.Cell>
-          <TableGrid.Cell flex={2}>종목명</TableGrid.Cell>
-          <TableGrid.Cell width={72} numeric>
+          <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.nth}>차수</TableGrid.Cell>
+          <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.date}>날짜</TableGrid.Cell>
+          <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.name}>종목명</TableGrid.Cell>
+          <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.qty} numeric>
             수량
           </TableGrid.Cell>
-          <TableGrid.Cell width={92} numeric>
+          <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.buyPrice} numeric>
             매입단가
           </TableGrid.Cell>
-          <TableGrid.Cell width={72}>매매구분</TableGrid.Cell>
-          <TableGrid.Cell width={92} numeric>
+          <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.side}>매매구분</TableGrid.Cell>
+          <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.sellPrice} numeric>
             매도단가
           </TableGrid.Cell>
-          <TableGrid.Cell width={100} numeric>
+          <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.pnl} numeric>
             평가손익
           </TableGrid.Cell>
-          <TableGrid.Cell width={82} numeric>
+          <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.pnlRate} numeric>
             수익률
           </TableGrid.Cell>
         </TableGrid.Header>
@@ -183,11 +196,11 @@ export const AllTradeHistoryPanel = ({ accountId }: AllTradeHistoryPanelProps): 
           ) : (
             rows.map((row) => (
               <TableGrid.Row key={row.key}>
-                <TableGrid.Cell width={60}>{row.nthText}</TableGrid.Cell>
-                <TableGrid.Cell width={110} className="muted">
+                <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.nth}>{row.nthText}</TableGrid.Cell>
+                <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.date} className="muted">
                   {row.dateText}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={2}>
+                <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.name}>
                   {row.nameText}
                   {row.pdnoText !== '' ? (
                     <span className="muted" style={{ marginLeft: '0.35rem' }}>
@@ -195,20 +208,28 @@ export const AllTradeHistoryPanel = ({ accountId }: AllTradeHistoryPanelProps): 
                     </span>
                   ) : null}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={72} numeric>
+                <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.qty} numeric>
                   {row.qtyText}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={92} numeric>
+                <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.buyPrice} numeric>
                   {row.buyPriceText}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={72}>{row.sideText}</TableGrid.Cell>
-                <TableGrid.Cell width={92} numeric>
+                <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.side}>{row.sideText}</TableGrid.Cell>
+                <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.sellPrice} numeric>
                   {row.sellPriceText}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={100} numeric className={row.pnlClassName}>
+                <TableGrid.Cell
+                  width={ALL_TRADE_HISTORY_COLS.pnl}
+                  numeric
+                  className={row.pnlClassName}
+                >
                   {row.pnlText}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={82} numeric className={row.pnlClassName}>
+                <TableGrid.Cell
+                  width={ALL_TRADE_HISTORY_COLS.pnlRate}
+                  numeric
+                  className={row.pnlClassName}
+                >
                   {row.pnlRateText}
                 </TableGrid.Cell>
               </TableGrid.Row>

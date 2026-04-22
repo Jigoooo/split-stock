@@ -51,7 +51,7 @@ export const MainPage = (): ReactElement => {
   useMainRealtime();
 
   const { accountId, isPending: isAccountPending } = useActiveAccountId();
-  const { selectedPdno, setSelectedPdno } = useMainSelection();
+  const { selectedPdno, selectedStock, setSelectedPdno, setSelectedStock } = useMainSelection();
 
   const layout = useDefaultLayout({
     id: 'split-stock.layout.main.split',
@@ -74,6 +74,7 @@ export const MainPage = (): ReactElement => {
       ? {
           pdno: selectedPdno,
           name:
+            selectedStock?.name ??
             balance.positions.find((p) => p.code === selectedPdno)?.name ??
             stockList.entries.find((e) => e.pdno === selectedPdno)?.name ??
             selectedPdno,
@@ -167,7 +168,7 @@ export const MainPage = (): ReactElement => {
           >
             <TradeSelectionBar
               selected={selectedEntry}
-              onSelect={(entry) => setSelectedPdno(entry.pdno)}
+              onSelect={(entry) => setSelectedStock({ pdno: entry.pdno, name: entry.name })}
             />
             {selectedEntry ? (
               <div

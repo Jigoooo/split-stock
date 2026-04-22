@@ -62,12 +62,17 @@ vi.mock('./ui/main-positions-pane', () => ({
   MainPositionsPane: ({
     accountId,
     onSelect,
+    selectedPdno,
   }: {
     accountId: number;
     selectedPdno: string | null;
     onSelect: (pdno: string) => void;
   }) => (
-    <div data-testid="main-positions-pane" data-account-id={accountId}>
+    <div
+      data-testid="main-positions-pane"
+      data-account-id={accountId}
+      data-selected-pdno={selectedPdno ?? ''}
+    >
       <button type="button" onClick={() => onSelect('005930')}>
         종목선택
       </button>
@@ -102,7 +107,26 @@ vi.mock('@renderer/entities/stock', () => ({
     error: null,
   }),
   StockPickerList: () => null,
-  TradeSelectionBar: () => <div data-testid="trade-selection-bar" />,
+  TradeSelectionBar: ({
+    onSelect,
+    selected,
+  }: {
+    onSelect: (entry: { pdno: string; name: string; sector: string | null }) => void;
+    selected: { pdno: string; name: string } | null;
+  }) => (
+    <div
+      data-testid="trade-selection-bar"
+      data-selected-pdno={selected?.pdno ?? ''}
+      data-selected-name={selected?.name ?? ''}
+    >
+      <button
+        type="button"
+        onClick={() => onSelect({ pdno: '000660', name: 'SK하이닉스', sector: '반도체' })}
+      >
+        검색선택
+      </button>
+    </div>
+  ),
 }));
 
 describe('MainPage', () => {
@@ -135,6 +159,43 @@ describe('MainPage', () => {
       'data-selected-name',
       '삼성전자',
     );
+    expect(screen.getByTestId('main-positions-pane')).toHaveAttribute(
+      'data-selected-pdno',
+      '005930',
+    );
+    expect(screen.getByTestId('trading-panel')).toHaveAttribute('data-pdno', '005930');
+    expect(screen.getByTestId('trading-panel')).toHaveAttribute('data-name', '삼성전자');
+  });
+
+  it('검색 선택도 같은 전역 선택 상태를 갱신해 좌측/우측/하단 패널에 반영된다', () => {
+    mockUseActiveAccountId.mockReturnValue({ accountId: 1, isPending: false });
+
+    render(<MainPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: '검색선택' }));
+
+    expect(screen.getByTestId('trade-selection-bar')).toHaveAttribute(
+      'data-selected-pdno',
+      '000660',
+    );
+    expect(screen.getByTestId('trade-selection-bar')).toHaveAttribute(
+      'data-selected-name',
+      'SK하이닉스',
+    );
+    expect(screen.getByTestId('main-positions-pane')).toHaveAttribute(
+      'data-selected-pdno',
+      '000660',
+    );
+    expect(screen.getByTestId('main-trade-history-pane')).toHaveAttribute(
+      'data-selected-pdno',
+      '000660',
+    );
+    expect(screen.getByTestId('main-trade-history-pane')).toHaveAttribute(
+      'data-selected-name',
+      'SK하이닉스',
+    );
+    expect(screen.getByTestId('trading-panel')).toHaveAttribute('data-pdno', '000660');
+    expect(screen.getByTestId('trading-panel')).toHaveAttribute('data-name', 'SK하이닉스');
   });
 
   it('accountId 없으면 안내 메시지 표시', () => {

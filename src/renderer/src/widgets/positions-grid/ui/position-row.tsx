@@ -2,7 +2,6 @@ import type { LotEntry } from '@renderer/entities/account';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
-import { LineChart } from 'lucide-react';
 import { type CSSProperties, forwardRef, type ReactElement, useTransition } from 'react';
 import type { PositionsGridRow } from '../model/use-positions-grid';
 
@@ -20,8 +19,6 @@ export interface PositionRowProps {
   onToggleExpand: (pdno: string) => void;
   /** 행 클릭 → 종목 선택. */
   onSelect: (pdno: string) => void;
-  /** 차트 아이콘 클릭 → trade popout + 종목 assign. */
-  onChartPopout?: (pdno: string, name: string) => void;
   /** 가상화 absolute positioning style. */
   style?: CSSProperties;
   /** 활성 계좌 ID — toggleSymbol mutation 에 필요. */
@@ -47,7 +44,6 @@ export const POSITION_COLS = {
   evalAmount: 128,
   auto: 52,
   stage: 88,
-  chart: 44,
 } as const;
 
 /**
@@ -62,7 +58,6 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
       autoOn,
       expanded,
       gridMaxStages,
-      onChartPopout,
       onSelect,
       onToggleExpand,
       row,
@@ -131,6 +126,14 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
           selected={isSelected}
           expanded={expanded}
           onClick={() => onSelect(position.code)}
+          {...(isSelected
+            ? {
+                style: {
+                  background: 'var(--accent-tint-12)',
+                  boxShadow: 'inset 0.2rem 0 0 0 var(--accent)',
+                },
+              }
+            : {})}
         >
           <TableGrid.Cell width={POSITION_COLS.expand}>
             <button
@@ -196,20 +199,6 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
             </button>
           </TableGrid.Cell>
           {stageCells}
-          <TableGrid.Cell width={POSITION_COLS.chart}>
-            <button
-              type="button"
-              aria-label={`${position.name} 차트`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onChartPopout?.(position.code, position.name);
-              }}
-              style={chartBtnStyle}
-              title="차트 팝아웃"
-            >
-              <LineChart size={13} />
-            </button>
-          </TableGrid.Cell>
         </TableGrid.Row>
 
         {/* expand: 차수별 상세 sub-row (가상화 행 안에서 동적 높이 — measureElement 가 처리) */}
@@ -246,19 +235,18 @@ const autoBtnStyle: CSSProperties = {
   fontSize: '1rem',
 };
 
-const chartBtnStyle: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  padding: '0.1rem',
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  color: 'var(--hts-muted, rgba(0,0,0,0.45))',
-};
-
 interface ExpandedLotsProps {
   lots: LotEntry[];
 }
+
+const EXPANDED_LOTS_COLS = {
+  nth: 52,
+  buyPrice: 100,
+  qty: 80,
+  amount: 120,
+  status: 96,
+  boughtAt: 116,
+} as const;
 
 const ExpandedLots = ({ lots }: ExpandedLotsProps): ReactElement => {
   if (lots.length === 0) {
@@ -287,37 +275,38 @@ const ExpandedLots = ({ lots }: ExpandedLotsProps): ReactElement => {
         variant="hts"
         stickyHeader={false}
         overlayScrollbar={false}
+        horizontalScroll
         style={{ height: 'auto', width: '100%' }}
       >
         <TableGrid.Header>
-          <TableGrid.Cell width={40}>차수</TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
+          <TableGrid.Cell width={EXPANDED_LOTS_COLS.nth}>차수</TableGrid.Cell>
+          <TableGrid.Cell width={EXPANDED_LOTS_COLS.buyPrice} numeric>
             매입가
           </TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
+          <TableGrid.Cell width={EXPANDED_LOTS_COLS.qty} numeric>
             수량
           </TableGrid.Cell>
-          <TableGrid.Cell flex={2} numeric>
+          <TableGrid.Cell width={EXPANDED_LOTS_COLS.amount} numeric>
             투입금액
           </TableGrid.Cell>
-          <TableGrid.Cell flex={1}>상태</TableGrid.Cell>
-          <TableGrid.Cell flex={2}>매수일</TableGrid.Cell>
+          <TableGrid.Cell width={EXPANDED_LOTS_COLS.status}>상태</TableGrid.Cell>
+          <TableGrid.Cell width={EXPANDED_LOTS_COLS.boughtAt}>매수일</TableGrid.Cell>
         </TableGrid.Header>
         <TableGrid.Body>
           {lots.map((lot) => (
             <TableGrid.Row key={`${lot.nth}-${lot.boughtAt}`}>
-              <TableGrid.Cell width={40}>{lot.nth}차</TableGrid.Cell>
-              <TableGrid.Cell flex={1} numeric>
+              <TableGrid.Cell width={EXPANDED_LOTS_COLS.nth}>{lot.nth}차</TableGrid.Cell>
+              <TableGrid.Cell width={EXPANDED_LOTS_COLS.buyPrice} numeric>
                 {thousandSeparator(lot.buyPrice)}
               </TableGrid.Cell>
-              <TableGrid.Cell flex={1} numeric>
+              <TableGrid.Cell width={EXPANDED_LOTS_COLS.qty} numeric>
                 {thousandSeparator(lot.qty)}
               </TableGrid.Cell>
-              <TableGrid.Cell flex={2} numeric>
+              <TableGrid.Cell width={EXPANDED_LOTS_COLS.amount} numeric>
                 {thousandSeparator(Math.round(lot.amountKrw))}
               </TableGrid.Cell>
-              <TableGrid.Cell flex={1}>{lot.status}</TableGrid.Cell>
-              <TableGrid.Cell flex={2} className="muted">
+              <TableGrid.Cell width={EXPANDED_LOTS_COLS.status}>{lot.status}</TableGrid.Cell>
+              <TableGrid.Cell width={EXPANDED_LOTS_COLS.boughtAt} className="muted">
                 {new Date(lot.boughtAt).toLocaleDateString('ko-KR')}
               </TableGrid.Cell>
             </TableGrid.Row>

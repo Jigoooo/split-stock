@@ -7,6 +7,15 @@ export interface FilledPaneProps {
   selectedPdno: string | null;
 }
 
+const FILLED_PANE_COLS = {
+  time: 84,
+  symbol: 90,
+  side: 64,
+  quantity: 96,
+  price: 110,
+  status: 88,
+} as const;
+
 /**
  * L2 "실시간 체결" 탭 — 내 계좌의 체결된 주문 확인용.
  *
@@ -60,20 +69,21 @@ export const FilledPane = ({ selectedPdno }: FilledPaneProps): ReactElement => {
         <TableGrid.Root
           variant="hts"
           stickyHeader
+          horizontalScroll
           aria-label="내 체결 목록"
           style={{ flex: 1, minHeight: 0 }}
         >
           <TableGrid.Header>
-            <TableGrid.Cell width={80}>시각</TableGrid.Cell>
-            <TableGrid.Cell width={80}>종목</TableGrid.Cell>
-            <TableGrid.Cell width={48}>구분</TableGrid.Cell>
-            <TableGrid.Cell flex={1} numeric>
+            <TableGrid.Cell width={FILLED_PANE_COLS.time}>시각</TableGrid.Cell>
+            <TableGrid.Cell width={FILLED_PANE_COLS.symbol}>종목</TableGrid.Cell>
+            <TableGrid.Cell width={FILLED_PANE_COLS.side}>구분</TableGrid.Cell>
+            <TableGrid.Cell width={FILLED_PANE_COLS.quantity} numeric>
               수량
             </TableGrid.Cell>
-            <TableGrid.Cell flex={1} numeric>
+            <TableGrid.Cell width={FILLED_PANE_COLS.price} numeric>
               가격
             </TableGrid.Cell>
-            <TableGrid.Cell width={56}>상태</TableGrid.Cell>
+            <TableGrid.Cell width={FILLED_PANE_COLS.status}>상태</TableGrid.Cell>
           </TableGrid.Header>
           <TableGrid.Body>
             {rows.map((row) => {
@@ -82,20 +92,20 @@ export const FilledPane = ({ selectedPdno }: FilledPaneProps): ReactElement => {
               const time = t ? new Date(t).toLocaleTimeString('ko-KR', { hour12: false }) : '-';
               return (
                 <TableGrid.Row key={row.id}>
-                  <TableGrid.Cell width={80} numeric>
+                  <TableGrid.Cell width={FILLED_PANE_COLS.time} numeric>
                     {time}
                   </TableGrid.Cell>
-                  <TableGrid.Cell width={80}>{row.pdno}</TableGrid.Cell>
-                  <TableGrid.Cell width={48} className={sideClass}>
+                  <TableGrid.Cell width={FILLED_PANE_COLS.symbol}>{row.pdno}</TableGrid.Cell>
+                  <TableGrid.Cell width={FILLED_PANE_COLS.side} className={sideClass}>
                     {row.side === 'BUY' ? '매수' : '매도'}
                   </TableGrid.Cell>
-                  <TableGrid.Cell flex={1} numeric>
+                  <TableGrid.Cell width={FILLED_PANE_COLS.quantity} numeric>
                     {thousandSeparator(row.qty)}
                   </TableGrid.Cell>
-                  <TableGrid.Cell flex={1} numeric>
+                  <TableGrid.Cell width={FILLED_PANE_COLS.price} numeric>
                     {row.division === 'MARKET' ? '시장가' : thousandSeparator(row.price)}
                   </TableGrid.Cell>
-                  <TableGrid.Cell width={56}>
+                  <TableGrid.Cell width={FILLED_PANE_COLS.status}>
                     <span className={`chip ${row.status === 'FILLED' ? 'chip--up' : ''}`}>
                       {row.status === 'FILLED' ? '체결' : '부분체결'}
                     </span>

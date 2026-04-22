@@ -129,7 +129,7 @@ describe('PositionsGrid', () => {
     );
   });
 
-  it('차트 아이콘 클릭 → openPopout("trade") + assignStock 호출, onSelect 미호출', () => {
+  it('선택 종목은 배경 강조가 적용되고 차트 팝아웃 버튼은 렌더하지 않는다', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
@@ -137,25 +137,17 @@ describe('PositionsGrid', () => {
       gridMaxStages: 2,
     });
 
-    const openPopout = vi.fn().mockResolvedValue({ ok: true });
-    const assignStock = vi.fn();
-    Object.defineProperty(window, 'appShell', {
-      value: { openPopout, assignStock },
-      configurable: true,
+    const { container } = render(<PositionsGrid accountId={1} selectedPdno="005930" />);
+    const selectedRow = container.querySelector(
+      '[data-position-row="005930"] [data-grid-role="row"]',
+    );
+
+    expect(selectedRow).toHaveAttribute('data-selected', 'true');
+    expect(selectedRow).toHaveStyle({
+      background: 'var(--accent-tint-12)',
+      boxShadow: 'inset 0.2rem 0 0 0 var(--accent)',
     });
-
-    const onSelect = vi.fn();
-    render(<PositionsGrid accountId={1} onSelect={onSelect} />);
-
-    const chartBtn = screen.getByRole('button', { name: '삼성전자 차트' });
-    fireEvent.click(chartBtn);
-
-    expect(openPopout).toHaveBeenCalledWith('trade');
-    expect(assignStock).toHaveBeenCalledWith('005930', '삼성전자');
-    expect(onSelect).not.toHaveBeenCalled();
-
-    // 정리
-    Object.defineProperty(window, 'appShell', { value: undefined, configurable: true });
+    expect(screen.queryByRole('button', { name: '삼성전자 차트' })).toBeNull();
   });
 
   it('자동 칩 클릭 → toggleSymbol mutation 호출, onSelect 미호출', () => {

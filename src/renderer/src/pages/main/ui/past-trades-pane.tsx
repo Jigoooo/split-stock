@@ -17,6 +17,14 @@ interface PdnoGroup {
   pnlRate: number; // (totalSell - totalBuy) / totalBuy * 100
 }
 
+const PAST_TRADES_COLS = {
+  name: 168,
+  date: 124,
+  buyAmount: 126,
+  sellAmount: 126,
+  pnlRate: 84,
+} as const;
+
 /**
  * L2="과거 거래 종목" 탭 컨텐트.
  *
@@ -94,19 +102,20 @@ export const PastTradesPane = ({ accountId, onSelect }: PastTradesPaneProps): Re
       <TableGrid.Root
         variant="hts"
         stickyHeader
+        horizontalScroll
         aria-label="과거 거래 종목"
         style={{ flex: 1, minHeight: 0 }}
       >
         <TableGrid.Header>
-          <TableGrid.Cell flex={1}>종목명</TableGrid.Cell>
-          <TableGrid.Cell flex={1}>마지막 거래일</TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
+          <TableGrid.Cell width={PAST_TRADES_COLS.name}>종목명</TableGrid.Cell>
+          <TableGrid.Cell width={PAST_TRADES_COLS.date}>마지막 거래일</TableGrid.Cell>
+          <TableGrid.Cell width={PAST_TRADES_COLS.buyAmount} numeric>
             총 매수금액
           </TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
+          <TableGrid.Cell width={PAST_TRADES_COLS.sellAmount} numeric>
             총 매도금액
           </TableGrid.Cell>
-          <TableGrid.Cell width={80} numeric>
+          <TableGrid.Cell width={PAST_TRADES_COLS.pnlRate} numeric>
             수익률
           </TableGrid.Cell>
         </TableGrid.Header>
@@ -120,22 +129,22 @@ export const PastTradesPane = ({ accountId, onSelect }: PastTradesPaneProps): Re
             const rateClass = g.pnlRate > 0 ? 'num-up' : g.pnlRate < 0 ? 'num-down' : 'num-flat';
             return (
               <TableGrid.Row key={g.pdno} onClick={() => onSelect(g.pdno)}>
-                <TableGrid.Cell flex={1}>
+                <TableGrid.Cell width={PAST_TRADES_COLS.name}>
                   {g.name}{' '}
                   <span className="muted" style={{ fontSize: '0.9em' }}>
                     {g.pdno}
                   </span>
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric className="muted">
+                <TableGrid.Cell width={PAST_TRADES_COLS.date} numeric className="muted">
                   {formatDate(g.lastTradedAt)}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric>
+                <TableGrid.Cell width={PAST_TRADES_COLS.buyAmount} numeric>
                   {thousandSeparator(Math.round(g.totalBuyKrw))}
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric>
+                <TableGrid.Cell width={PAST_TRADES_COLS.sellAmount} numeric>
                   {thousandSeparator(Math.round(g.totalSellKrw))}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={80} numeric className={rateClass}>
+                <TableGrid.Cell width={PAST_TRADES_COLS.pnlRate} numeric className={rateClass}>
                   {g.pnlRate.toFixed(2)}%
                 </TableGrid.Cell>
               </TableGrid.Row>

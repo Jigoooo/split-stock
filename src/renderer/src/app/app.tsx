@@ -24,7 +24,6 @@ const AppShell = ({ popout }: { popout: PopoutApi }): ReactElement => {
   return (
     <div className="app-root" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <header className="app-header">
-        <h1>Split Stock</h1>
         <AccountBar env={shell.env} />
         {shell.env ? (
           <>
