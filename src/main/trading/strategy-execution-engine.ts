@@ -109,10 +109,9 @@ export class StrategyExecutionEngine {
       },
       {
         pdno,
-        totalAmountKrw: profile.totalAmountKrw,
         maxStages: profile.maxStages,
-        dropPct: profile.dropPct,
-        profitPct: profile.profitPct,
+        buyRules: profile.buyRules,
+        sellRules: profile.sellRules,
       },
     );
     const actionableOrders = orders.filter((order) =>

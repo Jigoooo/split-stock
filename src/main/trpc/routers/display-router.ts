@@ -41,6 +41,7 @@ const UpdateDisplaySettingsSchema = z.object({
   grid: z
     .object({
       rowHeightPx: z.number().int().min(18).max(60).optional(),
+      stageCellMode: z.enum(['PERCENT', 'NTH', 'DATE', 'QTY']).optional(),
     })
     .optional(),
 });
@@ -142,6 +143,9 @@ export const displayRouter = router({
     if (input.grid?.rowHeightPx !== undefined) {
       repo.set(SETTING_KEYS.DISPLAY_GRID_ROW_HEIGHT_PX, String(input.grid.rowHeightPx));
     }
+    if (input.grid?.stageCellMode !== undefined) {
+      repo.set(SETTING_KEYS.DISPLAY_GRID_STAGE_CELL_MODE, input.grid.stageCellMode);
+    }
 
     return { ok: true as const };
   }),
@@ -173,6 +177,7 @@ export const displayRouter = router({
       String(DISPLAY_DEFAULTS.crosshair.labelVisible),
     );
     repo.set(SETTING_KEYS.DISPLAY_GRID_ROW_HEIGHT_PX, String(DISPLAY_DEFAULTS.grid.rowHeightPx));
+    repo.set(SETTING_KEYS.DISPLAY_GRID_STAGE_CELL_MODE, DISPLAY_DEFAULTS.grid.stageCellMode);
 
     return { ok: true as const };
   }),

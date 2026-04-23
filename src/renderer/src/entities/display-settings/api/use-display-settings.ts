@@ -32,7 +32,7 @@ export interface UseUpdateDisplaySettingsResult {
           labelVisible: boolean;
         }>;
       }>;
-      grid: Partial<{ rowHeightPx: number }>;
+      grid: Partial<{ rowHeightPx: number; stageCellMode: 'PERCENT' | 'NTH' | 'DATE' | 'QTY' }>;
     }>,
   ) => Promise<{ ok: true }>;
   isPending: boolean;

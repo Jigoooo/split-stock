@@ -29,8 +29,12 @@ export function useEditStrategy(pdno: string | null): UseEditStrategyReturn {
   const presets = trpc.strategy.listPresets.useQuery();
 
   const invalidateAll = async (): Promise<void> => {
-    await utils.strategy.getActive.invalidate({ pdno });
-    await utils.strategy.listPresets.invalidate();
+    await Promise.all([
+      utils.strategy.getActive.invalidate({ pdno }),
+      utils.strategy.listPresets.invalidate(),
+      utils.account.getBalanceWithLots.invalidate(),
+      ...(pdno !== null ? [utils.account.getPositionOverlay.invalidate({ pdno })] : []),
+    ]);
   };
 
   const setActive = trpc.strategy.setActive.useMutation({ onSuccess: invalidateAll });

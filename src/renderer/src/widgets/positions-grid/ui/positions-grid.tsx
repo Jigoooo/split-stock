@@ -1,6 +1,11 @@
+import {
+  type BalanceStageCellMode,
+  useGetDisplaySettings,
+  useUpdateDisplaySettings,
+} from '@renderer/entities/display-settings';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { Button, TableGrid, useTableGridVirtual } from '@renderer/shared/ui';
+import { Button, Select, TableGrid, useTableGridVirtual } from '@renderer/shared/ui';
 import { type ReactElement, useRef, useState } from 'react';
 import { usePositionsGrid } from '../model/use-positions-grid';
 import { POSITION_COLS, PositionRow } from './position-row';
@@ -22,14 +27,14 @@ export interface PositionsGridProps {
  */
 export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
   const { onSelect, selectedPdno = null } = props;
-  const { error, gridMaxStages, isPending, mismatches, rows, syncStatus } = usePositionsGrid();
+  const { error, gridMaxStages, isPending, mismatches, rows, summary, syncStatus } =
+    usePositionsGrid();
   const utils = trpc.useUtils();
+  const displaySettings = useGetDisplaySettings();
+  const updateDisplaySettings = useUpdateDisplaySettings();
+  const stageCellMode: BalanceStageCellMode =
+    displaySettings.settings?.grid.stageCellMode ?? 'PERCENT';
 
-  // 종목별 자동매매 상태 — grid 레벨 1회 조회
-  const safetyState = trpc.safety.getState.useQuery(
-    { accountId: props.accountId },
-    { refetchInterval: 3000 },
-  );
   const syncCurrentState = trpc.account.syncCurrentState.useMutation({
     onMutate: () => {
       console.info('[PositionsGrid] syncCurrentState requested', {
@@ -87,8 +92,69 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
       }}
       aria-label={`보유 종목 그리드 (계좌 ${props.accountId})`}
     >
-      <div className="panel__title" style={{ flexShrink: 0 }}>
-        보유 종목 ({thousandSeparator(rows.length)}건)
+      <div
+        className="panel__title"
+        style={{
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.8rem',
+          flexWrap: 'wrap',
+        }}
+      >
+        <span>보유 종목 ({thousandSeparator(rows.length)}건)</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span className="muted" style={{ fontSize: '1rem' }}>
+            차수 표시
+          </span>
+          <Select
+            dense
+            aria-label="차수 셀 표시 방식"
+            value={stageCellMode}
+            disabled={updateDisplaySettings.isPending}
+            onChange={(event) => {
+              void updateDisplaySettings.mutateAsync({
+                grid: { stageCellMode: event.target.value as BalanceStageCellMode },
+              });
+            }}
+            style={{ minWidth: '7rem' }}
+          >
+            <option value="PERCENT">수익률</option>
+            <option value="NTH">차수</option>
+            <option value="DATE">날짜</option>
+            <option value="QTY">수량</option>
+          </Select>
+        </div>
+      </div>
+      <div
+        className="panel__body"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))',
+          gap: '0.5rem',
+          flexShrink: 0,
+        }}
+      >
+        <SummaryCard label="예수금" value={formatKrw(summary.deposit)} />
+        <SummaryCard label="예수금 + 2" value={formatKrw(summary.d2Deposit)} />
+        <SummaryCard label="총매입금액" value={formatKrw(summary.totalBuyAmount)} />
+        <SummaryCard label="총평가금액" value={formatKrw(summary.totalEval)} />
+        <SummaryCard
+          label="총평가손익"
+          value={formatSigned(summary.totalPnlAmount)}
+          {...(numberClassName(summary.totalPnlAmount)
+            ? { className: numberClassName(summary.totalPnlAmount) }
+            : {})}
+        />
+        <SummaryCard
+          label="수익률"
+          value={`${summary.totalPnlRate.toFixed(2)}%`}
+          {...(numberClassName(summary.totalPnlAmount)
+            ? { className: numberClassName(summary.totalPnlAmount) }
+            : {})}
+        />
+        <SummaryCard label="추정자산" value={formatKrw(summary.estimatedAsset)} />
       </div>
       {syncStatus === 'MISMATCH' ? (
         <div style={{ flexShrink: 0 }}>
@@ -204,7 +270,7 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
                     onToggleExpand={handleToggleExpand}
                     onSelect={handleSelect}
                     accountId={props.accountId}
-                    autoOn={safetyState.data?.bySymbol[row.position.code] ?? null}
+                    stageCellMode={stageCellMode}
                     style={{
                       position: 'absolute',
                       top: vItem.start,
@@ -237,4 +303,55 @@ function describeMismatchReason(reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH
     case 'QTY_MISMATCH':
       return '수량 불일치';
   }
+}
+
+const SummaryCard = ({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string;
+  className?: string | undefined;
+}): ReactElement => (
+  <div
+    style={{
+      border: '1px solid var(--hts-line, rgba(0,0,0,0.08))',
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(246,248,252,0.98))',
+      borderRadius: 6,
+      padding: '0.45rem 0.6rem',
+      minWidth: 0,
+    }}
+  >
+    <div className="muted" style={{ fontSize: '0.95rem' }}>
+      {label}
+    </div>
+    <div
+      className={className}
+      style={{
+        marginTop: '0.15rem',
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+      }}
+    >
+      {value}
+    </div>
+  </div>
+);
+
+function formatKrw(value: number): string {
+  return thousandSeparator(Math.round(value));
+}
+
+function formatSigned(value: number): string {
+  if (!Number.isFinite(value)) return '-';
+  return `${value > 0 ? '+' : ''}${thousandSeparator(Math.round(value))}`;
+}
+
+function numberClassName(value: number): string | undefined {
+  if (value > 0) return 'num-up';
+  if (value < 0) return 'num-down';
+  return 'num-flat';
 }

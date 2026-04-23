@@ -1,5 +1,6 @@
 import {
   DEFAULT_STRATEGY_PROFILE,
+  migrateLegacyStrategyProfile,
   type StrategyProfile,
   StrategyProfileSchema,
 } from '@shared/contracts';
@@ -62,12 +63,16 @@ export class StrategyRepo {
     pdno: string | null,
     profile: StrategyProfile,
   ): Result<void, StrategyRepoError> {
-    const parsed = StrategyProfileSchema.safeParse(profile);
-    if (!parsed.success) {
-      return err({ kind: 'VALIDATION', msg: parsed.error.message });
+    const normalized = migrateLegacyStrategyProfile(profile);
+    if (!normalized) {
+      const parsed = StrategyProfileSchema.safeParse(profile);
+      return err({
+        kind: 'VALIDATION',
+        msg: parsed.success ? 'strategy profile normalize failed' : parsed.error.message,
+      });
     }
     const before = this.readProfile(activeKey(accountId, pdno));
-    this.settings.set(activeKey(accountId, pdno), JSON.stringify(parsed.data));
+    this.settings.set(activeKey(accountId, pdno), JSON.stringify(normalized));
     this.logger.log({
       level: 'INFO',
       category: 'FSM',
@@ -76,7 +81,7 @@ export class StrategyRepo {
         accountId,
         pdno: pdno ?? '__global__',
         before: before.isOk() ? before.value : null,
-        after: parsed.data,
+        after: normalized,
       },
     });
     return ok(undefined);
@@ -135,10 +140,8 @@ export class StrategyRepo {
       if (!row.key.startsWith(prefix)) continue;
       const name = row.key.slice(prefix.length);
       try {
-        const parsed = StrategyProfileSchema.safeParse(JSON.parse(row.value));
-        if (parsed.success) {
-          results.push({ name, profile: parsed.data });
-        }
+        const profile = migrateLegacyStrategyProfile(JSON.parse(row.value));
+        if (profile) results.push({ name, profile });
       } catch {
         // skip malformed entries — 복원 실패는 무시
       }
@@ -151,19 +154,23 @@ export class StrategyRepo {
     name: string,
     profile: StrategyProfile,
   ): Result<void, StrategyRepoError> {
-    const parsed = StrategyProfileSchema.safeParse(profile);
-    if (!parsed.success) {
-      return err({ kind: 'VALIDATION', msg: parsed.error.message });
+    const normalized = migrateLegacyStrategyProfile(profile);
+    if (!normalized) {
+      const parsed = StrategyProfileSchema.safeParse(profile);
+      return err({
+        kind: 'VALIDATION',
+        msg: parsed.success ? 'strategy preset normalize failed' : parsed.error.message,
+      });
     }
     if (name.length === 0 || name.length > 50) {
       return err({ kind: 'VALIDATION', msg: '프리셋 이름은 1~50자' });
     }
-    this.settings.set(presetKey(accountId, name), JSON.stringify(parsed.data));
+    this.settings.set(presetKey(accountId, name), JSON.stringify(normalized));
     this.logger.log({
       level: 'INFO',
       category: 'FSM',
       message: 'strategy.preset.saved',
-      payload: { accountId, name, profile: parsed.data },
+      payload: { accountId, name, profile: normalized },
     });
     return ok(undefined);
   }
@@ -254,15 +261,107 @@ export class StrategyRepo {
     return { migrated };
   }
 
+  upgradeStoredProfiles(): { upgraded: number; recovered: number } {
+    const rows = this.settings.list();
+    let upgraded = 0;
+    let recovered = 0;
+
+    for (const row of rows) {
+      if (!row.key.startsWith(`${ACTIVE_PREFIX}.`) && !row.key.startsWith(`${PRESET_PREFIX}.`)) {
+        continue;
+      }
+
+      let nextProfile: StrategyProfile;
+      let recoveredWithDefault = false;
+      try {
+        const raw = JSON.parse(row.value);
+        const migrated = migrateLegacyStrategyProfile(raw);
+        if (migrated) {
+          nextProfile = migrated;
+        } else {
+          nextProfile = DEFAULT_STRATEGY_PROFILE;
+          recoveredWithDefault = true;
+        }
+      } catch {
+        nextProfile = DEFAULT_STRATEGY_PROFILE;
+        recoveredWithDefault = true;
+      }
+
+      const normalized = JSON.stringify(nextProfile);
+      if (normalized === row.value) continue;
+
+      this.settings.set(row.key, normalized);
+      if (recoveredWithDefault) {
+        recovered += 1;
+        this.logger.log({
+          level: 'ERROR',
+          category: 'FSM',
+          message: 'strategy.migration.recovered_with_default',
+          payload: { key: row.key },
+        });
+      } else {
+        upgraded += 1;
+      }
+    }
+
+    if (upgraded > 0 || recovered > 0) {
+      this.logger.log({
+        level: recovered > 0 ? 'WARN' : 'INFO',
+        category: 'FSM',
+        message: 'strategy.migration.completed',
+        payload: { upgraded, recovered },
+      });
+    }
+    return { upgraded, recovered };
+  }
+
+  backfillMissingActiveProfiles(
+    accountId: number,
+    pdnos: string[],
+  ): { seeded: number; failed: number } {
+    let seeded = 0;
+    let failed = 0;
+    const uniquePdnos = Array.from(new Set(pdnos)).sort((a, b) => a.localeCompare(b));
+    for (const pdno of uniquePdnos) {
+      const seededResult = this.ensureSeededActive(accountId, pdno);
+      if (seededResult.isErr()) {
+        failed += 1;
+        this.logger.log({
+          level: 'ERROR',
+          category: 'FSM',
+          message: 'strategy.backfill.failed',
+          payload: { accountId, pdno, reason: seededResult.error.kind },
+        });
+        continue;
+      }
+      if (seededResult.value.seeded) seeded += 1;
+    }
+
+    if (seeded > 0 || failed > 0) {
+      this.logger.log({
+        level: failed > 0 ? 'WARN' : 'INFO',
+        category: 'FSM',
+        message: 'strategy.backfill.completed',
+        payload: { accountId, seeded, failed },
+      });
+    }
+    return { seeded, failed };
+  }
+
   private readProfile(key: string): Result<StrategyProfile | null, StrategyRepoError> {
     const raw = this.settings.get(key);
     if (raw === null) return ok(null);
     try {
-      const parsed = StrategyProfileSchema.safeParse(JSON.parse(raw));
-      if (!parsed.success) {
-        return err({ kind: 'PARSE_FAILED', cause: parsed.error.message });
+      const parsedRaw = JSON.parse(raw);
+      const normalized = migrateLegacyStrategyProfile(parsedRaw);
+      if (!normalized) {
+        const next = StrategyProfileSchema.safeParse(parsedRaw);
+        return err({
+          kind: 'PARSE_FAILED',
+          cause: next.success ? 'strategy profile normalize failed' : next.error.message,
+        });
       }
-      return ok(parsed.data);
+      return ok(normalized);
     } catch (cause) {
       return err({ kind: 'PARSE_FAILED', cause });
     }

@@ -1,55 +1,53 @@
+import { createStrategyRules, DEFAULT_STRATEGY_PROFILE } from '@shared/contracts';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PROFILE, validateProfile } from './validate';
 
 describe('validateProfile', () => {
   it('기본값은 통과', () => {
-    const r = validateProfile(DEFAULT_PROFILE as unknown as Record<string, unknown>);
-    expect(r.ok).toBe(true);
+    const result = validateProfile(DEFAULT_PROFILE as unknown as Record<string, unknown>);
+    expect(result.ok).toBe(true);
   });
 
-  it('dropPct 범위 초과 → 필드 에러', () => {
-    const r = validateProfile({
-      totalAmountKrw: 1_000_000,
+  it('buyRules 길이가 maxStages와 다르면 에러', () => {
+    const result = validateProfile({
+      ...DEFAULT_STRATEGY_PROFILE,
       maxStages: 5,
-      dropPct: 0.9, // >0.5
-      profitPct: 0.05,
+      buyRules: createStrategyRules(4).buyRules,
     });
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors.dropPct).toBeTruthy();
-  });
-
-  it('여러 필드 오류 동시 보고', () => {
-    const r = validateProfile({
-      totalAmountKrw: -100,
-      maxStages: 0,
-      dropPct: 0.03,
-      profitPct: 0.05,
-    });
-    expect(r.ok).toBe(false);
-    if (!r.ok) {
-      expect(r.errors.totalAmountKrw).toBeTruthy();
-      expect(r.errors.maxStages).toBeTruthy();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.buyRules).toBeTruthy();
     }
   });
 
-  it('booster 선택 필드 — 생략 OK', () => {
-    const r = validateProfile({
-      totalAmountKrw: 1_000_000,
-      maxStages: 5,
-      dropPct: 0.03,
-      profitPct: 0.05,
+  it('1차 buyRule은 triggerDropPct가 없어야 한다', () => {
+    const result = validateProfile({
+      ...DEFAULT_STRATEGY_PROFILE,
+      buyRules: [
+        { nth: 1, triggerDropPct: 0.03, amountKrw: 1_000_000 },
+        ...DEFAULT_STRATEGY_PROFILE.buyRules.slice(1),
+      ],
     });
-    expect(r.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.buyRules).toBeTruthy();
+    }
   });
 
-  it('boosterPct 음수 -10% → 통과 (즉시 트리거 의미)', () => {
-    const r = validateProfile({
-      totalAmountKrw: 1_000_000,
-      maxStages: 5,
-      dropPct: 0.03,
-      profitPct: 0.05,
+  it('booster 선택 필드는 생략 가능하다', () => {
+    const result = validateProfile({
+      ...DEFAULT_STRATEGY_PROFILE,
+      boosterPct: undefined,
+      boosterAmountKrw: undefined,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('boosterPct 음수는 허용한다', () => {
+    const result = validateProfile({
+      ...DEFAULT_STRATEGY_PROFILE,
       boosterPct: -0.05,
     });
-    expect(r.ok).toBe(true);
+    expect(result.ok).toBe(true);
   });
 });

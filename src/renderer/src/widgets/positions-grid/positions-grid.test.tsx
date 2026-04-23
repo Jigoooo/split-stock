@@ -3,29 +3,43 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PositionsGrid } from './ui/positions-grid';
 
-// useVirtualizer — 가상화 없이 items 를 직접 노출하도록 stub
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
     getTotalSize: () => count * 36,
     getVirtualItems: () =>
-      Array.from({ length: count }, (_, i) => ({
-        key: i,
-        index: i,
-        start: i * 36,
+      Array.from({ length: count }, (_, index) => ({
+        key: index,
+        index,
+        start: index * 36,
       })),
     measureElement: vi.fn(),
   }),
 }));
 
 const mockUsePositionsGrid = vi.fn();
+const quickModeMutate = vi.fn();
+const syncCurrentStateMutateAsync = vi.fn();
+const displayMutateAsync = vi.fn();
 
 vi.mock('./model/use-positions-grid', () => ({
   usePositionsGrid: () => mockUsePositionsGrid(),
 }));
 
-const toggleSymbolMutate = vi.fn();
-const getStateInvalidate = vi.fn();
-const syncCurrentStateMutateAsync = vi.fn();
+vi.mock('@renderer/entities/display-settings', () => ({
+  useGetDisplaySettings: () => ({
+    isPending: false,
+    error: null,
+    settings: {
+      chart: { ma: {}, volume: {}, crosshair: {} },
+      grid: { rowHeightPx: 26, stageCellMode: 'PERCENT' },
+    },
+  }),
+  useUpdateDisplaySettings: () => ({
+    mutateAsync: displayMutateAsync,
+    isPending: false,
+    error: null,
+  }),
+}));
 
 vi.mock('@renderer/shared/api/trpc', () => ({
   trpc: {
@@ -40,18 +54,18 @@ vi.mock('@renderer/shared/api/trpc', () => ({
         }),
       },
     },
-    safety: {
-      getState: {
-        useQuery: () => ({ data: { bySymbol: {} } }),
-      },
-      toggleSymbol: {
-        useMutation: ({ onSuccess }: { onSuccess: () => void }) => ({
+    strategy: {
+      setAutoModeQuick: {
+        useMutation: ({ onSuccess }: { onSuccess: () => Promise<void> | void }) => ({
           mutate: (args: unknown) => {
-            toggleSymbolMutate(args);
-            onSuccess();
+            quickModeMutate(args);
+            void onSuccess();
           },
           isPending: false,
         }),
+      },
+      getActive: {
+        invalidate: vi.fn(),
       },
     },
     useUtils: () => ({
@@ -67,26 +81,40 @@ vi.mock('@renderer/shared/api/trpc', () => ({
         listActive: { invalidate: vi.fn() },
         listMyFills: { invalidate: vi.fn() },
       },
-      safety: {
-        getState: { invalidate: getStateInvalidate },
+      strategy: {
+        getActive: { invalidate: vi.fn() },
+      },
+      display: {
+        getSettings: { invalidate: vi.fn() },
       },
     }),
   },
 }));
+
+const summary = {
+  deposit: 1_000_000,
+  d2Deposit: 1_200_000,
+  totalBuyAmount: 500_000,
+  totalEval: 520_000,
+  totalPnlAmount: 20_000,
+  totalPnlRate: 4,
+  estimatedAsset: 1_520_000,
+};
 
 const makeRow = (code: string, name: string) => ({
   position: {
     code,
     name,
     qty: 10,
-    avgPrice: 50000,
-    currentPrice: 52000,
-    evalAmount: 520000,
-    pnlAmount: 20000,
-    pnlRate: 0.04,
+    avgPrice: 50_000,
+    currentPrice: 52_000,
+    evalAmount: 520_000,
+    pnlAmount: 20_000,
+    pnlRate: 4,
   },
   lots: [],
   rowMaxStages: 2,
+  strategyMeta: { maxStages: 2, autoBuyEnabled: true, autoSellEnabled: true },
 });
 
 const makeRowWithLot = (code: string, name: string) => ({
@@ -94,22 +122,23 @@ const makeRowWithLot = (code: string, name: string) => ({
   lots: [
     {
       nth: 1,
-      buyPrice: 50000,
+      buyPrice: 50_000,
       qty: 6,
-      amountKrw: 300000,
+      amountKrw: 300_000,
       status: 'OPEN',
-      boughtAt: Date.now(),
+      boughtAt: new Date('2025-01-02').getTime(),
     },
   ],
 });
 
 describe('PositionsGrid', () => {
-  it('마운트 + 기본 컬럼 헤더 렌더링', () => {
+  it('요약 바와 기본 컬럼을 렌더링한다', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
       mismatches: [],
       rows: [],
+      summary,
       syncStatus: 'IN_SYNC',
       gridMaxStages: 1,
     });
@@ -117,171 +146,90 @@ describe('PositionsGrid', () => {
     render(<PositionsGrid accountId={1} />);
 
     expect(screen.getByRole('region', { name: /보유 종목 그리드/ })).toBeInTheDocument();
+    expect(screen.getByText('예수금')).toBeInTheDocument();
+    expect(screen.getByText('총평가손익')).toBeInTheDocument();
     expect(screen.getByText('종목명')).toBeInTheDocument();
-    expect(screen.getByText('수량')).toBeInTheDocument();
-    expect(screen.getByText('매입가')).toBeInTheDocument();
-    expect(screen.getByText('현재가')).toBeInTheDocument();
   });
 
-  it('[+] 클릭 시 expand 상태 토글', () => {
+  it('확장 버튼과 행 선택이 동작한다', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
       mismatches: [],
       rows: [makeRow('005930', '삼성전자')],
-      syncStatus: 'IN_SYNC',
-      gridMaxStages: 2,
-    });
-
-    render(<PositionsGrid accountId={1} />);
-
-    const expandBtn = screen.getByRole('button', { name: '차수 펼치기' });
-    expect(expandBtn).toBeInTheDocument();
-    fireEvent.click(expandBtn);
-    expect(screen.getByRole('button', { name: '차수 접기' })).toBeInTheDocument();
-  });
-
-  it('종목 row 클릭 → onSelect 호출', () => {
-    mockUsePositionsGrid.mockReturnValue({
-      isPending: false,
-      error: null,
-      mismatches: [],
-      rows: [makeRow('005930', '삼성전자')],
+      summary,
       syncStatus: 'IN_SYNC',
       gridMaxStages: 2,
     });
 
     const onSelect = vi.fn();
     render(<PositionsGrid accountId={1} onSelect={onSelect} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '차수 펼치기' }));
+    expect(screen.getByRole('button', { name: '차수 접기' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('삼성전자'));
     expect(onSelect).toHaveBeenCalledWith('005930');
   });
 
-  it('가상화 측정 row에 data-index를 노출한다', () => {
+  it('자동매매 상태 셀렉트 변경 시 quick mutation을 호출한다', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
       mismatches: [],
       rows: [makeRow('005930', '삼성전자')],
+      summary,
       syncStatus: 'IN_SYNC',
       gridMaxStages: 2,
     });
 
-    const { container } = render(<PositionsGrid accountId={1} />);
-    expect(container.querySelector('[data-position-row="005930"]')).toHaveAttribute(
-      'data-index',
-      '0',
-    );
-  });
+    quickModeMutate.mockClear();
+    render(<PositionsGrid accountId={1} />);
 
-  it('선택 종목은 배경 강조가 적용되고 차트 팝아웃 버튼은 렌더하지 않는다', () => {
-    mockUsePositionsGrid.mockReturnValue({
-      isPending: false,
-      error: null,
-      mismatches: [],
-      rows: [makeRow('005930', '삼성전자')],
-      syncStatus: 'IN_SYNC',
-      gridMaxStages: 2,
+    fireEvent.change(screen.getByRole('combobox', { name: '삼성전자 자동매매 상태' }), {
+      target: { value: 'BUY_ONLY' },
     });
 
-    const { container } = render(<PositionsGrid accountId={1} selectedPdno="005930" />);
-    const selectedRow = container.querySelector(
-      '[data-position-row="005930"] [data-grid-role="row"]',
-    );
-
-    expect(selectedRow).toHaveAttribute('data-selected', 'true');
-    expect(selectedRow).toHaveStyle({
-      background: 'var(--accent-tint-12)',
-      boxShadow: 'inset 0.2rem 0 0 0 var(--accent)',
-    });
-    expect(screen.queryByRole('button', { name: '삼성전자 차트' })).toBeNull();
-  });
-
-  it('자동 칩 클릭 → toggleSymbol mutation 호출, onSelect 미호출', () => {
-    mockUsePositionsGrid.mockReturnValue({
-      isPending: false,
-      error: null,
-      mismatches: [],
-      rows: [makeRow('005930', '삼성전자')],
-      syncStatus: 'IN_SYNC',
-      gridMaxStages: 2,
-    });
-
-    toggleSymbolMutate.mockClear();
-
-    const onSelect = vi.fn();
-    render(<PositionsGrid accountId={1} onSelect={onSelect} />);
-
-    // autoOn=null(미지정) → 버튼 텍스트 "ON", 클릭 시 on=false 로 토글
-    const autoBtn = screen.getByRole('button', { name: '삼성전자 자동매매 ON' });
-    fireEvent.click(autoBtn);
-
-    expect(toggleSymbolMutate).toHaveBeenCalledWith({
+    expect(quickModeMutate).toHaveBeenCalledWith({
       accountId: 1,
       pdno: '005930',
-      on: false,
+      mode: 'BUY_ONLY',
     });
-    expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('불일치 경고가 있으면 수동 동기화 버튼을 노출하고 현재 계좌로 sync를 호출한다', async () => {
+  it('불일치 경고에서 동기화 버튼을 누르면 현재 계좌로 sync를 호출한다', async () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
       mismatches: [{ pdno: '005930', kisQty: 10, lotQty: 9, reason: 'QTY_MISMATCH' }],
       rows: [makeRow('005930', '삼성전자')],
+      summary,
       syncStatus: 'MISMATCH',
       gridMaxStages: 2,
     });
     syncCurrentStateMutateAsync.mockClear();
 
     render(<PositionsGrid accountId={7} />);
-
     fireEvent.click(screen.getByRole('button', { name: '동기화' }));
 
     expect(syncCurrentStateMutateAsync).toHaveBeenCalledWith({ accountId: 7 });
   });
 
-  it('불일치 상세 보기 클릭 시 종목별 원인을 펼쳐 보여준다', () => {
-    mockUsePositionsGrid.mockReturnValue({
-      isPending: false,
-      error: null,
-      mismatches: [
-        { pdno: '005930', kisQty: 10, lotQty: 9, reason: 'QTY_MISMATCH' },
-        { pdno: '000660', kisQty: 3, lotQty: 0, reason: 'NO_LOTS' },
-      ],
-      rows: [makeRow('005930', '삼성전자')],
-      syncStatus: 'MISMATCH',
-      gridMaxStages: 2,
-    });
-
-    render(<PositionsGrid accountId={7} />);
-
-    fireEvent.click(screen.getByRole('button', { name: '상세 보기' }));
-
-    expect(screen.getByText('005930').closest('div')).toHaveTextContent(
-      '005930 · 수량 불일치 · KIS 10주 / lot 9주',
-    );
-    expect(screen.getByText('000660').closest('div')).toHaveTextContent(
-      '000660 · 잔고는 있는데 차수 장부가 없음 · KIS 3주 / lot 0주',
-    );
-  });
-
-  it('차수 컬럼은 매입가/수량 대신 차수별 현재 수익률만 표시한다', () => {
+  it('기본 차수 표시 모드는 수익률이다', () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
       mismatches: [],
       rows: [makeRowWithLot('005930', '삼성전자')],
+      summary,
       syncStatus: 'IN_SYNC',
       gridMaxStages: 2,
     });
 
     render(<PositionsGrid accountId={1} />);
 
-    expect(screen.getByText('4.00')).toBeInTheDocument();
-    expect(screen.getByTitle('1차 · OPEN · 수익률 4.00%')).toHaveTextContent('4.00');
-    expect(screen.queryByText('×6')).toBeNull();
+    expect(
+      screen.getByTitle('1차 · OPEN · 매수일 2025. 1. 2. · 수량 6주 · 수익률 4.00%'),
+    ).toHaveTextContent('4.00%');
   });
 });

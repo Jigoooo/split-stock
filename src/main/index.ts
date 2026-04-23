@@ -12,10 +12,11 @@ import { createIPCHandler } from 'trpc-electron/main';
 // `import { app } from 'electron'`이 런타임에 undefined가 되는 interop
 // 문제가 있어, createRequire로 직접 require한다.
 const electronRequire = createRequire(import.meta.url);
-const { app, BrowserWindow, ipcMain, nativeTheme, safeStorage, screen, session, shell } =
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, screen, session, shell } =
   electronRequire('electron') as {
     app: typeof import('electron').app;
     BrowserWindow: typeof BrowserWindowType;
+    dialog: typeof import('electron').dialog;
     ipcMain: IpcMainType;
     nativeTheme: typeof import('electron').nativeTheme;
     safeStorage: typeof safeStorageType;
@@ -156,6 +157,35 @@ function bootstrapDeps(userDataDir: string) {
   if (ensured.isOk()) {
     // 단일 계좌 시절 strategy 키를 활성 계좌로 이전 (멱등).
     strategyRepo.migrateLegacyKeys(ensured.value);
+  }
+  const strategyMigration = strategyRepo.upgradeStoredProfiles();
+  const backfillStrategiesForAccount = (accountId: number): void => {
+    const rows = lotsRepo.listRows(accountId);
+    if (rows.isErr()) {
+      eventLogger.log({
+        level: 'ERROR',
+        category: 'FSM',
+        message: 'strategy.backfill.account-scan-failed',
+        payload: { accountId, reason: rows.error.kind },
+      });
+      return;
+    }
+    const openPdnos = rows.value.filter((row) => row.status === 'OPEN').map((row) => row.pdno);
+    strategyRepo.backfillMissingActiveProfiles(accountId, openPdnos);
+  };
+  for (const account of activeAccounts.list()) {
+    backfillStrategiesForAccount(account.id);
+  }
+  if (strategyMigration.recovered > 0) {
+    void app.whenReady().then(async () => {
+      await dialog.showMessageBox({
+        type: 'warning',
+        title: '자동매매 설정 복구',
+        message:
+          '일부 자동매매 설정을 새 형식으로 읽을 수 없어 기본 자동매매 설정으로 복구했습니다.',
+        detail: `복구된 항목: ${strategyMigration.recovered}건`,
+      });
+    });
   }
   const toWatchOutcomeEvent = (
     status: WatchOutcomeEvent['status'],
@@ -790,6 +820,10 @@ function bootstrapDeps(userDataDir: string) {
     logger: eventLogger,
     manualOrderReconciler,
     onRefreshed: () => {
+      const accountId = factory.getActiveAccountId();
+      if (accountId !== null) {
+        backfillStrategiesForAccount(accountId);
+      }
       strategyEngine.refreshTrackedSymbols();
     },
   });

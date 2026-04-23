@@ -34,8 +34,10 @@ export interface DisplaySettings {
   };
   grid: {
     rowHeightPx: number;
+    stageCellMode: BalanceStageCellMode;
   };
 }
 
 export type MaPeriod = 5 | 10 | 20 | 60 | 120;
 export const MA_PERIODS: MaPeriod[] = [5, 10, 20, 60, 120];
+export type BalanceStageCellMode = 'PERCENT' | 'NTH' | 'DATE' | 'QTY';

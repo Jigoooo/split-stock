@@ -1,5 +1,7 @@
 import {
   type BalanceWithLotsPosition,
+  type BalanceWithLotsStrategyMeta,
+  type BalanceWithLotsSummary,
   type LotEntry,
   useBalanceWithLots,
 } from '@renderer/entities/account';
@@ -9,6 +11,7 @@ export interface PositionsGridRow {
   lots: LotEntry[];
   /** 종목별 전략 maxStages — 없으면 0 (자동 OFF). */
   rowMaxStages: number;
+  strategyMeta: BalanceWithLotsStrategyMeta | null;
 }
 
 export interface UsePositionsGridResult {
@@ -21,6 +24,7 @@ export interface UsePositionsGridResult {
     reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH';
   }>;
   rows: PositionsGridRow[];
+  summary: BalanceWithLotsSummary;
   syncStatus: 'IN_SYNC' | 'MISMATCH';
   /** 그리드 전체 차수 컬럼 수 — 모든 rows 의 max 와 1 중 큰 값. 헤더/셀 컬럼 안정성 보장. */
   gridMaxStages: number;
@@ -33,13 +37,22 @@ export interface UsePositionsGridResult {
  *  - 정렬은 서버 응답 순서 유지 (W6 에서 컬럼 정렬 추가 예정)
  */
 export function usePositionsGrid(): UsePositionsGridResult {
-  const { error, isPending, lotsByPdno, mismatches, positions, strategiesByPdno, syncStatus } =
-    useBalanceWithLots();
+  const {
+    error,
+    isPending,
+    lotsByPdno,
+    mismatches,
+    positions,
+    strategiesByPdno,
+    summary,
+    syncStatus,
+  } = useBalanceWithLots();
 
   const rows: PositionsGridRow[] = positions.map((position) => ({
     position,
     lots: lotsByPdno[position.code] ?? [],
     rowMaxStages: strategiesByPdno[position.code]?.maxStages ?? 0,
+    strategyMeta: strategiesByPdno[position.code] ?? null,
   }));
 
   // 그리드 전체 차수 컬럼 수 — 모든 rows 의 max(전략 maxStages, 보유 lot의 nth max) 중 max.
@@ -52,5 +65,5 @@ export function usePositionsGrid(): UsePositionsGridResult {
     }
   }
 
-  return { error, gridMaxStages, isPending, mismatches, rows, syncStatus };
+  return { error, gridMaxStages, isPending, mismatches, rows, summary, syncStatus };
 }

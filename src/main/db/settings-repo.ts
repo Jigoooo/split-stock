@@ -94,6 +94,7 @@ export const SETTING_KEYS = {
 
   // ── 표시 설정: 그리드 ─────────────────────────────────────────────
   DISPLAY_GRID_ROW_HEIGHT_PX: 'display.grid.rowHeightPx',
+  DISPLAY_GRID_STAGE_CELL_MODE: 'display.grid.stageCellMode',
 
   // ── 실시간 설정 ─────────────────────────────────────────────────
   /** WS 세션 capacity — KIS 기본 20, 향후 60 확장 시 사용자가 변경 가능 (1~60). */
@@ -252,8 +253,11 @@ export interface DisplaySettings {
   };
   grid: {
     rowHeightPx: number;
+    stageCellMode: BalanceStageCellMode;
   };
 }
+
+export type BalanceStageCellMode = 'PERCENT' | 'NTH' | 'DATE' | 'QTY';
 
 const MA_DEFAULTS: Record<5 | 10 | 20 | 60 | 120, MaSettings> = {
   5: { enabled: true, color: '#e83d3d', width: 1, style: 'solid' },
@@ -274,7 +278,7 @@ const CROSSHAIR_DEFAULTS: CrosshairSettings = {
   labelVisible: true,
 };
 
-const DISPLAY_GRID_DEFAULTS = { rowHeightPx: 26 };
+const DISPLAY_GRID_DEFAULTS = { rowHeightPx: 26, stageCellMode: 'PERCENT' as BalanceStageCellMode };
 
 function readMa(repo: SettingsRepo, period: 5 | 10 | 20 | 60 | 120): MaSettings {
   const p = period as 5 | 10 | 20 | 60 | 120;
@@ -349,6 +353,13 @@ export function readDisplayConfig(repo: SettingsRepo): DisplaySettings {
     Number.isFinite(rowNum) && rowNum >= 18 && rowNum <= 60
       ? rowNum
       : DISPLAY_GRID_DEFAULTS.rowHeightPx;
+  const stageCellModeRaw = repo.get(SETTING_KEYS.DISPLAY_GRID_STAGE_CELL_MODE);
+  const validStageCellModes: BalanceStageCellMode[] = ['PERCENT', 'NTH', 'DATE', 'QTY'];
+  const stageCellMode: BalanceStageCellMode =
+    stageCellModeRaw !== null &&
+    validStageCellModes.includes(stageCellModeRaw as BalanceStageCellMode)
+      ? (stageCellModeRaw as BalanceStageCellMode)
+      : DISPLAY_GRID_DEFAULTS.stageCellMode;
 
   const crosshairModeRaw = repo.get(SETTING_KEYS.DISPLAY_CROSSHAIR_MODE);
   const validCrosshairModes: CrosshairModeType[] = ['Magnet', 'Normal'];
@@ -380,7 +391,7 @@ export function readDisplayConfig(repo: SettingsRepo): DisplaySettings {
         labelVisible: crosshairLabelVisible,
       },
     },
-    grid: { rowHeightPx },
+    grid: { rowHeightPx, stageCellMode },
   };
 }
 

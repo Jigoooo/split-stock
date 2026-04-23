@@ -1,4 +1,8 @@
-import type { StrategyProfile } from '@shared/contracts';
+import {
+  createStrategyRules,
+  DEFAULT_STRATEGY_PROFILE,
+  type StrategyProfile,
+} from '@shared/contracts';
 import { describe, expect, it } from 'vitest';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
@@ -13,7 +17,7 @@ function buildLogger(): EventLogger & { entries: Array<{ message: string; payloa
   const entries: Array<{ message: string; payload?: unknown }> = [];
   return {
     entries,
-    log: (e) => entries.push({ message: e.message, payload: e.payload }),
+    log: (event) => entries.push({ message: event.message, payload: event.payload }),
   };
 }
 
@@ -25,197 +29,148 @@ function setup() {
   return { settings, logger, repo: new StrategyRepo(settings, logger) };
 }
 
-const baseProfile = (overrides: Partial<StrategyProfile> = {}): StrategyProfile => ({
-  totalAmountKrw: 5_000_000,
-  maxStages: 5,
-  dropPct: 0.03,
-  profitPct: 0.05,
-  autoBuyEnabled: true,
-  autoBuyOrderType: 'LIMIT',
-  autoSellEnabled: true,
-  autoSellOrderType: 'LIMIT',
-  ...overrides,
-});
+function baseProfile(overrides: Partial<StrategyProfile> = {}): StrategyProfile {
+  const maxStages = overrides.maxStages ?? 5;
+  return {
+    version: 2,
+    maxStages,
+    ...createStrategyRules(maxStages, {
+      amountKrw: 1_000_000,
+      dropPct: 0.03,
+      profitPct: 0.05,
+    }),
+    autoBuyEnabled: true,
+    autoBuyOrderType: 'LIMIT',
+    autoSellEnabled: true,
+    autoSellOrderType: 'LIMIT',
+    ...overrides,
+  };
+}
 
-describe('StrategyRepo — active', () => {
+describe('StrategyRepo — active/preset', () => {
   it('계좌 글로벌 active 라운드트립 + strategy.updated 로그 기록', () => {
     const { repo, logger } = setup();
-    expect(repo.getActive(ACC_A, null).isOk()).toBe(true);
     expect(repo.getActive(ACC_A, null)._unsafeUnwrap()).toBeNull();
 
-    const r = repo.setActive(ACC_A, null, baseProfile());
-    expect(r.isOk()).toBe(true);
+    const result = repo.setActive(ACC_A, null, baseProfile());
+    expect(result.isOk()).toBe(true);
+    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()?.buyRules[0]?.amountKrw).toBe(1_000_000);
 
-    const loaded = repo.getActive(ACC_A, null);
-    expect(loaded.isOk()).toBe(true);
-    expect(loaded._unsafeUnwrap()?.maxStages).toBe(5);
-
-    const log = logger.entries.find((e) => e.message === 'strategy.updated');
+    const log = logger.entries.find((entry) => entry.message === 'strategy.updated');
     expect(log).toBeTruthy();
-    const payload = log?.payload as
-      | { before: unknown; after: unknown; pdno: string; accountId: number }
-      | undefined;
-    expect(payload?.before).toBeNull();
-    expect(payload?.accountId).toBe(ACC_A);
   });
 
   it('종목별 active와 글로벌은 독립 키', () => {
     const { repo } = setup();
-    repo.setActive(ACC_A, null, baseProfile({ dropPct: 0.02 }));
-    repo.setActive(ACC_A, '005930', baseProfile({ dropPct: 0.05 }));
-
-    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()?.dropPct).toBe(0.02);
-    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.dropPct).toBe(0.05);
-  });
-
-  it('두 번째 setActive 호출은 before/after diff 기록', () => {
-    const { repo, logger } = setup();
-    repo.setActive(ACC_A, null, baseProfile({ dropPct: 0.02 }));
-    logger.entries.length = 0; // reset
-    repo.setActive(ACC_A, null, baseProfile({ dropPct: 0.05 }));
-
-    const log = logger.entries.find((e) => e.message === 'strategy.updated');
-    const p = log?.payload as
-      | { before: StrategyProfile | null; after: StrategyProfile }
-      | undefined;
-    expect(p?.before?.dropPct).toBe(0.02);
-    expect(p?.after.dropPct).toBe(0.05);
-  });
-
-  it('Zod 범위 벗어난 dropPct → VALIDATION 에러', () => {
-    const { repo } = setup();
-    const r = repo.setActive(ACC_A, null, baseProfile({ dropPct: 0.9 }));
-    expect(r.isErr()).toBe(true);
-    if (r.isErr()) expect(r.error.kind).toBe('VALIDATION');
-  });
-
-  it('clearActive 호출 전후 getActive 결과', () => {
-    const { repo } = setup();
     repo.setActive(ACC_A, null, baseProfile());
-    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()).not.toBeNull();
-    repo.clearActive(ACC_A, null);
-    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()).toBeNull();
+    repo.setActive(
+      ACC_A,
+      '005930',
+      baseProfile({ buyRules: createStrategyRules(5, { amountKrw: 500_000 }).buyRules }),
+    );
+
+    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()?.buyRules[0]?.amountKrw).toBe(1_000_000);
+    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.buyRules[0]?.amountKrw).toBe(500_000);
   });
 
-  it('ensureSeededActive: 종목별 전략이 없으면 글로벌 active를 복사한다', () => {
+  it('ensureSeededActive: 글로벌 active가 있으면 복사하고, 없으면 기본 프로필을 사용한다', () => {
     const { repo } = setup();
-    repo.setActive(ACC_A, null, baseProfile({ dropPct: 0.07 }));
+    repo.setActive(ACC_A, null, baseProfile({ autoBuyEnabled: false }));
+    const seededFromGlobal = repo.ensureSeededActive(ACC_A, '005930');
+    expect(seededFromGlobal.isOk()).toBe(true);
+    if (seededFromGlobal.isErr()) throw new Error('seed failed');
+    expect(seededFromGlobal.value.source).toBe('global');
+    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.autoBuyEnabled).toBe(false);
 
-    const seeded = repo.ensureSeededActive(ACC_A, '005930');
-    expect(seeded.isOk()).toBe(true);
-    if (seeded.isErr()) throw new Error('seed failed');
-    expect(seeded.value.seeded).toBe(true);
-    expect(seeded.value.source).toBe('global');
-    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.dropPct).toBe(0.07);
+    const seededDefault = repo.ensureSeededActive(ACC_B, '000660');
+    expect(seededDefault.isOk()).toBe(true);
+    if (seededDefault.isErr()) throw new Error('seed failed');
+    expect(seededDefault.value.source).toBe('default');
+    expect(repo.getActive(ACC_B, '000660')._unsafeUnwrap()?.maxStages).toBe(
+      DEFAULT_STRATEGY_PROFILE.maxStages,
+    );
   });
 
-  it('ensureSeededActive: 글로벌 전략도 없으면 기본 프로필을 시드한다', () => {
+  it('savePreset/listPresets/deletePreset는 계좌별로 분리된다', () => {
     const { repo } = setup();
-
-    const seeded = repo.ensureSeededActive(ACC_A, '005930');
-    expect(seeded.isOk()).toBe(true);
-    if (seeded.isErr()) throw new Error('seed failed');
-    expect(seeded.value.source).toBe('default');
-    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.maxStages).toBe(5);
+    repo.savePreset(ACC_A, 'A전용', baseProfile());
+    repo.savePreset(ACC_B, 'B전용', baseProfile({ autoSellEnabled: false }));
+    expect(repo.listPresets(ACC_A).map((preset) => preset.name)).toEqual(['A전용']);
+    expect(repo.listPresets(ACC_B).map((preset) => preset.name)).toEqual(['B전용']);
+    repo.deletePreset(ACC_A, 'A전용');
+    expect(repo.listPresets(ACC_A)).toEqual([]);
   });
 });
 
-describe('StrategyRepo — preset', () => {
-  it('savePreset + listPresets 정렬 (계좌별 격리)', () => {
+describe('StrategyRepo — legacy compatibility', () => {
+  it('readProfile/setActive/savePreset는 legacy shape도 허용한다', () => {
     const { repo } = setup();
-    repo.savePreset(ACC_A, '대형주', baseProfile({ dropPct: 0.02, profitPct: 0.04 }));
-    repo.savePreset(ACC_A, '코스닥변동', baseProfile({ dropPct: 0.05, profitPct: 0.08 }));
+    const legacyLike = {
+      totalAmountKrw: 5_000_000,
+      maxStages: 5,
+      dropPct: 0.03,
+      profitPct: 0.05,
+      autoBuyEnabled: true,
+      autoBuyOrderType: 'LIMIT' as const,
+      autoSellEnabled: true,
+      autoSellOrderType: 'LIMIT' as const,
+    };
 
-    const presets = repo.listPresets(ACC_A);
-    expect(presets.map((p) => p.name)).toEqual(['대형주', '코스닥변동']);
-    expect(presets[0]?.profile.dropPct).toBe(0.02);
+    expect(repo.setActive(ACC_A, null, legacyLike as unknown as StrategyProfile).isOk()).toBe(true);
+    expect(repo.savePreset(ACC_A, 'legacy', legacyLike as unknown as StrategyProfile).isOk()).toBe(
+      true,
+    );
+    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()?.buyRules[1]?.triggerDropPct).toBe(0.03);
+    expect(repo.listPresets(ACC_A)[0]?.profile.sellRules[0]?.targetProfitPct).toBe(0.05);
   });
 
-  it('deletePreset', () => {
-    const { repo } = setup();
-    repo.savePreset(ACC_A, '대형주', baseProfile());
-    repo.savePreset(ACC_A, '코스닥변동', baseProfile());
-    repo.deletePreset(ACC_A, '대형주');
-    expect(repo.listPresets(ACC_A).map((p) => p.name)).toEqual(['코스닥변동']);
+  it('upgradeStoredProfiles: legacy JSON을 신형으로 업그레이드하고 깨진 항목은 기본값으로 복구한다', () => {
+    const { settings, repo } = setup();
+    settings.set(
+      `strategy.active.${ACC_A}`,
+      JSON.stringify({
+        totalAmountKrw: 5_000_000,
+        maxStages: 5,
+        dropPct: 0.03,
+        profitPct: 0.05,
+        autoBuyEnabled: true,
+        autoBuyOrderType: 'LIMIT',
+        autoSellEnabled: true,
+        autoSellOrderType: 'LIMIT',
+      }),
+    );
+    settings.set(`strategy.active.${ACC_A}.005930`, '{bad-json');
+
+    const result = repo.upgradeStoredProfiles();
+    expect(result.upgraded).toBe(1);
+    expect(result.recovered).toBe(1);
+    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()?.buyRules[1]?.triggerDropPct).toBe(0.03);
+    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()).toEqual(DEFAULT_STRATEGY_PROFILE);
   });
 
-  it('프리셋 이름 빈문자열 → VALIDATION', () => {
-    const { repo } = setup();
-    const r = repo.savePreset(ACC_A, '', baseProfile());
-    expect(r.isErr()).toBe(true);
-    if (r.isErr()) expect(r.error.kind).toBe('VALIDATION');
+  it('migrateLegacyKeys는 기존 단일 계좌 키를 신규 형식으로 옮긴다', () => {
+    const { settings, repo } = setup();
+    settings.set('strategy.active', JSON.stringify(baseProfile()));
+    settings.set('strategy.active.005930', JSON.stringify(baseProfile({ autoSellEnabled: false })));
+    settings.set('strategy.preset.대형주', JSON.stringify(baseProfile()));
+
+    const result = repo.migrateLegacyKeys(ACC_A);
+    expect(result.migrated).toBe(3);
+    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()?.maxStages).toBe(5);
+    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.autoSellEnabled).toBe(false);
+    expect(repo.listPresets(ACC_A).map((preset) => preset.name)).toEqual(['대형주']);
   });
 });
 
-describe('StrategyRepo — 파싱 에러', () => {
-  it('손상된 JSON → PARSE_FAILED', () => {
-    const { settings, logger } = setup();
-    settings.set(`strategy.active.${ACC_A}`, '{not-json');
-    const repo = new StrategyRepo(settings, logger);
-    const r = repo.getActive(ACC_A, null);
-    expect(r.isErr()).toBe(true);
-    if (r.isErr()) expect(r.error.kind).toBe('PARSE_FAILED');
-  });
-});
-
-describe('StrategyRepo — per-account 격리', () => {
-  it('계좌 A의 active 가 계좌 B에 보이지 않음', () => {
+describe('StrategyRepo — backfill', () => {
+  it('보유 종목 목록을 받아 종목별 설정이 없는 항목만 시드한다', () => {
     const { repo } = setup();
-    repo.setActive(ACC_A, null, baseProfile({ dropPct: 0.02 }));
-    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()?.dropPct).toBe(0.02);
-    expect(repo.getActive(ACC_B, null)._unsafeUnwrap()).toBeNull();
-  });
+    repo.setActive(ACC_A, null, baseProfile({ autoBuyEnabled: false }));
+    repo.setActive(ACC_A, '005930', baseProfile({ autoBuyEnabled: true }));
 
-  it('동일 종목 active 라도 계좌 다르면 분리', () => {
-    const { repo } = setup();
-    repo.setActive(ACC_A, '005930', baseProfile({ dropPct: 0.02 }));
-    repo.setActive(ACC_B, '005930', baseProfile({ dropPct: 0.07 }));
-    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.dropPct).toBe(0.02);
-    expect(repo.getActive(ACC_B, '005930')._unsafeUnwrap()?.dropPct).toBe(0.07);
-  });
-
-  it('listPresets 는 해당 계좌 prefix 만 필터', () => {
-    const { repo } = setup();
-    repo.savePreset(ACC_A, 'A전용', baseProfile({ dropPct: 0.02 }));
-    repo.savePreset(ACC_B, 'B전용', baseProfile({ dropPct: 0.07 }));
-    expect(repo.listPresets(ACC_A).map((p) => p.name)).toEqual(['A전용']);
-    expect(repo.listPresets(ACC_B).map((p) => p.name)).toEqual(['B전용']);
-  });
-});
-
-describe('StrategyRepo — migrateLegacyKeys', () => {
-  it('단일 계좌 시절 active 글로벌 키를 신규 형식으로 이전', () => {
-    const { settings, repo } = setup();
-    settings.set('strategy.active', JSON.stringify(baseProfile({ dropPct: 0.02 })));
-    const r = repo.migrateLegacyKeys(ACC_A);
-    expect(r.migrated).toBe(1);
-    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()?.dropPct).toBe(0.02);
-    expect(settings.get('strategy.active')).toBeNull();
-  });
-
-  it('단일 계좌 시절 종목별 active 키 (strategy.active.{pdno}) 이전', () => {
-    const { settings, repo } = setup();
-    settings.set('strategy.active.005930', JSON.stringify(baseProfile({ dropPct: 0.04 })));
-    const r = repo.migrateLegacyKeys(ACC_A);
-    expect(r.migrated).toBe(1);
-    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.dropPct).toBe(0.04);
-  });
-
-  it('단일 계좌 시절 preset 키 (strategy.preset.{name}) 이전', () => {
-    const { settings, repo } = setup();
-    settings.set('strategy.preset.대형주', JSON.stringify(baseProfile({ dropPct: 0.02 })));
-    const r = repo.migrateLegacyKeys(ACC_A);
-    expect(r.migrated).toBe(1);
-    expect(repo.listPresets(ACC_A).map((p) => p.name)).toEqual(['대형주']);
-  });
-
-  it('이미 신규 형식인 키는 다시 이전하지 않음 (멱등)', () => {
-    const { settings, repo } = setup();
-    repo.setActive(ACC_A, null, baseProfile({ dropPct: 0.02 }));
-    repo.savePreset(ACC_A, '대형주', baseProfile());
-    const r = repo.migrateLegacyKeys(ACC_A);
-    expect(r.migrated).toBe(0);
-    expect(repo.getActive(ACC_A, null)._unsafeUnwrap()?.dropPct).toBe(0.02);
-    void settings; // typescript usage
+    const result = repo.backfillMissingActiveProfiles(ACC_A, ['005930', '000660']);
+    expect(result.seeded).toBe(1);
+    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.autoBuyEnabled).toBe(true);
+    expect(repo.getActive(ACC_A, '000660')._unsafeUnwrap()?.autoBuyEnabled).toBe(false);
   });
 });

@@ -1,7 +1,9 @@
 import type { LotEntry } from '@renderer/entities/account';
+import type { BalanceStageCellMode } from '@renderer/entities/display-settings';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
+import { deriveStrategyAutoMode, type StrategyAutoMode } from '@shared/contracts/strategy';
 import { type CSSProperties, forwardRef, type ReactElement, useTransition } from 'react';
 import type { PositionsGridRow } from '../model/use-positions-grid';
 
@@ -23,27 +25,23 @@ export interface PositionRowProps {
   style?: CSSProperties;
   /** 활성 계좌 ID — toggleSymbol mutation 에 필요. */
   accountId: number;
-  /**
-   * 종목별 자동매매 상태.
-   * - true: 명시적 ON / false: 명시적 OFF / null: 미지정
-   */
-  autoOn: boolean | null;
+  stageCellMode: BalanceStageCellMode;
 }
 
 /** 컬럼 정의 — Header(positions-grid) 와 Row(position-row) 가 공유. */
 export const POSITION_COLS = {
   expand: 38,
   name: 128,
-  changeRate: 80,
+  changeRate: 68,
   qty: 80,
   avgPrice: 96,
   curPrice: 96,
   pnlAmount: 112,
-  pnlRate: 80,
+  pnlRate: 68,
   buyAmount: 128,
   evalAmount: 128,
-  auto: 52,
-  stage: 88,
+  auto: 122,
+  stage: 72,
 } as const;
 
 /**
@@ -55,24 +53,30 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
   function PositionRow(props, ref): ReactElement {
     const {
       accountId,
-      autoOn,
       expanded,
       gridMaxStages,
       onSelect,
       onToggleExpand,
       row,
       selectedPdno,
+      stageCellMode,
       style,
       virtualIndex,
     } = props;
     const [isPending, startTransition] = useTransition();
 
     const utils = trpc.useUtils();
-    const toggleSymbol = trpc.safety.toggleSymbol.useMutation({
-      onSuccess: () => utils.safety.getState.invalidate({ accountId }),
+    const setAutoModeQuick = trpc.strategy.setAutoModeQuick.useMutation({
+      onSuccess: async () => {
+        await Promise.all([
+          utils.account.getBalanceWithLots.invalidate(),
+          utils.strategy.getActive.invalidate({ pdno: position.code }),
+        ]);
+      },
     });
-    const { lots, position } = row;
+    const { lots, position, strategyMeta } = row;
     const isSelected = selectedPdno === position.code;
+    const autoMode = strategyMeta ? deriveStrategyAutoMode(strategyMeta) : 'ALL_ON';
 
     const sign = position.pnlAmount === 0 ? 'flat' : position.pnlAmount > 0 ? 'up' : 'down';
     const pnlColorClass = sign === 'up' ? 'num-up' : sign === 'down' ? 'num-down' : 'num-flat';
@@ -113,19 +117,23 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
             : stagePnlRate < 0
               ? 'num-down'
               : 'num-flat';
+      const stageText = formatStageCell(stageCellMode, nth, lot, stagePnlRate);
+      const stageTitle = formatStageTitle(nth, lot, stagePnlRate);
+      const cellClassName =
+        stageCellMode === 'PERCENT'
+          ? stagePnlClass
+          : stageCellMode === 'DATE'
+            ? 'muted'
+            : undefined;
       stageCells.push(
         <TableGrid.Cell
           key={`stage-${nth}`}
           width={POSITION_COLS.stage}
           numeric
-          title={
-            stagePnlRate === null
-              ? `${nth}차 · ${lot.status}`
-              : `${nth}차 · ${lot.status} · 수익률 ${stagePnlRate.toFixed(2)}%`
-          }
-          className={stagePnlClass}
+          title={stageTitle}
+          {...(cellClassName ? { className: cellClassName } : {})}
         >
-          {stagePnlRate === null ? '-' : stagePnlRate.toFixed(2)}
+          {stageText}
         </TableGrid.Cell>,
       );
     }
@@ -186,27 +194,27 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
             {thousandSeparator(Math.round(position.evalAmount))}
           </TableGrid.Cell>
           <TableGrid.Cell width={POSITION_COLS.auto}>
-            <button
-              type="button"
-              aria-label={`${position.name} 자동매매 ${autoOn === false ? 'OFF' : 'ON'}`}
-              aria-pressed={autoOn !== false}
-              disabled={toggleSymbol.isPending}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleSymbol.mutate({
+            <select
+              className="hts-input hts-input--dense"
+              value={autoMode}
+              disabled={setAutoModeQuick.isPending}
+              aria-label={`${position.name} 자동매매 상태`}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+              onChange={(event) => {
+                setAutoModeQuick.mutate({
                   accountId,
                   pdno: position.code,
-                  on: autoOn === false,
+                  mode: event.target.value as StrategyAutoMode,
                 });
               }}
-              style={{
-                ...autoBtnStyle,
-                cursor: toggleSymbol.isPending ? 'wait' : 'pointer',
-                color: autoOn === false ? 'var(--hts-down, #e53935)' : 'var(--hts-up, #1976d2)',
-              }}
+              style={{ minWidth: '8.8rem' }}
             >
-              {autoOn === false ? 'OFF' : 'ON'}
-            </button>
+              <option value="ALL_ON">전체 ON</option>
+              <option value="ALL_OFF">전체 OFF</option>
+              <option value="BUY_ONLY">매수만 ON</option>
+              <option value="SELL_ONLY">매도만 ON</option>
+            </select>
           </TableGrid.Cell>
           {stageCells}
         </TableGrid.Row>
@@ -229,10 +237,41 @@ function formatKrw(value: number): string {
   return thousandSeparator(Math.round(value));
 }
 
+function formatStageCell(
+  mode: BalanceStageCellMode,
+  nth: number,
+  lot: LotEntry,
+  stagePnlRate: number | null,
+): string {
+  switch (mode) {
+    case 'NTH':
+      return `${nth}차`;
+    case 'DATE':
+      return new Date(lot.boughtAt).toLocaleDateString('ko-KR', {
+        month: '2-digit',
+        day: '2-digit',
+      });
+    case 'QTY':
+      return thousandSeparator(lot.qty);
+    case 'PERCENT':
+      return stagePnlRate === null ? '-' : `${stagePnlRate.toFixed(2)}%`;
+  }
+}
+
+function formatStageTitle(nth: number, lot: LotEntry, stagePnlRate: number | null): string {
+  return [
+    `${nth}차`,
+    lot.status,
+    `매수일 ${new Date(lot.boughtAt).toLocaleDateString('ko-KR')}`,
+    `수량 ${thousandSeparator(lot.qty)}주`,
+    `수익률 ${stagePnlRate === null ? '-' : `${stagePnlRate.toFixed(2)}%`}`,
+  ].join(' · ');
+}
+
 const expandBtnStyle: CSSProperties = {
-  background: 'transparent',
-  border: '1px solid var(--hts-line, rgba(0,0,0,0.2))',
-  borderRadius: 2,
+  background: 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(232,236,242,0.95))',
+  border: '1px solid var(--hts-line, rgba(0,0,0,0.18))',
+  borderRadius: 5,
   width: '1.6rem',
   height: '1.6rem',
   cursor: 'pointer',
@@ -240,14 +279,6 @@ const expandBtnStyle: CSSProperties = {
   fontSize: '1rem',
   lineHeight: 1,
   padding: 0,
-};
-
-const autoBtnStyle: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-  fontWeight: 600,
-  fontSize: '1rem',
 };
 
 interface ExpandedLotsProps {
@@ -281,9 +312,11 @@ const ExpandedLots = ({ lots }: ExpandedLotsProps): ReactElement => {
   return (
     <div
       style={{
-        padding: '0.3rem 0.6rem',
-        background: 'var(--hts-accent-bg, rgba(0,0,0,0.02))',
+        padding: '0.45rem 0.7rem 0.65rem',
+        background: 'linear-gradient(180deg, rgba(246,248,252,0.96), rgba(239,243,249,0.98))',
         borderTop: '1px solid var(--hts-line, rgba(0,0,0,0.06))',
+        borderBottom: '1px solid var(--hts-line, rgba(0,0,0,0.1))',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.65)',
       }}
     >
       <TableGrid.Root

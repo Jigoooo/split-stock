@@ -3,6 +3,8 @@ export { useAccountBalance } from './model/use-account-balance';
 export { useActiveAccountId } from './model/use-active-account-id';
 export type {
   BalanceWithLotsPosition,
+  BalanceWithLotsStrategyMeta,
+  BalanceWithLotsSummary,
   LotEntry,
   UseBalanceWithLotsResult,
 } from './model/use-balance-with-lots';

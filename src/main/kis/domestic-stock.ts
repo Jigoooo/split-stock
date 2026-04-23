@@ -24,7 +24,9 @@ export interface Position {
 export interface BalanceResult {
   positions: Position[];
   deposit: number; // 예수금 총액
+  d2Deposit: number; // D+2 예수금
   totalEval: number; // 총평가금액
+  estimatedAsset: number; // 순자산금액
 }
 
 export interface DailyCcldOrder {
@@ -162,7 +164,9 @@ export async function inquireBalance(
   return ok({
     positions,
     deposit: parseNum(summary?.dnca_tot_amt),
+    d2Deposit: parseNum(summary?.prvs_rcdl_excc_amt),
     totalEval: parseNum(summary?.tot_evlu_amt),
+    estimatedAsset: parseNum(summary?.nass_amt),
   });
 }
 

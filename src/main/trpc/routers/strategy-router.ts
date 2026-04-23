@@ -1,4 +1,8 @@
-import { StrategyProfileSchema } from '@shared/contracts/strategy';
+import {
+  applyStrategyAutoMode,
+  type StrategyAutoMode,
+  StrategyProfileSchema,
+} from '@shared/contracts/strategy';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { applyPriceRatio } from '../../trading/respiit-planner';
@@ -45,6 +49,36 @@ export const strategyRouter = router({
         });
       }
       return { ok: true as const };
+    }),
+
+  setAutoModeQuick: publicProcedure
+    .input(
+      ActiveSelectorSchema.extend({
+        pdno: z.string().regex(/^\d{6}$/),
+        mode: z.enum(['ALL_ON', 'ALL_OFF', 'BUY_ONLY', 'SELL_ONLY']),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const accountId = resolveAccountId(ctx, input);
+      const seeded = ctx.strategyRepo.ensureSeededActive(accountId, input.pdno);
+      if (seeded.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `자동매매 상태 변경 실패: ${seeded.error.kind}`,
+        });
+      }
+      const nextProfile = applyStrategyAutoMode(
+        seeded.value.profile,
+        input.mode as StrategyAutoMode,
+      );
+      const saveResult = ctx.strategyRepo.setActive(accountId, input.pdno, nextProfile);
+      if (saveResult.isErr()) {
+        throw new TRPCError({
+          code: saveResult.error.kind === 'VALIDATION' ? 'BAD_REQUEST' : 'INTERNAL_SERVER_ERROR',
+          message: `자동매매 상태 저장 실패: ${saveResult.error.kind}`,
+        });
+      }
+      return { ok: true as const, profile: nextProfile };
     }),
 
   clearActive: publicProcedure.input(ActiveSelectorSchema).mutation(({ ctx, input }) => {

@@ -6,6 +6,9 @@ import {
   useDisplaySettings,
 } from '@renderer/features/display-settings';
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
+import { ProtectionLimits } from '@renderer/features/edit-strategy/ui/protection-limits';
+import { RateGuard } from '@renderer/features/edit-strategy/ui/rate-guard';
+import { TimeWindows } from '@renderer/features/edit-strategy/ui/time-windows';
 import { ActivePendingList, PendingCancelForm } from '@renderer/features/pending-cancel-settings';
 import { PriceCorrectionForm } from '@renderer/features/price-correction-settings';
 import { Button, ErrorBoundary, Select } from '@renderer/shared/ui';
@@ -15,13 +18,13 @@ import { useState } from 'react';
 
 /**
  * 설정 페이지.
- * - 차수(전략) 파라미터 편집 섹션 포함 (대시보드 폴더 제거로 환원).
+ * - 기본 자동매매 설정 + 계좌 공통 보호 설정 포함.
  * - 각 섹션은 ErrorBoundary 로 격리해 한 폼이 throw 해도 다른 섹션은 계속 사용 가능하도록 한다 (흰화면 방지).
  */
 export const SettingsPage = (): ReactElement => {
   return (
     <div style={{ display: 'grid', gap: '1.2rem', minWidth: 0 }}>
-      <Section name="차수 설정">
+      <Section name="기본 자동매매 설정">
         <StrategySection />
       </Section>
       <Section name="표시 설정">
@@ -56,7 +59,7 @@ function Section({ name, children }: { name: string; children: ReactNode }): Rea
 }
 
 /**
- * 차수(전략) 설정 섹션.
+ * 기본 자동매매 설정 섹션.
  * - 전역 프리셋(pdno=null) 편집.
  * - presetKey 로 form 강제 재마운트 — sub-hook stale 방지 (검증된 패턴).
  */
@@ -146,6 +149,15 @@ function StrategySection(): ReactElement {
           void strategy.saveAsPreset(name, profile);
         }}
       />
+
+      <div className="panel">
+        <div className="panel__title">계좌 공통 보호 설정</div>
+        <div className="panel__body" style={{ display: 'grid', gap: '1rem' }}>
+          <ProtectionLimits />
+          <TimeWindows />
+          <RateGuard />
+        </div>
+      </div>
     </div>
   );
 }

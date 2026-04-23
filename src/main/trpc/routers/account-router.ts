@@ -385,9 +385,10 @@ export const accountRouter = router({
    *
    * 반환:
    *   - positions: 기존 getBalance 와 동일 (KIS inquire-balance)
-   *   - deposit, totalEval: 동일
+   *   - deposit/d2Deposit/totalEval/estimatedAsset: KIS 요약 raw 값
+   *   - totalBuyAmount/totalPnlAmount/totalPnlRate: 요약 바 파생 값
    *   - lotsByPdno: Record<pdno, LotSnapshotEntry[]> — open/buying lot 만 (실시간 차수)
-   *   - strategiesByPdno: Record<pdno, { maxStages: number }> — 종목별 또는 글로벌 active strategy의 maxStages
+   *   - strategiesByPdno: Record<pdno, { maxStages, autoBuyEnabled, autoSellEnabled }>
    *
    * 호출측은 KIS HTTP 1회 + DB 조회 N회를 분산 호출하지 않고 단일 요청으로 끝낼 수 있다.
    * 기존 getBalance 는 호환성 유지(별도 procedure).
@@ -506,13 +507,16 @@ export const accountRouter = router({
         });
         lotsByPdno = {};
       }
-      // 각 pdno 의 active strategy: 종목별 → 글로벌 → 없음. 종목별 maxStages 만 반환.
+      // 각 pdno 의 active strategy: 종목별 → 글로벌 → 없음. UI가 즉시 사용 가능한
+      // 최소 메타(maxStages + 자동매수/자동매도 상태)만 반환.
       // strategyRepo 오류 시 빈 객체로 fallback — 잔고 표시는 계속.
-      let strategiesByPdno: Record<string, { maxStages: number }> = {};
+      let strategiesByPdno: Record<
+        string,
+        { maxStages: number; autoBuyEnabled: boolean; autoSellEnabled: boolean }
+      > = {};
       try {
         const globalActive = ctx.strategyRepo.getActive(accountId, null);
-        const globalMaxStages =
-          globalActive.isOk() && globalActive.value !== null ? globalActive.value.maxStages : null;
+        const globalProfile = globalActive.isOk() ? globalActive.value : null;
         // positions + lotsByPdno 의 모든 pdno 합집합 — 잔고는 있으나 lot 없는 종목도 포함.
         const allPdnos = new Set<string>([
           ...balance.value.positions.map((p) => p.code),
@@ -520,12 +524,14 @@ export const accountRouter = router({
         ]);
         for (const pdno of allPdnos) {
           const perSymbol = ctx.strategyRepo.getActive(accountId, pdno);
-          const maxStages =
-            perSymbol.isOk() && perSymbol.value !== null
-              ? perSymbol.value.maxStages
-              : globalMaxStages;
-          if (maxStages !== null) {
-            strategiesByPdno[pdno] = { maxStages };
+          const profile =
+            perSymbol.isOk() && perSymbol.value !== null ? perSymbol.value : globalProfile;
+          if (profile !== null) {
+            strategiesByPdno[pdno] = {
+              maxStages: profile.maxStages,
+              autoBuyEnabled: profile.autoBuyEnabled,
+              autoSellEnabled: profile.autoSellEnabled,
+            };
           }
         }
       } catch (err) {
@@ -544,10 +550,24 @@ export const accountRouter = router({
         })),
         lotsByPdno,
       });
+      const totalBuyAmount = balance.value.positions.reduce(
+        (sum, position) => sum + position.qty * position.avgPrice,
+        0,
+      );
+      const totalPnlAmount = balance.value.positions.reduce(
+        (sum, position) => sum + position.pnlAmount,
+        0,
+      );
+      const totalPnlRate = totalBuyAmount > 0 ? (totalPnlAmount / totalBuyAmount) * 100 : 0;
       return {
         positions: balance.value.positions,
         deposit: balance.value.deposit,
+        d2Deposit: balance.value.d2Deposit,
         totalEval: balance.value.totalEval,
+        estimatedAsset: balance.value.estimatedAsset,
+        totalBuyAmount,
+        totalPnlAmount,
+        totalPnlRate,
         lotsByPdno,
         syncStatus: mismatches.length > 0 ? 'MISMATCH' : 'IN_SYNC',
         mismatches,
@@ -576,14 +596,21 @@ export const accountRouter = router({
       const globalActive = ctx.strategyRepo.getActive(accountId, null);
       const profile =
         (active.isOk() ? active.value : null) ?? (globalActive.isOk() ? globalActive.value : null);
-      const profitPct = profile?.profitPct ?? 0.05;
+      const profitPctByNth: Record<number, number> = {};
+      for (const rule of profile?.sellRules ?? []) {
+        profitPctByNth[rule.nth] = rule.targetProfitPct;
+      }
       const overlay: LotOverlaySnapshot[] = snap.value.lots.map((l) => ({
         nth: l.nth,
         buyPrice: l.buyPrice,
         qty: l.qty,
         status: l.status,
       }));
-      const lines = buildLotOverlay(overlay, { profitPct, includeSold: input.includeSold });
-      return { lines, profitPct };
+      const lines = buildLotOverlay(overlay, {
+        profitPctByNth,
+        fallbackProfitPct: 0.05,
+        includeSold: input.includeSold,
+      });
+      return { lines, profitPctByNth };
     }),
 });

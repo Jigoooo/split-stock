@@ -25,10 +25,32 @@ export interface LotEntry {
   sellPrice?: number;
 }
 
+export interface BalanceWithLotsStrategyMeta {
+  maxStages: number;
+  autoBuyEnabled: boolean;
+  autoSellEnabled: boolean;
+}
+
+export interface BalanceWithLotsSummary {
+  deposit: number;
+  d2Deposit: number;
+  totalBuyAmount: number;
+  totalEval: number;
+  totalPnlAmount: number;
+  totalPnlRate: number;
+  estimatedAsset: number;
+}
+
 export interface UseBalanceWithLotsResult {
   positions: BalanceWithLotsPosition[];
   deposit: number;
+  d2Deposit: number;
   totalEval: number;
+  estimatedAsset: number;
+  totalBuyAmount: number;
+  totalPnlAmount: number;
+  totalPnlRate: number;
+  summary: BalanceWithLotsSummary;
   lotsByPdno: Record<string, LotEntry[]>;
   mismatches: Array<{
     pdno: string;
@@ -37,7 +59,7 @@ export interface UseBalanceWithLotsResult {
     reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH';
   }>;
   syncStatus: 'IN_SYNC' | 'MISMATCH';
-  strategiesByPdno: Record<string, { maxStages: number }>;
+  strategiesByPdno: Record<string, BalanceWithLotsStrategyMeta>;
   isPending: boolean;
   error: { message: string } | null;
 }
@@ -45,7 +67,12 @@ export interface UseBalanceWithLotsResult {
 interface BalanceWithLotsSnapshot {
   positions: BalanceWithLotsPosition[];
   deposit: number;
+  d2Deposit: number;
   totalEval: number;
+  estimatedAsset: number;
+  totalBuyAmount: number;
+  totalPnlAmount: number;
+  totalPnlRate: number;
   lotsByPdno: Record<string, LotEntry[]>;
   mismatches: Array<{
     pdno: string;
@@ -54,7 +81,7 @@ interface BalanceWithLotsSnapshot {
     reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH';
   }>;
   syncStatus: 'IN_SYNC' | 'MISMATCH';
-  strategiesByPdno: Record<string, { maxStages: number }>;
+  strategiesByPdno: Record<string, BalanceWithLotsStrategyMeta>;
 }
 
 function readCachedSnapshot(accountId: number | null): BalanceWithLotsSnapshot | null {
@@ -86,6 +113,7 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
   const { accountId } = useActiveAccountId();
   const cachedSnapshot = useMemo(() => readCachedSnapshot(accountId), [accountId]);
   const [queryReady, setQueryReady] = useState(accountId !== null && cachedSnapshot === null);
+  const [consecutiveFailureCount, setConsecutiveFailureCount] = useState(0);
 
   useEffect(() => {
     if (accountId === null) {
@@ -103,24 +131,52 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
 
   const query = trpc.account.getBalanceWithLots.useQuery(
     accountId !== null ? { accountId } : undefined,
-    { enabled: accountId !== null && queryReady, refetchInterval: 4000, staleTime: 0 },
+    {
+      enabled: accountId !== null && queryReady,
+      refetchInterval: 4000,
+      staleTime: 0,
+    },
   );
   const data = (query.data as BalanceWithLotsSnapshot | undefined) ?? cachedSnapshot;
 
   useEffect(() => {
     if (!query.data) return;
+    setConsecutiveFailureCount(0);
     writeCachedSnapshot(accountId, query.data as BalanceWithLotsSnapshot);
   }, [accountId, query.data]);
 
+  useEffect(() => {
+    if (query.errorUpdatedAt === 0 || !query.error) return;
+    setConsecutiveFailureCount((count) => count + 1);
+  }, [query.error, query.errorUpdatedAt]);
+
+  const summary: BalanceWithLotsSummary = {
+    deposit: data?.deposit ?? 0,
+    d2Deposit: data?.d2Deposit ?? 0,
+    totalBuyAmount: data?.totalBuyAmount ?? 0,
+    totalEval: data?.totalEval ?? 0,
+    totalPnlAmount: data?.totalPnlAmount ?? 0,
+    totalPnlRate: data?.totalPnlRate ?? 0,
+    estimatedAsset: data?.estimatedAsset ?? 0,
+  };
+  const hideTransientError = query.error !== null && consecutiveFailureCount < 3;
+
   return {
     positions: data?.positions ?? [],
-    deposit: data?.deposit ?? 0,
-    totalEval: data?.totalEval ?? 0,
+    deposit: summary.deposit,
+    d2Deposit: summary.d2Deposit,
+    totalEval: summary.totalEval,
+    estimatedAsset: summary.estimatedAsset,
+    totalBuyAmount: summary.totalBuyAmount,
+    totalPnlAmount: summary.totalPnlAmount,
+    totalPnlRate: summary.totalPnlRate,
+    summary,
     lotsByPdno: (data?.lotsByPdno ?? {}) as Record<string, LotEntry[]>,
     mismatches: data?.mismatches ?? [],
     syncStatus: (data?.syncStatus ?? 'IN_SYNC') as 'IN_SYNC' | 'MISMATCH',
     strategiesByPdno: data?.strategiesByPdno ?? {},
-    isPending: query.isPending && cachedSnapshot === null,
-    error: query.error ? { message: query.error.message } : null,
+    isPending:
+      (query.isPending && cachedSnapshot === null) || (hideTransientError && data === null),
+    error: query.error && !hideTransientError ? { message: query.error.message } : null,
   };
 }
