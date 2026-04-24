@@ -61,7 +61,11 @@ export function ControlPopup({
     side: 'bottom',
   });
   const [popupStyle, setPopupStyle] = useState<CSSProperties>({
+    left: 0,
+    position: 'fixed',
+    top: 0,
     visibility: 'hidden',
+    zIndex,
   });
   const portalTarget =
     typeof document === 'undefined'

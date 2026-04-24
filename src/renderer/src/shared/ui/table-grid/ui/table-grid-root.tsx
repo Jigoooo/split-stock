@@ -163,13 +163,13 @@ export function TableGridRoot(props: RootProps): ReactElement {
         ) : (
           <>
             {children}
-            {overlayScrollbar ? <OverlayScrollbar containerRef={bodyRef} /> : null}
+            {overlayScrollbar ? <OverlayScrollbar containerRef={bodyRef} alwaysVisible /> : null}
           </>
         )}
         {/* horizontalScroll=true 시: wrapper 가 세로+가로 모두 담당 → 두 방향 모두 부착 */}
         {horizontalScroll && overlayScrollbar ? (
           <>
-            <OverlayScrollbar containerRef={hScrollRef} />
+            <OverlayScrollbar containerRef={hScrollRef} alwaysVisible />
             <OverlayScrollbar containerRef={hScrollRef} orientation="horizontal" alwaysVisible />
           </>
         ) : null}

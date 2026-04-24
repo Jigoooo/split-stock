@@ -14,6 +14,7 @@ export type OverlayScrollbarProps = {
   orientation?: 'vertical' | 'horizontal';
   autoHideDelay?: number;
   minThumbSize?: number;
+  /** 스크롤 가능한 경우 thumb/track 을 자동 숨김 없이 표시한다. default true */
   alwaysVisible?: boolean;
   offset?: {
     top?: number;

@@ -10,6 +10,12 @@ import { type ReactElement, useRef, useState } from 'react';
 import { usePositionsGrid } from '../model/use-positions-grid';
 import { POSITION_COLS, PositionRow } from './position-row';
 
+const STAGE_CELL_MODE_OPTIONS = [
+  { value: 'PERCENT', label: '수익률' },
+  { value: 'DATE', label: '날짜' },
+  { value: 'QTY', label: '수량' },
+] as const satisfies ReadonlyArray<{ value: BalanceStageCellMode; label: string }>;
+
 export interface PositionsGridProps {
   /** 활성 계좌 ID — Wave 4 cutover 시 props 로 주입. 본 wave 는 entity hook 의 active 계좌 사용. */
   accountId: number;
@@ -125,9 +131,11 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
             }}
             style={{ minWidth: '7rem' }}
           >
-            <option value="PERCENT">수익률</option>
-            <option value="DATE">날짜</option>
-            <option value="QTY">수량</option>
+            {STAGE_CELL_MODE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </Select>
         </div>
       </div>

@@ -1,8 +1,9 @@
 import type { LotEntry } from '@renderer/entities/account';
 import type { BalanceStageCellMode } from '@renderer/entities/display-settings';
+import { STRATEGY_AUTO_MODE_OPTIONS } from '@renderer/features/edit-strategy';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { TableGrid } from '@renderer/shared/ui';
+import { Select, TableGrid } from '@renderer/shared/ui';
 import { deriveStrategyAutoMode, type StrategyAutoMode } from '@shared/contracts/strategy';
 import { type CSSProperties, forwardRef, type ReactElement, useTransition } from 'react';
 import type { PositionsGridRow } from '../model/use-positions-grid';
@@ -71,6 +72,7 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
         await Promise.all([
           utils.account.getBalanceWithLots.invalidate(),
           utils.strategy.getActive.invalidate({ pdno: position.code }),
+          utils.strategy.getEffectiveForEdit.invalidate({ pdno: position.code }),
         ]);
       },
     });
@@ -194,11 +196,11 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
             {thousandSeparator(Math.round(position.evalAmount))}
           </TableGrid.Cell>
           <TableGrid.Cell width={POSITION_COLS.auto}>
-            <select
-              className="hts-input hts-input--dense"
+            <Select
               value={autoMode}
               disabled={setAutoModeQuick.isPending}
               aria-label={`${position.name} 자동매매 상태`}
+              dense
               onClick={(event) => event.stopPropagation()}
               onKeyDown={(event) => event.stopPropagation()}
               onChange={(event) => {
@@ -210,11 +212,12 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
               }}
               style={{ minWidth: '8.8rem' }}
             >
-              <option value="ALL_ON">전체 ON</option>
-              <option value="ALL_OFF">전체 OFF</option>
-              <option value="BUY_ONLY">매수만 ON</option>
-              <option value="SELL_ONLY">매도만 ON</option>
-            </select>
+              {STRATEGY_AUTO_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
           </TableGrid.Cell>
           {stageCells}
         </TableGrid.Row>

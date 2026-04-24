@@ -67,6 +67,9 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       getActive: {
         invalidate: vi.fn(),
       },
+      getEffectiveForEdit: {
+        invalidate: vi.fn(),
+      },
     },
     useUtils: () => ({
       account: {
@@ -83,6 +86,7 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       },
       strategy: {
         getActive: { invalidate: vi.fn() },
+        getEffectiveForEdit: { invalidate: vi.fn() },
       },
       display: {
         getSettings: { invalidate: vi.fn() },
@@ -172,7 +176,7 @@ describe('PositionsGrid', () => {
     expect(onSelect).toHaveBeenCalledWith('005930');
   });
 
-  it('자동매매 상태 셀렉트 변경 시 quick mutation을 호출한다', () => {
+  it('자동매매 상태 셀렉트 변경 시 quick mutation을 호출한다', async () => {
     mockUsePositionsGrid.mockReturnValue({
       isPending: false,
       error: null,
@@ -186,9 +190,12 @@ describe('PositionsGrid', () => {
     quickModeMutate.mockClear();
     render(<PositionsGrid accountId={1} />);
 
-    fireEvent.change(screen.getByRole('combobox', { name: '삼성전자 자동매매 상태' }), {
-      target: { value: 'BUY_ONLY' },
-    });
+    const autoModeSelect = screen.getByRole('combobox', { name: '삼성전자 자동매매 상태' });
+    autoModeSelect.focus();
+    fireEvent.keyDown(autoModeSelect, { key: 'ArrowDown' });
+    fireEvent.keyDown(autoModeSelect, { key: 'ArrowDown' });
+    fireEvent.keyDown(autoModeSelect, { key: 'ArrowDown' });
+    fireEvent.keyDown(autoModeSelect, { key: 'Enter' });
 
     expect(quickModeMutate).toHaveBeenCalledWith({
       accountId: 1,

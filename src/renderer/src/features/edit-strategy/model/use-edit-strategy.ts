@@ -4,7 +4,13 @@ import type { StrategyProfile } from '@shared/contracts';
 interface ActiveState {
   isPending: boolean;
   error: { message: string } | null;
-  data: { profile: StrategyProfile | null } | undefined;
+  data:
+    | {
+        profile: StrategyProfile;
+        source: 'symbol' | 'global' | 'default';
+        hasOverride: boolean;
+      }
+    | undefined;
 }
 
 interface PresetsState {
@@ -25,12 +31,14 @@ interface UseEditStrategyReturn {
 
 export function useEditStrategy(pdno: string | null): UseEditStrategyReturn {
   const utils = trpc.useUtils();
-  const active = trpc.strategy.getActive.useQuery({ pdno });
+  const active = trpc.strategy.getEffectiveForEdit.useQuery({ pdno });
   const presets = trpc.strategy.listPresets.useQuery();
 
   const invalidateAll = async (): Promise<void> => {
     await Promise.all([
       utils.strategy.getActive.invalidate({ pdno }),
+      utils.strategy.getEffectiveForEdit.invalidate({ pdno }),
+      utils.strategy.getEffectiveForEdit.invalidate(),
       utils.strategy.listPresets.invalidate(),
       utils.account.getBalanceWithLots.invalidate(),
       ...(pdno !== null ? [utils.account.getPositionOverlay.invalidate({ pdno })] : []),
@@ -46,7 +54,13 @@ export function useEditStrategy(pdno: string | null): UseEditStrategyReturn {
     active: {
       isPending: active.isPending,
       error: active.error ? { message: active.error.message } : null,
-      data: active.data,
+      data: active.data
+        ? {
+            profile: active.data.effectiveProfile,
+            source: active.data.source,
+            hasOverride: active.data.hasOverride,
+          }
+        : undefined,
     },
     presets: {
       isPending: presets.isPending,

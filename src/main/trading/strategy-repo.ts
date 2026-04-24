@@ -1,6 +1,7 @@
 import {
   DEFAULT_STRATEGY_PROFILE,
   migrateLegacyStrategyProfile,
+  normalizeStrategyProfile,
   type StrategyProfile,
   StrategyProfileSchema,
 } from '@shared/contracts';
@@ -11,6 +12,8 @@ import type { EventLogger } from '../logging/event-logger';
 export type StrategyRepoError =
   | { kind: 'VALIDATION'; msg: string }
   | { kind: 'PARSE_FAILED'; cause: unknown };
+
+export type StrategyEffectiveSource = 'symbol' | 'global' | 'default';
 
 const ACTIVE_PREFIX = 'strategy.active';
 const PRESET_PREFIX = 'strategy.preset';
@@ -63,7 +66,7 @@ export class StrategyRepo {
     pdno: string | null,
     profile: StrategyProfile,
   ): Result<void, StrategyRepoError> {
-    const normalized = migrateLegacyStrategyProfile(profile);
+    const normalized = normalizeStrategyProfile(profile);
     if (!normalized) {
       const parsed = StrategyProfileSchema.safeParse(profile);
       return err({
@@ -85,6 +88,34 @@ export class StrategyRepo {
       },
     });
     return ok(undefined);
+  }
+
+  getEffectiveForEdit(
+    accountId: number,
+    pdno: string | null,
+  ): Result<
+    { profile: StrategyProfile; source: StrategyEffectiveSource; hasOverride: boolean },
+    StrategyRepoError
+  > {
+    const active = this.getActive(accountId, pdno);
+    if (active.isErr()) return err(active.error);
+    if (active.value) {
+      return ok({
+        profile: active.value,
+        source: pdno === null ? 'global' : 'symbol',
+        hasOverride: true,
+      });
+    }
+
+    if (pdno !== null) {
+      const globalActive = this.getActive(accountId, null);
+      if (globalActive.isErr()) return err(globalActive.error);
+      if (globalActive.value) {
+        return ok({ profile: globalActive.value, source: 'global', hasOverride: false });
+      }
+    }
+
+    return ok({ profile: DEFAULT_STRATEGY_PROFILE, source: 'default', hasOverride: false });
   }
 
   clearActive(accountId: number, pdno: string | null): void {
@@ -154,7 +185,7 @@ export class StrategyRepo {
     name: string,
     profile: StrategyProfile,
   ): Result<void, StrategyRepoError> {
-    const normalized = migrateLegacyStrategyProfile(profile);
+    const normalized = normalizeStrategyProfile(profile);
     if (!normalized) {
       const parsed = StrategyProfileSchema.safeParse(profile);
       return err({

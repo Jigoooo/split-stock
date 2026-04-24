@@ -37,6 +37,22 @@ export const strategyRouter = router({
     return { profile: r.value };
   }),
 
+  getEffectiveForEdit: publicProcedure.input(ActiveSelectorSchema).query(({ ctx, input }) => {
+    const accountId = resolveAccountId(ctx, input);
+    const r = ctx.strategyRepo.getEffectiveForEdit(accountId, input.pdno);
+    if (r.isErr()) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `전략 로드 실패: ${r.error.kind}`,
+      });
+    }
+    return {
+      effectiveProfile: r.value.profile,
+      source: r.value.source,
+      hasOverride: r.value.hasOverride,
+    };
+  }),
+
   setActive: publicProcedure
     .input(ActiveSelectorSchema.extend({ profile: StrategyProfileSchema }))
     .mutation(({ ctx, input }) => {

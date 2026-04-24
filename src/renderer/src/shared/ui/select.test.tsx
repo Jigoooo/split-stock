@@ -188,6 +188,23 @@ describe('Select', () => {
     expect(screen.getByRole('listbox')).toBeInTheDocument();
   });
 
+  it('첫 오픈에서 선택 option 정렬을 위해 window scrollIntoView를 호출하지 않는다', async () => {
+    const scrollIntoViewMock = HTMLElement.prototype.scrollIntoView as unknown as {
+      mockClear: () => void;
+      mock: { calls: unknown[] };
+    };
+    scrollIntoViewMock.mockClear();
+
+    render(<LargeSelectHarness count={40} initial="item-35" />);
+
+    fireEvent.click(screen.getByRole('combobox', { name: '대량 환경 선택' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    });
+    expect(scrollIntoViewMock.mock.calls).toHaveLength(0);
+  });
+
   it('닫힌 상태에서 option snapshot이 바뀌면 첫 오픈부터 최신 메타데이터를 사용한다', () => {
     render(<SelectSnapshotUpdateHarness />);
 
@@ -287,7 +304,9 @@ describe('Select', () => {
     expect(overlay).not.toBeNull();
 
     await waitFor(() => {
-      expect(within(overlay as HTMLElement).getByRole('listbox')).toBeInTheDocument();
+      const listbox = within(overlay as HTMLElement).getByRole('listbox');
+      expect(listbox).toBeInTheDocument();
+      expect(listbox).toHaveStyle({ position: 'fixed' });
     });
   });
 });

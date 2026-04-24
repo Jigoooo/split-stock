@@ -1,6 +1,8 @@
 import {
+  applyStrategyAutoMode,
   createStrategyRules,
   DEFAULT_STRATEGY_PROFILE,
+  MAX_STRATEGY_STAGES,
   type StrategyProfile,
 } from '@shared/contracts';
 import { describe, expect, it } from 'vitest';
@@ -99,6 +101,57 @@ describe('StrategyRepo — active/preset', () => {
     expect(repo.listPresets(ACC_B).map((preset) => preset.name)).toEqual(['B전용']);
     repo.deletePreset(ACC_A, 'A전용');
     expect(repo.listPresets(ACC_A)).toEqual([]);
+  });
+
+  it('maxStages 밖 비활성 차수 값은 저장소 재생성 후에도 보존된다', () => {
+    const { settings, logger, repo } = setup();
+    const fullRules = createStrategyRules(MAX_STRATEGY_STAGES, {
+      amountKrw: 1_000_000,
+      dropPct: 0.03,
+      profitPct: 0.05,
+    });
+    const profile = baseProfile({
+      maxStages: 5,
+      buyRules: fullRules.buyRules.map((rule) =>
+        rule.nth === 12 ? { ...rule, amountKrw: 777_000, triggerDropPct: 0.12 } : rule,
+      ),
+      sellRules: fullRules.sellRules.map((rule) =>
+        rule.nth === 12 ? { ...rule, targetProfitPct: 0.18 } : rule,
+      ),
+    });
+
+    expect(repo.setActive(ACC_A, '005930', profile).isOk()).toBe(true);
+
+    const restarted = new StrategyRepo(settings, logger);
+    const loaded = restarted.getActive(ACC_A, '005930')._unsafeUnwrap();
+    expect(loaded?.buyRules).toHaveLength(MAX_STRATEGY_STAGES);
+    expect(loaded?.buyRules[11]?.amountKrw).toBe(777_000);
+    expect(loaded?.buyRules[11]?.triggerDropPct).toBe(0.12);
+    expect(loaded?.sellRules[11]?.targetProfitPct).toBe(0.18);
+
+    const quickChanged = applyStrategyAutoMode(loaded as StrategyProfile, 'BUY_ONLY');
+    expect(restarted.setActive(ACC_A, '005930', quickChanged).isOk()).toBe(true);
+
+    const restartedAgain = new StrategyRepo(settings, logger);
+    const afterQuickMutation = restartedAgain.getActive(ACC_A, '005930')._unsafeUnwrap();
+    expect(afterQuickMutation?.buyRules[11]?.amountKrw).toBe(777_000);
+    expect(afterQuickMutation?.buyRules).toHaveLength(MAX_STRATEGY_STAGES);
+  });
+
+  it('getEffectiveForEdit는 종목 override 없이 글로벌/기본값을 읽기 전용 fallback으로 반환한다', () => {
+    const { repo } = setup();
+    repo.setActive(ACC_A, null, baseProfile({ autoBuyEnabled: false }));
+
+    const fromGlobal = repo.getEffectiveForEdit(ACC_A, '005930')._unsafeUnwrap();
+    expect(fromGlobal.source).toBe('global');
+    expect(fromGlobal.hasOverride).toBe(false);
+    expect(fromGlobal.profile.autoBuyEnabled).toBe(false);
+    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()).toBeNull();
+
+    const fromDefault = repo.getEffectiveForEdit(ACC_B, '000660')._unsafeUnwrap();
+    expect(fromDefault.source).toBe('default');
+    expect(fromDefault.hasOverride).toBe(false);
+    expect(fromDefault.profile.maxStages).toBe(DEFAULT_STRATEGY_PROFILE.maxStages);
   });
 });
 

@@ -8,6 +8,7 @@ export interface MainTradeHistoryPaneProps {
   /** 좌측에서 선택된 종목. null 이면 외부 R1 탭은 "모든 매매내역" 한 개만. */
   selectedPdno: string | null;
   selectedName?: string | null;
+  onOpenStrategySettings?: (() => void) | undefined;
 }
 
 type R1 = 'symbol' | 'all';
@@ -24,7 +25,7 @@ type R1 = 'symbol' | 'all';
  *   - 'all'    → AllTradeHistoryPanel (전용 화면)
  */
 export const MainTradeHistoryPane = (props: MainTradeHistoryPaneProps): ReactElement => {
-  const { accountId, selectedName = null, selectedPdno } = props;
+  const { accountId, onOpenStrategySettings, selectedName = null, selectedPdno } = props;
   const [r1, setR1Raw] = useState<R1>(selectedPdno !== null ? 'symbol' : 'all');
   const [, startTransition] = useTransition();
   const setR1 = (next: R1): void => {
@@ -73,7 +74,11 @@ export const MainTradeHistoryPane = (props: MainTradeHistoryPaneProps): ReactEle
         {effectiveR1 === 'all' ? (
           <AllTradeHistoryPanel accountId={accountId} />
         ) : (
-          <TradeHistoryPanel accountId={accountId} pdno={selectedPdno} />
+          <TradeHistoryPanel
+            accountId={accountId}
+            pdno={selectedPdno}
+            onOpenStrategySettings={onOpenStrategySettings}
+          />
         )}
       </div>
     </section>

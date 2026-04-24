@@ -14,7 +14,7 @@ export function OverlayScrollbar({
   orientation = 'vertical',
   autoHideDelay = AUTO_HIDE_DELAY,
   minThumbSize = MIN_THUMB_SIZE,
-  alwaysVisible = false,
+  alwaysVisible = true,
   offset,
 }: OverlayScrollbarProps) {
   const shouldReduceMotion = useReducedMotion();

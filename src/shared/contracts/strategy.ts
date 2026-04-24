@@ -21,7 +21,9 @@ export const RespiitPlanSchema = z.object({
 });
 export type RespiitPlan = z.infer<typeof RespiitPlanSchema>;
 
-const StageNthSchema = z.number().int().min(1).max(50);
+export const MAX_STRATEGY_STAGES = 50;
+
+const StageNthSchema = z.number().int().min(1).max(MAX_STRATEGY_STAGES);
 const PercentSchema = z.number().positive().max(0.5);
 
 export const StrategyBuyRuleSchema = z.object({
@@ -44,9 +46,9 @@ export type StrategySellRule = z.infer<typeof StrategySellRuleSchema>;
 
 const StrategyProfileBaseSchema = z.object({
   version: z.literal(2).default(2),
-  maxStages: z.number().int().min(1).max(50),
-  buyRules: z.array(StrategyBuyRuleSchema).min(1).max(50),
-  sellRules: z.array(StrategySellRuleSchema).min(1).max(50),
+  maxStages: z.number().int().min(1).max(MAX_STRATEGY_STAGES),
+  buyRules: z.array(StrategyBuyRuleSchema).min(1).max(MAX_STRATEGY_STAGES),
+  sellRules: z.array(StrategySellRuleSchema).min(1).max(MAX_STRATEGY_STAGES),
   autoBuyEnabled: z.boolean().default(true),
   autoBuyOrderType: z.enum(['LIMIT', 'MARKET']).default('LIMIT'),
   autoSellEnabled: z.boolean().default(true),
@@ -63,42 +65,33 @@ const StrategyProfileBaseSchema = z.object({
  * - sellRules는 1차~N차 차수별 익절률을 가진다.
  */
 export const StrategyProfileSchema = StrategyProfileBaseSchema.superRefine((profile, ctx) => {
-  if (profile.buyRules.length !== profile.maxStages) {
+  if (profile.buyRules.length < profile.maxStages) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['buyRules'],
-      message: 'buyRules 길이는 maxStages와 같아야 합니다.',
+      message: 'buyRules는 활성 maxStages 이상 채워야 합니다.',
     });
   }
-  if (profile.sellRules.length !== profile.maxStages) {
+  if (profile.sellRules.length < profile.maxStages) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['sellRules'],
-      message: 'sellRules 길이는 maxStages와 같아야 합니다.',
+      message: 'sellRules는 활성 maxStages 이상 채워야 합니다.',
     });
   }
 
-  for (let nth = 1; nth <= profile.maxStages; nth += 1) {
+  for (let index = 0; index < profile.buyRules.length; index += 1) {
+    const nth = index + 1;
     const buyRule = profile.buyRules[nth - 1];
-    const sellRule = profile.sellRules[nth - 1];
 
     if (!buyRule || buyRule.nth !== nth) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['buyRules'],
-        message: 'buyRules nth는 1차부터 maxStages까지 순서대로 채워야 합니다.',
+        message: 'buyRules nth는 1차부터 저장된 차수까지 순서대로 채워야 합니다.',
       });
       break;
     }
-    if (!sellRule || sellRule.nth !== nth) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['sellRules'],
-        message: 'sellRules nth는 1차부터 maxStages까지 순서대로 채워야 합니다.',
-      });
-      break;
-    }
-
     if (nth === 1 && buyRule.triggerDropPct !== null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -114,6 +107,20 @@ export const StrategyProfileSchema = StrategyProfileBaseSchema.superRefine((prof
       });
     }
   }
+
+  for (let index = 0; index < profile.sellRules.length; index += 1) {
+    const nth = index + 1;
+    const sellRule = profile.sellRules[nth - 1];
+
+    if (!sellRule || sellRule.nth !== nth) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sellRules'],
+        message: 'sellRules nth는 1차부터 저장된 차수까지 순서대로 채워야 합니다.',
+      });
+      break;
+    }
+  }
 });
 export type StrategyProfile = z.infer<typeof StrategyProfileSchema>;
 
@@ -122,7 +129,7 @@ const DEFAULT_DROP_PCT = 0.03;
 const DEFAULT_PROFIT_PCT = 0.05;
 
 export function createStrategyRules(
-  maxStages: number,
+  maxStages: number = MAX_STRATEGY_STAGES,
   opts: {
     amountKrw?: number;
     dropPct?: number;
@@ -149,7 +156,7 @@ export function createStrategyRules(
 export const DEFAULT_STRATEGY_PROFILE: StrategyProfile = {
   version: 2,
   maxStages: 5,
-  ...createStrategyRules(5),
+  ...createStrategyRules(MAX_STRATEGY_STAGES),
   autoBuyEnabled: true,
   autoBuyOrderType: 'LIMIT',
   autoSellEnabled: true,
@@ -171,6 +178,7 @@ export const LegacyStrategyProfileSchema = z.object({
 export type LegacyStrategyProfile = z.infer<typeof LegacyStrategyProfileSchema>;
 
 export type StrategyAutoMode = 'ALL_ON' | 'ALL_OFF' | 'BUY_ONLY' | 'SELL_ONLY';
+export type StrategyOrderType = StrategyProfile['autoBuyOrderType'];
 
 export function deriveStrategyAutoMode(
   profile: Pick<StrategyProfile, 'autoBuyEnabled' | 'autoSellEnabled'>,
@@ -196,19 +204,24 @@ export function applyStrategyAutoMode(
   }
 }
 
-export function deriveTotalAmountKrw(profile: Pick<StrategyProfile, 'buyRules'>): number {
-  return profile.buyRules.reduce((sum, rule) => sum + rule.amountKrw, 0);
+export function deriveTotalAmountKrw(
+  profile: Pick<StrategyProfile, 'buyRules'> & Partial<Pick<StrategyProfile, 'maxStages'>>,
+): number {
+  const activeLength = profile.maxStages ?? profile.buyRules.length;
+  return profile.buyRules.slice(0, activeLength).reduce((sum, rule) => sum + rule.amountKrw, 0);
 }
 
-export function migrateLegacyStrategyProfile(input: unknown): StrategyProfile | null {
-  const next = StrategyProfileSchema.safeParse(input);
-  if (next.success) return next.data;
+export function normalizeStrategyProfile(input: unknown): StrategyProfile | null {
+  const next = StrategyProfileBaseSchema.safeParse(input);
+  if (next.success) {
+    return expandStrategyRules(next.data);
+  }
 
   const legacy = LegacyStrategyProfileSchema.safeParse(input);
   if (!legacy.success) return null;
 
   const amountKrw = Math.max(1, Math.floor(legacy.data.totalAmountKrw / legacy.data.maxStages));
-  return StrategyProfileSchema.parse({
+  return normalizeStrategyProfile({
     version: 2,
     maxStages: legacy.data.maxStages,
     ...createStrategyRules(legacy.data.maxStages, {
@@ -225,6 +238,39 @@ export function migrateLegacyStrategyProfile(input: unknown): StrategyProfile | 
       ? { autoTradingEnabled: legacy.data.autoTradingEnabled }
       : {}),
   });
+}
+
+export function migrateLegacyStrategyProfile(input: unknown): StrategyProfile | null {
+  return normalizeStrategyProfile(input);
+}
+
+function expandStrategyRules(
+  profile: z.infer<typeof StrategyProfileBaseSchema>,
+): StrategyProfile | null {
+  const defaults = createStrategyRules(MAX_STRATEGY_STAGES);
+  const buyRules = defaults.buyRules.map((fallback, index) => {
+    const nth = index + 1;
+    const existing = profile.buyRules[index];
+    return {
+      nth,
+      triggerDropPct: nth === 1 ? null : (existing?.triggerDropPct ?? fallback.triggerDropPct),
+      amountKrw: existing?.amountKrw ?? fallback.amountKrw,
+    };
+  });
+  const sellRules = defaults.sellRules.map((fallback, index) => {
+    const nth = index + 1;
+    const existing = profile.sellRules[index];
+    return {
+      nth,
+      targetProfitPct: existing?.targetProfitPct ?? fallback.targetProfitPct,
+    };
+  });
+  const parsed = StrategyProfileSchema.safeParse({
+    ...profile,
+    buyRules,
+    sellRules,
+  });
+  return parsed.success ? parsed.data : null;
 }
 
 export const StrategyPresetSchema = z.object({

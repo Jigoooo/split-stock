@@ -38,6 +38,10 @@ const VERTICAL_SEPARATOR: ReactElement = (
 
 const panelStyle = { overflow: 'hidden' } as const;
 
+export interface MainPageProps {
+  onOpenStrategySettings?: (() => void) | undefined;
+}
+
 /**
  * 메인 페이지 — 상단(좌/우 split: 포지션/매매내역) + 하단(주문 섹션) vertical split.
  *
@@ -47,7 +51,7 @@ const panelStyle = { overflow: 'hidden' } as const;
  * - 하단 30% (min 25%) : 선택 종목 기준 차트 + 주문 패널
  * - activeAccountId 없으면 안내 패널만 표시 (login 화면을 따로 두지 않고 shell 레벨).
  */
-export const MainPage = (): ReactElement => {
+export const MainPage = ({ onOpenStrategySettings }: MainPageProps): ReactElement => {
   useMainRealtime();
 
   const { accountId, isPending: isAccountPending } = useActiveAccountId();
@@ -150,6 +154,7 @@ export const MainPage = (): ReactElement => {
                 accountId={accountId}
                 selectedPdno={selectedPdno}
                 selectedName={selectedEntry?.name ?? null}
+                onOpenStrategySettings={onOpenStrategySettings}
               />
             </Panel>
           </Group>

@@ -259,8 +259,6 @@ const SelectRoot = ({
   // 첫 오픈 시 option registration 비용을 피한다.
   const resolvedOptions = optionSnapshot ?? options;
   const optionLookup = buildOptionLookup(resolvedOptions);
-  const usesVirtualizedSnapshot =
-    optionSnapshot !== undefined && resolvedOptions.length >= SELECT_VIRTUALIZE_THRESHOLD;
 
   const applyOpenChange = (nextOpen: boolean): void => {
     if (open === undefined) {
@@ -349,18 +347,6 @@ const SelectRoot = ({
     if (!isOpen || wasOpen) return;
     syncActiveToCurrent();
   }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen || activeValue === '' || usesVirtualizedSnapshot) return;
-
-    const activeOption = optionLookup.byValue.get(activeValue);
-    if (!activeOption) return;
-
-    window.requestAnimationFrame(() => {
-      const optionElement = document.getElementById(activeOption.id);
-      optionElement?.scrollIntoView?.({ block: 'nearest' });
-    });
-  }, [activeValue, isOpen, optionLookup, usesVirtualizedSnapshot]);
 
   const contextValue: SelectContextValue = {
     activeValue,
@@ -732,6 +718,34 @@ function SelectContentWithPopupRef({
     if (!context.open || !shouldVirtualize || activeIndex < 0) return;
     virtualizer.scrollToIndex(activeIndex, { align: 'auto' });
   }, [activeIndex, context.open, shouldVirtualize, virtualizer]);
+
+  useEffect(() => {
+    if (!context.open || shouldVirtualize || context.activeValue === '') return;
+
+    const activeOption = context.optionLookup.byValue.get(context.activeValue);
+    if (!activeOption) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const popup = popupRef.current;
+      const optionElement = document.getElementById(activeOption.id);
+      if (!popup || !optionElement || !popup.contains(optionElement)) return;
+
+      const popupRect = popup.getBoundingClientRect();
+      const optionRect = optionElement.getBoundingClientRect();
+      const paddingPx = 6;
+
+      if (optionRect.top < popupRect.top + paddingPx) {
+        popup.scrollTop -= popupRect.top + paddingPx - optionRect.top;
+        return;
+      }
+
+      if (optionRect.bottom > popupRect.bottom - paddingPx) {
+        popup.scrollTop += optionRect.bottom - (popupRect.bottom - paddingPx);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [context.activeValue, context.open, context.optionLookup, shouldVirtualize]);
 
   const renderedOptions =
     snapshotOptions === undefined ? (
