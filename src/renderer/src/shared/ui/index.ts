@@ -8,7 +8,6 @@ export type {
   DatePickerProps,
   DatePickerRootProps,
   DatePickerTriggerProps,
-  DatePickerValueProps,
 } from './date-picker';
 export { DatePicker } from './date-picker';
 export {

@@ -87,6 +87,7 @@ describe('DatePicker', () => {
     render(<DatePickerHarness onCommit={onCommit} />);
 
     fireEvent.click(screen.getByRole('button', { name: '기준일 선택' }));
+    fireEvent.click(screen.getByRole('button', { name: '월 선택 열기' }));
     fireEvent.click(screen.getByRole('button', { name: '연도 선택 열기' }));
 
     await waitFor(() => {

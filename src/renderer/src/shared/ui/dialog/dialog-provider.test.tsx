@@ -117,7 +117,11 @@ describe('DialogProvider', () => {
       });
     });
 
-    fireEvent.click(await screen.findByRole('button', { name: '닫기' }));
+    const dialog = await screen.findByRole('dialog');
+    const backdrop = dialog.previousElementSibling;
+    expect(backdrop).toBeInstanceOf(HTMLElement);
+
+    fireEvent.click(backdrop as HTMLElement);
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

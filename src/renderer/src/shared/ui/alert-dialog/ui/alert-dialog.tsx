@@ -1,5 +1,4 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, AlertTriangle, CheckCircle2, Info, type LucideIcon } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { createPortal } from 'react-dom';
@@ -9,19 +8,7 @@ import type { DialogConfig, DialogTypeValue } from '../../dialog/model/dialog-ty
 import { DialogMode, DialogType } from '../../dialog/model/dialog-types';
 import { OverlayType, overlayStackActions, pushOverlayHistoryState } from '../../overlay-stack';
 
-const TYPE_ICON: Record<DialogTypeValue, LucideIcon> = {
-  [DialogType.INFO]: Info,
-  [DialogType.SUCCESS]: CheckCircle2,
-  [DialogType.WARNING]: AlertTriangle,
-  [DialogType.ERROR]: AlertCircle,
-};
-
-const TYPE_TITLE: Record<DialogTypeValue, string> = {
-  [DialogType.INFO]: '알림',
-  [DialogType.SUCCESS]: '성공',
-  [DialogType.WARNING]: '경고',
-  [DialogType.ERROR]: '오류',
-};
+const DESTRUCTIVE_TYPES = new Set<DialogTypeValue>([DialogType.WARNING, DialogType.ERROR]);
 
 function getTypeAccent(type: DialogTypeValue, colors: ReturnType<typeof useColors>): string {
   switch (type) {
@@ -32,7 +19,7 @@ function getTypeAccent(type: DialogTypeValue, colors: ReturnType<typeof useColor
     case DialogType.ERROR:
       return colors.feedback.error;
     default:
-      return colors.feedback.info;
+      return colors.interactive.primary;
   }
 }
 
@@ -50,7 +37,6 @@ type AlertDialogRendererProps = {
 
 export function AlertDialogRenderer({ config }: AlertDialogRendererProps): ReactElement | null {
   const colors = useColors();
-  const dialogRef = useRef<HTMLDivElement>(null);
   const historyIdRef = useRef<string | null>(null);
   const ignoreOverlayResolveRef = useRef(false);
   const latestCancelRef = useRef(config.onCancel);
@@ -125,43 +111,12 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (!isTopOverlay()) return;
 
-      if (event.key === 'Escape' && isOverlayPressClose) {
-        event.preventDefault();
-        closeWithHistory(false);
-        return;
-      }
-
       if (event.key === 'Enter') {
-        const target = event.target;
-        if (target instanceof HTMLElement && target.tagName === 'TEXTAREA') {
-          return;
-        }
         event.preventDefault();
         closeWithHistory(true);
-        return;
-      }
-
-      if (event.key === 'Tab' && dialogRef.current) {
-        const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        );
-        const first = focusables[0];
-        const last = focusables[focusables.length - 1];
-
-        if (focusables.length === 0) return;
-
-        if (event.shiftKey) {
-          if (document.activeElement === first) {
-            event.preventDefault();
-            last?.focus();
-          }
-          return;
-        }
-
-        if (document.activeElement === last) {
-          event.preventDefault();
-          first?.focus();
-        }
+      } else if (event.key === 'Escape' && isOverlayPressClose) {
+        event.preventDefault();
+        closeWithHistory(false);
       }
     };
 
@@ -171,10 +126,8 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
 
   if (!isOpen) return null;
 
-  const Icon = TYPE_ICON[type];
   const accentColor = getTypeAccent(type, colors);
-  const displayTitle = title && title !== '알림' ? title : TYPE_TITLE[type];
-  const destructive = type === DialogType.ERROR || type === DialogType.WARNING;
+  const isDestructive = DESTRUCTIVE_TYPES.has(type);
 
   return createPortal(
     <AnimatePresence>
@@ -182,162 +135,119 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
         <>
           <motion.div
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            animate={{ opacity: 1, pointerEvents: 'auto' }}
+            exit={{ opacity: 0, pointerEvents: 'none' }}
+            transition={{ duration: 0.2 }}
             style={{
               position: 'fixed',
               inset: 0,
               zIndex: Z_INDEX.ALERT_BACKDROP,
               backgroundColor: colors.overlay.modalBackdrop,
               backdropFilter: 'blur(4px)',
-              WebkitBackdropFilter: 'blur(4px)',
+            }}
+            onClick={() => {
+              if (isOverlayPressClose && isTopOverlay()) closeWithHistory(false);
             }}
           />
-          {isOverlayPressClose ? (
-            <button
-              type="button"
-              aria-label="닫기"
-              onClick={() => {
-                if (isTopOverlay()) {
-                  closeWithHistory(false);
-                }
-              }}
-              style={{
-                position: 'fixed',
-                inset: 0,
-                zIndex: Z_INDEX.ALERT_BACKDROP,
-                border: 0,
-                padding: 0,
-                background: 'transparent',
-                cursor: 'default',
-              }}
-            />
-          ) : null}
           <motion.div
-            ref={dialogRef}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="app-dialog-title"
-            initial={{ opacity: 0, scale: 1.04, x: '-50%', y: '-48%' }}
-            animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
-            exit={{ opacity: 0, scale: 0.98, x: '-50%', y: '-48%' }}
-            transition={{ type: 'spring', damping: 26, stiffness: 360, mass: 0.82 }}
+            aria-labelledby={title ? 'app-dialog-title' : undefined}
+            initial={{ opacity: 0, scale: 1.08, x: '-50%', y: '-50%' }}
+            animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%', pointerEvents: 'auto' }}
+            exit={{ opacity: 0, scale: 0.96, x: '-50%', y: '-50%', pointerEvents: 'none' }}
+            transition={{ type: 'spring', damping: 20, stiffness: 380, mass: 0.8 }}
             style={{
               position: 'fixed',
               top: '50%',
               left: '50%',
               zIndex: Z_INDEX.ALERT,
-              width: 'min(44rem, calc(100vw - 3.2rem))',
-              minWidth: 'min(32rem, calc(100vw - 3.2rem))',
-              borderRadius: '1.8rem',
+              width: '27rem',
+              maxWidth: 'calc(100vw - 4rem)',
+              backgroundColor: `color-mix(in srgb, ${colors.bg.elevated} 92%, ${accentColor} 8%)`,
               border: `1px solid ${colors.border.default}`,
-              background: `linear-gradient(180deg, ${colors.bg.elevated}, ${colors.bg.subtle})`,
-              boxShadow: `0 24px 64px ${colors.shadow.modal}`,
+              borderRadius: '1.4rem',
               overflow: 'hidden',
+              boxShadow: `0 24px 64px ${colors.shadow.modal}`,
             }}
+            onClick={(event) => event.stopPropagation()}
           >
             <div
               style={{
+                padding: '2rem 2rem 0.8rem',
+                textAlign: 'center',
                 display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                padding: '1.6rem 1.8rem 1rem',
-                borderBottom: `1px solid ${colors.border.default}`,
+                flexDirection: 'column',
+                gap: '0.4rem',
               }}
             >
-              <span
-                aria-hidden
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '3.2rem',
-                  height: '3.2rem',
-                  flexShrink: 0,
-                  borderRadius: '999px',
-                  background: `color-mix(in srgb, ${accentColor} 14%, ${colors.bg.elevated})`,
-                  color: accentColor,
-                }}
-              >
-                <Icon size={18} />
-              </span>
-              <div style={{ minWidth: 0 }}>
-                <div
+              {title ? (
+                <h2
                   id="app-dialog-title"
                   style={{
+                    fontSize: '1.7rem',
+                    fontWeight: 600,
                     color: colors.text.primary,
-                    fontSize: '1.55rem',
-                    fontWeight: 700,
                     lineHeight: 1.25,
                   }}
                 >
-                  {displayTitle}
+                  {title}
+                </h2>
+              ) : null}
+              {message ? (
+                <div style={{ fontSize: '1.3rem', color: colors.text.secondary, lineHeight: 1.45 }}>
+                  {message}
                 </div>
-              </div>
+              ) : null}
             </div>
-
-            <div
-              style={{
-                padding: '1.4rem 1.8rem 1.2rem',
-                color: colors.text.secondary,
-                fontSize: '1.3rem',
-                lineHeight: 1.6,
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'keep-all',
-              }}
-            >
-              {message}
-            </div>
-
             <div
               style={{
                 display: 'flex',
-                gap: '0.9rem',
-                justifyContent: 'stretch',
-                padding: '0 1.6rem 1.6rem',
+                flexDirection: mode === DialogMode.CONFIRM ? 'row-reverse' : 'column',
+                gap: '0.8rem',
+                padding: '1.2rem 1.6rem 1.6rem',
               }}
             >
               {renderActions ? (
                 renderActions(() => closeWithHistory(false))
               ) : (
                 <>
+                  <button
+                    type="button"
+                    onClick={() => closeWithHistory(true)}
+                    style={{
+                      flex: mode === DialogMode.CONFIRM ? 1 : undefined,
+                      height: '4rem',
+                      border: 'none',
+                      borderRadius: '1rem',
+                      background: isDestructive ? accentColor : colors.interactive.primary,
+                      fontSize: '1.5rem',
+                      fontWeight: 600,
+                      color: colors.text.onBrand,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {confirmText}
+                  </button>
                   {mode === DialogMode.CONFIRM ? (
                     <button
                       type="button"
                       onClick={() => closeWithHistory(false)}
                       style={{
-                        flex: '1 1 0',
-                        minHeight: '4.2rem',
-                        borderRadius: '1.1rem',
+                        flex: 1,
+                        height: '4rem',
                         border: `1px solid ${colors.border.default}`,
+                        borderRadius: '1rem',
                         background: colors.bg.elevated,
-                        color: colors.text.primary,
-                        fontSize: '1.3rem',
+                        fontSize: '1.5rem',
                         fontWeight: 600,
+                        color: colors.text.primary,
                         cursor: 'pointer',
                       }}
                     >
                       {cancelText}
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={() => closeWithHistory(true)}
-                    style={{
-                      flex: '1 1 0',
-                      minHeight: '4.2rem',
-                      borderRadius: '1.1rem',
-                      border: `1px solid ${destructive ? accentColor : colors.interactive.primary}`,
-                      background: destructive ? accentColor : colors.interactive.primary,
-                      color: colors.text.onBrand,
-                      fontSize: '1.3rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {confirmText}
-                  </button>
                 </>
               )}
             </div>
