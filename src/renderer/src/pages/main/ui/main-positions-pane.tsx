@@ -1,10 +1,10 @@
 import { type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
-import { PositionsGrid } from '@renderer/widgets/positions-grid';
 import { ActiveOrdersPanel } from '@renderer/widgets/trading-panel';
 import type { ReactElement } from 'react';
 import { type PaneL1, type PaneL2, usePaneTabs } from '../model/use-pane-tabs';
 import { FilledPane } from './filled-pane';
 import { PastTradesPane } from './past-trades-pane';
+import { PositionsGrid } from './positions-grid';
 import { WatchBoard } from './watch-board';
 
 export interface MainPositionsPaneProps {

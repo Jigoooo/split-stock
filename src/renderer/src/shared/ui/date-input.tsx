@@ -120,7 +120,7 @@ function useDateInputFieldContext(component: string): DateInputFieldContextValue
   return context;
 }
 
-function useDateInputPopupContext(component: string): DateInputPopupContextValue {
+export function useDatePickerContext(component: string): DateInputPopupContextValue {
   const context = useContext(DateInputPopupContext);
   if (!context) {
     throw new Error(`${component} must be used within DateInput.Root`);
@@ -904,7 +904,7 @@ const DateInputTrigger = memo(
     title = '날짜 선택기 열기',
     ...props
   }: DateInputTriggerProps): ReactElement => {
-    const context = useDateInputPopupContext('DateInput.Trigger');
+    const context = useDatePickerContext('DateInput.Trigger');
 
     return (
       <button
@@ -946,7 +946,7 @@ export interface DateInputContentProps {
 
 const DateInputContent = memo(
   ({ children, className, style }: DateInputContentProps): ReactElement => {
-    const context = useDateInputPopupContext('DateInput.Content');
+    const context = useDatePickerContext('DateInput.Content');
 
     return (
       <ControlPopup
@@ -976,7 +976,7 @@ export interface DateInputCalendarProps {
 }
 
 const DateInputCalendar = memo(({ className }: DateInputCalendarProps): ReactElement => {
-  const context = useDateInputPopupContext('DateInput.Calendar');
+  const context = useDatePickerContext('DateInput.Calendar');
   const year = context.visibleMonth.getFullYear();
   const month = context.visibleMonth.getMonth();
   const todayIso = useMemo(() => getTodayIso(), []);

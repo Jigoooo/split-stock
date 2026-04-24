@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import {
   type DialogActions,
   type DialogConfig,
+  DialogMode,
   type DialogOpenPayload,
   type DialogStates,
   type DialogStore,
@@ -14,6 +15,7 @@ const noop = (): void => {};
 
 const getInitialConfig = (): DialogConfig => ({
   isOpen: false,
+  mode: DialogMode.ALERT,
   type: DialogType.INFO,
   isOverlayPressClose: true,
   isCancelWith: false,
@@ -30,7 +32,16 @@ const getInitialConfig = (): DialogConfig => ({
 const RESET_DELAY_MS = 200;
 
 export const useDialogStore = create<DialogStore>()((setState, getState) => {
-  const closeAndReset = (): void => {
+  let pendingAsyncResolve: ((value: boolean) => void) | null = null;
+
+  const settlePendingAsync = (value: boolean): void => {
+    const resolve = pendingAsyncResolve;
+    pendingAsyncResolve = null;
+    resolve?.(value);
+  };
+
+  const closeAndReset = (result = false): void => {
+    settlePendingAsync(result);
     setState((prev) => ({ dialogConfig: { ...prev.dialogConfig, isOpen: false } }));
     setTimeout(() => {
       // 다른 dialog가 그 사이에 열렸다면 reset 스킵
@@ -40,7 +51,13 @@ export const useDialogStore = create<DialogStore>()((setState, getState) => {
     }, RESET_DELAY_MS);
   };
 
-  const openDialog = (payload: DialogOpenPayload): void => {
+  const buildDialogConfig = (
+    payload: DialogOpenPayload,
+    handlers?: {
+      onConfirm?: () => void;
+      onCancel?: () => void;
+    },
+  ): DialogConfig => {
     const {
       type = DialogType.INFO,
       isOverlayPressClose = true,
@@ -49,71 +66,58 @@ export const useDialogStore = create<DialogStore>()((setState, getState) => {
       message,
       confirmText,
       cancelText,
-      onConfirm = noop,
-      onCancel = noop,
       renderActions,
     } = payload;
-
     const shouldShowCancel = cancelText !== undefined ? true : isCancelWith;
 
+    return {
+      isOpen: true,
+      mode: shouldShowCancel ? DialogMode.CONFIRM : DialogMode.ALERT,
+      type,
+      isOverlayPressClose,
+      isCancelWith: shouldShowCancel,
+      title: title ?? '알림',
+      message,
+      confirmText: confirmText ?? '확인',
+      cancelText: cancelText ?? '취소',
+      onConfirm: handlers?.onConfirm ?? noop,
+      onCancel: handlers?.onCancel ?? noop,
+      renderActions,
+    };
+  };
+
+  const openDialog = (payload: DialogOpenPayload): void => {
+    settlePendingAsync(false);
+    const { onConfirm = noop, onCancel = noop } = payload;
+
     setState({
-      dialogConfig: {
-        isOpen: true,
-        type,
-        isOverlayPressClose,
-        isCancelWith: shouldShowCancel,
-        title: title ?? '알림',
-        message,
-        confirmText: confirmText ?? '확인',
-        cancelText: cancelText ?? '취소',
+      dialogConfig: buildDialogConfig(payload, {
         onConfirm: () => {
           onConfirm();
-          closeAndReset();
+          closeAndReset(true);
         },
         onCancel: () => {
           onCancel();
-          closeAndReset();
+          closeAndReset(false);
         },
-        renderActions,
-      },
+      }),
     });
   };
 
   const openDialogAsync = (payload: DialogOpenPayload): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
-      const {
-        type = DialogType.INFO,
-        isOverlayPressClose = true,
-        isCancelWith = false,
-        title,
-        message,
-        confirmText,
-        cancelText,
-        renderActions,
-      } = payload;
-
-      const shouldShowCancel = cancelText !== undefined ? true : isCancelWith;
+      settlePendingAsync(false);
+      pendingAsyncResolve = resolve;
 
       setState({
-        dialogConfig: {
-          isOpen: true,
-          type,
-          isOverlayPressClose,
-          isCancelWith: shouldShowCancel,
-          title: title ?? '알림',
-          message,
-          confirmText: confirmText ?? '확인',
-          cancelText: cancelText ?? '취소',
+        dialogConfig: buildDialogConfig(payload, {
           onConfirm: () => {
-            resolve(true);
-            closeAndReset();
+            closeAndReset(true);
           },
           onCancel: () => {
-            resolve(false);
-            closeAndReset();
+            closeAndReset(false);
           },
-          renderActions,
-        },
+        }),
       });
     });
   };
@@ -129,7 +133,7 @@ export const useDialogStore = create<DialogStore>()((setState, getState) => {
     errorAsync: (p: DialogTypePayload) => openDialogAsync({ ...p, type: DialogType.ERROR }),
     info: (p: DialogTypePayload) => openDialog({ ...p, type: DialogType.INFO }),
     infoAsync: (p: DialogTypePayload) => openDialogAsync({ ...p, type: DialogType.INFO }),
-    close: closeAndReset,
+    close: () => closeAndReset(false),
   };
 
   const initial: DialogStates = { dialogConfig: getInitialConfig() };

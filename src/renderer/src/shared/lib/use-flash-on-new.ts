@@ -15,17 +15,20 @@ export function useFlashOnNew<T>(
   flashDurationMs = 500,
 ): ReadonlySet<string | number> {
   const seenRef = useRef<Set<string | number> | null>(null);
+  const getKeyRef = useRef(getKey);
   const [flashing, setFlashing] = useState<ReadonlySet<string | number>>(() => new Set());
+
+  getKeyRef.current = getKey;
 
   useEffect(() => {
     // 첫 렌더: 기존 아이템은 전부 "seen"으로 기록해서 초기 로드 시 flash 방지
     if (seenRef.current === null) {
-      seenRef.current = new Set(items.map(getKey));
+      seenRef.current = new Set(items.map((item) => getKeyRef.current(item)));
       return;
     }
 
     const seen = seenRef.current;
-    const nextKeys = items.map(getKey);
+    const nextKeys = items.map((item) => getKeyRef.current(item));
     const newKeys: (string | number)[] = [];
     for (const key of nextKeys) {
       if (!seen.has(key)) {
@@ -57,8 +60,6 @@ export function useFlashOnNew<T>(
     return () => {
       for (const id of timeouts) clearTimeout(id);
     };
-    // items 배열 자체의 참조/길이/순서 변경 시 재평가
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, flashDurationMs]);
 
   return flashing;

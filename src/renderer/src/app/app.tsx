@@ -6,13 +6,13 @@ import {
 } from '@renderer/features/trade-notifications';
 import { LoginPage } from '@renderer/pages/login';
 import { Button } from '@renderer/shared/ui';
-import { AccountBar } from '@renderer/widgets/account-bar';
-import { ConnectionStatusDot } from '@renderer/widgets/connection-status-dot';
 import type { ReactElement } from 'react';
 import { readPopoutRoute } from './model/popout-route';
 import { useAppShell } from './model/use-app-shell';
 import { type PopoutApi, usePopoutState } from './model/use-popout-state';
 import { AppProviders } from './providers';
+import { AccountBar } from './ui/account-bar';
+import { ConnectionStatusDot } from './ui/connection-status-dot';
 import { HeaderPopoutButtons } from './ui/header-popout-buttons';
 import { PanelWorkspace } from './ui/panel-workspace';
 import { PopoutPage } from './ui/popout-page';

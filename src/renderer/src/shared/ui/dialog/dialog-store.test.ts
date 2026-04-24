@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { alertDialog } from './lib/alert-dialog';
 import { useDialogStore } from './model/dialog-store';
-import { DialogType } from './model/dialog-types';
+import { DialogMode, DialogType } from './model/dialog-types';
 
 const reset = (): void => {
   useDialogStore.getState().actions.close();
@@ -13,6 +14,7 @@ describe('dialog-store', () => {
     useDialogStore.setState({
       dialogConfig: {
         isOpen: false,
+        mode: DialogMode.ALERT,
         type: DialogType.INFO,
         isOverlayPressClose: true,
         isCancelWith: false,
@@ -34,6 +36,7 @@ describe('dialog-store', () => {
     expect(cfg.isOpen).toBe(true);
     expect(cfg.message).toBe('테스트 메시지');
     expect(cfg.type).toBe(DialogType.INFO);
+    expect(cfg.mode).toBe(DialogMode.ALERT);
   });
 
   it('close가 isOpen=false로 만든다', () => {
@@ -70,6 +73,7 @@ describe('dialog-store', () => {
   it('warningAsync는 type=WARNING으로 열린다', async () => {
     const promise = useDialogStore.getState().actions.warningAsync({ message: 'w' });
     expect(useDialogStore.getState().dialogConfig.type).toBe(DialogType.WARNING);
+    expect(useDialogStore.getState().dialogConfig.mode).toBe(DialogMode.ALERT);
     useDialogStore.getState().dialogConfig.onCancel();
     await expect(promise).resolves.toBe(false);
   });
@@ -83,6 +87,7 @@ describe('dialog-store', () => {
   it('isCancelWith=true 명시도 cancel 버튼 노출 정보를 유지한다', () => {
     useDialogStore.getState().actions.open({ message: 'x', isCancelWith: true });
     expect(useDialogStore.getState().dialogConfig.isCancelWith).toBe(true);
+    expect(useDialogStore.getState().dialogConfig.mode).toBe(DialogMode.CONFIRM);
   });
 
   it('open의 onConfirm 콜백은 호출 후 자동 close된다', () => {
@@ -91,5 +96,16 @@ describe('dialog-store', () => {
     useDialogStore.getState().dialogConfig.onConfirm();
     expect(spy).toHaveBeenCalledTimes(1);
     expect(useDialogStore.getState().dialogConfig.isOpen).toBe(false);
+  });
+
+  it('alertDialog.confirm은 기본적으로 warning confirm dialog를 연다', async () => {
+    const promise = alertDialog.confirm({ message: '정말 진행할까요?' });
+    const config = useDialogStore.getState().dialogConfig;
+
+    expect(config.type).toBe(DialogType.WARNING);
+    expect(config.mode).toBe(DialogMode.CONFIRM);
+
+    config.onCancel();
+    await expect(promise).resolves.toBe(false);
   });
 });

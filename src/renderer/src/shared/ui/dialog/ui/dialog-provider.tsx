@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '../../button';
 import { useDialogStore } from '../model/dialog-store';
-import { DialogType, type DialogTypeValue } from '../model/dialog-types';
+import { DialogMode, DialogType, type DialogTypeValue } from '../model/dialog-types';
 
 const TYPE_CLASS: Record<DialogTypeValue, string> = {
   [DialogType.INFO]: 'app-dialog--info',
@@ -35,9 +35,9 @@ export const DialogProvider = (): ReactElement | null => {
   const config = useDialogStore((s) => s.dialogConfig);
   const {
     isOpen,
+    mode,
     type,
     isOverlayPressClose,
-    isCancelWith,
     title,
     message,
     confirmText,
@@ -53,7 +53,7 @@ export const DialogProvider = (): ReactElement | null => {
     if (!isOpen) return;
 
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && isOverlayPressClose) {
         e.preventDefault();
         onCancel();
         return;
@@ -81,7 +81,7 @@ export const DialogProvider = (): ReactElement | null => {
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onCancel]);
+  }, [isOpen, isOverlayPressClose, onCancel]);
 
   if (!isOpen) return null;
 
@@ -115,7 +115,7 @@ export const DialogProvider = (): ReactElement | null => {
             renderActions(onCancel)
           ) : (
             <>
-              {isCancelWith ? (
+              {mode === DialogMode.CONFIRM ? (
                 <Button onClick={onCancel} dense>
                   {cancelText}
                 </Button>

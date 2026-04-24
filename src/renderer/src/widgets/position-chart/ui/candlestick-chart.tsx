@@ -106,7 +106,11 @@ const formatCrosshairDateKr = (time: Time): string => {
   return `${y}-${m}-${dd}`;
 };
 
-function formatOverlayLineTitle(line: { kind: 'buy' | 'sell-target'; nth: number; price: number }): string {
+function formatOverlayLineTitle(line: {
+  kind: 'buy' | 'sell-target';
+  nth: number;
+  price: number;
+}): string {
   const roundedPrice = Math.round(line.price).toLocaleString('ko-KR');
   return line.kind === 'buy'
     ? `${line.nth}차 매수 ${roundedPrice}`

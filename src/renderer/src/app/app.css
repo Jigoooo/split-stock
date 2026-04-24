@@ -393,6 +393,10 @@ body {
   padding: 0 0.25rem 0 0.45rem;
 }
 
+.hts-date-picker {
+  padding-right: 0.45rem;
+}
+
 .hts-date-shell__fields {
   display: inline-flex;
   align-items: center;
@@ -482,6 +486,74 @@ body {
   cursor: not-allowed;
   color: var(--fg-3);
   background: transparent;
+}
+
+.hts-date-shell .hts-date-picker__trigger {
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0;
+  color: inherit;
+}
+
+.hts-date-picker__label-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.hts-date-picker__leading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-2);
+  flex-shrink: 0;
+}
+
+.hts-date-picker__value {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.hts-date-picker__value--placeholder {
+  color: var(--fg-3);
+}
+
+.hts-date-picker__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 0.35rem;
+  color: var(--fg-2);
+  background: var(--bg-2);
+  flex-shrink: 0;
+  transition:
+    background-color var(--motion-fast) var(--motion-crisp),
+    color var(--motion-fast) var(--motion-crisp),
+    transform var(--motion-fast) var(--motion-crisp);
+}
+
+.hts-date-picker__trigger:hover:not(:disabled) .hts-date-picker__leading,
+.hts-date-picker__trigger:hover:not(:disabled) .hts-date-picker__icon {
+  color: var(--accent);
+}
+
+.hts-date-picker__trigger:hover:not(:disabled) .hts-date-picker__icon,
+.hts-date-picker__trigger[aria-expanded="true"] .hts-date-picker__icon {
+  background: var(--accent-tint-8);
+}
+
+.hts-date-picker__trigger[aria-expanded="true"] .hts-date-picker__icon {
+  transform: rotate(180deg);
 }
 
 /* 폼 컨트롤은 box-shadow 링이 이미 있어 global outline을 중복 방지 */

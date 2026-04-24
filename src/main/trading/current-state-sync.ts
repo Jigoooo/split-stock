@@ -60,9 +60,9 @@ export class CurrentStateSync {
 
   constructor(private readonly opts: CurrentStateSyncOptions) {}
 
-  trigger(
-    reason: 'startup' | 'account-switch' | 'env-switch' | 'trade-event' | 'manual',
-  ): { started: boolean } {
+  trigger(reason: 'startup' | 'account-switch' | 'env-switch' | 'trade-event' | 'manual'): {
+    started: boolean;
+  } {
     if (this.running) {
       this.opts.logger.log({
         level: 'INFO',

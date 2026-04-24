@@ -4,10 +4,20 @@ export type { CheckboxProps } from './checkbox';
 export { Checkbox } from './checkbox';
 export type { DateInputProps } from './date-input';
 export { DateInput } from './date-input';
+export type {
+  DatePickerProps,
+  DatePickerRootProps,
+  DatePickerTriggerProps,
+  DatePickerValueProps,
+} from './date-picker';
+export { DatePicker } from './date-picker';
 export {
+  alertDialog,
   type DialogActions,
   type DialogActionsRenderer,
   type DialogConfig,
+  DialogMode,
+  type DialogModeValue,
   type DialogOpenPayload,
   DialogProvider,
   type DialogStates,

@@ -13,10 +13,18 @@ export const DialogType = {
 
 export type DialogTypeValue = (typeof DialogType)[keyof typeof DialogType];
 
+export const DialogMode = {
+  ALERT: 'ALERT',
+  CONFIRM: 'CONFIRM',
+} as const;
+
+export type DialogModeValue = (typeof DialogMode)[keyof typeof DialogMode];
+
 export type DialogActionsRenderer = (close: () => void) => ReactNode;
 
 export interface DialogConfig {
   isOpen: boolean;
+  mode: DialogModeValue;
   type: DialogTypeValue;
   isOverlayPressClose: boolean;
   isCancelWith: boolean;

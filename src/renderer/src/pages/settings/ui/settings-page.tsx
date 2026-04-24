@@ -5,10 +5,13 @@ import {
   GridDensityForm,
   useDisplaySettings,
 } from '@renderer/features/display-settings';
-import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
-import { ProtectionLimits } from '@renderer/features/edit-strategy/ui/protection-limits';
-import { RateGuard } from '@renderer/features/edit-strategy/ui/rate-guard';
-import { TimeWindows } from '@renderer/features/edit-strategy/ui/time-windows';
+import {
+  ProtectionLimits,
+  RateGuard,
+  StrategyForm,
+  TimeWindows,
+  useEditStrategy,
+} from '@renderer/features/edit-strategy';
 import { ActivePendingList, PendingCancelForm } from '@renderer/features/pending-cancel-settings';
 import { PriceCorrectionForm } from '@renderer/features/price-correction-settings';
 import { Button, ErrorBoundary, Select } from '@renderer/shared/ui';

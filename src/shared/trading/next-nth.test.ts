@@ -32,11 +32,6 @@ describe('deriveNextBuyNth', () => {
   });
 
   it('SELLING도 active cycle로 본다', () => {
-    expect(
-      hasActiveCycle([
-        { status: 'SOLD' },
-        { status: 'SELLING' },
-      ]),
-    ).toBe(true);
+    expect(hasActiveCycle([{ status: 'SOLD' }, { status: 'SELLING' }])).toBe(true);
   });
 });
