@@ -1077,11 +1077,11 @@ function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
     return { action: 'deny' };
   });
 
-  const hash = popoutRoute ? `#popout=${encodeURIComponent(popoutRoute)}` : '';
+  const hash = popoutRoute ? `/popout/${encodeURIComponent(popoutRoute)}` : '';
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}${hash}`);
+    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}${hash ? `#${hash}` : ''}`);
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'), { hash: hash.slice(1) });
+    void win.loadFile(join(__dirname, '../renderer/index.html'), { hash });
   }
 
   return win;

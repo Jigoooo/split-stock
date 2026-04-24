@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import babel from '@rolldown/plugin-babel';
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 // electron-vite 5는 기본으로 package.json의 dependencies를 자동 external 처리
 // (build.externalizeDeps: true가 기본값). electron은 devDependencies이므로
@@ -64,7 +65,20 @@ export default defineConfig({
         '@shared': resolve(__dirname, 'src/shared'),
       },
     },
-    plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
+    plugins: [
+      tanstackRouter({
+        target: 'react',
+        autoCodeSplitting: true,
+        // electron-vite rebases the renderer plugin root to `src/renderer`, so these
+        // resolve to repo-level `./src/renderer/src/routes` and `./src/renderer/src/routeTree.gen.ts`.
+        routesDirectory: './src/routes',
+        generatedRouteTree: './src/routeTree.gen.ts',
+        quoteStyle: 'single',
+        semicolons: true,
+      }),
+      react(),
+      babel({ presets: [reactCompilerPreset()] }),
+    ],
     build: {
       rollupOptions: {
         input: {

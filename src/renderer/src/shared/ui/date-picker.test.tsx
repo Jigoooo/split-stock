@@ -30,9 +30,11 @@ function DatePickerHarness(props: {
   initial?: string;
   max?: string;
   min?: string;
+  name?: string;
   onCommit?: (nextValue: string) => void;
+  placeholder?: string;
 }): ReactElement {
-  const { initial = '2026-04-10', max, min, onCommit } = props;
+  const { initial = '2026-04-10', max, min, name, onCommit, placeholder } = props;
   const [value, setValue] = useState(initial);
 
   return (
@@ -41,6 +43,8 @@ function DatePickerHarness(props: {
         aria-label="기준일 선택"
         max={max}
         min={min}
+        name={name}
+        placeholder={placeholder}
         value={value}
         onChange={(nextValue) => {
           onCommit?.(nextValue);
@@ -120,6 +124,37 @@ describe('DatePicker', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '기준일 선택' })).toHaveTextContent('2026-05-20');
+    });
+  });
+
+  it('hidden input mirrors controlled and committed values when name is provided', async () => {
+    const onCommit = vi.fn();
+    render(
+      <DatePickerHarness
+        initial=""
+        name="reportDate"
+        onCommit={onCommit}
+        placeholder="날짜 선택"
+      />,
+    );
+
+    const hidden = document.querySelector<HTMLInputElement>('input[name="reportDate"]');
+    const trigger = screen.getByRole('button', { name: '기준일 선택' });
+
+    expect(hidden).not.toBeNull();
+    expect(hidden).toHaveValue('');
+    expect(trigger).toHaveTextContent('날짜 선택');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '2026-04-18 선택' }));
+
+    await waitFor(() => {
+      expect(onCommit).toHaveBeenCalledWith('2026-04-18');
+      expect(hidden).toHaveValue('2026-04-18');
+      expect(trigger).toHaveTextContent('2026-04-18');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
     });
   });
 });

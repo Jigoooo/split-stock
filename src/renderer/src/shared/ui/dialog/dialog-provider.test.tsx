@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useOverlayStackStore } from '../overlay-stack';
 import { useDialogStore } from './model/dialog-store';
 import { DialogMode, DialogType } from './model/dialog-types';
 import { DialogProvider } from './ui/dialog-provider';
@@ -27,6 +28,10 @@ const resetDialogStore = (): void => {
 describe('DialogProvider', () => {
   afterEach(() => {
     resetDialogStore();
+    useOverlayStackStore.setState({
+      pendingBacks: 0,
+      stack: [],
+    });
   });
 
   it('ReactNode message를 portal로 렌더한다', async () => {
@@ -116,6 +121,29 @@ describe('DialogProvider', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('dialog.close는 cancel 콜백 없이 닫는다', async () => {
+    const onCancel = vi.fn();
+    render(<DialogProvider />);
+
+    act(() => {
+      useDialogStore.getState().actions.open({
+        message: 'programmatic close',
+        onCancel,
+      });
+    });
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    act(() => {
+      useDialogStore.getState().actions.close();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(onCancel).not.toHaveBeenCalled();
     });
   });
 });

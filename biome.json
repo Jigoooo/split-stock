@@ -14,7 +14,8 @@
       "!**/drizzle",
       "!**/.omc",
       "!**/.playwright-mcp",
-      "!**/coverage"
+      "!**/coverage",
+      "!src/renderer/src/routeTree.gen.ts"
     ]
   },
   "assist": {

@@ -1,0 +1,7 @@
+export const Z_INDEX = {
+  CONTROL_POPUP: 1080,
+  MODAL_BACKDROP: 1100,
+  MODAL: 1101,
+  ALERT_BACKDROP: 1100,
+  ALERT: 1101,
+} as const;

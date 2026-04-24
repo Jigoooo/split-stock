@@ -108,4 +108,25 @@ describe('dialog-store', () => {
     config.onCancel();
     await expect(promise).resolves.toBe(false);
   });
+
+  it('두 번째 async dialog가 열리면 이전 pending promise를 false로 resolve한다', async () => {
+    const first = useDialogStore.getState().actions.openAsync({ message: 'first' });
+    const second = useDialogStore.getState().actions.openAsync({ message: 'second' });
+
+    await expect(first).resolves.toBe(false);
+
+    useDialogStore.getState().dialogConfig.onConfirm();
+    await expect(second).resolves.toBe(true);
+  });
+
+  it('alertDialog.alert는 기본적으로 info alert mode로 열린다', async () => {
+    const promise = alertDialog.alert({ message: '확인만 필요합니다' });
+    const config = useDialogStore.getState().dialogConfig;
+
+    expect(config.type).toBe(DialogType.INFO);
+    expect(config.mode).toBe(DialogMode.ALERT);
+
+    config.onConfirm();
+    await expect(promise).resolves.toBe(true);
+  });
 });

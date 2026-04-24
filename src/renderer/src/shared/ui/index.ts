@@ -36,6 +36,14 @@ export type { NumberInputProps } from './number-input';
 export { NumberInput } from './number-input';
 export type { OverlayScrollbarProps } from './overlay-scrollbar';
 export { OverlayScrollbar } from './overlay-scrollbar';
+export {
+  type OverlayEntry,
+  OverlayStackManager,
+  OverlayType,
+  overlayStackActions,
+  pushOverlayHistoryState,
+  useOverlayStackStore,
+} from './overlay-stack';
 export type { RadioGroupItem, RadioGroupProps } from './radio-group';
 export { RadioGroup } from './radio-group';
 export type { SegmentedToggleProps } from './segmented-toggle';

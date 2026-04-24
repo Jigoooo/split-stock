@@ -83,6 +83,8 @@
   --accent-tint-12: rgba(2, 132, 199, 0.12);
   --accent-tint-18: rgba(2, 132, 199, 0.18);
   --accent-tint-22: rgba(2, 132, 199, 0.22);
+  --warning: #ca8a04;
+  --warning-soft: rgba(202, 138, 4, 0.12);
 
   /* Interactive state — up/down (한국식 상/하향) */
   --up-hover: #b91c1c;
@@ -390,11 +392,21 @@ body {
 }
 
 .hts-date-shell {
-  padding: 0 0.25rem 0 0.45rem;
+  min-height: 3.2rem;
+  padding: 0.1rem 0.35rem 0.1rem 0.55rem;
+  border-radius: 1rem;
+  box-shadow:
+    0 0.1rem 0.2rem rgba(15, 23, 42, 0.03),
+    0 0.6rem 1.8rem -1.4rem rgba(15, 23, 42, 0.18);
 }
 
-.hts-date-picker {
-  padding-right: 0.45rem;
+.hts-date-shell.hts-date-picker {
+  min-height: 4rem;
+  padding: 0.9rem 1.2rem;
+  border-color: var(--border);
+  border-radius: 1.1rem;
+  background: var(--bg);
+  box-shadow: 0 1rem 2.6rem -2.2rem rgba(15, 23, 42, 0.18);
 }
 
 .hts-date-shell__fields {
@@ -463,12 +475,12 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.4rem;
-  min-width: 2.4rem;
+  width: 2.6rem;
+  min-width: 2.6rem;
   align-self: stretch;
   padding: 0;
   border: none;
-  border-radius: 0.25rem;
+  border-radius: 0.75rem;
   background: transparent;
   color: var(--fg-2);
   cursor: pointer;
@@ -479,7 +491,7 @@ body {
 
 .hts-date-shell__trigger:hover {
   color: var(--accent);
-  background: var(--accent-tint-8);
+  background: var(--accent-tint-10);
 }
 
 .hts-date-shell__trigger:disabled {
@@ -492,7 +504,7 @@ body {
   width: 100%;
   min-width: 0;
   justify-content: space-between;
-  gap: 0.45rem;
+  gap: 0.55rem;
   padding: 0;
   color: inherit;
 }
@@ -500,9 +512,12 @@ body {
 .hts-date-picker__label-wrap {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.8rem;
   flex: 1;
   min-width: 0;
+  color: var(--fg);
+  font-size: 1.5rem;
+  line-height: 1.4;
 }
 
 .hts-date-picker__leading {
@@ -530,9 +545,9 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.8rem;
-  height: 1.8rem;
-  border-radius: 0.35rem;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.7rem;
   color: var(--fg-2);
   background: var(--bg-2);
   flex-shrink: 0;
@@ -669,7 +684,11 @@ body {
 
 .hts-control-popup--date {
   width: min(29.6rem, calc(100vw - 1.6rem));
-  padding: 0.8rem;
+  padding: 1rem;
+  border-color: var(--border);
+  border-radius: 1.4rem;
+  background: linear-gradient(180deg, var(--bg), var(--bg-3));
+  box-shadow: 0 2.8rem 6.4rem rgba(15, 23, 42, 0.2);
 }
 
 .hts-control-option {
@@ -680,7 +699,7 @@ body {
   width: 100%;
   min-height: 2.8rem;
   padding: 0.45rem 0.6rem;
-  border: 0.1rem solid transparent;
+  border: 0.1rem solid var(--border);
   border-radius: 0.35rem;
   background: transparent;
   cursor: pointer;
@@ -692,7 +711,7 @@ body {
 }
 
 .hts-control-option--dense {
-  min-height: 2.6rem;
+  min-height: 3rem;
   padding: 0.3rem 0.55rem;
   font-size: 1.1rem;
 }
@@ -746,14 +765,14 @@ body {
 
 .hts-date-popup {
   display: grid;
-  gap: 0.7rem;
+  gap: 0.9rem;
 }
 
 .hts-date-popup__header {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.7rem;
 }
 
 .hts-date-popup__nav,
@@ -761,7 +780,7 @@ body {
 .hts-date-popup__month-cell,
 .hts-date-popup__day {
   border: 0.1rem solid transparent;
-  border-radius: 0.4rem;
+  border-radius: 0.9rem;
   background: transparent;
   color: var(--fg);
   font: inherit;
@@ -778,18 +797,21 @@ body {
 }
 
 .hts-date-popup__nav {
-  width: 2.6rem;
-  min-width: 2.6rem;
+  width: 3rem;
+  min-width: 3rem;
+  background: var(--bg);
 }
 
 .hts-date-popup__selector {
-  padding: 0 0.75rem;
-  border-color: var(--border);
+  padding: 0 0.95rem;
+  background: var(--bg);
+  font-size: 1.4rem;
+  font-weight: 700;
 }
 
 .hts-date-popup__selector--active {
   border-color: var(--accent);
-  background: var(--accent-tint-8);
+  background: var(--accent-tint-10);
   color: var(--accent-active);
 }
 
@@ -797,14 +819,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
+  gap: 0.6rem;
 }
 
 .hts-date-popup__weekdays,
 .hts-date-popup__days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 0.3rem;
+  gap: 0.4rem;
 }
 
 .hts-date-popup__weekday {
@@ -813,13 +835,15 @@ body {
   justify-content: center;
   min-height: 2rem;
   color: var(--fg-3);
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 1.05rem;
+  font-weight: 700;
 }
 
 .hts-date-popup__day {
-  min-height: 2.8rem;
+  min-height: 3rem;
+  aspect-ratio: 1 / 1;
   cursor: pointer;
+  background: var(--bg);
 }
 
 .hts-date-popup__day--adjacent {
@@ -828,6 +852,7 @@ body {
 
 .hts-date-popup__day--today {
   border-color: var(--accent-tint-22);
+  box-shadow: inset 0 0 0 0.1rem var(--accent-tint-12);
 }
 
 .hts-date-popup__day--selected {
@@ -835,6 +860,7 @@ body {
   background: var(--accent);
   color: #fff;
   font-weight: 700;
+  box-shadow: 0 0.8rem 1.8rem -1.2rem var(--accent);
 }
 
 .hts-date-popup__day--disabled {
@@ -853,14 +879,14 @@ body {
 .hts-date-popup__month-grid,
 .hts-date-popup__year-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.4rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
 }
 
 .hts-date-popup__month-cell {
-  min-height: 3rem;
+  min-height: 3.6rem;
   padding: 0.45rem 0.3rem;
-  border-color: var(--border);
+  background: var(--bg);
   cursor: pointer;
 }
 
@@ -875,7 +901,7 @@ body {
 .hts-date-popup__selector:hover:not(:disabled),
 .hts-date-popup__month-cell:hover:not(:disabled),
 .hts-date-popup__day:hover:not(:disabled) {
-  background: var(--surface-hover);
+  background: color-mix(in srgb, var(--bg) 85%, var(--accent) 15%);
 }
 
 .hts-date-popup__day--selected:hover {
@@ -1615,11 +1641,11 @@ body {
 @keyframes app-dialog-in {
   from {
     opacity: 0;
-    transform: scale(0.95) translateY(0.4rem);
+    transform: translate(-50%, -50%) scale(1.08);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 
@@ -1627,9 +1653,9 @@ body {
   /* OrderConfirmDialog(.modal-overlay z:1000)보다 위에 노출 */
   z-index: 1100;
   position: fixed;
-  backdrop-filter: blur(3px) saturate(110%);
-  -webkit-backdrop-filter: blur(3px) saturate(110%);
-  background: rgba(15, 23, 42, 0.08);
+  background: rgba(15, 23, 42, 0.32);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .app-dialog-overlay__backdrop {
@@ -1647,95 +1673,78 @@ body {
 }
 
 .app-dialog {
-  min-width: 32rem;
-  max-width: min(90vw, 44rem);
-  background: var(--bg);
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 27rem;
+  max-width: calc(100vw - 4rem);
+  background: color-mix(in srgb, var(--bg) 92%, var(--app-dialog-accent) 8%);
   border: 0.1rem solid var(--border);
-  border-radius: 1.8rem;
-  box-shadow:
-    0 20px 48px -12px rgba(15, 23, 42, 0.28),
-    0 8px 20px -8px rgba(15, 23, 42, 0.18),
-    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  border-radius: 1.4rem;
+  box-shadow: 0 2.4rem 6.4rem rgba(15, 23, 42, 0.18);
   overflow: hidden;
-  position: relative;
   z-index: 1;
-  animation: app-dialog-in 0.22s ease-out both;
+  animation: app-dialog-in 0.22s cubic-bezier(0.2, 0, 0, 1) both;
 }
 
 .app-dialog__title {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 1.4rem 1.6rem 0.9rem;
-  font-size: 1.4rem;
-  font-weight: 650;
+  padding: 2rem 2rem 0.8rem;
+  font-size: 1.7rem;
+  font-weight: 600;
   color: var(--fg);
-  border-bottom: 0.1rem solid var(--border);
-}
-
-.app-dialog__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .app-dialog__body {
-  padding: 1.2rem 1.6rem;
-  font-size: 1.25rem;
+  padding: 0 2rem 0.8rem;
+  font-size: 1.3rem;
   color: var(--fg-2);
   white-space: pre-wrap;
   word-break: keep-all;
-  line-height: 1.65;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .app-dialog__actions {
   display: flex;
-  gap: 0.9rem;
-  justify-content: stretch;
-  padding: 0.6rem 1.4rem 1.4rem;
+  flex-direction: row-reverse;
+  gap: 0.8rem;
+  padding: 1.2rem 1.6rem 1.6rem;
 }
 
-.app-dialog__actions button {
+.app-dialog__button {
   flex: 1 1 0;
-  min-width: 7rem;
-  padding: 0.75rem 1.6rem;
-  font-size: 1.25rem;
-  border-radius: 999px;
+  height: 4rem;
+  padding: 0 1.4rem;
+  border-radius: 1rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--motion-crisp),
+    border-color var(--motion-fast) var(--motion-crisp),
+    color var(--motion-fast) var(--motion-crisp);
 }
 
-/* type별 아이콘 색상 (수직 바 없음) */
-.app-dialog--info .app-dialog__icon {
-  color: var(--accent);
+.app-dialog__button--confirm {
+  border: 0;
+  background: var(--app-dialog-accent);
+  color: #fff;
 }
 
-.app-dialog--success .app-dialog__icon {
-  color: var(--up);
+.app-dialog__button--confirm:hover {
+  filter: brightness(0.96);
 }
 
-.app-dialog--warning .app-dialog__icon {
-  color: #ca8a04;
+.app-dialog__button--cancel {
+  border: 0.1rem solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
 }
 
-.app-dialog--error .app-dialog__icon {
-  color: var(--down);
-}
-
-/* type별 제목 색상 */
-.app-dialog--info .app-dialog__title {
-  color: var(--accent);
-}
-
-.app-dialog--success .app-dialog__title {
-  color: var(--up);
-}
-
-.app-dialog--warning .app-dialog__title {
-  color: #ca8a04;
-}
-
-.app-dialog--error .app-dialog__title {
-  color: var(--down);
+.app-dialog__button--cancel:hover {
+  background: var(--bg-3);
 }
 
 /* ===== 환경 전환 전역 오버레이 ===== */
