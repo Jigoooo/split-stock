@@ -28,6 +28,7 @@ describe('StrategyForm', () => {
     expect(screen.getByRole('combobox', { name: '자동매매 상태' })).toHaveValue('ALL_ON');
     expect(screen.getByRole('textbox', { name: '2차 자동매수 하락률' })).toHaveValue('3');
     expect(screen.getByRole('textbox', { name: '1차 자동매도 익절률' })).toHaveValue('5');
+    expect(screen.queryByText('수익부스터 (선택)')).toBeNull();
   });
 
   it('차수별 규칙 수정 후 저장 payload는 새 스키마 shape를 유지한다', () => {
@@ -88,5 +89,28 @@ describe('StrategyForm', () => {
         ]),
       }),
     );
+  });
+
+  it('이전 프로필에 있던 booster 필드는 저장 시 제거된다', () => {
+    const onSubmit = vi.fn();
+    render(
+      <StrategyForm
+        initial={
+          {
+            ...initial,
+            boosterPct: 0.02,
+            boosterAmountKrw: 300_000,
+          } as unknown as StrategyProfile
+        }
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '자동매매 설정 저장' }));
+
+    const submitted = onSubmit.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(submitted).toBeTruthy();
+    expect(submitted ? 'boosterPct' in submitted : true).toBe(false);
+    expect(submitted ? 'boosterAmountKrw' in submitted : true).toBe(false);
   });
 });

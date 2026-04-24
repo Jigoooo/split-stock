@@ -85,56 +85,7 @@ lots {
 
 [src/main/trading/lots-repo.test.ts](../../src/main/trading/lots-repo.test.ts) — 단일 insert → snapshot 라운드트립, 중복 차수 거부 + rollback, updateLotStatus 변경, replan 통합.
 
-## 3. 수익부스터 (NM-004)
-
-1차 전량 매도 직후 "마지막 체결가 × (1 - boosterPct)" 도달 시 1차 **재매수**.
-
-### 사용 방법
-
-```ts
-const booster = new BoosterWatcher({
-  timer: realTimer,
-  onTrigger: ({ pdno, amountKrw }, { price }) => {
-    // 1차 매수 주문 + lots.insertLot({ nth: 1, ... })
-  },
-  onExpire: (task) => logger.log({ level: 'INFO', category: 'FSM', message: 'booster.expired', payload: { pdno: task.pdno } }),
-});
-
-booster.register({
-  pdno: '005930',
-  lastFilledPrice: 75_000,
-  boosterPct: 0.005,         // 0.5% 하락 시 재진입
-  amountKrw: 500_000,
-  expiresAt: Date.now() + 24 * 3_600_000, // 24h
-});
-
-// 가격 신호 push
-booster.onPrice('005930', 74_625);  // 트리거
-```
-
-엔진: [src/main/trading/booster-watcher.ts](../../src/main/trading/booster-watcher.ts)
-
-### 불변식
-
-- 같은 `pdno` 재등록 시 이전 entry 는 expire timer 해제 + 덮어쓰기.
-- `boosterPct <= 0` 이면 등록 즉시 `trigger(lastFilledPrice)` — "홀딩 유지" 효과.
-- `expiresAt` 경과 시 자동 해제 + `onExpire` 콜백 (이미 트리거됐으면 호출하지 않음).
-- 트리거 1회 후 해당 entry 는 제거 — 중복 재매수 방지.
-
-### 테스트 방법
-
-[src/main/trading/booster-watcher.test.ts](../../src/main/trading/booster-watcher.test.ts) 6 cases — 즉시 트리거(pct≤0), 가격 도달 트리거, 만료, 미도달, `cancel`, 재 register 덮어쓰기.
-
-### 엣지 케이스
-
-| 케이스 | 기대 동작 |
-| --- | --- |
-| 동일 pdno 재등록 | 기존 timer clear, 새 task 로 덮어쓰기 |
-| `boosterPct=-0.0001` (음수) | 즉시 트리거 (홀딩) |
-| `expiresAt` 가 과거 | 즉시 expire(`setTimeout(…, 0)`) |
-| 가격 신호가 임계 이상만 유지 | 영원히 트리거 안 됨, expires 시 onExpire |
-
-## 4. 예약매수 (NM-005)
+## 3. 예약매수 (NM-005)
 
 잔고에 없는 신규 종목을 지정 가격 + 유효기간 내 최초 도달 시 1차 매수.
 

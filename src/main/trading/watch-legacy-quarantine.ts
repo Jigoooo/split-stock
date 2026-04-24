@@ -5,6 +5,7 @@ import type { EventLogger } from '../logging/event-logger';
 
 export const LEGACY_WATCH_CONTRACTION_REASON =
   'LEGACY_RULE_NOT_SUPPORTED_AFTER_RESERVATION_BUY_CONTRACTION' as const;
+export const BOOSTER_FEATURE_REMOVED_REASON = 'BOOSTER_FEATURE_REMOVED' as const;
 
 /**
  * 예약매수 전용 계약으로 축소된 이후 더 이상 실행되면 안 되는 legacy 감시 row를
@@ -14,19 +15,16 @@ export function quarantineLegacyWatchRows(db: Db, logger: EventLogger): number {
   const rows = db
     .select()
     .from(watchOrders)
-    .where(
-      and(
-        inArray(watchOrders.status, ['WATCHING', 'PAUSED']),
-        or(not(eq(watchOrders.side, 'BUY')), not(eq(watchOrders.comparator, 'LTE'))),
-      ),
-    )
+    .where(and(inArray(watchOrders.status, ['WATCHING', 'PAUSED']), legacyWatchCondition()))
     .all();
 
   for (const row of rows) {
+    const reason =
+      row.source === 'BOOSTER' ? BOOSTER_FEATURE_REMOVED_REASON : LEGACY_WATCH_CONTRACTION_REASON;
     db.update(watchOrders)
       .set({
         status: 'CANCELLED',
-        lastFailureReason: LEGACY_WATCH_CONTRACTION_REASON,
+        lastFailureReason: reason,
         updatedAt: new Date(),
       })
       .where(eq(watchOrders.id, row.id))
@@ -40,10 +38,17 @@ export function quarantineLegacyWatchRows(db: Db, logger: EventLogger): number {
         watchId: row.id,
         pdno: row.pdno,
         source: row.source,
-        reason: LEGACY_WATCH_CONTRACTION_REASON,
+        reason,
       },
     });
   }
 
   return rows.length;
+}
+
+function legacyWatchCondition() {
+  return or(
+    eq(watchOrders.source, 'BOOSTER'),
+    or(not(eq(watchOrders.side, 'BUY')), not(eq(watchOrders.comparator, 'LTE'))),
+  );
 }

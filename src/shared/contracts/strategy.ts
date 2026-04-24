@@ -51,8 +51,6 @@ const StrategyProfileBaseSchema = z.object({
   autoBuyOrderType: z.enum(['LIMIT', 'MARKET']).default('LIMIT'),
   autoSellEnabled: z.boolean().default(true),
   autoSellOrderType: z.enum(['LIMIT', 'MARKET']).default('LIMIT'),
-  boosterPct: z.number().min(-0.1).max(0.5).optional(),
-  boosterAmountKrw: z.number().int().positive().optional(),
   respiitPlan: RespiitPlanSchema.optional(),
   autoTradingEnabled: z.boolean().optional(),
 });
@@ -167,8 +165,6 @@ export const LegacyStrategyProfileSchema = z.object({
   autoBuyOrderType: z.enum(['LIMIT', 'MARKET']).default('LIMIT'),
   autoSellEnabled: z.boolean().default(true),
   autoSellOrderType: z.enum(['LIMIT', 'MARKET']).default('LIMIT'),
-  boosterPct: z.number().min(-0.1).max(0.5).optional(),
-  boosterAmountKrw: z.number().int().positive().optional(),
   respiitPlan: RespiitPlanSchema.optional(),
   autoTradingEnabled: z.boolean().optional(),
 });
@@ -224,10 +220,6 @@ export function migrateLegacyStrategyProfile(input: unknown): StrategyProfile | 
     autoBuyOrderType: legacy.data.autoBuyOrderType,
     autoSellEnabled: legacy.data.autoSellEnabled,
     autoSellOrderType: legacy.data.autoSellOrderType,
-    ...(legacy.data.boosterPct !== undefined ? { boosterPct: legacy.data.boosterPct } : {}),
-    ...(legacy.data.boosterAmountKrw !== undefined
-      ? { boosterAmountKrw: legacy.data.boosterAmountKrw }
-      : {}),
     ...(legacy.data.respiitPlan ? { respiitPlan: legacy.data.respiitPlan } : {}),
     ...(legacy.data.autoTradingEnabled !== undefined
       ? { autoTradingEnabled: legacy.data.autoTradingEnabled }

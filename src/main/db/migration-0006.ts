@@ -3,11 +3,10 @@ import type { Db } from './client';
 /**
  * Migration 0006: watch_orders 테이블에 metadata 컬럼 추가.
  *
- * booster-watcher에서 1차 매도 시점의 strategy snapshot을 저장하고,
- * 부스터 트리거 후 복원하기 위해 메타데이터 컬럼 추가.
+ * 레거시 자동감시가 strategy snapshot 등 추가 문맥을 저장할 수 있도록 메타데이터 컬럼을 도입했다.
  *
  * - metadata: TEXT(JSON), NULL 허용
- *   - source='BOOSTER'일 때 { strategySnapshot: StrategyProfile } 형태 저장
+ *   - legacy source='BOOSTER' rows가 strategySnapshot을 저장하던 이력이 있음
  *   - 다른 source는 NULL 또는 비워둠
  */
 export function migrate_0006(db: Db): void {

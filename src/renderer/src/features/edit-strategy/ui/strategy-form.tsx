@@ -11,7 +11,6 @@ import {
 import type { ReactElement, ReactNode } from 'react';
 import { useState } from 'react';
 import { type StrategyFormErrors, validateProfile } from '../model/validate';
-import { BoosterSection } from './booster-section';
 
 interface StageRuleRowRaw {
   nth: number;
@@ -59,18 +58,6 @@ function toFormRaw(profile: StrategyProfile | null): FormRaw {
   };
 }
 
-function toBoosterRaw(profile: StrategyProfile | null): {
-  boosterPct: string;
-  boosterAmountKrw: string;
-} {
-  const resolved = migrateLegacyStrategyProfile(profile) ?? DEFAULT_STRATEGY_PROFILE;
-  return {
-    boosterPct: resolved.boosterPct === undefined ? '' : String(resolved.boosterPct * 100),
-    boosterAmountKrw:
-      resolved.boosterAmountKrw === undefined ? '' : String(resolved.boosterAmountKrw),
-  };
-}
-
 function resizeStageRows(current: StageRuleRowRaw[], nextMaxStages: number): StageRuleRowRaw[] {
   if (nextMaxStages <= 0) return current;
   const fallback = current.at(-1) ?? toStageRows(DEFAULT_STRATEGY_PROFILE).at(-1);
@@ -88,11 +75,7 @@ function resizeStageRows(current: StageRuleRowRaw[], nextMaxStages: number): Sta
   });
 }
 
-function toProfile(
-  raw: FormRaw,
-  rows: StageRuleRowRaw[],
-  booster: { boosterPct: string; boosterAmountKrw: string },
-): Record<string, unknown> {
+function toProfile(raw: FormRaw, rows: StageRuleRowRaw[]): Record<string, unknown> {
   const maxStages = Number(raw.maxStages);
   const profile = applyStrategyAutoMode(
     {
@@ -116,10 +99,6 @@ function toProfile(
     nth: row.nth,
     targetProfitPct: Number(row.targetProfitPct) / 100,
   }));
-  if (booster.boosterPct.trim().length > 0) profile.boosterPct = Number(booster.boosterPct) / 100;
-  if (booster.boosterAmountKrw.trim().length > 0) {
-    profile.boosterAmountKrw = Number(booster.boosterAmountKrw);
-  }
   return profile;
 }
 
@@ -135,11 +114,10 @@ export interface StrategyFormProps {
 export const StrategyForm = (props: StrategyFormProps): ReactElement => {
   const [raw, setRaw] = useState<FormRaw>(() => toFormRaw(props.initial));
   const [rows, setRows] = useState<StageRuleRowRaw[]>(() => toStageRows(props.initial));
-  const [booster, setBooster] = useState(() => toBoosterRaw(props.initial));
   const [errors, setErrors] = useState<StrategyFormErrors>({});
   const [presetInput, setPresetInput] = useState('');
 
-  const validated = validateProfile(toProfile(raw, rows, booster));
+  const validated = validateProfile(toProfile(raw, rows));
 
   const updateRaw = (key: keyof FormRaw, value: FormRaw[keyof FormRaw]): void => {
     setRaw((prev) => ({ ...prev, [key]: value }));
@@ -248,13 +226,6 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
           errors={errors}
           disabled={props.disabled}
           onChange={updateRow}
-        />
-
-        <BoosterSection
-          raw={booster}
-          errors={{ boosterPct: errors.boosterPct, boosterAmountKrw: errors.boosterAmountKrw }}
-          disabled={props.disabled}
-          onUpdate={(key) => (value) => setBooster((prev) => ({ ...prev, [key]: value }))}
         />
       </div>
       <div

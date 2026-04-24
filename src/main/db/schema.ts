@@ -225,10 +225,10 @@ export const symbolMemos = sqliteTable('symbol_memos', {
 });
 
 /**
- * 통합 자동감시주문 큐 — booster/prebuy/custom을 단일 큐로 일원화.
+ * 통합 자동감시주문 큐 — 예약매수/사용자 감시를 단일 큐로 일원화.
  *
  * source:
- *   - 'BOOSTER' : 1차 전량 매도 후 lastFilledPrice*(1-boosterPct) 도달 시 1차 재매수
+ *   - 'BOOSTER' : 제거된 레거시 기능 호환용 잔존 값
  *   - 'PREBUY'  : 잔고 없는 신규 종목의 예약 매수
  *   - 'CUSTOM'  : 사용자 정의 자동감시 (BUY/SELL 모두 가능)
  *

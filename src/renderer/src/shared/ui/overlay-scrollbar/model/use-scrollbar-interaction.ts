@@ -7,9 +7,16 @@ export function useScrollbarInteraction(
   autoHideDelay: number,
   orientation: 'vertical' | 'horizontal' = 'vertical',
   isPointerOver = false,
+  alwaysVisible = false,
 ) {
   const [isDragging, setIsDragging] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(alwaysVisible);
+
+  useEffect(() => {
+    if (alwaysVisible && !isVisible) {
+      setIsVisible(true);
+    }
+  }, [alwaysVisible, isVisible]);
 
   // isDragging 중이면 렌더 중 isVisible 보장
   if (isDragging && !isVisible) {
@@ -42,14 +49,14 @@ export function useScrollbarInteraction(
   // 자동 숨김 타이머 — scrollPos가 deps에 있으므로 스크롤 중에는 타이머 재시작
   // biome-ignore lint/correctness/useExhaustiveDependencies: scrollPos은 타이머 재시작을 위한 의도적 의존성
   useEffect(() => {
-    if (!isVisible || isDragging || isPointerOver) return;
+    if (alwaysVisible || !isVisible || isDragging || isPointerOver) return;
 
     const timer = setTimeout(() => {
       setIsVisible(false);
     }, autoHideDelay);
 
     return () => clearTimeout(timer);
-  }, [scrollPos, isVisible, isDragging, autoHideDelay, isPointerOver]);
+  }, [scrollPos, isVisible, isDragging, autoHideDelay, isPointerOver, alwaysVisible]);
 
   const handleThumbPointerDown = (e: React.PointerEvent) => {
     e.preventDefault();

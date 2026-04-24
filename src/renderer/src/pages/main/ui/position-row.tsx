@@ -239,13 +239,11 @@ function formatKrw(value: number): string {
 
 function formatStageCell(
   mode: BalanceStageCellMode,
-  nth: number,
+  _nth: number,
   lot: LotEntry,
   stagePnlRate: number | null,
 ): string {
   switch (mode) {
-    case 'NTH':
-      return `${nth}차`;
     case 'DATE':
       return new Date(lot.boughtAt).toLocaleDateString('ko-KR', {
         month: '2-digit',

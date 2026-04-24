@@ -34,19 +34,11 @@ describe('validateProfile', () => {
     }
   });
 
-  it('booster 선택 필드는 생략 가능하다', () => {
+  it('추가 필드가 있어도 전략 검증은 핵심 스키마만 사용한다', () => {
     const result = validateProfile({
       ...DEFAULT_STRATEGY_PROFILE,
-      boosterPct: undefined,
-      boosterAmountKrw: undefined,
-    });
-    expect(result.ok).toBe(true);
-  });
-
-  it('boosterPct 음수는 허용한다', () => {
-    const result = validateProfile({
-      ...DEFAULT_STRATEGY_PROFILE,
-      boosterPct: -0.05,
+      boosterPct: 0.02,
+      boosterAmountKrw: 500_000,
     });
     expect(result.ok).toBe(true);
   });

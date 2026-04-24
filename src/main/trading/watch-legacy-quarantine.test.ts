@@ -3,6 +3,7 @@ import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
 import { eventLogs, watchOrders } from '../db/schema';
 import {
+  BOOSTER_FEATURE_REMOVED_REASON,
   LEGACY_WATCH_CONTRACTION_REASON,
   quarantineLegacyWatchRows,
 } from './watch-legacy-quarantine';
@@ -77,5 +78,38 @@ describe('quarantineLegacyWatchRows', () => {
 
     const events = db.select().from(eventLogs).all();
     expect(events.some((event) => event.message === 'watch.legacy.quarantined')).toBe(true);
+  });
+
+  it('active BOOSTER row를 CANCELLED로 격리하고 제거 사유를 남긴다', () => {
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const logger = {
+      log: vi.fn((entry) =>
+        db
+          .insert(eventLogs)
+          .values({
+            ts: new Date(),
+            level: entry.level,
+            category: entry.category,
+            message: entry.message,
+            payloadJson: JSON.stringify(entry.payload ?? null),
+            auditPayload: null,
+          })
+          .run(),
+      ),
+    };
+
+    const boosterId = seedWatch(db, { source: 'BOOSTER', status: 'WATCHING' });
+
+    const quarantined = quarantineLegacyWatchRows(db, logger);
+    expect(quarantined).toBe(1);
+
+    const boosterRow = db
+      .select()
+      .from(watchOrders)
+      .all()
+      .find((row) => row.id === boosterId);
+    expect(boosterRow?.status).toBe('CANCELLED');
+    expect(boosterRow?.lastFailureReason).toBe(BOOSTER_FEATURE_REMOVED_REASON);
   });
 });

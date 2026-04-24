@@ -257,7 +257,7 @@ export interface DisplaySettings {
   };
 }
 
-export type BalanceStageCellMode = 'PERCENT' | 'NTH' | 'DATE' | 'QTY';
+export type BalanceStageCellMode = 'PERCENT' | 'DATE' | 'QTY';
 
 const MA_DEFAULTS: Record<5 | 10 | 20 | 60 | 120, MaSettings> = {
   5: { enabled: true, color: '#e83d3d', width: 1, style: 'solid' },
@@ -354,7 +354,7 @@ export function readDisplayConfig(repo: SettingsRepo): DisplaySettings {
       ? rowNum
       : DISPLAY_GRID_DEFAULTS.rowHeightPx;
   const stageCellModeRaw = repo.get(SETTING_KEYS.DISPLAY_GRID_STAGE_CELL_MODE);
-  const validStageCellModes: BalanceStageCellMode[] = ['PERCENT', 'NTH', 'DATE', 'QTY'];
+  const validStageCellModes: BalanceStageCellMode[] = ['PERCENT', 'DATE', 'QTY'];
   const stageCellMode: BalanceStageCellMode =
     stageCellModeRaw !== null &&
     validStageCellModes.includes(stageCellModeRaw as BalanceStageCellMode)

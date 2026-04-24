@@ -373,7 +373,7 @@ function statusLabel(status: WatchOrder['status']): string {
 function sourceLabel(source: WatchOrder['source']): string {
   switch (source) {
     case 'BOOSTER':
-      return '수익부스터';
+      return '구버전';
     case 'PREBUY':
     case 'CUSTOM':
       return '예약매수';

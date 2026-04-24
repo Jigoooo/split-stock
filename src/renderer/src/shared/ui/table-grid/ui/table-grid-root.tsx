@@ -170,7 +170,7 @@ export function TableGridRoot(props: RootProps): ReactElement {
         {horizontalScroll && overlayScrollbar ? (
           <>
             <OverlayScrollbar containerRef={hScrollRef} />
-            <OverlayScrollbar containerRef={hScrollRef} orientation="horizontal" />
+            <OverlayScrollbar containerRef={hScrollRef} orientation="horizontal" alwaysVisible />
           </>
         ) : null}
       </div>

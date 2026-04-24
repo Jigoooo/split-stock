@@ -1,6 +1,6 @@
 # 전략 파라미터 · 프리셋 · 변경 감사
 
-NM-010. 자동매매 FSM 이 사용하는 `totalAmountKrw / maxStages / dropPct / profitPct / boosterPct / boosterAmountKrw` 를 UI 에서 편집하고 프리셋으로 재사용합니다.
+NM-010. 자동매매 FSM 이 사용하는 `totalAmountKrw / maxStages / dropPct / profitPct` 를 UI 에서 편집하고 프리셋으로 재사용합니다.
 
 상위 인덱스: [../README.md](../README.md)
 
@@ -14,8 +14,6 @@ const StrategyProfileSchema = z.object({
   maxStages: z.number().int().min(1).max(20),
   dropPct: z.number().positive().max(0.5),     // 0 < x ≤ 0.5
   profitPct: z.number().positive().max(0.5),
-  boosterPct: z.number().min(-0.1).max(0.5).optional(),  // 음수는 "즉시 재진입"
-  boosterAmountKrw: z.number().int().positive().optional(),
 });
 ```
 
@@ -103,8 +101,6 @@ const { presets } = await trpc.strategy.listPresets.query();
 | `dropPct=0.5` | 허용 (경계값, `max(0.5)`) |
 | `dropPct=0.51` | Zod 실패 |
 | `profitPct < 0` | 실패 |
-| `boosterPct=-0.001` | 허용 — FSM/booster-watcher 에서 **즉시 트리거**로 해석 |
-| `boosterAmountKrw` 없이 `boosterPct` 만 | 허용 — 부스터 재매수 시 금액은 `totalAmountKrw/maxStages` fallback (호출측 책임) |
 | 프리셋 이름 빈 문자열 | `VALIDATION` — "프리셋 이름은 1~50자" |
 | JSON 손상 (설정 DB 수동 수정 후) | `getActive` 가 `PARSE_FAILED` 반환 — UI 는 fallback 로 기본값 표시 |
 | 종목별 전략 없음 + 글로벌 있음 | 차수 오버레이 / FSM 은 글로벌 사용 |

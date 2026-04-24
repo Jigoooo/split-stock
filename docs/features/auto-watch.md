@@ -1,6 +1,6 @@
 # 자동감시 제어 · 예약매수 · 알림
 
-자동감시는 예약매수 전용 기능입니다. 수익부스터는 내부적으로 예약매수 항목을 등록하는 흐름이며, 자동매도는 자동매매 설정/FSM이 담당합니다.
+자동감시는 예약매수 전용 기능입니다. 자동매도는 자동매매 설정/FSM이 담당합니다.
 
 상위 인덱스: [../README.md](../README.md)
 
@@ -24,19 +24,16 @@
 자동감시는 돌파(cross) 감지가 아니라 **현재가 threshold 충족**입니다.
 
 - 예약매수: `price <= targetPrice`
-- 수익부스터: 마지막 1차 매도 체결가 기준 `-N%` 하락 도달 시 재매수
 
 주의:
 
 - 현재가가 이미 조건을 만족한 상태라면 다음 가격 업데이트에서 즉시 트리거됩니다.
-- `boosterPct <= 0` 은 즉시 트리거 의미를 유지합니다.
 - `목표가 이상`, `매도 자동감시`, 일반화된 비교 선택은 공개 UI/API에서 지원하지 않습니다.
 
 ## 3. 소스별 ownership
 
 - 수동 예약매수(`CUSTOM`) — `watch_orders`가 authoritative
 - `PREBUY` — `prebuy_orders`가 authoritative, `watch_orders`는 `sourceRefId=prebuy_orders.id`를 가진 control/runtime row
-- `BOOSTER` — `watch_orders`가 runtime row이며 `metadata`에 booster task를 JSON으로 저장
 
 `sourceRefId`와 `metadata`를 사용해 reload 시 중복 row 없이 reconcile합니다.
 

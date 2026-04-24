@@ -14,6 +14,7 @@ export type OverlayScrollbarProps = {
   orientation?: 'vertical' | 'horizontal';
   autoHideDelay?: number;
   minThumbSize?: number;
+  alwaysVisible?: boolean;
   offset?: {
     top?: number;
     right?: number;

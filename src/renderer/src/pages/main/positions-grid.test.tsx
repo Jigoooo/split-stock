@@ -232,4 +232,49 @@ describe('PositionsGrid', () => {
       screen.getByTitle('1차 · OPEN · 매수일 2025. 1. 2. · 수량 6주 · 수익률 4.00%'),
     ).toHaveTextContent('4.00%');
   });
+
+  it('기존 잔고 스냅샷이 있으면 일시적 rate limit 에러를 테이블 본문에 노출하지 않는다', () => {
+    mockUsePositionsGrid.mockReturnValue({
+      isPending: false,
+      error: { message: '잔고조회 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      mismatches: [],
+      rows: [makeRow('005930', '삼성전자')],
+      summary,
+      syncStatus: 'IN_SYNC',
+      gridMaxStages: 2,
+    });
+
+    render(<PositionsGrid accountId={1} />);
+
+    expect(
+      screen.queryByText('잔고조회 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'),
+    ).toBeNull();
+    expect(screen.getByText('삼성전자')).toBeInTheDocument();
+  });
+
+  it('표시할 잔고 스냅샷이 없으면 에러를 본문에 노출한다', () => {
+    mockUsePositionsGrid.mockReturnValue({
+      isPending: false,
+      error: { message: '잔고조회 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+      mismatches: [],
+      rows: [],
+      summary: {
+        deposit: 0,
+        d2Deposit: 0,
+        totalBuyAmount: 0,
+        totalEval: 0,
+        totalPnlAmount: 0,
+        totalPnlRate: 0,
+        estimatedAsset: 0,
+      },
+      syncStatus: 'IN_SYNC',
+      gridMaxStages: 1,
+    });
+
+    render(<PositionsGrid accountId={1} />);
+
+    expect(
+      screen.getByText('잔고조회 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.'),
+    ).toBeInTheDocument();
+  });
 });

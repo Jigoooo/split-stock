@@ -29,6 +29,11 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
   const { onSelect, selectedPdno = null } = props;
   const { error, gridMaxStages, isPending, mismatches, rows, summary, syncStatus } =
     usePositionsGrid();
+  const showInlineError = shouldRenderInlineBalanceError(
+    error?.message ?? null,
+    rows.length,
+    summary,
+  );
   const utils = trpc.useUtils();
   const displaySettings = useGetDisplaySettings();
   const updateDisplaySettings = useUpdateDisplaySettings();
@@ -121,7 +126,6 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
             style={{ minWidth: '7rem' }}
           >
             <option value="PERCENT">수익률</option>
-            <option value="NTH">차수</option>
             <option value="DATE">날짜</option>
             <option value="QTY">수량</option>
           </Select>
@@ -240,7 +244,7 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
           ))}
         </TableGrid.Header>
         <TableGrid.Body scrollRef={scrollRef}>
-          {error ? (
+          {showInlineError && error ? (
             <div className="chip chip--down" role="alert" style={{ margin: '0.6rem' }}>
               {error.message}
             </div>
@@ -292,6 +296,37 @@ function stageNumbers(count: number): number[] {
   const out: number[] = [];
   for (let n = 1; n <= count; n += 1) out.push(n);
   return out;
+}
+
+function shouldRenderInlineBalanceError(
+  message: string | null,
+  rowCount: number,
+  summary: {
+    deposit: number;
+    d2Deposit: number;
+    totalBuyAmount: number;
+    totalEval: number;
+    estimatedAsset: number;
+  },
+): boolean {
+  if (!message) return false;
+  const hasSnapshot =
+    rowCount > 0 ||
+    summary.deposit > 0 ||
+    summary.d2Deposit > 0 ||
+    summary.totalBuyAmount > 0 ||
+    summary.totalEval > 0 ||
+    summary.estimatedAsset > 0;
+  if (!hasSnapshot) return true;
+
+  return !isTransientBalanceError(message);
+}
+
+function isTransientBalanceError(message: string): boolean {
+  return (
+    message.startsWith('잔고조회 요청이 너무 많습니다.') ||
+    message.startsWith('잔고 서버에 일시적인 문제가 있습니다.')
+  );
 }
 
 function describeMismatchReason(reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH'): string {

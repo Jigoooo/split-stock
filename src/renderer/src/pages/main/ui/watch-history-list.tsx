@@ -97,7 +97,7 @@ function historyLabel(message: string): string {
 function sourceLabel(source: NonNullable<WatchHistoryItem['source']>): string {
   switch (source) {
     case 'BOOSTER':
-      return '수익부스터';
+      return '구버전';
     case 'PREBUY':
     case 'CUSTOM':
       return '예약매수';

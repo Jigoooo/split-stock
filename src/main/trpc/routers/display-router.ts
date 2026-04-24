@@ -41,7 +41,7 @@ const UpdateDisplaySettingsSchema = z.object({
   grid: z
     .object({
       rowHeightPx: z.number().int().min(18).max(60).optional(),
-      stageCellMode: z.enum(['PERCENT', 'NTH', 'DATE', 'QTY']).optional(),
+      stageCellMode: z.enum(['PERCENT', 'DATE', 'QTY']).optional(),
     })
     .optional(),
 });

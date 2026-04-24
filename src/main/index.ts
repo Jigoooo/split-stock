@@ -72,7 +72,6 @@ import { SafetyStateRegistry } from './safety/safety-state';
 import { createTimeWindowRepo } from './safety/time-window';
 import { CredentialsRepo } from './security/credentials-repo';
 import { BalanceSync } from './trading/balance-sync';
-import { BoosterWatcher } from './trading/booster-watcher';
 import { CurrentStateSync } from './trading/current-state-sync';
 import { DailyCandlesRepo } from './trading/daily-candles-repo';
 import { createEnvAwarePricePoller } from './trading/env-aware-price-poller';
@@ -274,8 +273,8 @@ function bootstrapDeps(userDataDir: string) {
   const syncStrategyPriceFeed = (pdnos: string[]): void => {
     syncTrackedPdnos(strategyTrackedPdnosRef, pdnos);
   };
-  // 통합 자동감시주문 엔진 — booster/prebuy/custom을 단일 큐로 관리.
-  // BOOSTER/PREBUY 핸들러는 어댑터(BoosterWatcher/PrebuyWatcher) 생성 시 registerHandler로 주입됨.
+  // 통합 자동감시주문 엔진 — 예약매수/사용자 감시를 단일 큐로 관리.
+  // 계좌별 어댑터는 registerHandler로 핸들러를 주입한다.
   const watchEngine = new WatchEngine({
     db,
     timer: realTimer,
@@ -331,7 +330,7 @@ function bootstrapDeps(userDataDir: string) {
 
   /**
    * REST 회전 폴링 큐. WS 한도(20·향후 60) 초과 종목을 자동 위임받아 가격을
-   * watchEngine.onPrice 로 흘려 보낸다. BOOSTER/PREBUY/CUSTOM watch_orders 트리거 평가도
+   * watchEngine.onPrice 로 흘려 보낸다. PREBUY/CUSTOM watch_orders 트리거 평가도
    * 동일 경로로 가동됨.
    *
    * 활성 env 가 바뀌어도 본 인스턴스는 동일 — env-aware poller 가 매 fetch 마다 currentEnv 를
@@ -550,14 +549,6 @@ function bootstrapDeps(userDataDir: string) {
       };
     }
   });
-  watchEngine.setFallbackHandler('BOOSTER', async (order, ctx) => {
-    try {
-      await runWatchedOrder(order, ctx.price);
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, reason: error instanceof Error ? error.message : String(error) };
-    }
-  });
   const strategyEngine = new StrategyExecutionEngine({
     bus,
     logger: eventLogger,
@@ -598,7 +589,6 @@ function bootstrapDeps(userDataDir: string) {
   strategyEngine.refreshTrackedSymbols();
 
   const prebuyWatchers = new Map<number, PrebuyWatcher>();
-  const boosterWatchers = new Map<number, BoosterWatcher>();
   for (const account of activeAccounts.list()) {
     const prebuyWatcher = new PrebuyWatcher({
       timer: realTimer,
@@ -643,51 +633,6 @@ function bootstrapDeps(userDataDir: string) {
     });
     prebuyWatcher.reload();
     prebuyWatchers.set(account.id, prebuyWatcher);
-
-    const boosterWatcher = new BoosterWatcher({
-      timer: realTimer,
-      engine: watchEngine,
-      accountId: account.id,
-      onTrigger: (task, ctx) => {
-        return runWatchedOrder(
-          {
-            id: 0,
-            accountId: account.id,
-            pdno: task.pdno,
-            source: 'BOOSTER',
-            side: 'BUY',
-            targetPrice:
-              task.boosterPct <= 0
-                ? task.lastFilledPrice
-                : Math.floor(task.lastFilledPrice * (1 - task.boosterPct)),
-            comparator: 'LTE',
-            orderType: 'LIMIT',
-            qtyOrAmountMode: 'AMOUNT',
-            qty: null,
-            amountKrw: task.amountKrw,
-            nth: 1,
-            sourceRefId: task.pdno,
-            expiresAt: task.expiresAt !== undefined ? new Date(task.expiresAt) : null,
-            status: 'WATCHING',
-            lastFailureReason: null,
-            metadata: JSON.stringify(task),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            executedAt: null,
-          },
-          ctx.price,
-        );
-      },
-      onExpire: (task) => {
-        eventLogger.log({
-          level: 'INFO',
-          category: 'WATCH',
-          message: 'watch.booster.expired',
-          payload: { accountId: account.id, pdno: task.pdno },
-        });
-      },
-    });
-    boosterWatchers.set(account.id, boosterWatcher);
   }
 
   const factory = createContextFactory({
@@ -838,7 +783,6 @@ function bootstrapDeps(userDataDir: string) {
     eventLogger,
     settingsRepo,
     prebuyWatchers,
-    boosterWatchers,
     balanceSync,
     manualOrderReconciler,
     dbPath: defaultDbPath(userDataDir),
@@ -1109,7 +1053,6 @@ void app.whenReady().then(async () => {
     eventLogger,
     settingsRepo,
     prebuyWatchers,
-    boosterWatchers,
     balanceSync,
     dbPath,
   } = bootstrapDeps(userDataDir);
@@ -1230,7 +1173,6 @@ void app.whenReady().then(async () => {
     balanceSync.dispose();
     backupScheduler.stop();
     for (const watcher of prebuyWatchers.values()) watcher.dispose();
-    for (const watcher of boosterWatchers.values()) watcher.dispose();
   });
 
   app.on('activate', () => {

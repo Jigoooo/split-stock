@@ -147,7 +147,7 @@ export class WatchEngine {
   private readonly queue = new Map<string, QueueEntry[]>(); // pdno → entries
   /**
    * source × accountId 단위 핸들러 라우팅 테이블.
-   * 다계좌 환경에서 BoosterWatcher/PrebuyWatcher 인스턴스 N개가 안전하게 공존하도록 분리.
+   * 다계좌 환경에서 계좌별 감시 어댑터가 안전하게 공존하도록 분리.
    */
   private readonly handlerRegistry = new Map<WatchSource, Map<number, WatchHandler>>();
   private readonly fallbackHandlers = new Map<WatchSource, WatchHandler>();
@@ -166,7 +166,6 @@ export class WatchEngine {
 
   /**
    * source × accountId 핸들러 등록.
-   * BoosterWatcher/PrebuyWatcher 어댑터가 인스턴스 생성 시 호출.
    * 같은 (source, accountId) 재등록 시 이전 핸들러를 덮어쓴다.
    */
   registerHandler(source: WatchSource, accountId: number, handler: WatchHandler): void {

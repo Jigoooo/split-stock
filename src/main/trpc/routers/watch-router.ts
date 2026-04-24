@@ -133,11 +133,13 @@ export const watchRouter = router({
       });
     }
     return {
-      orders: ctx.watchEngine.list({
-        status: input.status,
-        source: input.source,
-        accountId: activeAccountId,
-      }),
+      orders: ctx.watchEngine
+        .list({
+          status: input.status,
+          source: input.source,
+          accountId: activeAccountId,
+        })
+        .filter((order) => order.source !== 'BOOSTER'),
     };
   }),
 
@@ -456,11 +458,7 @@ export const watchRouter = router({
             accountId,
             pdno: typeof payload.pdno === 'string' ? payload.pdno : null,
             source:
-              payload.source === 'BOOSTER' ||
-              payload.source === 'PREBUY' ||
-              payload.source === 'CUSTOM'
-                ? payload.source
-                : null,
+              payload.source === 'PREBUY' || payload.source === 'CUSTOM' ? payload.source : null,
             watchId:
               typeof payload.watchId === 'number' && Number.isInteger(payload.watchId)
                 ? payload.watchId

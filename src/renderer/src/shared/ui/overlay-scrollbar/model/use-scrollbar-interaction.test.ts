@@ -112,6 +112,30 @@ describe('useScrollbarInteraction', () => {
     expect(result.current.isVisible).toBe(true);
   });
 
+  it('alwaysVisible=true 이면 초기 상태부터 isVisible=true', () => {
+    const div = makeHorizontalDiv();
+    const { result } = renderHook(() => {
+      const ref = useRef<HTMLDivElement>(div);
+      return useScrollbarInteraction(ref, 40, 0, 1500, 'horizontal', false, true);
+    });
+
+    expect(result.current.isVisible).toBe(true);
+  });
+
+  it('alwaysVisible=true 이면 자동 숨김 타이머가 동작하지 않는다', () => {
+    const div = makeHorizontalDiv();
+    const { result } = renderHook(() => {
+      const ref = useRef<HTMLDivElement>(div);
+      return useScrollbarInteraction(ref, 40, 0, 1000, 'horizontal', false, true);
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(1001);
+    });
+
+    expect(result.current.isVisible).toBe(true);
+  });
+
   it('hover 중에는 자동 숨김이 멈추고 hover 종료 후 다시 동작한다', () => {
     const div = makeDiv();
     const { result, rerender } = renderHook(

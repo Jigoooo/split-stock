@@ -14,6 +14,7 @@ export function OverlayScrollbar({
   orientation = 'vertical',
   autoHideDelay = AUTO_HIDE_DELAY,
   minThumbSize = MIN_THUMB_SIZE,
+  alwaysVisible = false,
   offset,
 }: OverlayScrollbarProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -52,13 +53,14 @@ export function OverlayScrollbar({
       autoHideDelay,
       orientation,
       isHovered,
+      alwaysVisible,
     );
 
   useEffect(() => {
-    if (!isVisible && isHovered) {
+    if (!alwaysVisible && !isVisible && isHovered) {
       setIsHovered(false);
     }
-  }, [isHovered, isVisible]);
+  }, [alwaysVisible, isHovered, isVisible]);
 
   if (!hasScroll) return null;
 
