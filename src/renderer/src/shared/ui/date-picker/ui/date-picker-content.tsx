@@ -1,5 +1,5 @@
-import { Z_INDEX } from '@renderer/shared/constants';
-import { useMediaQuery } from '@renderer/shared/hooks';
+import { Z_INDEX } from '@renderer/shared/config';
+import { useMediaQuery } from '@renderer/shared/lib/interaction';
 import { useColors } from '@renderer/shared/theme';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createPortal } from 'react-dom';

@@ -1,9 +1,9 @@
+import { Z_INDEX } from '@renderer/shared/config';
+import { useColors } from '@renderer/shared/theme';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactElement } from 'react';
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Z_INDEX } from '../../../constants';
-import { useColors } from '../../../theme';
 import type { DialogConfig, DialogTypeValue } from '../../dialog/model/dialog-types';
 import { DialogMode, DialogType } from '../../dialog/model/dialog-types';
 import { OverlayType, overlayStackActions, pushOverlayHistoryState } from '../../overlay-stack';

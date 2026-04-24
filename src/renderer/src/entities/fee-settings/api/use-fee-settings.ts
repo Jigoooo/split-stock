@@ -1,4 +1,4 @@
-import { trpc } from '../../../shared/api/trpc';
+import { trpc } from '@renderer/shared/api/trpc';
 import type { AllFeeSettings, FeeSettings } from '../model/types';
 
 interface UseGetFeeSettingsReturn {

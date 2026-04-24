@@ -13,6 +13,17 @@ export const LOG_CATEGORIES = [
   'CANCEL',
 ] as const;
 export const LOG_EXPORT_FORMATS = ['csv', 'json'] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+export type LogCategory = (typeof LOG_CATEGORIES)[number];
+export type LogDateRange = 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' | '';
+export type LogExportFormat = (typeof LOG_EXPORT_FORMATS)[number];
+export interface LogExportResult {
+  canceled: boolean;
+  count?: number;
+  filename?: string;
+  format?: LogExportFormat;
+  path?: string;
+}
 
 export interface LogEntry {
   id: number | string;
@@ -24,34 +35,34 @@ export interface LogEntry {
 }
 
 export interface UseLogTailResult {
-  level: (typeof LOG_LEVELS)[number];
-  setLevel: (level: (typeof LOG_LEVELS)[number]) => void;
-  categories: Set<(typeof LOG_CATEGORIES)[number]>;
-  setCategories: (categories: Set<(typeof LOG_CATEGORIES)[number]>) => void;
-  search: string;
-  setSearch: (search: string) => void;
-  dateRange: 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' | '';
-  setDateRange: (dateRange: 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' | '') => void;
-  isPending: boolean;
-  error: { message: string } | null;
-  entries: LogEntry[];
-  exportPending: boolean;
-  exportLogs: (format: (typeof LOG_EXPORT_FORMATS)[number]) => Promise<{
-    canceled: boolean;
-    count?: number;
-    filename?: string;
-    format?: (typeof LOG_EXPORT_FORMATS)[number];
-    path?: string;
-  }>;
+  actions: {
+    exportLogs: (format: LogExportFormat) => Promise<LogExportResult>;
+    setCategories: (categories: Set<LogCategory>) => void;
+    setDateRange: (dateRange: LogDateRange) => void;
+    setLevel: (level: LogLevel) => void;
+    setSearch: (search: string) => void;
+  };
+  data: {
+    entries: LogEntry[];
+  };
+  filters: {
+    categories: Set<LogCategory>;
+    dateRange: LogDateRange;
+    level: LogLevel;
+    search: string;
+  };
+  status: {
+    error: { message: string } | null;
+    exportPending: boolean;
+    isPending: boolean;
+  };
 }
 
 export function useLogTail(): UseLogTailResult {
-  const [level, setLevel] = useState<(typeof LOG_LEVELS)[number]>('');
-  const [categories, setCategories] = useState<Set<(typeof LOG_CATEGORIES)[number]>>(new Set());
+  const [level, setLevel] = useState<LogLevel>('');
+  const [categories, setCategories] = useState<Set<LogCategory>>(new Set());
   const [search, setSearch] = useState('');
-  const [dateRange, setDateRange] = useState<
-    'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' | ''
-  >('');
+  const [dateRange, setDateRange] = useState<LogDateRange>('');
   const exportMutation = trpc.logs.export.useMutation();
 
   const selectedCategories =
@@ -82,15 +93,7 @@ export function useLogTail(): UseLogTailResult {
     },
   );
 
-  const exportLogs = async (
-    format: (typeof LOG_EXPORT_FORMATS)[number],
-  ): Promise<{
-    canceled: boolean;
-    count?: number;
-    filename?: string;
-    format?: (typeof LOG_EXPORT_FORMATS)[number];
-    path?: string;
-  }> =>
+  const exportLogs = async (format: LogExportFormat): Promise<LogExportResult> =>
     exportMutation.mutateAsync({
       format,
       ...(level ? { level: level as 'INFO' | 'WARN' | 'ERROR' } : {}),
@@ -102,18 +105,26 @@ export function useLogTail(): UseLogTailResult {
     });
 
   return {
-    level,
-    setLevel,
-    categories,
-    setCategories,
-    search,
-    setSearch,
-    dateRange,
-    setDateRange,
-    isPending: tail.isPending,
-    error: tail.error ? { message: tail.error.message } : null,
-    entries: tail.data?.entries ?? [],
-    exportPending: exportMutation.isPending,
-    exportLogs,
+    actions: {
+      exportLogs,
+      setCategories,
+      setDateRange,
+      setLevel,
+      setSearch,
+    },
+    data: {
+      entries: tail.data?.entries ?? [],
+    },
+    filters: {
+      categories,
+      dateRange,
+      level,
+      search,
+    },
+    status: {
+      error: tail.error ? { message: tail.error.message } : null,
+      exportPending: exportMutation.isPending,
+      isPending: tail.isPending,
+    },
   };
 }

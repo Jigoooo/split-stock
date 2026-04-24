@@ -1,6 +1,6 @@
+import type { FeeEnv, FeeSettings } from '@renderer/entities/fee-settings';
+import { useGetAllFeeSettings, useUpdateFeeSettings } from '@renderer/entities/fee-settings';
 import { useEffect, useState } from 'react';
-import type { FeeEnv, FeeSettings } from '../../../entities/fee-settings';
-import { useGetAllFeeSettings, useUpdateFeeSettings } from '../../../entities/fee-settings';
 
 const DEFAULT_FEES = {
   real: { buy: 0.015, sell: 0.015, tax: 0.2 },

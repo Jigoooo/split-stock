@@ -17,19 +17,27 @@ import {
 } from '../lib/all-trade-history';
 
 export interface UseAllTradeHistoryResult {
-  draft: DraftFilters;
-  yearOptions: number[];
-  dayOptions: number[];
-  isApplying: boolean;
-  isPending: boolean;
-  error: { message: string } | null;
-  summary: AllTradeHistorySummary;
-  rows: AllTradeHistoryRow[];
-  setSearch: (value: string) => void;
-  setYear: (value: number) => void;
-  setMonth: (value: number) => void;
-  setDay: (value: DraftDay) => void;
-  applyFilters: () => void;
+  actions: {
+    applyFilters: () => void;
+    setDay: (value: DraftDay) => void;
+    setMonth: (value: number) => void;
+    setSearch: (value: string) => void;
+    setYear: (value: number) => void;
+  };
+  data: {
+    rows: AllTradeHistoryRow[];
+    summary: AllTradeHistorySummary;
+  };
+  filters: {
+    dayOptions: number[];
+    draft: DraftFilters;
+    yearOptions: number[];
+  };
+  status: {
+    error: { message: string } | null;
+    isApplying: boolean;
+    isPending: boolean;
+  };
 }
 
 export function useAllTradeHistory(accountId: number): UseAllTradeHistoryResult {
@@ -93,18 +101,26 @@ export function useAllTradeHistory(accountId: number): UseAllTradeHistoryResult 
   };
 
   return {
-    draft,
-    yearOptions,
-    dayOptions,
-    isApplying,
-    isPending: query.isPending,
-    error: query.error ? { message: query.error.message } : null,
-    summary,
-    rows,
-    setSearch,
-    setYear,
-    setMonth,
-    setDay,
-    applyFilters,
+    actions: {
+      applyFilters,
+      setDay,
+      setMonth,
+      setSearch,
+      setYear,
+    },
+    data: {
+      rows,
+      summary,
+    },
+    filters: {
+      dayOptions,
+      draft,
+      yearOptions,
+    },
+    status: {
+      error: query.error ? { message: query.error.message } : null,
+      isApplying,
+      isPending: query.isPending,
+    },
   };
 }

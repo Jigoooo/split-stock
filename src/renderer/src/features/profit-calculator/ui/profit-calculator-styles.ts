@@ -1,0 +1,113 @@
+export const profitCalculatorStyles = {
+  alwaysOnTopLabel: {
+    display: 'flex' as const,
+    alignItems: 'center' as const,
+    gap: '6px',
+    fontSize: '13px',
+    cursor: 'pointer' as const,
+  },
+  checkbox: {
+    cursor: 'pointer' as const,
+  },
+  container: {
+    display: 'flex' as const,
+    flexDirection: 'column' as const,
+    height: '100vh',
+    backgroundColor: '#f5f5f5',
+    padding: '12px',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  },
+  content: {
+    flex: 1,
+    overflowY: 'auto' as const,
+  },
+  feeInfo: {
+    padding: '8px 10px',
+    backgroundColor: '#fff8e1',
+    borderRadius: '4px',
+    display: 'flex' as const,
+    flexDirection: 'column' as const,
+    gap: '4px',
+  },
+  feeRow: {
+    display: 'flex' as const,
+    justifyContent: 'space-between' as const,
+    fontSize: '12px',
+    color: '#666',
+  },
+  form: {
+    display: 'flex' as const,
+    flexDirection: 'column' as const,
+    gap: '12px',
+  },
+  formGroup: {
+    display: 'flex' as const,
+    flexDirection: 'column' as const,
+    gap: '4px',
+  },
+  input: {
+    padding: '6px 8px',
+    border: '1px solid #d0d0d0',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontFamily: 'inherit',
+  },
+  label: {
+    fontSize: '12px',
+    fontWeight: 500,
+    color: '#333',
+  },
+  resultLabel: {
+    color: '#333',
+    fontWeight: 500,
+  },
+  resultRow: {
+    display: 'flex' as const,
+    justifyContent: 'space-between' as const,
+    fontSize: '13px',
+  },
+  resultValue: {
+    color: '#1976d2',
+    fontWeight: 600,
+    textAlign: 'right' as const,
+  },
+  results: {
+    padding: '12px 10px',
+    backgroundColor: '#e8f5e9',
+    borderRadius: '4px',
+    display: 'flex' as const,
+    flexDirection: 'column' as const,
+    gap: '8px',
+  },
+  tabButton: {
+    padding: '8px 12px',
+    border: 'none',
+    backgroundColor: 'transparent',
+    cursor: 'pointer' as const,
+    fontSize: '13px',
+    fontWeight: 500,
+    transition: 'all 0.2s ease',
+  },
+  tabButtonActive: {
+    color: '#1976d2',
+    borderBottom: '2px solid #1976d2',
+    marginBottom: '-1px',
+  },
+  tabButtonInactive: {
+    color: '#666',
+  },
+  tabNav: {
+    display: 'flex' as const,
+    gap: '4px',
+    marginBottom: '12px',
+    borderBottom: '1px solid #e0e0e0',
+  },
+  toolbar: {
+    display: 'flex' as const,
+    justifyContent: 'flex-end' as const,
+    alignItems: 'center' as const,
+    marginBottom: '12px',
+    paddingBottom: '8px',
+    borderBottom: '1px solid #e0e0e0',
+  },
+};

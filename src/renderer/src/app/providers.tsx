@@ -1,12 +1,12 @@
+import { createQueryClient } from '@renderer/shared/api/query-client';
+import { trpc } from '@renderer/shared/api/trpc';
+import { DialogProvider } from '@renderer/shared/ui';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { PropsWithChildren, ReactElement } from 'react';
 import { useState } from 'react';
 import { Toaster } from 'sonner';
 import superjson from 'superjson';
 import { ipcLink } from 'trpc-electron/renderer';
-import { createQueryClient } from '../shared/api/query-client';
-import { trpc } from '../shared/api/trpc';
-import { DialogProvider } from '../shared/ui';
 
 export const AppProviders = ({ children }: PropsWithChildren): ReactElement => {
   const [queryClient] = useState(() => createQueryClient());

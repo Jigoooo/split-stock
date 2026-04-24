@@ -1,5 +1,5 @@
+import type { FeeEnv } from '@renderer/entities/fee-settings';
 import { useState } from 'react';
-import type { FeeEnv } from '../../../entities/fee-settings';
 import { useFeeSettingsForm } from '../model/use-fee-settings-form';
 
 export function FeeSettingsForm() {

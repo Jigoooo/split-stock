@@ -1,16 +1,11 @@
-import {
-  useActiveAccountId,
-  useBalanceWithLots,
-  usePositionOverlay,
-} from '@renderer/entities/account';
-import { TradeSelectionBar, useStockList } from '@renderer/entities/stock';
-import { trpc } from '@renderer/shared/api/trpc';
-import { PositionChart } from '@renderer/widgets/position-chart';
-import { TradingPanel } from '@renderer/widgets/trading-panel';
+import { useActiveAccountId } from '@renderer/entities/account';
 import type { ReactElement } from 'react';
 import { Group, type Layout, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 import { useMainRealtime } from '../model/use-main-realtime';
 import { useMainSelection } from '../model/use-main-selection';
+import { useMainTradingContext } from '../model/use-main-trading-context';
+import { MainAccountLoading, MainNoAccount } from './main-account-status';
+import { MainBottomSection } from './main-bottom-section';
 import { MainPositionsPane } from './main-positions-pane';
 import { MainTradeHistoryPane } from './main-trade-history-pane';
 
@@ -66,66 +61,17 @@ export const MainPage = ({ onOpenStrategySettings }: MainPageProps): ReactElemen
     storage: localStorage,
   });
 
-  // 하단 차트/주문 패널의 isProd / 종목명 조회.
-  // 우선순위: 잔고 positions(보유) → 종목 마스터(stock_master) → pdno 자체(최종 폴백).
-  // stock_master 는 useStockList 로 이미 다른 UI에서 캐시 로드되므로 네트워크 재요청 없음(10분 staleTime).
-  const envQuery = trpc.auth.getEnv.useQuery();
-  const isProd = envQuery.data?.env === 'PROD';
-  const balance = useBalanceWithLots();
-  const stockList = useStockList('');
-  const selectedEntry =
-    selectedPdno !== null
-      ? {
-          pdno: selectedPdno,
-          name:
-            selectedStock?.name ??
-            balance.positions.find((p) => p.code === selectedPdno)?.name ??
-            stockList.entries.find((e) => e.pdno === selectedPdno)?.name ??
-            selectedPdno,
-        }
-      : null;
-  const overlay = usePositionOverlay(selectedEntry?.pdno ?? null, { includeSold: true });
+  const { isProd, overlayLines, selectedEntry } = useMainTradingContext(
+    selectedPdno,
+    selectedStock,
+  );
 
   if (isAccountPending) {
-    return (
-      <div
-        className="muted"
-        style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '1.1rem',
-        }}
-      >
-        계좌 확인 중…
-      </div>
-    );
+    return <MainAccountLoading />;
   }
 
   if (accountId === null) {
-    return (
-      <div
-        className="muted"
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: '0.6rem',
-          fontSize: '1.1rem',
-          padding: '1rem',
-          textAlign: 'center',
-        }}
-        role="status"
-      >
-        <div>활성 계좌가 없습니다.</div>
-        <div style={{ fontSize: '0.95rem' }}>
-          상단 계좌 바에서 계좌를 추가하거나 선택하면 메인 화면이 표시됩니다.
-        </div>
-      </div>
-    );
+    return <MainNoAccount />;
   }
 
   return (
@@ -161,56 +107,12 @@ export const MainPage = ({ onOpenStrategySettings }: MainPageProps): ReactElemen
         </Panel>
         {VERTICAL_SEPARATOR}
         <Panel id="main-bottom" defaultSize={30} minSize={20} style={panelStyle}>
-          <div
-            style={{
-              height: '100%',
-              padding: '0.8rem',
-              boxSizing: 'border-box',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.2rem',
-            }}
-          >
-            <TradeSelectionBar
-              selected={selectedEntry}
-              onSelect={(entry) => setSelectedStock({ pdno: entry.pdno, name: entry.name })}
-            />
-            {selectedEntry ? (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'minmax(320px, 0.95fr) minmax(680px, 1.05fr)',
-                  gap: '1.2rem',
-                  flex: 1,
-                  minHeight: 0,
-                }}
-              >
-                <div style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                  <PositionChart
-                    pdno={selectedEntry.pdno}
-                    name={selectedEntry.name}
-                    lines={overlay.lines}
-                    enableDrawingTools={false}
-                  />
-                </div>
-                <div
-                  style={{
-                    minHeight: 0,
-                    minWidth: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <TradingPanel
-                    pdno={selectedEntry.pdno}
-                    name={selectedEntry.name}
-                    isProd={isProd}
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <MainBottomSection
+            isProd={isProd}
+            overlayLines={overlayLines}
+            selectedEntry={selectedEntry}
+            onSelectStock={(entry) => setSelectedStock({ pdno: entry.pdno, name: entry.name })}
+          />
         </Panel>
       </Group>
     </div>

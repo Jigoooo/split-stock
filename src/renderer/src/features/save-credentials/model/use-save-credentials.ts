@@ -1,6 +1,6 @@
+import { trpc } from '@renderer/shared/api/trpc';
 import type { Credentials } from '@shared/contracts';
 import { useQueryClient } from '@tanstack/react-query';
-import { trpc } from '../../../shared/api/trpc';
 
 /**
  * 자격증명을 저장한 뒤 해당 env로 자동 전환하는 mutation.
