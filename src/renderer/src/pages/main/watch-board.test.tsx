@@ -39,6 +39,10 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       resume: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
       setGlobalEnabled: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
+    ai: {
+      listConfigs: { useQuery: () => ({ data: { configs: [] }, isLoading: false }) },
+      suggestSymbols: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
   },
 }));
 

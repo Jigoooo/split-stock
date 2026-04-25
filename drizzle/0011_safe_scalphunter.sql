@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `ai_provider_configs_default_uniq` ON `ai_provider_configs` (`is_default`) WHERE is_default = 1;

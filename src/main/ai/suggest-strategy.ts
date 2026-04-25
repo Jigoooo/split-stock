@@ -1,3 +1,4 @@
+import { DEFAULT_STRATEGY_PROFILE, StrategyProfileSchema } from '@shared/contracts';
 import { z } from 'zod';
 import type { EventLogger } from '../logging/event-logger';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
@@ -149,6 +150,42 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
   }
 
   const suggestion = normalizeSuggestion(result.parsed);
+
+  // dry-run StrategyProfileSchema 검증 — renderer 가 mergeIntoProfile 후 적용 시 기존
+  // validateProfile 에서 실패할 케이스를 사전에 차단해 "적용" 클릭 후 실패 UX 를 방지.
+  const draftProfile = {
+    ...DEFAULT_STRATEGY_PROFILE,
+    maxStages: suggestion.maxStages,
+    buyRules: suggestion.buyRules.map((r) => ({
+      nth: r.nth,
+      triggerDropPct: r.nth === 1 ? null : r.triggerDropPct,
+      amountKrw: r.amountKrw,
+    })),
+    sellRules: suggestion.sellRules.map((r) => ({
+      nth: r.nth,
+      targetProfitPct: r.targetProfitPct,
+    })),
+  };
+  const draftValidation = StrategyProfileSchema.safeParse(draftProfile);
+  if (!draftValidation.success) {
+    input.logger.log({
+      level: 'WARN',
+      category: 'SYS',
+      message: 'ai.suggest-strategy.draft-invalid',
+      payload: {
+        pdno: input.pdno,
+        provider: config.provider,
+        model: config.model,
+        issues: draftValidation.error.issues.slice(0, 3).map((i) => i.message),
+      },
+    });
+    return {
+      suggestion: null,
+      emptyReason: 'AI 제안이 검증을 통과하지 못했습니다. 다시 시도하거나 수동으로 입력하세요.',
+      durationMs: Date.now() - startedAt,
+    };
+  }
+
   input.logger.log({
     level: 'INFO',
     category: 'SYS',

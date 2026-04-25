@@ -59,7 +59,10 @@ export class LlmClient {
       });
       return { parsed, text };
     } catch (cause) {
-      const msg = cause instanceof Error ? cause.message : String(cause);
+      const sanitizedMsg = redactKey(
+        cause instanceof Error ? cause.message : String(cause),
+        req.config.apiKeyPlain,
+      );
       this.opts.logger.log({
         level: 'ERROR',
         category: 'SYS',
@@ -69,10 +72,12 @@ export class LlmClient {
           model: req.config.model,
           durationMs: Date.now() - startedAt,
           schemaName: req.schemaName,
-          msg,
+          msg: sanitizedMsg,
         },
       });
-      throw cause;
+      // 평문 키가 SDK 에러 메시지에 포함될 수 있어 sanitize 한 새 Error 로 다시 throw —
+      // renderer 토스트로 키가 새지 않도록.
+      throw cause instanceof Error ? new Error(sanitizedMsg) : new Error(sanitizedMsg);
     }
   }
 
@@ -81,16 +86,21 @@ export class LlmClient {
    * 사용자 "연결 테스트" 버튼에서 호출.
    */
   async ping(config: AiProviderConfigWithKey): Promise<void> {
-    await this.callProvider({
-      config,
-      messages: [
-        {
-          role: 'user',
-          content: 'ping. respond with the single word: pong',
-        },
-      ],
-      maxOutputTokens: 10,
-    });
+    try {
+      await this.callProvider({
+        config,
+        messages: [
+          {
+            role: 'user',
+            content: 'ping. respond with the single word: pong',
+          },
+        ],
+        maxOutputTokens: 10,
+      });
+    } catch (cause) {
+      const msg = cause instanceof Error ? cause.message : String(cause);
+      throw new Error(redactKey(msg, config.apiKeyPlain));
+    }
   }
 
   private async callProvider<T>(req: ChatRequest<T>): Promise<string> {
@@ -180,4 +190,18 @@ function stripCodeFence(text: string): string {
  */
 export function providerLabel(p: AiProvider): string {
   return p === 'openai' ? 'OpenAI' : 'Claude';
+}
+
+/**
+ * SDK 에러 메시지에 평문 API 키가 포함될 수 있어 sanitize.
+ * - 키 자체와 prefix(앞 4자) 패턴 모두 마스킹.
+ * - main 로그 / renderer 토스트 어디로 흘러도 안전하도록 main 측에서 1회 마스킹.
+ */
+export function redactKey(msg: string, plainKey: string): string {
+  if (!msg || !plainKey) return msg;
+  let out = msg.split(plainKey).join('[REDACTED]');
+  // sk-... 형태 prefix 가 우연히 떠도 추가 마스킹.
+  out = out.replace(/sk-[A-Za-z0-9_-]{8,}/g, '[REDACTED]');
+  out = out.replace(/sk-ant-[A-Za-z0-9_-]{8,}/g, '[REDACTED]');
+  return out;
 }

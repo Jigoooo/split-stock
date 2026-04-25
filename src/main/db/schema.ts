@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { blob, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 /**
@@ -283,13 +284,21 @@ export const watchOrders = sqliteTable('watch_orders', {
  *
  * is_default 는 동시에 1개만 true 여야 함 (라우터에서 enforce).
  */
-export const aiProviderConfigs = sqliteTable('ai_provider_configs', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  provider: text('provider').notNull(), // 'openai' | 'anthropic'
-  model: text('model').notNull(),
-  encryptedApiKey: blob('encrypted_api_key', { mode: 'buffer' }).notNull(),
-  apiKeyMasked: text('api_key_masked').notNull(),
-  isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-});
+export const aiProviderConfigs = sqliteTable(
+  'ai_provider_configs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    provider: text('provider').notNull(), // 'openai' | 'anthropic'
+    model: text('model').notNull(),
+    encryptedApiKey: blob('encrypted_api_key', { mode: 'buffer' }).notNull(),
+    apiKeyMasked: text('api_key_masked').notNull(),
+    isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    // is_default 단일성 DB 차원 enforce — repo transaction 만으로는 동시 다중 main 인스턴스 / 직접 SQL
+    // / 마이그레이션 회귀 시 invariant 가 깨질 수 있다. partial unique index 로 안전망 추가.
+    uniqueIndex('ai_provider_configs_default_uniq').on(t.isDefault).where(sql`is_default = 1`),
+  ],
+);
