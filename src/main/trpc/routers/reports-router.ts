@@ -1,5 +1,7 @@
 import { TRPCError } from '@trpc/server';
+import { and, gte, lt } from 'drizzle-orm';
 import { z } from 'zod';
+import { eventLogs } from '../../db/schema';
 import {
   computeDailyReport,
   exportEventsCsv,
@@ -65,4 +67,65 @@ export const reportsRouter = router({
     }),
 
   csvKinds: publicProcedure.query(() => ({ kinds: CsvKindSchema.options })),
+
+  /**
+   * 일자별 운영 요약 — event_logs 테이블에서 카테고리·메시지별 집계.
+   * - 자동매수 시도/차단, 미체결 자동취소, 보정 적용, 시세 cooldown, 자동감시 실행 카운트.
+   * - 사용자가 reports 페이지에서 "오늘의 운영 요약" 카드로 한 눈에 파악.
+   */
+  getDailyOpsSummary: publicProcedure
+    .input(z.object({ date: z.date() }))
+    .query(({ ctx, input }) => {
+      const dayStart = new Date(input.date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+
+      const rows = ctx.db
+        .select()
+        .from(eventLogs)
+        .where(and(gte(eventLogs.ts, dayStart), lt(eventLogs.ts, dayEnd)))
+        .all();
+
+      const messageCounts = new Map<string, number>();
+      const cooldownPdnos = new Set<string>();
+      for (const row of rows) {
+        messageCounts.set(row.message, (messageCounts.get(row.message) ?? 0) + 1);
+        if (row.message === 'quote-feed.cooldown' && row.payloadJson) {
+          try {
+            const parsed = JSON.parse(row.payloadJson) as { pdno?: string };
+            if (parsed.pdno) cooldownPdnos.add(parsed.pdno);
+          } catch {
+            // ignore — payload 파싱 실패 시 종목명만 세지 못함
+          }
+        }
+      }
+
+      const get = (msg: string): number => messageCounts.get(msg) ?? 0;
+
+      return {
+        date: dayStart.toISOString(),
+        autoBuy: {
+          executed: get('strategy-engine.orders-generated'),
+          watchExecuted: get('watch.executed'),
+          watchFailed: get('watch.failed'),
+          blockedProtection: get('auto-buy.protection.blocked'),
+          blockedTimeWindow: get('auto-buy.time-window.blocked'),
+          blockedRateGuard: get('auto-buy.rate-guard.sell-only'),
+        },
+        pendingCancel: {
+          success: get('pending-cancel.success'),
+          failed: get('pending-cancel.failed'),
+          skipped: get('pending-cancel.skip'),
+          limitReached: get('pending-cancel.limit-reached'),
+        },
+        priceCorrection: {
+          applied: get('order.price-correction.applied'),
+        },
+        quoteFeed: {
+          cooldownEvents: get('quote-feed.cooldown'),
+          cooldownPdnos: Array.from(cooldownPdnos).sort((a, b) => a.localeCompare(b)),
+        },
+      };
+    }),
 });

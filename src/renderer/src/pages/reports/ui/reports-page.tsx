@@ -1,6 +1,7 @@
+import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, DateInput } from '@renderer/shared/ui';
-import type { ReactElement } from 'react';
+import { type ReactElement, useMemo } from 'react';
 import { useReports } from '../model/use-reports';
 
 function downloadCsv(csv: string, filename: string): void {
@@ -19,6 +20,13 @@ export const ReportsPage = (): ReactElement => {
   const { exportCsv, fromStr, setFromStr, summary, summaryError, summaryPending, toStr, setToStr } =
     useReports();
 
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  const opsQuery = trpc.reports.getDailyOpsSummary.useQuery({ date: today });
+
   const onExport = async (kind: 'trades' | 'lots' | 'events'): Promise<void> => {
     const result = await exportCsv(kind);
     downloadCsv(result.csv, result.filename);
@@ -26,6 +34,19 @@ export const ReportsPage = (): ReactElement => {
 
   return (
     <div style={{ display: 'grid', gap: '1.2rem' }}>
+      <div className="panel">
+        <div className="panel__title">오늘의 운영 요약</div>
+        <div className="panel__body">
+          {opsQuery.isPending ? (
+            <span className="muted">집계 중…</span>
+          ) : opsQuery.error ? (
+            <span className="chip chip--down">{opsQuery.error.message}</span>
+          ) : opsQuery.data ? (
+            <DailyOpsSummary data={opsQuery.data} />
+          ) : null}
+        </div>
+      </div>
+
       <div className="panel">
         <div className="panel__title">기간</div>
         <div
@@ -114,3 +135,56 @@ function formatKrwSigned(v: number): string {
   const sign = v > 0 ? '+' : v < 0 ? '-' : '';
   return `${sign}${thousandSeparator(Math.abs(v))}원`;
 }
+
+interface DailyOpsSummaryData {
+  date: string;
+  autoBuy: {
+    executed: number;
+    watchExecuted: number;
+    watchFailed: number;
+    blockedProtection: number;
+    blockedTimeWindow: number;
+    blockedRateGuard: number;
+  };
+  pendingCancel: {
+    success: number;
+    failed: number;
+    skipped: number;
+    limitReached: number;
+  };
+  priceCorrection: { applied: number };
+  quoteFeed: { cooldownEvents: number; cooldownPdnos: string[] };
+}
+
+const DailyOpsSummary = ({ data }: { data: DailyOpsSummaryData }): ReactElement => {
+  const totalBlocked =
+    data.autoBuy.blockedProtection + data.autoBuy.blockedTimeWindow + data.autoBuy.blockedRateGuard;
+  return (
+    <div style={{ display: 'grid', gap: '1.2rem' }}>
+      <div style={{ display: 'flex', gap: '2.4rem', flexWrap: 'wrap' }}>
+        <Kpi label="자동매매 시도" value={`${thousandSeparator(data.autoBuy.executed)}건`} />
+        <Kpi label="자동감시 실행" value={`${thousandSeparator(data.autoBuy.watchExecuted)}건`} />
+        <Kpi label="자동감시 실패" value={`${thousandSeparator(data.autoBuy.watchFailed)}건`} />
+        <Kpi label="자동매수 차단" value={`${thousandSeparator(totalBlocked)}건`} />
+        <Kpi label="미체결 자동취소" value={`${thousandSeparator(data.pendingCancel.success)}건`} />
+        <Kpi label="자동취소 실패" value={`${thousandSeparator(data.pendingCancel.failed)}건`} />
+        <Kpi label="호가 자동보정" value={`${thousandSeparator(data.priceCorrection.applied)}건`} />
+        <Kpi
+          label="시세 cooldown"
+          value={`${thousandSeparator(data.quoteFeed.cooldownPdnos.length)}종목`}
+        />
+      </div>
+      {totalBlocked > 0 ? (
+        <div className="muted" style={{ fontSize: '1rem' }}>
+          차단 내역: 보호한도 {data.autoBuy.blockedProtection} · 시간대{' '}
+          {data.autoBuy.blockedTimeWindow} · RateGuard {data.autoBuy.blockedRateGuard}
+        </div>
+      ) : null}
+      {data.quoteFeed.cooldownPdnos.length > 0 ? (
+        <div className="muted" style={{ fontSize: '1rem' }}>
+          cooldown 종목: {data.quoteFeed.cooldownPdnos.join(', ')}
+        </div>
+      ) : null}
+    </div>
+  );
+};
