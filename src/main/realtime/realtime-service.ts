@@ -216,6 +216,12 @@ export class RealtimeService {
     return this.pool.getActiveSubscriptions(this.getAccountIdOrZero());
   }
 
+  /** 현재 활성 계좌의 WS 슬롯 capacity. UI 표시용. */
+  getSessionCapacity(): number {
+    if (!this.pool) return 0;
+    return this.pool.getCapacity(this.getAccountIdOrZero());
+  }
+
   /** [BC] tick/orderbook refcount 스냅샷. */
   getWatched(): Array<{ pdno: string; tick: number; orderbook: number }> {
     return Array.from(this.watches.values()).map((e) => ({ ...e }));

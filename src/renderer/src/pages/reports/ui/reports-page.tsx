@@ -26,6 +26,9 @@ export const ReportsPage = (): ReactElement => {
     return d;
   }, []);
   const opsQuery = trpc.reports.getDailyOpsSummary.useQuery({ date: today });
+  const realtimeStatsQuery = trpc.monitoring.getRealtimeStats.useQuery(undefined, {
+    refetchInterval: 5_000,
+  });
 
   const onExport = async (kind: 'trades' | 'lots' | 'events'): Promise<void> => {
     const result = await exportCsv(kind);
@@ -42,7 +45,7 @@ export const ReportsPage = (): ReactElement => {
           ) : opsQuery.error ? (
             <span className="chip chip--down">{opsQuery.error.message}</span>
           ) : opsQuery.data ? (
-            <DailyOpsSummary data={opsQuery.data} />
+            <DailyOpsSummary data={opsQuery.data} realtimeStats={realtimeStatsQuery.data ?? null} />
           ) : null}
         </div>
       </div>
@@ -156,7 +159,20 @@ interface DailyOpsSummaryData {
   quoteFeed: { cooldownEvents: number; cooldownPdnos: string[] };
 }
 
-const DailyOpsSummary = ({ data }: { data: DailyOpsSummaryData }): ReactElement => {
+interface RealtimeStatsData {
+  capacity: number;
+  wsCount: number;
+  restFallbackCount: number;
+  total: number;
+}
+
+const DailyOpsSummary = ({
+  data,
+  realtimeStats,
+}: {
+  data: DailyOpsSummaryData;
+  realtimeStats: RealtimeStatsData | null;
+}): ReactElement => {
   const totalBlocked =
     data.autoBuy.blockedProtection + data.autoBuy.blockedTimeWindow + data.autoBuy.blockedRateGuard;
   return (
@@ -173,6 +189,16 @@ const DailyOpsSummary = ({ data }: { data: DailyOpsSummaryData }): ReactElement 
           label="시세 cooldown"
           value={`${thousandSeparator(data.quoteFeed.cooldownPdnos.length)}종목`}
         />
+        {realtimeStats && realtimeStats.capacity > 0 ? (
+          <Kpi
+            label="WS 슬롯"
+            value={`${realtimeStats.wsCount}/${realtimeStats.capacity}${
+              realtimeStats.restFallbackCount > 0
+                ? ` (REST ${realtimeStats.restFallbackCount})`
+                : ''
+            }`}
+          />
+        ) : null}
       </div>
       {totalBlocked > 0 ? (
         <div className="muted" style={{ fontSize: '1rem' }}>

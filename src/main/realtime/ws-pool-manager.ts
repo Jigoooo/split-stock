@@ -239,6 +239,11 @@ export class WsPoolManager {
     return out;
   }
 
+  /** 계좌별 capacity 조회 — UI/디버깅용. 슬롯 미생성이면 defaultCapacity. */
+  getCapacity(accountId: number): number {
+    return this.slots.get(accountId)?.capacity ?? this.defaultCapacity;
+  }
+
   /** 즉시 재배치 — 테스트/긴급용. debounce 무시. */
   reconcileNow(): void {
     if (this.rebalanceHandle) {
