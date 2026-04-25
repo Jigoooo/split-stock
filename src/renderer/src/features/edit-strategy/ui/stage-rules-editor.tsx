@@ -9,7 +9,7 @@ import type {
 } from '../model/strategy-form-types';
 import type { StrategyFormErrors } from '../model/validate';
 import { ErrorChip } from './error-chip';
-import { StageRuleCard } from './stage-rule-card';
+import { STAGE_RULE_CARD_COLUMNS, StageRuleCard } from './stage-rule-card';
 import { TradingOrderTypeField } from './trading-order-type-field';
 
 interface StageRulesEditorProps {
@@ -111,6 +111,39 @@ export const StageRulesEditor = ({
           disabled={disabled}
           onChange={onAutoSellOrderTypeChange}
         />
+      </div>
+
+      <div
+        role="presentation"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: STAGE_RULE_CARD_COLUMNS,
+          alignItems: 'stretch',
+          border: '1px solid var(--border)',
+          borderRadius: '0.35rem',
+          background: 'var(--bg-2)',
+          fontSize: '1rem',
+          fontWeight: 600,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          aria-hidden
+          style={{
+            padding: '0.45rem 0.65rem',
+            borderRight: '1px solid var(--border)',
+          }}
+        />
+        <div
+          style={{
+            padding: '0.45rem 0.75rem',
+            borderRight: '1px solid var(--border)',
+            color: 'var(--up)',
+          }}
+        >
+          매수 규칙
+        </div>
+        <div style={{ padding: '0.45rem 0.75rem', color: 'var(--down)' }}>매도 규칙</div>
       </div>
 
       <div
