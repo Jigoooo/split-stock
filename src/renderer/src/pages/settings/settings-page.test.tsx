@@ -7,7 +7,7 @@ vi.mock('@renderer/features/backup-restore', () => ({
   BackupPanel: () => <div data-testid="backup-panel" />,
 }));
 
-vi.mock('@renderer/features/credentials-settings', () => ({
+vi.mock('./ui/credentials-settings-panel', () => ({
   CredentialsSettingsPanel: () => <div data-testid="credentials-panel" />,
 }));
 

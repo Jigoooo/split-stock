@@ -1,5 +1,4 @@
 import { BackupPanel } from '@renderer/features/backup-restore';
-import { CredentialsSettingsPanel } from '@renderer/features/credentials-settings';
 import {
   ChartSettingsForm,
   GridDensityForm,
@@ -17,6 +16,8 @@ import { PriceCorrectionForm } from '@renderer/features/price-correction-setting
 import { ErrorBoundary, type HtsTabItem, HtsTabs, OverlayScrollbar } from '@renderer/shared/ui';
 import type { ReactElement, ReactNode } from 'react';
 import { useRef, useState } from 'react';
+
+import { CredentialsSettingsPanel } from './credentials-settings-panel';
 
 // 라벨 정의와 id 유니온을 한 곳에서 동기화 (single source of truth).
 // 'monitoring'(Sentry DSN) 탭은 사용자 facing 가치가 낮아 일시 숨김 — 향후 빌드 환경변수
