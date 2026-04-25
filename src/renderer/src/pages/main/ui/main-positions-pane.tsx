@@ -20,8 +20,8 @@ const L1_TABS: ReadonlyArray<HtsTabItem<PaneL1>> = [
 
 const L2_TABS: ReadonlyArray<HtsTabItem<PaneL2>> = [
   { id: 'balance', label: '실시간 잔고' },
-  { id: 'filled', label: '실시간 체결' },
-  { id: 'unfilled', label: '실시간 미체결' },
+  { id: 'filled', label: '체결' },
+  { id: 'unfilled', label: '미체결' },
   { id: 'past', label: '과거 거래 종목' },
 ];
 

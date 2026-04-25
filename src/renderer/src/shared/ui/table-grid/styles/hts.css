@@ -13,6 +13,26 @@
   background: var(--bg);
 }
 
+/* ── placeholder row (빈/로딩) — viewport 가운데 고정 ── */
+/* root 가 container-type: inline-size 이므로 100cqw = root 가시 너비.
+   sticky-left:0 으로 가로 스크롤 위치와 무관하게 viewport 좌측에 고정 →
+   100cqw 너비 + 자식 cell 의 text-align:center 로 viewport 가운데 정렬. */
+.table-grid-row.table-grid-row--placeholder {
+  position: sticky;
+  left: 0;
+  width: 100cqw;
+  min-width: 100cqw;
+  max-width: 100cqw;
+  justify-content: center;
+}
+
+.table-grid-row.table-grid-row--placeholder .table-grid-cell {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  justify-content: center;
+}
+
 .table-grid-root[data-variant="hts"] .table-grid-header {
   background: var(--bg-3);
   color: var(--fg-2);
@@ -38,6 +58,32 @@
   align-items: center;
   padding: 0 0.6rem;
   border-bottom: 0.1rem solid var(--border);
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-row .positions-table__auto-cell {
+  align-items: stretch;
+  padding: 0;
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-row .positions-table__auto-cell .hts-control-root {
+  height: 100%;
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-row .positions-table__auto-select.hts-select {
+  height: 100%;
+  min-height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 0.35rem 0 0.55rem;
+}
+
+.table-grid-root[data-variant="hts"]
+  .table-grid-row
+  .positions-table__auto-select.hts-select:focus-visible {
+  border-color: transparent;
+  box-shadow: inset 0 0 0 0.2rem var(--accent-ring);
 }
 
 .table-grid-root[data-variant="hts"][data-zebra="true"]
@@ -127,26 +173,6 @@
 /* ── 가로 스크롤 wrapper 기본 스크롤바 숨김 (webkit) ── */
 .table-grid-root .table-grid-hscroll-wrapper::-webkit-scrollbar {
   display: none;
-}
-
-/* ── placeholder row (빈/로딩) — viewport 가운데 고정 ── */
-/* root 가 container-type: inline-size 이므로 100cqw = root 가시 너비.
-   sticky-left:0 으로 가로 스크롤 위치와 무관하게 viewport 좌측에 고정 →
-   100cqw 너비 + 자식 cell 의 text-align:center 로 viewport 가운데 정렬. */
-.table-grid-row.table-grid-row--placeholder {
-  position: sticky;
-  left: 0;
-  width: 100cqw;
-  min-width: 100cqw;
-  max-width: 100cqw;
-  justify-content: center;
-}
-
-.table-grid-row.table-grid-row--placeholder .table-grid-cell {
-  flex: 1 1 auto;
-  min-width: 0;
-  text-align: center;
-  justify-content: center;
 }
 
 /* ── horizontalScroll: 헤더·body·행이 wrapper 너비에 묶이지 않도록 ── */

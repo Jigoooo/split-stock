@@ -5,6 +5,7 @@ import { createTestDb } from '../db/client';
 import { SettingsRepo } from '../db/settings-repo';
 import { FeedBus } from '../realtime/feed-bus';
 import { SafetyStateRegistry } from '../safety/safety-state';
+import { AutoOrderBlockedError } from './auto-order-errors';
 import { LotsRepo } from './lots-repo';
 import { StockMasterRepo } from './stock-master-repo';
 import { StrategyExecutionEngine } from './strategy-execution-engine';
@@ -37,6 +38,24 @@ function setDefaultProfile(strategyRepo: StrategyRepo) {
     autoBuyOrderType: 'LIMIT',
     autoSellEnabled: true,
     autoSellOrderType: 'LIMIT',
+  });
+}
+
+function emitSamsungTick(bus: FeedBus, price: number): void {
+  bus.emitTick({
+    pdno: '005930',
+    time: '093000',
+    price,
+    dayChange: 0,
+    dayChangeRate: 0,
+    tickDirection: 'FLAT',
+    volume: 1,
+    accumVolume: 1,
+    open: price,
+    high: price,
+    low: price,
+    bestAsk: price,
+    bestBid: price,
   });
 }
 
@@ -93,6 +112,120 @@ describe('StrategyExecutionEngine', () => {
         triggerReason: 'DROP_BUY',
       }),
     );
+  });
+
+  it('주문 실행 실패를 safety error lock으로 전환해 재시도 폭주를 막는다', async () => {
+    const { bus, logger, lotsRepo, safetyRegistry, strategyRepo } = setup();
+    lotsRepo.insertLot({
+      accountId: 1,
+      pdno: '005930',
+      nth: 1,
+      buyPrice: 70_000,
+      qty: 10,
+      amountKrw: 700_000,
+      status: 'OPEN',
+      boughtAt: new Date(),
+    });
+    setDefaultProfile(strategyRepo);
+    const failure = new Error('주문 실패: API_BUSINESS - 모의투자 영업일이 아닙니다.');
+    const executeOrder = vi.fn(async () => {
+      throw failure;
+    });
+
+    const engine = new StrategyExecutionEngine({
+      bus,
+      logger: logger as never,
+      lotsRepo,
+      strategyRepo,
+      safetyRegistry,
+      getActiveAccountId: () => 1,
+      executeOrder,
+    });
+    engine.refreshTrackedSymbols();
+
+    emitSamsungTick(bus, 67_800);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(executeOrder).toHaveBeenCalledTimes(1);
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'ERROR',
+        category: 'FSM',
+        message: 'strategy-engine.order-failed',
+        payload: expect.objectContaining({
+          accountId: 1,
+          pdno: '005930',
+          reason: failure.message,
+          side: 'BUY',
+          triggerReason: 'DROP_BUY',
+        }),
+      }),
+    );
+    expect(safetyRegistry.get(1).getSnapshot()).toMatchObject({
+      master: false,
+      errorLock: {
+        active: true,
+        reason: failure.message,
+      },
+    });
+
+    emitSamsungTick(bus, 67_800);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(executeOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('장 사전 가드가 차단하면 주문 시도 없이 로그만 남긴다', async () => {
+    const { bus, logger, lotsRepo, safetyRegistry, strategyRepo } = setup();
+    lotsRepo.insertLot({
+      accountId: 1,
+      pdno: '005930',
+      nth: 1,
+      buyPrice: 70_000,
+      qty: 10,
+      amountKrw: 700_000,
+      status: 'OPEN',
+      boughtAt: new Date(),
+    });
+    setDefaultProfile(strategyRepo);
+    const executeOrder = vi.fn(async () => undefined);
+    const marketSessionGuard = {
+      assertAutoOrderAllowed: vi.fn(async () => {
+        throw new AutoOrderBlockedError('MARKET_WEEKEND', '자동주문 차단: 주말');
+      }),
+    };
+
+    const engine = new StrategyExecutionEngine({
+      bus,
+      logger: logger as never,
+      lotsRepo,
+      strategyRepo,
+      safetyRegistry,
+      getActiveAccountId: () => 1,
+      executeOrder,
+      marketSessionGuard,
+    });
+    engine.refreshTrackedSymbols();
+
+    emitSamsungTick(bus, 67_800);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(marketSessionGuard.assertAutoOrderAllowed).toHaveBeenCalledWith({
+      accountId: 1,
+      pdno: '005930',
+      side: 'BUY',
+      source: 'STRATEGY',
+    });
+    expect(executeOrder).not.toHaveBeenCalled();
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'WARN',
+        category: 'FSM',
+        message: 'strategy-engine.order-blocked',
+      }),
+    );
+    expect(safetyRegistry.get(1).getSnapshot().master).toBe(true);
+    expect(safetyRegistry.get(1).getSnapshot().errorLock.active).toBe(false);
   });
 
   it('active cycle이 없으면 추적 종목이 없다', () => {

@@ -71,12 +71,14 @@ import { createRateGuardRepo } from './safety/rate-guard';
 import { SafetyStateRegistry } from './safety/safety-state';
 import { createTimeWindowRepo } from './safety/time-window';
 import { CredentialsRepo } from './security/credentials-repo';
+import { isAutoOrderBlockedError } from './trading/auto-order-errors';
 import { BalanceSync } from './trading/balance-sync';
 import { CurrentStateSync } from './trading/current-state-sync';
 import { DailyCandlesRepo } from './trading/daily-candles-repo';
 import { createEnvAwarePricePoller } from './trading/env-aware-price-poller';
 import { LotsRepo } from './trading/lots-repo';
 import { ManualOrderReconciler } from './trading/manual-order-reconciler';
+import { MarketSessionGuard } from './trading/market-session-guard';
 import { PendingOrderWatcher } from './trading/pending-order-watcher';
 import { PrebuyRepo } from './trading/prebuy-repo';
 import { PrebuyWatcher } from './trading/prebuy-watcher';
@@ -489,6 +491,13 @@ function bootstrapDeps(userDataDir: string) {
       });
     },
   });
+  const marketSessionGuard = new MarketSessionGuard({
+    auth,
+    credentialsRepo,
+    getCurrentEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
+    httpByEnv,
+    logger: eventLogger,
+  });
 
   const runWatchedOrder = async (order: WatchOrder, triggerPrice: number): Promise<void> => {
     await executeWatchOrder(
@@ -504,13 +513,16 @@ function bootstrapDeps(userDataDir: string) {
         getCurrentEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
         lotsRepo,
         strategyRepo,
+        marketSessionGuard,
       },
       order,
       triggerPrice,
     );
   };
   const isKeepWatchingError = (error: unknown): boolean =>
-    error instanceof Error && /이미 활성 차수가 있어 신규 1차 자동진입을 생략/.test(error.message);
+    isAutoOrderBlockedError(error) ||
+    (error instanceof Error &&
+      /이미 활성 차수가 있어 신규 1차 자동진입을 생략/.test(error.message));
 
   watchEngine.setFallbackHandler('CUSTOM', async (order, ctx) => {
     try {
@@ -557,6 +569,7 @@ function bootstrapDeps(userDataDir: string) {
     safetyRegistry,
     getActiveAccountId: () => factoryRef.factory?.getActiveAccountId() ?? null,
     onTrackedPdnosChanged: syncStrategyPriceFeed,
+    marketSessionGuard,
     executeOrder: async (input) => {
       await executeStrategyOrder(
         {

@@ -96,7 +96,6 @@ export const PositionChart = ({
           </div>
         ) : null}
         <CandlestickChart
-          key={`${pdno}:${chart.period}`}
           candles={chart.candles}
           enableDrawingTools={enableDrawingTools}
           liveCandle={chart.liveCandle}

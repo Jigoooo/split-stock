@@ -1,6 +1,11 @@
 import { MockAgent, setGlobalDispatcher } from 'undici';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { inquireBalance, inquireDailyCcld, inquirePrice } from './domestic-stock';
+import {
+  inquireBalance,
+  inquireDailyCcld,
+  inquireDomesticHoliday,
+  inquirePrice,
+} from './domestic-stock';
 import { KIS_BASE_URL } from './endpoints';
 import { KisHttpClient } from './http-client';
 
@@ -175,6 +180,64 @@ describe('inquirePrice', () => {
       expect(v.upperLimit).toBe(89_700);
       expect(v.lowerLimit).toBe(48_300);
       expect(v.prevClose).toBe(69_000);
+    }
+  });
+});
+
+describe('inquireDomesticHoliday', () => {
+  let agent: MockAgent;
+
+  beforeEach(() => {
+    agent = setupMock();
+  });
+
+  it('국내휴장일조회 응답의 개장일 여부를 정규화한다', async () => {
+    const pool = agent.get(BASE);
+    pool.intercept({ path: /chk-holiday/, method: 'GET' }).reply(200, {
+      rt_cd: '0',
+      msg_cd: 'OK',
+      msg1: 'success',
+      output: [
+        {
+          bass_dt: '20260424',
+          wday_dvsn_cd: '5',
+          bzdy_yn: 'Y',
+          tr_day_yn: 'Y',
+          opnd_yn: 'Y',
+          sttl_day_yn: 'Y',
+        },
+        {
+          bass_dt: '20260425',
+          wday_dvsn_cd: '6',
+          bzdy_yn: 'N',
+          tr_day_yn: 'N',
+          opnd_yn: 'N',
+          sttl_day_yn: 'N',
+        },
+      ],
+    });
+
+    const r = await inquireDomesticHoliday(baseDeps(agent), '20260424');
+    expect(r.isOk()).toBe(true);
+    if (r.isOk()) {
+      expect(r.value).toEqual([
+        {
+          date: '20260424',
+          weekdayCode: '5',
+          businessDay: true,
+          tradingDay: true,
+          openDay: true,
+          settlementDay: true,
+        },
+        {
+          date: '20260425',
+          weekdayCode: '6',
+          businessDay: false,
+          tradingDay: false,
+          openDay: false,
+          settlementDay: false,
+        },
+      ]);
     }
   });
 });

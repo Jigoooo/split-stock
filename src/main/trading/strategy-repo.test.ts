@@ -91,6 +91,10 @@ describe('StrategyRepo — active/preset', () => {
     expect(repo.getActive(ACC_B, '000660')._unsafeUnwrap()?.maxStages).toBe(
       DEFAULT_STRATEGY_PROFILE.maxStages,
     );
+    expect(repo.getActive(ACC_B, '000660')._unsafeUnwrap()).toMatchObject({
+      autoBuyEnabled: false,
+      autoSellEnabled: false,
+    });
   });
 
   it('savePreset/listPresets/deletePreset는 계좌별로 분리된다', () => {
@@ -199,6 +203,26 @@ describe('StrategyRepo — legacy compatibility', () => {
     expect(result.recovered).toBe(1);
     expect(repo.getActive(ACC_A, null)._unsafeUnwrap()?.buyRules[1]?.triggerDropPct).toBe(0.03);
     expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()).toEqual(DEFAULT_STRATEGY_PROFILE);
+  });
+
+  it('upgradeStoredProfiles: 예전 기본 자동 ON active 설정은 OFF로 낮춘다', () => {
+    const { settings, repo } = setup();
+    settings.set(
+      `strategy.active.${ACC_A}.005930`,
+      JSON.stringify({
+        ...DEFAULT_STRATEGY_PROFILE,
+        autoBuyEnabled: true,
+        autoSellEnabled: true,
+      }),
+    );
+
+    const result = repo.upgradeStoredProfiles();
+
+    expect(result.autoDisabled).toBe(1);
+    expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()).toMatchObject({
+      autoBuyEnabled: false,
+      autoSellEnabled: false,
+    });
   });
 
   it('migrateLegacyKeys는 기존 단일 계좌 키를 신규 형식으로 옮긴다', () => {

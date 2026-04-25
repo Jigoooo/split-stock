@@ -73,6 +73,15 @@ export interface DailyCandle {
   volume: number;
 }
 
+export interface DomesticHolidayInfo {
+  date: string; // YYYYMMDD
+  weekdayCode: string;
+  businessDay: boolean;
+  tradingDay: boolean;
+  openDay: boolean;
+  settlementDay: boolean;
+}
+
 export interface DomesticStockDeps {
   http: KisHttpClient;
   env: AppEnv;
@@ -83,7 +92,10 @@ export interface DomesticStockDeps {
   accountProdCd: string;
 }
 
-function authHeaders(deps: DomesticStockDeps, trIdValue: string): Record<string, string> {
+function authHeaders(
+  deps: Pick<DomesticStockDeps, 'token' | 'appKey' | 'appSecret'>,
+  trIdValue: string,
+): Record<string, string> {
   return {
     authorization: `Bearer ${deps.token}`,
     appkey: deps.appKey,
@@ -281,6 +293,50 @@ export async function inquirePrice(
     lowerLimit: parseNum(out.stck_llam),
     prevClose: parseNum(out.stck_sdpr),
   });
+}
+
+/**
+ * 국내휴장일조회 — chk-holiday.
+ * TR_ID: CTCA0903R. KIS 안내상 주문 가능 여부는 opnd_yn(개장일여부)을 사용한다.
+ */
+export async function inquireDomesticHoliday(
+  deps: Omit<DomesticStockDeps, 'accountNo8' | 'accountProdCd'>,
+  bassDt: string,
+): Promise<Result<DomesticHolidayInfo[], KisError>> {
+  const headers = authHeaders(deps, 'CTCA0903R');
+  const query = {
+    BASS_DT: bassDt,
+    CTX_AREA_FK: '',
+    CTX_AREA_NK: '',
+  };
+  const res = await deps.http.get<unknown>(KIS_PATH.CHECK_HOLIDAY, query, headers);
+  if (res.isErr()) return err(res.error);
+  const body = res.value.body as {
+    rt_cd?: string;
+    msg_cd?: string;
+    msg1?: string;
+    output?: unknown;
+  };
+  if (typeof body.rt_cd !== 'string') {
+    return err(makeKisError('VALIDATION', 'holiday response malformed', { cause: 'rt_cd 없음' }));
+  }
+  const bizErr = interpretRtCd(body.rt_cd, body.msg_cd ?? '', body.msg1 ?? '');
+  if (bizErr) return err(bizErr);
+
+  const output = Array.isArray(body.output) ? body.output : body.output ? [body.output] : [];
+  return ok(
+    output
+      .filter((row): row is Record<string, unknown> => row !== null && typeof row === 'object')
+      .map((row) => ({
+        date: String(row.bass_dt ?? ''),
+        weekdayCode: String(row.wday_dvsn_cd ?? ''),
+        businessDay: row.bzdy_yn === 'Y',
+        tradingDay: row.tr_day_yn === 'Y',
+        openDay: row.opnd_yn === 'Y',
+        settlementDay: row.sttl_day_yn === 'Y',
+      }))
+      .filter((row) => row.date.length > 0),
+  );
 }
 
 function toIsoDate(yyyymmdd: string): string {

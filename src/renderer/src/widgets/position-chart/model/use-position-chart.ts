@@ -149,6 +149,7 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
   const [reachedEnd, setReachedEnd] = useState(false);
   const [reloadSeq, setReloadSeq] = useState(0);
   const candlesRef = useRef<Candle[]>([]);
+  const loadedPdnoRef = useRef(pdno);
   const loadingRef = useRef(false);
   const reachedEndRef = useRef(false);
   const utils = trpc.useUtils();
@@ -183,9 +184,13 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
       setIsLoading(true);
       setError(null);
       const cached = readCachedCandles(pdno, period);
+      const pdnoChanged = loadedPdnoRef.current !== pdno;
+      loadedPdnoRef.current = pdno;
       if (cached.length === 0) {
-        setCandles([]);
-        candlesRef.current = [];
+        if (pdnoChanged) {
+          setCandles([]);
+          candlesRef.current = [];
+        }
       } else {
         setCandles(cached);
         candlesRef.current = cached;

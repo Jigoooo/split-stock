@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 const useSafetySwitchMock = vi.fn();
@@ -11,13 +11,14 @@ vi.mock('../model/use-safety-switch', () => ({
 import { SafetySwitchHeader } from './safety-switch-header';
 
 describe('SafetySwitchHeader', () => {
-  it('master=true면 주문 가능 버튼을 보여준다', () => {
+  it('master=true면 주문 가능 스위치를 보여준다', () => {
+    const setMaster = vi.fn();
     useSafetySwitchMock.mockReturnValue({
       clearErrorLock: vi.fn(),
       clearPending: false,
       error: null,
       isPending: false,
-      setMaster: vi.fn(),
+      setMaster,
       setMasterPending: false,
       snapshot: {
         master: true,
@@ -27,10 +28,13 @@ describe('SafetySwitchHeader', () => {
 
     render(<SafetySwitchHeader />);
 
-    expect(screen.getByRole('button', { name: '주문 가능' })).toHaveClass('hts-btn--primary');
+    const switchControl = screen.getByRole('switch', { name: '주문 가능' });
+    expect(switchControl).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(switchControl);
+    expect(setMaster).toHaveBeenCalledWith(false);
   });
 
-  it('master=false면 주문 차단 버튼을 보여준다', () => {
+  it('master=false면 주문 차단 스위치를 보여준다', () => {
     useSafetySwitchMock.mockReturnValue({
       clearErrorLock: vi.fn(),
       clearPending: false,
@@ -46,6 +50,10 @@ describe('SafetySwitchHeader', () => {
 
     render(<SafetySwitchHeader />);
 
-    expect(screen.getByRole('button', { name: '주문 차단' })).toHaveClass('hts-btn--danger');
+    expect(screen.getByRole('switch', { name: '주문 차단' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    expect(screen.getByText('차단')).toBeInTheDocument();
   });
 });

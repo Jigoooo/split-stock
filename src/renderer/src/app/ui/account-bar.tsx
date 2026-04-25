@@ -15,19 +15,16 @@ export interface AccountBarProps {
  * 환경(MOCK/PROD) 표시는 계좌 셀렉터의 EnvDot 이 담당 — 별도 배지 없음.
  */
 export const AccountBar = ({ env }: AccountBarProps): ReactElement => (
-  <div
-    style={{
-      display: 'inline-flex',
-      gap: '0.6rem',
-      alignItems: 'center',
-      flexWrap: 'wrap',
-    }}
-  >
-    <AccountSelector />
-    {env === null ? <span className="chip">연결 안 됨</span> : null}
-    <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)' }} />
-    <SafetySwitchHeader />
-    <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)' }} />
-    <WatchGlobalToggle />
+  <div className="app-header__cluster app-header__cluster--account">
+    <div className="app-header__section">
+      <span className="app-header__section-label">계좌</span>
+      <AccountSelector />
+      {env === null ? <span className="chip">연결 안 됨</span> : null}
+    </div>
+    <div className="app-header__section app-header__section--status">
+      <span className="app-header__section-label">상태</span>
+      <SafetySwitchHeader />
+      <WatchGlobalToggle />
+    </div>
   </div>
 );

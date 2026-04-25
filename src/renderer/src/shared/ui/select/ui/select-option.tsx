@@ -70,6 +70,7 @@ export const SelectOption = ({
         context.setActiveValue(value);
       }}
     >
+      <span className="hts-control-option__label">{children}</span>
       <span
         className={joinClasses(
           'hts-control-option__check',
@@ -79,7 +80,6 @@ export const SelectOption = ({
       >
         <Check size={13} />
       </span>
-      <span className="hts-control-option__label">{children}</span>
     </button>
   );
 };

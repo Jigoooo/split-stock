@@ -209,6 +209,33 @@ describe('PositionChart', () => {
     expect(seriesOptions.priceFormat.formatter(12345)).toBe('12,345');
   });
 
+  it('봉 단위 전환 시 차트 인스턴스를 재생성하지 않는다', async () => {
+    fetchChartMock.mockResolvedValue({
+      candles: [
+        {
+          date: '2026-04-18',
+          open: 10000,
+          high: 12345,
+          low: 9800,
+          close: 12000,
+          volume: 123456,
+        },
+      ],
+      toMs: Date.UTC(2026, 3, 19),
+    });
+
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+
+    await waitFor(() => expect(createChartMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('tab', { name: '주' }));
+
+    await waitFor(() =>
+      expect(fetchChartMock).toHaveBeenCalledWith({ code: '005930', period: 'W' }),
+    );
+    expect(createChartMock).toHaveBeenCalledTimes(1);
+  });
+
   it('거래량 시리즈의 마지막 값 라벨과 가격선을 숨긴다', async () => {
     fetchChartMock.mockResolvedValueOnce({
       candles: [

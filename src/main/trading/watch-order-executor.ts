@@ -17,6 +17,7 @@ import type { SafetyStateRegistry } from '../safety/safety-state';
 import type { CredentialsRepo } from '../security/credentials-repo';
 import { assertCredMatchesEnv } from '../trpc/router-helpers';
 import type { LotsRepo } from './lots-repo';
+import type { AutoOrderMarketGuard } from './market-session-guard';
 import { createPendingBuyLot, linkPendingSellLot } from './order-lot-link';
 import type { PendingOrderWatcher } from './pending-order-watcher';
 import type { StrategyRepo } from './strategy-repo';
@@ -34,6 +35,7 @@ export interface WatchOrderExecutorDeps {
   getCurrentEnv: () => AppEnv | null;
   lotsRepo: LotsRepo;
   strategyRepo: StrategyRepo;
+  marketSessionGuard?: AutoOrderMarketGuard;
 }
 
 export interface StrategyOrderInput {
@@ -77,6 +79,13 @@ export async function executeWatchOrder(
   if (!safety.canTrade(order.pdno)) {
     throw new Error('안전 스위치에 의해 해당 종목 거래가 차단됨');
   }
+
+  await deps.marketSessionGuard?.assertAutoOrderAllowed({
+    accountId: order.accountId,
+    pdno: order.pdno,
+    side: order.side,
+    source: 'WATCH',
+  });
 
   const tokenResult = await deps.auth.getValidToken(env, cred.appKey, cred.appSecret);
   if (tokenResult.isErr()) {

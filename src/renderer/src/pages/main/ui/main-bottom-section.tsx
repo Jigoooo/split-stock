@@ -19,18 +19,20 @@ export const MainBottomSection = ({
   selectedEntry,
 }: MainBottomSectionProps): ReactElement => (
   <div
+    className="main-bottom-section"
     style={{
       height: '100%',
       padding: '0.8rem',
       boxSizing: 'border-box',
       display: 'flex',
       flexDirection: 'column',
-      gap: '1.2rem',
+      gap: '0.8rem',
     }}
   >
-    <TradeSelectionBar selected={selectedEntry} onSelect={onSelectStock} />
+    <TradeSelectionBar selected={selectedEntry} onSelect={onSelectStock} compact hideSyncButton />
     {selectedEntry ? (
       <div
+        className="main-bottom-section__content"
         style={{
           display: 'grid',
           gridTemplateColumns: 'minmax(320px, 0.95fr) minmax(680px, 1.05fr)',

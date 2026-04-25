@@ -38,27 +38,14 @@ const AppShellFrame = ({ children, popout, shell }: AppShellFrameProps): ReactEl
         <AccountBar env={shell.env} />
         {shell.env && popout ? (
           <>
-            <ConnectionStatusDot />
-            <div
-              style={{
-                display: 'flex',
-                gap: '0.6rem',
-                marginLeft: '1.2rem',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
+            <div className="app-header__section app-header__section--connection">
+              <ConnectionStatusDot />
+            </div>
+            <div className="app-header__section app-header__section--tools">
+              <span className="app-header__section-label">메뉴</span>
               <HeaderPopoutButtons popout={popout} />
             </div>
-            <nav
-              style={{
-                display: 'flex',
-                gap: '0.6rem',
-                marginLeft: 'auto',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
+            <nav className="app-header__section app-header__section--session">
               <Button onClick={() => shell.logout(false)} disabled={shell.isLoggingOut} dense>
                 로그아웃
               </Button>

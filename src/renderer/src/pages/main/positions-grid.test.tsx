@@ -191,6 +191,10 @@ describe('PositionsGrid', () => {
     render(<PositionsGrid accountId={1} />);
 
     const autoModeSelect = screen.getByRole('combobox', { name: '삼성전자 자동매매 상태' });
+    expect(autoModeSelect).toHaveClass('positions-table__auto-select');
+    expect(autoModeSelect.closest('[data-grid-role="cell"]')).toHaveClass(
+      'positions-table__auto-cell',
+    );
     autoModeSelect.focus();
     fireEvent.keyDown(autoModeSelect, { key: 'ArrowDown' });
     fireEvent.keyDown(autoModeSelect, { key: 'ArrowDown' });

@@ -188,6 +188,16 @@ describe('Select', () => {
     expect(screen.getByRole('listbox')).toBeInTheDocument();
   });
 
+  it('선택 표시 아이콘을 옵션 라벨 뒤에 렌더링한다', () => {
+    render(<SelectHarness />);
+
+    fireEvent.click(screen.getByRole('combobox', { name: '환경 선택' }));
+
+    const alpha = screen.getByRole('option', { name: 'Alpha' });
+    expect(alpha.children[0]).toHaveClass('hts-control-option__label');
+    expect(alpha.children[1]).toHaveClass('hts-control-option__check');
+  });
+
   it('첫 오픈에서 선택 option 정렬을 위해 window scrollIntoView를 호출하지 않는다', async () => {
     const scrollIntoViewMock = HTMLElement.prototype.scrollIntoView as unknown as {
       mockClear: () => void;

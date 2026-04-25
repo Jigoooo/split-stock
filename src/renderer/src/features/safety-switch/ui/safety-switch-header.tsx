@@ -1,4 +1,4 @@
-import { Button } from '@renderer/shared/ui';
+import { Button, Switch } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useSafetySwitch } from '../model/use-safety-switch';
 
@@ -15,16 +15,25 @@ export const SafetySwitchHeader = (): ReactElement | null => {
   const errorLocked = snap.errorLock.active;
 
   return (
-    <div style={{ display: 'inline-flex', gap: '0.6rem', alignItems: 'center' }}>
-      <Button
+    <div className="header-toggle-control">
+      <span className="header-toggle-control__label">주문</span>
+      <Switch
+        checked={snap.master}
         disabled={errorLocked || setMasterPending}
-        onClick={() => setMaster(!snap.master)}
+        onChange={setMaster}
+        aria-label={`주문 ${snap.master ? '가능' : '차단'}`}
         title="Ctrl/Cmd+Shift+K 로 즉시 중지"
-        variant={snap.master ? 'primary' : 'danger'}
-        dense
+        tone={snap.master ? 'success' : 'danger'}
+      />
+      <span
+        className={
+          snap.master
+            ? 'header-toggle-control__state'
+            : 'header-toggle-control__state header-toggle-control__state--danger'
+        }
       >
-        {snap.master ? '주문 가능' : '주문 차단'}
-      </Button>
+        {snap.master ? '가능' : '차단'}
+      </span>
       {errorLocked ? (
         <>
           <span className="chip chip--down" role="status">

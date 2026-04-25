@@ -292,10 +292,11 @@ export class StrategyRepo {
     return { migrated };
   }
 
-  upgradeStoredProfiles(): { upgraded: number; recovered: number } {
+  upgradeStoredProfiles(): { upgraded: number; recovered: number; autoDisabled: number } {
     const rows = this.settings.list();
     let upgraded = 0;
     let recovered = 0;
+    let autoDisabled = 0;
 
     for (const row of rows) {
       if (!row.key.startsWith(`${ACTIVE_PREFIX}.`) && !row.key.startsWith(`${PRESET_PREFIX}.`)) {
@@ -316,6 +317,15 @@ export class StrategyRepo {
       } catch {
         nextProfile = DEFAULT_STRATEGY_PROFILE;
         recoveredWithDefault = true;
+      }
+
+      if (row.key.startsWith(`${ACTIVE_PREFIX}.`) && isUnsafeDefaultAutoProfile(nextProfile)) {
+        nextProfile = {
+          ...nextProfile,
+          autoBuyEnabled: false,
+          autoSellEnabled: false,
+        };
+        autoDisabled += 1;
       }
 
       const normalized = JSON.stringify(nextProfile);
@@ -340,10 +350,18 @@ export class StrategyRepo {
         level: recovered > 0 ? 'WARN' : 'INFO',
         category: 'FSM',
         message: 'strategy.migration.completed',
-        payload: { upgraded, recovered },
+        payload: { upgraded, recovered, autoDisabled },
       });
     }
-    return { upgraded, recovered };
+    if (autoDisabled > 0) {
+      this.logger.log({
+        level: 'WARN',
+        category: 'FSM',
+        message: 'strategy.default_auto.disabled',
+        payload: { count: autoDisabled },
+      });
+    }
+    return { upgraded, recovered, autoDisabled };
   }
 
   backfillMissingActiveProfiles(
@@ -397,4 +415,14 @@ export class StrategyRepo {
       return err({ kind: 'PARSE_FAILED', cause });
     }
   }
+}
+
+function isUnsafeDefaultAutoProfile(profile: StrategyProfile): boolean {
+  if (!profile.autoBuyEnabled || !profile.autoSellEnabled) return false;
+  const disabled = {
+    ...profile,
+    autoBuyEnabled: false,
+    autoSellEnabled: false,
+  };
+  return JSON.stringify(disabled) === JSON.stringify(DEFAULT_STRATEGY_PROFILE);
 }

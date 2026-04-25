@@ -34,6 +34,7 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
   const { cycles, error, isPending } = useTradeCycles(
     pdno !== null ? { accountId, pdno, status } : { accountId, status },
   );
+  const showSymbolColumn = pdno === null;
 
   return (
     <TableGrid.Root
@@ -52,7 +53,9 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
         <TableGrid.Cell width={TRADE_HISTORY_COLS.nth} numeric>
           차수
         </TableGrid.Cell>
-        <TableGrid.Cell width={TRADE_HISTORY_COLS.symbol}>종목</TableGrid.Cell>
+        {showSymbolColumn ? (
+          <TableGrid.Cell width={TRADE_HISTORY_COLS.symbol}>종목</TableGrid.Cell>
+        ) : null}
         <TableGrid.Cell width={TRADE_HISTORY_COLS.buyPrice} numeric>
           매수가
         </TableGrid.Cell>
@@ -95,12 +98,14 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
                 <TableGrid.Cell width={TRADE_HISTORY_COLS.nth} numeric>
                   {cycle.nth}차
                 </TableGrid.Cell>
-                <TableGrid.Cell width={TRADE_HISTORY_COLS.symbol}>
-                  <span className="num">{cycle.pdno}</span>
-                  <span className="muted" style={{ marginLeft: '0.4rem' }}>
-                    {cycle.name}
-                  </span>
-                </TableGrid.Cell>
+                {showSymbolColumn ? (
+                  <TableGrid.Cell width={TRADE_HISTORY_COLS.symbol}>
+                    <span className="num">{cycle.pdno}</span>
+                    <span className="muted" style={{ marginLeft: '0.4rem' }}>
+                      {cycle.name}
+                    </span>
+                  </TableGrid.Cell>
+                ) : null}
                 <TableGrid.Cell width={TRADE_HISTORY_COLS.buyPrice} numeric>
                   {formatKrw(cycle.buyPrice)}
                 </TableGrid.Cell>

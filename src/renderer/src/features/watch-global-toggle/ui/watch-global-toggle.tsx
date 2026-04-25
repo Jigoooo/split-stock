@@ -1,6 +1,7 @@
 import { useActiveAccountId } from '@renderer/entities/account';
 import { useWatchControlState } from '@renderer/entities/watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
+import { Switch } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
 /**
@@ -29,21 +30,18 @@ export const WatchGlobalToggle = (): ReactElement => {
   }
 
   return (
-    <button
-      type="button"
-      className="chip"
-      aria-pressed={state.globalEnabled}
-      aria-label={`자동감시 ${state.globalEnabled ? 'ON' : 'OFF'} (${state.totalTrackedCount})`}
-      onClick={() => setGlobal.mutate({ enabled: !state.globalEnabled })}
-      disabled={setGlobal.isPending}
-      style={{
-        cursor: setGlobal.isPending ? 'wait' : 'pointer',
-        border: 'none',
-        background: state.globalEnabled ? 'var(--accent-tint-6)' : 'var(--bg-3)',
-        color: 'inherit',
-      }}
-    >
-      자동감시 {state.globalEnabled ? 'ON' : 'OFF'} ({state.totalTrackedCount})
-    </button>
+    <div className="header-toggle-control">
+      <span className="header-toggle-control__label">감시</span>
+      <Switch
+        checked={state.globalEnabled}
+        aria-label={`자동감시 ${state.globalEnabled ? 'ON' : 'OFF'} (${state.totalTrackedCount})`}
+        onChange={(enabled) => setGlobal.mutate({ enabled })}
+        disabled={setGlobal.isPending}
+        tone={state.globalEnabled ? 'accent' : 'danger'}
+      />
+      <span className="header-toggle-control__state">
+        {state.globalEnabled ? 'ON' : 'OFF'} ({state.totalTrackedCount})
+      </span>
+    </div>
   );
 };

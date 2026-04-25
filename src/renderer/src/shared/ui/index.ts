@@ -49,6 +49,8 @@ export type { SegmentedToggleProps } from './segmented-toggle';
 export { SegmentedToggle } from './segmented-toggle';
 export type { SelectProps } from './select';
 export { Select } from './select';
+export type { SwitchProps } from './switch';
+export { Switch } from './switch';
 export type {
   Align as TableGridAlign,
   BodyProps as TableGridBodyProps,

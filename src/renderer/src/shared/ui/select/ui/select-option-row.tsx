@@ -43,6 +43,7 @@ export const SelectOptionRow = memo(
         onActivate(value);
       }}
     >
+      <span className="hts-control-option__label">{label}</span>
       <span
         className={joinClasses(
           'hts-control-option__check',
@@ -52,7 +53,6 @@ export const SelectOptionRow = memo(
       >
         <Check size={13} />
       </span>
-      <span className="hts-control-option__label">{label}</span>
     </button>
   ),
 );

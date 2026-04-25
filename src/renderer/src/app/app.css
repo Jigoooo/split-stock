@@ -126,7 +126,7 @@ body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   /* 앱 셸이 viewport 전체를 차지하고 내부에서 flex로 나눠 스크롤을 테이블로만 위임 */
   height: 100%;
   overflow: hidden;
@@ -165,12 +165,64 @@ body {
 .app-header {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
-  padding: 0.6rem 1.2rem;
+  gap: 0.7rem;
+  padding: 0.45rem 1rem;
   border-bottom: 0.1rem solid var(--border);
   background: var(--bg);
-  height: 3.2rem;
+  min-height: 4rem;
   box-sizing: border-box;
+  overflow: visible;
+  position: relative;
+  z-index: 20;
+}
+
+.app-header__cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.app-header__cluster--account {
+  flex: 0 1 auto;
+}
+
+.app-header__section {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.25rem 0.65rem;
+  border: 0.1rem solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--bg-2);
+  min-height: 2.9rem;
+  box-sizing: border-box;
+}
+
+.app-header__section--status {
+  gap: 0.75rem;
+}
+
+.app-header__section--connection {
+  padding-inline: 0.5rem;
+  background: var(--bg);
+}
+
+.app-header__section--tools {
+  flex: 0 1 auto;
+}
+
+.app-header__section--session {
+  margin-left: auto;
+  background: var(--bg);
+}
+
+.app-header__section-label {
+  color: var(--fg-3);
+  font-size: 1rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .env-badge {
@@ -261,6 +313,113 @@ body {
   background: rgba(16, 185, 129, 0.12);
   color: var(--status-connected);
   border-color: transparent;
+}
+
+.header-toggle-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.header-toggle-control__label {
+  color: var(--fg-2);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.header-toggle-control__state {
+  color: var(--fg);
+  font-size: 1.05rem;
+  font-weight: 700;
+  min-width: 3.2rem;
+}
+
+.header-toggle-control__state--danger {
+  color: var(--down);
+}
+
+.hts-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hts-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.hts-switch__track {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 3.6rem;
+  height: 1.9rem;
+  padding: 0.2rem;
+  box-sizing: border-box;
+  border: 0.1rem solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-3);
+  transition:
+    background-color var(--motion-fast) var(--motion-crisp),
+    border-color var(--motion-fast) var(--motion-crisp),
+    box-shadow var(--motion-fast) var(--motion-crisp);
+}
+
+.hts-switch__thumb {
+  display: block;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 0.1rem solid var(--border);
+  box-shadow: 0 0.1rem 0.35rem rgba(15, 23, 42, 0.2);
+  transform: translateX(0);
+  transition:
+    transform var(--motion-fast) var(--motion-crisp),
+    border-color var(--motion-fast) var(--motion-crisp);
+}
+
+.hts-switch[data-state="checked"] .hts-switch__thumb {
+  transform: translateX(1.65rem);
+}
+
+.hts-switch[data-state="checked"][data-tone="accent"] .hts-switch__track {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.hts-switch[data-state="checked"][data-tone="success"] .hts-switch__track {
+  border-color: var(--status-connected);
+  background: var(--status-connected);
+}
+
+.hts-switch[data-state="checked"][data-tone="danger"] .hts-switch__track {
+  border-color: var(--down);
+  background: var(--down);
+}
+
+.hts-switch[data-state="unchecked"][data-tone="danger"] .hts-switch__track {
+  border-color: var(--down);
+  background: var(--down-soft);
+}
+
+.hts-switch:focus-visible .hts-switch__track {
+  box-shadow: 0 0 0 0.2rem var(--accent-ring);
+}
+
+.hts-switch__label {
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 
 /* HTS 테이블 클래스는 shared/ui/table-grid 로 마이그레이션 완료 (NM-100~104). */
@@ -693,7 +852,7 @@ body {
 
 .hts-control-option {
   display: grid;
-  grid-template-columns: 1.4rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 1.4rem;
   align-items: center;
   column-gap: 0.55rem;
   width: 100%;

@@ -43,14 +43,18 @@ vi.mock('@renderer/shared/api/trpc', () => ({
 }));
 
 describe('WatchGlobalToggle', () => {
-  it('전역 상태와 전체 건수를 "자동감시 ON (N)" 형식으로 표시', () => {
+  it('전역 상태와 전체 건수를 switch 상태로 표시', () => {
     render(<WatchGlobalToggle />);
-    expect(screen.getByRole('button', { name: '자동감시 ON (3)' })).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '자동감시 ON (3)' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByText('ON (3)')).toBeInTheDocument();
   });
 
   it('클릭 시 전역 OFF mutation 호출', () => {
     render(<WatchGlobalToggle />);
-    fireEvent.click(screen.getByRole('button', { name: '자동감시 ON (3)' }));
+    fireEvent.click(screen.getByRole('switch', { name: '자동감시 ON (3)' }));
     expect(mutateMock).toHaveBeenCalledWith({ enabled: false });
   });
 });

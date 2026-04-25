@@ -3,8 +3,10 @@ import { ACTIVE_CYCLE_STATUSES, type ActiveCycleStatus } from '@shared/trading/n
 import type { EventLogger } from '../logging/event-logger';
 import type { FeedBus } from '../realtime/feed-bus';
 import type { SafetyStateRegistry } from '../safety/safety-state';
+import { isAutoOrderBlockedError } from './auto-order-errors';
 import { evaluate } from './fsm';
 import type { LotsRepo } from './lots-repo';
+import type { AutoOrderMarketGuard } from './market-session-guard';
 import type { StrategyRepo } from './strategy-repo';
 
 export interface StrategyExecutionEngineOptions {
@@ -24,12 +26,14 @@ export interface StrategyExecutionEngineOptions {
     side: 'BUY' | 'SELL';
     triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
   }) => Promise<void>;
+  marketSessionGuard?: AutoOrderMarketGuard;
   onTrackedPdnosChanged?: (pdnos: string[]) => void;
 }
 
 export class StrategyExecutionEngine {
   private readonly unsubscribers = new Map<string, () => void>();
   private readonly inFlightPdnos = new Set<string>();
+  private readonly blockedLogLastAt = new Map<string, number>();
 
   constructor(private readonly opts: StrategyExecutionEngineOptions) {}
 
@@ -76,7 +80,9 @@ export class StrategyExecutionEngine {
       this.unsubscribers.set(
         pdno,
         this.opts.bus.subscribeTick(pdno, (tick) => {
-          void this.onTick(pdno, tick.price);
+          void this.onTick(pdno, tick.price).catch((error) => {
+            this.handleTickFailure(pdno, tick.price, error);
+          });
         }),
       );
     }
@@ -121,6 +127,33 @@ export class StrategyExecutionEngine {
 
     this.inFlightPdnos.add(pdno);
     try {
+      const guardOrder = actionableOrders[0];
+      if (guardOrder && this.opts.marketSessionGuard) {
+        try {
+          await this.opts.marketSessionGuard.assertAutoOrderAllowed({
+            accountId,
+            pdno,
+            side: guardOrder.kind,
+            source: 'STRATEGY',
+          });
+        } catch (error) {
+          if (isAutoOrderBlockedError(error)) {
+            this.handleOrderBlocked({
+              accountId,
+              code: error.code,
+              nth: guardOrder.nth,
+              pdno,
+              price,
+              reason: error.message,
+              side: guardOrder.kind,
+              triggerReason: guardOrder.kind === 'BUY' ? 'DROP_BUY' : 'PROFIT_SELL',
+            });
+            return;
+          }
+          throw error;
+        }
+      }
+
       this.opts.logger.log({
         level: 'INFO',
         category: 'FSM',
@@ -134,21 +167,132 @@ export class StrategyExecutionEngine {
       });
 
       for (const order of actionableOrders) {
-        await this.opts.executeOrder({
-          accountId,
-          division: order.kind === 'BUY' ? profile.autoBuyOrderType : profile.autoSellOrderType,
-          nth: order.nth,
-          pdno: order.pdno,
-          price: order.price,
-          qty: order.qty,
-          side: order.kind,
-          triggerReason: order.kind === 'BUY' ? 'DROP_BUY' : 'PROFIT_SELL',
-        });
+        const triggerReason = order.kind === 'BUY' ? 'DROP_BUY' : 'PROFIT_SELL';
+        try {
+          await this.opts.executeOrder({
+            accountId,
+            division: order.kind === 'BUY' ? profile.autoBuyOrderType : profile.autoSellOrderType,
+            nth: order.nth,
+            pdno: order.pdno,
+            price: order.price,
+            qty: order.qty,
+            side: order.kind,
+            triggerReason,
+          });
+        } catch (error) {
+          if (isAutoOrderBlockedError(error)) {
+            this.handleOrderBlocked({
+              accountId,
+              code: error.code,
+              nth: order.nth,
+              pdno: order.pdno,
+              price,
+              reason: error.message,
+              side: order.kind,
+              triggerReason,
+            });
+            return;
+          }
+          this.handleOrderFailure({
+            accountId,
+            error,
+            nth: order.nth,
+            pdno: order.pdno,
+            price,
+            side: order.kind,
+            triggerReason,
+          });
+          return;
+        }
       }
     } finally {
       this.inFlightPdnos.delete(pdno);
     }
   }
+
+  private handleOrderFailure(input: {
+    accountId: number;
+    error: unknown;
+    nth: number;
+    pdno: string;
+    price: number;
+    side: 'BUY' | 'SELL';
+    triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
+  }): void {
+    const reason = describeUnknownError(input.error);
+    this.opts.logger.log({
+      level: 'ERROR',
+      category: 'FSM',
+      message: 'strategy-engine.order-failed',
+      payload: {
+        accountId: input.accountId,
+        nth: input.nth,
+        pdno: input.pdno,
+        price: input.price,
+        reason,
+        side: input.side,
+        triggerReason: input.triggerReason,
+      },
+    });
+    this.opts.safetyRegistry.get(input.accountId).recordError(reason);
+  }
+
+  private handleOrderBlocked(input: {
+    accountId: number;
+    code: string;
+    nth: number;
+    pdno: string;
+    price: number;
+    reason: string;
+    side: 'BUY' | 'SELL';
+    triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
+  }): void {
+    const logKey = `${input.accountId}:${input.pdno}:${input.code}:${input.side}`;
+    const now = Date.now();
+    const lastAt = this.blockedLogLastAt.get(logKey) ?? 0;
+    if (now - lastAt < 60_000) return;
+    this.blockedLogLastAt.set(logKey, now);
+    this.opts.logger.log({
+      level: 'WARN',
+      category: 'FSM',
+      message: 'strategy-engine.order-blocked',
+      payload: {
+        accountId: input.accountId,
+        code: input.code,
+        nth: input.nth,
+        pdno: input.pdno,
+        price: input.price,
+        reason: input.reason,
+        side: input.side,
+        triggerReason: input.triggerReason,
+      },
+    });
+  }
+
+  private handleTickFailure(pdno: string, price: number, error: unknown): void {
+    const accountId = this.opts.getActiveAccountId();
+    const reason = describeUnknownError(error);
+    this.opts.logger.log({
+      level: 'ERROR',
+      category: 'FSM',
+      message: 'strategy-engine.tick-failed',
+      payload: {
+        accountId,
+        pdno,
+        price,
+        reason,
+      },
+    });
+    if (accountId !== null) {
+      this.opts.safetyRegistry.get(accountId).recordError(reason);
+    }
+  }
+}
+
+function describeUnknownError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return String(error);
 }
 
 function resolveStrategyProfile(
