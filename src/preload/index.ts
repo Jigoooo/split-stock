@@ -39,6 +39,19 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:account-changed', handler);
     return () => ipcRenderer.off('appShell:account-changed', handler);
   },
+  /**
+   * 설정 변경(매매/보호/시간대/자동감시/안전/백업/표시 등)을 다른 창에 통지 — 모든 popout 윈도우와
+   * 부모창이 query invalidate 로 동기화한다. scope 는 사용자가 어떤 도메인을 수정했는지 알리는 hint
+   * (옵션). 리스너는 그냥 전체 invalidateQueries 로 처리해도 된다.
+   */
+  broadcastSettingsChanged: (scope?: string): void => {
+    ipcRenderer.send('appShell:settings-changed', scope ?? 'all');
+  },
+  onSettingsChanged: (listener: (scope: string) => void): (() => void) => {
+    const handler = (_: unknown, scope: string): void => listener(scope);
+    ipcRenderer.on('appShell:settings-changed', handler);
+    return () => ipcRenderer.off('appShell:settings-changed', handler);
+  },
   onWatchEvent: (listener: (event: WatchOutcomeEvent) => void): (() => void) => {
     const handler = (_: unknown, event: WatchOutcomeEvent): void => listener(event);
     ipcRenderer.on('appShell:watch-event', handler);
@@ -66,6 +79,8 @@ export type AppShellBridge = {
   onStockAssigned: (listener: (pdno: string, name: string) => void) => () => void;
   broadcastAccountChanged: (accountId: number) => void;
   onAccountChanged: (listener: (accountId: number) => void) => () => void;
+  broadcastSettingsChanged: (scope?: string) => void;
+  onSettingsChanged: (listener: (scope: string) => void) => () => void;
   onWatchEvent?: (listener: (event: WatchOutcomeEvent) => void) => () => void;
   onTradeEvent?: (listener: (event: TradeExecutionEvent) => void) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;

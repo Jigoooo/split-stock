@@ -1164,6 +1164,17 @@ void app.whenReady().then(async () => {
     }
   });
 
+  // 어느 창이든 설정 변경 → 송신자 제외 모든 창에 브로드캐스트.
+  // 각 창은 onSettingsChanged 리스너에서 query invalidate 로 동기화한다.
+  ipcMain.on('appShell:settings-changed', (event, scope: unknown) => {
+    const safeScope = typeof scope === 'string' ? scope : 'all';
+    for (const target of BrowserWindow.getAllWindows()) {
+      if (target.isDestroyed()) continue;
+      if (target.webContents.id === event.sender.id) continue;
+      target.webContents.send('appShell:settings-changed', safeScope);
+    }
+  });
+
   // 팝아웃 창의 "창 항상 위로" 토글
   ipcMain.handle('appShell:setAlwaysOnTop', (event, on: unknown) => {
     if (typeof on !== 'boolean') return;

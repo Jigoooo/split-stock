@@ -1,5 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 /**
  * 계좌 전환 mutation — `account.setActive` 호출.
@@ -23,9 +24,16 @@ export interface UseSwitchAccountResult {
 export function useSwitchAccount(): UseSwitchAccountResult {
   const qc = useQueryClient();
   const setActive = trpc.account.setActive.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       // 활성 계좌 변경은 컨텍스트 자체가 바뀌므로 모든 query invalidate.
       await qc.invalidateQueries();
+      // popout 윈도우들도 같은 계좌 컨텍스트를 따라가도록 broadcast.
+      window.appShell?.broadcastAccountChanged?.(variables.accountId);
+      window.appShell?.broadcastSettingsChanged?.('account');
+      toast.success('계좌가 전환되었습니다');
+    },
+    onError: (err) => {
+      toast.error(`계좌 전환 실패: ${err.message}`);
     },
   });
 

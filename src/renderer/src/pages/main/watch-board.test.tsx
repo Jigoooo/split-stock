@@ -64,6 +64,8 @@ describe('WatchBoard', () => {
       onStockAssigned: vi.fn(() => () => {}),
       broadcastAccountChanged: vi.fn(),
       onAccountChanged: vi.fn(() => () => {}),
+      broadcastSettingsChanged: vi.fn(),
+      onSettingsChanged: vi.fn(() => () => {}),
       setAlwaysOnTop: vi.fn().mockResolvedValue(undefined),
       fitContentHeight: vi.fn().mockResolvedValue(undefined),
     };

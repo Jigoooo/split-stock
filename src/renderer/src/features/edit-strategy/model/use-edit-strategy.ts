@@ -1,5 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import type { StrategyProfile } from '@shared/contracts';
+import { toast } from 'sonner';
 
 interface ActiveState {
   isPending: boolean;
@@ -45,10 +46,54 @@ export function useEditStrategy(pdno: string | null): UseEditStrategyReturn {
     ]);
   };
 
-  const setActive = trpc.strategy.setActive.useMutation({ onSuccess: invalidateAll });
-  const clearActive = trpc.strategy.clearActive.useMutation({ onSuccess: invalidateAll });
-  const savePreset = trpc.strategy.savePreset.useMutation({ onSuccess: invalidateAll });
-  const deletePreset = trpc.strategy.deletePreset.useMutation({ onSuccess: invalidateAll });
+  const broadcast = (): void => {
+    window.appShell?.broadcastSettingsChanged?.('strategy');
+  };
+
+  const setActive = trpc.strategy.setActive.useMutation({
+    onSuccess: async () => {
+      await invalidateAll();
+      broadcast();
+      toast.success(
+        pdno === null ? '기본 매매설정이 저장되었습니다' : '활성 매매설정이 저장되었습니다',
+      );
+    },
+    onError: (err) => {
+      toast.error(`매매설정 저장 실패: ${err.message}`);
+    },
+  });
+  const clearActive = trpc.strategy.clearActive.useMutation({
+    onSuccess: async () => {
+      await invalidateAll();
+      broadcast();
+      toast.success(
+        pdno === null ? '기본 매매설정이 초기화되었습니다' : '종목별 설정이 초기화되었습니다',
+      );
+    },
+    onError: (err) => {
+      toast.error(`매매설정 초기화 실패: ${err.message}`);
+    },
+  });
+  const savePreset = trpc.strategy.savePreset.useMutation({
+    onSuccess: async (_data, variables) => {
+      await invalidateAll();
+      broadcast();
+      toast.success(`템플릿 "${variables.name}" 저장됨`);
+    },
+    onError: (err) => {
+      toast.error(`템플릿 저장 실패: ${err.message}`);
+    },
+  });
+  const deletePreset = trpc.strategy.deletePreset.useMutation({
+    onSuccess: async (_data, variables) => {
+      await invalidateAll();
+      broadcast();
+      toast.success(`템플릿 "${variables.name}" 삭제됨`);
+    },
+    onError: (err) => {
+      toast.error(`템플릿 삭제 실패: ${err.message}`);
+    },
+  });
 
   return {
     active: {

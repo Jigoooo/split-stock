@@ -2,6 +2,7 @@ import type { PriceCorrectionStrategy } from '@renderer/entities/price-correctio
 import { useGetPriceCorrectionSettings } from '@renderer/entities/price-correction-settings';
 import { trpc } from '@renderer/shared/api/trpc';
 import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 
 /**
  * 호가 자동 보정 설정 폼 상태 관리.
@@ -14,6 +15,10 @@ export function usePriceCorrectionForm() {
   const updateMutation = trpc.priceCorrection.updateSettings.useMutation({
     onSuccess: () => {
       void utils.priceCorrection.getSettings.invalidate();
+      toast.success('호가 자동 보정 설정이 저장되었습니다');
+    },
+    onError: (err) => {
+      toast.error(`호가 자동 보정 저장 실패: ${err.message}`);
     },
   });
 

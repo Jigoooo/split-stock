@@ -1,4 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { toast } from 'sonner';
 
 export interface SafetySnapshot {
   master: boolean;
@@ -23,10 +24,24 @@ export function useSafetySwitch(): UseSafetySwitchResult {
     refetchInterval: 2000,
   });
   const setMaster = trpc.safety.setMaster.useMutation({
-    onSuccess: () => state.refetch(),
+    onSuccess: (_data, variables) => {
+      void state.refetch();
+      window.appShell?.broadcastSettingsChanged?.('safety');
+      toast.success(variables.on ? '주문 허용 상태로 전환됨' : '주문 차단 상태로 전환됨');
+    },
+    onError: (err) => {
+      toast.error(`안전 스위치 변경 실패: ${err.message}`);
+    },
   });
   const clear = trpc.safety.clearErrorLock.useMutation({
-    onSuccess: () => state.refetch(),
+    onSuccess: () => {
+      void state.refetch();
+      window.appShell?.broadcastSettingsChanged?.('safety');
+      toast.success('오류 잠금이 해제되었습니다');
+    },
+    onError: (err) => {
+      toast.error(`오류 잠금 해제 실패: ${err.message}`);
+    },
   });
 
   return {

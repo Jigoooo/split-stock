@@ -2,6 +2,7 @@ import { useActiveAccountId } from '@renderer/entities/account';
 import { useGetProtectionLimits } from '@renderer/entities/protection-limits';
 import { trpc } from '@renderer/shared/api/trpc';
 import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 
 type RawFields = {
   perSymbolDailyMaxBuysEnabled: boolean;
@@ -28,6 +29,11 @@ export function useProtectionLimitsForm() {
       if (accountId !== null) {
         void utils.protection.get.invalidate({ accountId });
       }
+      window.appShell?.broadcastSettingsChanged?.('protection');
+      toast.success('보호 한도 설정이 저장되었습니다');
+    },
+    onError: (err) => {
+      toast.error(`보호 한도 저장 실패: ${err.message}`);
     },
   });
 

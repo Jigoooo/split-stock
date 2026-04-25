@@ -10,6 +10,7 @@ import { trpc } from '@renderer/shared/api/trpc';
 import { Button, Switch, TextInput } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 
 interface SlotRowProps {
   side: TradeSide;
@@ -36,7 +37,15 @@ const SlotRow = ({
   const [endErr, setEndErr] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  const upsert = trpc.tradingWindows.upsert.useMutation({ onSuccess: onMutated });
+  const upsert = trpc.tradingWindows.upsert.useMutation({
+    onSuccess: () => {
+      onMutated();
+      toast.success(`${slot}차 ${side === 'BUY' ? '매수' : '매도'} 시간대 저장됨`);
+    },
+    onError: (err) => {
+      toast.error(`시간대 저장 실패: ${err.message}`);
+    },
+  });
 
   const handleToggle = (checked: boolean): void => {
     const s = hhmmToMinutes(startRaw);

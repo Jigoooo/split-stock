@@ -1,5 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 export interface PendingCancelFormState {
   enabled: boolean;
@@ -51,6 +52,11 @@ export function usePendingCancelSettings(): UsePendingCancelSettingsResult {
     onSuccess: () => {
       void utils.pendingCancel.getSettings.invalidate();
       setLocalForm(null);
+      window.appShell?.broadcastSettingsChanged?.('pendingCancel');
+      toast.success('미체결 자동취소 설정이 저장되었습니다');
+    },
+    onError: (err) => {
+      toast.error(`미체결 자동취소 저장 실패: ${err.message}`);
     },
   });
 

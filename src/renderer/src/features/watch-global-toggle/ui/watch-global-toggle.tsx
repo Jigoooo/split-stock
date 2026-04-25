@@ -3,6 +3,7 @@ import { useWatchControlState } from '@renderer/entities/watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
 import { Switch } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
+import { toast } from 'sonner';
 
 /**
  * 헤더 자동감시 전역 토글.
@@ -14,10 +15,15 @@ export const WatchGlobalToggle = (): ReactElement => {
   const { accountId } = useActiveAccountId();
   const { isPending, state } = useWatchControlState();
   const setGlobal = trpc.watch.setGlobalEnabled.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       await utils.watch.getControlState.invalidate();
       await utils.watch.list.invalidate();
       await utils.watch.history.invalidate();
+      window.appShell?.broadcastSettingsChanged?.('watch');
+      toast.success(variables.enabled ? '자동감시 ON' : '자동감시 OFF');
+    },
+    onError: (err) => {
+      toast.error(`자동감시 토글 실패: ${err.message}`);
     },
   });
 

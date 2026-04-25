@@ -4,6 +4,7 @@ import { trpc } from '@renderer/shared/api/trpc';
 import { Button, NumberInput, Switch } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 
 /**
  * 연속매수 방지(rate-guard) 설정 폼.
@@ -18,6 +19,10 @@ export const RateGuard = (): ReactElement => {
   const updateMutation = trpc.rateGuard.updateSettings.useMutation({
     onSuccess: () => {
       void utils.rateGuard.getSettings.invalidate();
+      toast.success('연속매수 방지 설정이 저장되었습니다');
+    },
+    onError: (err) => {
+      toast.error(`연속매수 방지 저장 실패: ${err.message}`);
     },
   });
 
