@@ -33,6 +33,12 @@ vi.mock('@renderer/features/display-settings', () => ({
 
 vi.mock('@renderer/features/edit-strategy', () => ({
   StrategySettingsSurface: () => <div data-testid="strategy-settings-surface" />,
+  STRATEGY_SETTINGS_TABS: [
+    { id: 'basic', label: '기본매매 설정' },
+    { id: 'templates', label: '템플릿 관리' },
+    { id: 'protection', label: '보호 설정' },
+    { id: 'conditions', label: '조건 설정' },
+  ],
 }));
 
 vi.mock('@renderer/features/pending-cancel-settings', () => ({

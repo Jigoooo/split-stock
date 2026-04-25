@@ -73,11 +73,18 @@ describe('TradeHistoryPanel', () => {
   it('탭 변경 시 컨텐츠 swap — 진행중 탭 클릭', () => {
     render(<TradeHistoryPanel accountId={1} pdno={null} />);
 
-    expect(screen.getByRole('tab', { name: '전체보기' })).toHaveAttribute('aria-selected', 'true');
+    // 기본 선택 탭은 '자동매매 설정' (useTradeHistoryTabs 기본값 = 'strategy')
+    expect(screen.getByRole('tab', { name: '자동매매 설정' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
 
     fireEvent.click(screen.getByRole('tab', { name: '진행중' }));
 
     expect(screen.getByRole('tab', { name: '진행중' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '전체보기' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: '자동매매 설정' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    );
   });
 });
