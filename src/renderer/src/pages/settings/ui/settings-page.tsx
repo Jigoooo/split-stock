@@ -1,3 +1,4 @@
+import { AiKeysSection } from '@renderer/features/ai-settings';
 import { BackupPanel } from '@renderer/features/backup-restore';
 import {
   ChartSettingsForm,
@@ -27,6 +28,7 @@ const TOP_TABS = [
   { id: 'display', label: '표시' },
   { id: 'orders', label: '주문/체결' },
   { id: 'account', label: '계좌/보안' },
+  { id: 'ai', label: 'AI' },
   { id: 'backup', label: '백업' },
 ] as const satisfies ReadonlyArray<HtsTabItem<string>>;
 
@@ -136,6 +138,11 @@ export const SettingsPage = (): ReactElement => {
           {topTab === 'account' ? (
             <Section name="보안 · 자격증명">
               <CredentialsSettingsPanel />
+            </Section>
+          ) : null}
+          {topTab === 'ai' ? (
+            <Section name="AI 키 관리">
+              <AiKeysSection />
             </Section>
           ) : null}
           {topTab === 'backup' ? (
