@@ -9,5 +9,8 @@ export { RateGuard } from './ui/rate-guard';
 export type { StrategyFormProps } from './ui/strategy-form';
 export { StrategyForm } from './ui/strategy-form';
 export type { StrategySettingsTab } from './ui/strategy-settings-surface';
-export { StrategySettingsSurface } from './ui/strategy-settings-surface';
+export {
+  STRATEGY_SETTINGS_TABS,
+  StrategySettingsSurface,
+} from './ui/strategy-settings-surface';
 export { TimeWindows } from './ui/time-windows';

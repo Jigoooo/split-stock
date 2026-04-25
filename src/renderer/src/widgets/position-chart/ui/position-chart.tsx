@@ -1,10 +1,22 @@
 import { useGetDisplaySettings } from '@renderer/entities/display-settings';
 import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import type { LotOverlayLine } from '@shared/trading/lot-overlay';
+import { Settings } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { type ChartPeriod, usePositionChart } from '../model/use-position-chart';
 import { CandlestickChart } from './candlestick-chart';
 import { PriceChips } from './price-chips';
+
+function openChartSettings(): void {
+  // popout 윈도우는 별도 BrowserWindow 지만 default session partition 공유 → localStorage 동기.
+  // 진입 시 settings-page 가 mount 직후 read & remove 하여 표시 탭으로 자동 점프.
+  try {
+    window.localStorage.setItem('popout:settings:initialTab', 'display');
+  } catch {
+    // localStorage 차단 환경에서는 sliently fallback (사용자가 직접 표시 탭 클릭)
+  }
+  void window.appShell?.openPopout('settings');
+}
 
 const PERIOD_LABEL: Record<ChartPeriod, string> = {
   D: '일',
@@ -63,6 +75,17 @@ export const PositionChart = ({
             label: PERIOD_LABEL[period],
           }))}
         />
+        <Button
+          iconLeading={<Settings size={14} />}
+          iconOnly
+          dense
+          aria-label="차트 설정"
+          title="차트 설정"
+          onClick={openChartSettings}
+          style={{ alignSelf: 'center', display: 'inline-flex', alignItems: 'center' }}
+        >
+          차트 설정
+        </Button>
       </div>
       <div
         className="panel__body"

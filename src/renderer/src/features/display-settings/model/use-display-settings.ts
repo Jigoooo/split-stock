@@ -11,6 +11,7 @@ import {
   useUpdateDisplaySettings,
 } from '@renderer/entities/display-settings';
 import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 
 /**
  * 차트/그리드 표시 설정 폼 상태 관리.
@@ -103,7 +104,7 @@ export function useDisplaySettings() {
         maPayload[period] = resolvedMa(period);
       }
 
-      void mutateAsync({
+      mutateAsync({
         chart: {
           ma: maPayload as Record<
             5 | 10 | 20 | 60 | 120,
@@ -118,18 +119,33 @@ export function useDisplaySettings() {
           crosshair: resolvedCrosshair,
         },
         grid: { rowHeightPx: resolvedRowHeight },
-      }).then(() => {
-        setLocalMa(null);
-        setLocalVolume(null);
-        setLocalCrosshair(null);
-        setLocalRowHeight(null);
-      });
+      }).then(
+        () => {
+          setLocalMa(null);
+          setLocalVolume(null);
+          setLocalCrosshair(null);
+          setLocalRowHeight(null);
+          toast.success('표시 설정이 저장되었습니다');
+        },
+        (err: unknown) => {
+          const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+          toast.error(`표시 설정 저장 실패: ${msg}`);
+        },
+      );
     });
   }
 
   function handleReset(): void {
     startTransition(() => {
-      reset.mutate();
+      reset.mutateAsync().then(
+        () => {
+          toast.success('표시 설정이 초기화되었습니다');
+        },
+        (err: unknown) => {
+          const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+          toast.error(`표시 설정 초기화 실패: ${msg}`);
+        },
+      );
       setLocalMa(null);
       setLocalVolume(null);
       setLocalCrosshair(null);

@@ -41,6 +41,7 @@ export interface UseUpdateDisplaySettingsResult {
 
 export interface UseResetDisplaySettingsResult {
   mutate: () => void;
+  mutateAsync: () => Promise<{ ok: true }>;
   isPending: boolean;
   error: { message: string } | null;
 }
@@ -86,6 +87,7 @@ export function useResetDisplaySettings(): UseResetDisplaySettingsResult {
   });
   return {
     mutate: mutation.mutate,
+    mutateAsync: mutation.mutateAsync as UseResetDisplaySettingsResult['mutateAsync'],
     isPending: mutation.isPending,
     error: mutation.error ? { message: mutation.error.message } : null,
   };

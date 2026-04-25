@@ -6,74 +6,140 @@ import {
   useDisplaySettings,
 } from '@renderer/features/display-settings';
 import {
+  STRATEGY_SETTINGS_TABS,
   StrategySettingsSurface,
   type StrategySettingsTab,
 } from '@renderer/features/edit-strategy';
 import { ActivePendingList, PendingCancelForm } from '@renderer/features/pending-cancel-settings';
 import { PriceCorrectionForm } from '@renderer/features/price-correction-settings';
-import { ErrorBoundary, type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
+import { ErrorBoundary, type HtsTabItem, HtsTabs, OverlayScrollbar } from '@renderer/shared/ui';
 import type { ReactElement, ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
-type SettingsTopTab = 'strategy' | 'display' | 'orders' | 'account' | 'backup';
-
-const TOP_TABS: ReadonlyArray<HtsTabItem<SettingsTopTab>> = [
+// 라벨 정의와 id 유니온을 한 곳에서 동기화 (single source of truth).
+const TOP_TABS = [
   { id: 'strategy', label: '매매설정관리' },
   { id: 'display', label: '표시' },
   { id: 'orders', label: '주문/체결' },
   { id: 'account', label: '계좌/보안' },
   { id: 'backup', label: '백업' },
-];
+] as const satisfies ReadonlyArray<HtsTabItem<string>>;
+
+type SettingsTopTab = (typeof TOP_TABS)[number]['id'];
 
 /**
  * 설정 페이지.
  * - 기본 자동매매 설정 + 계좌 공통 보호 설정 포함.
  * - 각 섹션은 ErrorBoundary 로 격리해 한 폼이 throw 해도 다른 섹션은 계속 사용 가능하도록 한다 (흰화면 방지).
  */
+function readInitialTab(): SettingsTopTab {
+  // popout 진입 시 호출자가 localStorage 로 전달한 초기 탭을 1회 소비.
+  // (예: 차트 위젯의 차트 설정 아이콘 → 표시 탭 자동 선택)
+  try {
+    const v = window.localStorage.getItem('popout:settings:initialTab');
+    if (v) {
+      window.localStorage.removeItem('popout:settings:initialTab');
+      const matched = TOP_TABS.find((t) => t.id === v);
+      if (matched) return matched.id;
+    }
+  } catch {
+    // localStorage 차단 환경 — 기본값 fallback
+  }
+  return 'strategy';
+}
+
 export const SettingsPage = (): ReactElement => {
-  const [topTab, setTopTab] = useState<SettingsTopTab>('strategy');
+  const [topTab, setTopTab] = useState<SettingsTopTab>(readInitialTab);
+  const [strategyTab, setStrategyTab] = useState<StrategySettingsTab>('basic');
+  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   return (
-    <div style={{ display: 'grid', gap: '1rem', minWidth: 0 }}>
-      <HtsTabs tabs={TOP_TABS} active={topTab} onChange={setTopTab} ariaLabel="설정 상위 탭" />
-      {topTab === 'strategy' ? (
-        <Section name="매매설정관리">
-          <StrategySection />
-        </Section>
-      ) : null}
-      {topTab === 'display' ? (
-        <Section name="표시 설정">
-          <DisplaySettingsSection />
-        </Section>
-      ) : null}
-      {topTab === 'orders' ? (
-        <div style={{ display: 'grid', gap: '1.2rem' }}>
-          <Section name="미체결 자동취소">
-            <PendingCancelForm />
-          </Section>
-          <Section name="활성 미체결 목록">
-            <ActivePendingList />
-          </Section>
-          <Section name="호가 자동 보정">
-            <div className="panel">
-              <div className="panel__title">호가 자동 보정</div>
-              <div className="panel__body">
-                <PriceCorrectionForm />
-              </div>
+    // 탭은 상단 고정, 컨텐츠만 스크롤. height:100% + minHeight:0 패턴으로 컨테이너의 가용 높이를 채운다.
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          background: 'var(--bg-1, var(--bg))',
+          paddingBottom: '0.6rem',
+          display: 'grid',
+          gap: '0.6rem',
+        }}
+      >
+        <HtsTabs tabs={TOP_TABS} active={topTab} onChange={setTopTab} ariaLabel="설정 상위 탭" />
+        {topTab === 'strategy' ? (
+          <HtsTabs
+            tabs={STRATEGY_SETTINGS_TABS}
+            active={strategyTab}
+            onChange={setStrategyTab}
+            ariaLabel="기본 자동매매설정 탭"
+          />
+        ) : null}
+      </div>
+      <div
+        ref={scrollRef}
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          paddingRight: '0.4rem',
+          // 네이티브 스크롤바 숨김 — OverlayScrollbar 가 시각화 담당
+          scrollbarWidth: 'none',
+        }}
+        className="settings-scroll-area"
+      >
+        <OverlayScrollbar containerRef={scrollRef} orientation="vertical" alwaysVisible={true} />
+        <div style={{ display: 'grid', gap: '1rem', minWidth: 0 }}>
+          {topTab === 'strategy' ? (
+            <Section name="매매설정관리">
+              <StrategySection activeTab={strategyTab} onTabChange={setStrategyTab} />
+            </Section>
+          ) : null}
+          {topTab === 'display' ? (
+            <Section name="표시 설정">
+              <DisplaySettingsSection />
+            </Section>
+          ) : null}
+          {topTab === 'orders' ? (
+            <div style={{ display: 'grid', gap: '1.2rem' }}>
+              <Section name="미체결 자동취소">
+                <PendingCancelForm />
+              </Section>
+              <Section name="활성 미체결 목록">
+                <ActivePendingList />
+              </Section>
+              <Section name="호가 자동 보정">
+                <div className="panel">
+                  <div className="panel__title">호가 자동 보정</div>
+                  <div className="panel__body">
+                    <PriceCorrectionForm />
+                  </div>
+                </div>
+              </Section>
             </div>
-          </Section>
+          ) : null}
+          {topTab === 'account' ? (
+            <Section name="보안 · 자격증명">
+              <CredentialsSettingsPanel />
+            </Section>
+          ) : null}
+          {topTab === 'backup' ? (
+            <Section name="백업/복원">
+              <BackupPanel />
+            </Section>
+          ) : null}
         </div>
-      ) : null}
-      {topTab === 'account' ? (
-        <Section name="보안 · 자격증명">
-          <CredentialsSettingsPanel />
-        </Section>
-      ) : null}
-      {topTab === 'backup' ? (
-        <Section name="백업/복원">
-          <BackupPanel />
-        </Section>
-      ) : null}
+      </div>
     </div>
   );
 };
@@ -87,13 +153,17 @@ function Section({ name, children }: { name: string; children: ReactNode }): Rea
  * - 전역 프리셋(pdno=null) 편집.
  * - presetKey 로 form 강제 재마운트 — sub-hook stale 방지 (검증된 패턴).
  */
-function StrategySection(): ReactElement {
-  const [tab, setTab] = useState<StrategySettingsTab>('basic');
-
+function StrategySection({
+  activeTab,
+  onTabChange,
+}: {
+  activeTab: StrategySettingsTab;
+  onTabChange: (tab: StrategySettingsTab) => void;
+}): ReactElement {
   return (
     <div className="panel">
       <div className="panel__body">
-        <StrategySettingsSurface activeTab={tab} onTabChange={setTab} />
+        <StrategySettingsSurface activeTab={activeTab} onTabChange={onTabChange} hideTabs />
       </div>
     </div>
   );

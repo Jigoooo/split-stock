@@ -37,9 +37,9 @@ export const POPOUT_ROUTE_CONFIG = {
     label: '설정',
     title: 'Split Stock · 설정',
     defaultWidth: 1040,
-    defaultHeight: 740,
+    defaultHeight: 880,
     minWidth: 720,
-    minHeight: 540,
+    minHeight: 640,
   },
   'stock-picker': {
     label: '종목 선택',

@@ -4,8 +4,9 @@ import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client';
 import { lots, orders, trades } from '../../db/schema';
-import { readPendingCancelConfig } from '../../db/settings-repo';
+import { readPendingCancelConfig, readPriceCorrectionConfig } from '../../db/settings-repo';
 import { cancelOrRevise, orderCash } from '../../kis/order';
+import { correctLimitPrice } from '../../kis/price-correction';
 import { createPendingBuyLot, linkHighestPendingSellLot } from '../../trading/order-lot-link';
 import { assertCredMatchesEnv, requireAccountId, resolveAccountId } from '../router-helpers';
 import { authedProcedure, router } from '../trpc-core';
@@ -77,6 +78,21 @@ export const orderRouter = router({
           message: '안전 스위치에 의해 해당 종목 거래가 차단됨',
         });
       }
+
+      // 자동보정: LIMIT 주문가를 호가단위에 맞게 보정 (BUY/SELL 별 strategy 적용).
+      // 예약/자동매매 경로(watch-order-executor)와 동일한 보정을 즉시주문에도 적용해
+      // 호가 미스매치로 인한 호가창 외 가격 전송을 방지한다.
+      const priceCorrectionCfg = readPriceCorrectionConfig(ctx.settingsRepo);
+      const correctedPrice =
+        input.division === 'LIMIT'
+          ? correctLimitPrice({
+              targetPrice: input.price,
+              side: input.side,
+              strategy: input.side === 'BUY' ? priceCorrectionCfg.buy : priceCorrectionCfg.sell,
+            })
+          : input.price;
+      const correctedInput = { ...input, price: correctedPrice };
+
       const result = await orderCash(
         {
           http: ctx.httpByEnv[env],
@@ -88,7 +104,7 @@ export const orderRouter = router({
           accountProdCd: cred.accountProdCd,
           logger: ctx.logger,
         },
-        input,
+        correctedInput,
       );
       if (result.isErr()) {
         throw new TRPCError({
@@ -109,7 +125,7 @@ export const orderRouter = router({
                 accountId,
                 pdno: input.pdno,
                 placedAt: now,
-                price: input.division === 'LIMIT' ? input.price : 0,
+                price: input.division === 'LIMIT' ? correctedPrice : 0,
                 qty: input.qty,
                 source: 'MANUAL',
               },
@@ -136,7 +152,7 @@ export const orderRouter = router({
           side: input.side,
           division: input.division,
           qty: input.qty,
-          price: input.price,
+          price: correctedPrice,
           status: 'PENDING',
           placedAt: now,
         })

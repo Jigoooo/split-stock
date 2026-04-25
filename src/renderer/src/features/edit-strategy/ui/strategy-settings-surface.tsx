@@ -1,4 +1,4 @@
-import { Button, HtsTabs, Select } from '@renderer/shared/ui';
+import { Button, type HtsTabItem, HtsTabs, Select } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { useMemo, useState } from 'react';
@@ -8,18 +8,22 @@ import { RateGuard } from './rate-guard';
 import { StrategyForm } from './strategy-form';
 import { TimeWindows } from './time-windows';
 
-export type StrategySettingsTab = 'basic' | 'templates' | 'protection' | 'conditions';
-
-const TABS = [
+// `as const satisfies` 로 라벨 정의와 id 유니온 타입을 한 곳에서 동기화.
+// → StrategySettingsTab 은 STRATEGY_SETTINGS_TABS 배열의 id 유니온으로 자동 derive.
+export const STRATEGY_SETTINGS_TABS = [
   { id: 'basic', label: '기본매매 설정' },
   { id: 'templates', label: '템플릿 관리' },
   { id: 'protection', label: '보호 설정' },
   { id: 'conditions', label: '조건 설정' },
-] as const;
+] as const satisfies ReadonlyArray<HtsTabItem<string>>;
+
+export type StrategySettingsTab = (typeof STRATEGY_SETTINGS_TABS)[number]['id'];
 
 export interface StrategySettingsSurfaceProps {
   activeTab: StrategySettingsTab;
   onTabChange: (tab: StrategySettingsTab) => void;
+  /** true 면 탭 헤더를 surface 내부에 렌더하지 않음 — 부모가 외부에 sticky 로 띄울 때 사용. */
+  hideTabs?: boolean;
 }
 
 function profileKey(profile: StrategyProfile | null | undefined): string {
@@ -29,15 +33,18 @@ function profileKey(profile: StrategyProfile | null | undefined): string {
 export const StrategySettingsSurface = ({
   activeTab,
   onTabChange,
+  hideTabs = false,
 }: StrategySettingsSurfaceProps): ReactElement => {
   return (
     <div style={{ display: 'grid', gap: '1rem', minWidth: 0 }}>
-      <HtsTabs
-        tabs={TABS}
-        active={activeTab}
-        onChange={onTabChange}
-        ariaLabel="기본 자동매매설정 탭"
-      />
+      {hideTabs ? null : (
+        <HtsTabs
+          tabs={STRATEGY_SETTINGS_TABS}
+          active={activeTab}
+          onChange={onTabChange}
+          ariaLabel="기본 자동매매설정 탭"
+        />
+      )}
       {activeTab === 'basic' ? <DefaultStrategyPanel /> : null}
       {activeTab === 'templates' ? <TemplateManagementPanel /> : null}
       {activeTab === 'protection' ? <ProtectionSettingsPanel /> : null}

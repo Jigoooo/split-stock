@@ -100,6 +100,9 @@ export interface PopoutPageProps {
 
 export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => {
   const isEdgeToEdgeRoute = route === 'add-watch-order' || route === 'add-account';
+  // settings 페이지는 자체 sticky 탭 + 내부 스크롤을 사용하므로 외부 wrapper 의 overflow 를 hidden 으로
+  // 두어 이중 스크롤바를 방지한다.
+  const isInternallyScrolled = route === 'settings';
   useEffect(() => {
     if (route === 'add-watch-order') return;
     document.title = getPopoutWindowTitle(route);
@@ -153,7 +156,10 @@ export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => 
       style={{
         padding: isEdgeToEdgeRoute ? 0 : '1rem',
         height: isEdgeToEdgeRoute ? undefined : '100vh',
-        overflow: isEdgeToEdgeRoute ? 'visible' : 'auto',
+        overflow: isEdgeToEdgeRoute ? 'visible' : isInternallyScrolled ? 'hidden' : 'auto',
+        display: isInternallyScrolled ? 'flex' : undefined,
+        flexDirection: isInternallyScrolled ? 'column' : undefined,
+        minHeight: 0,
       }}
     >
       {content}

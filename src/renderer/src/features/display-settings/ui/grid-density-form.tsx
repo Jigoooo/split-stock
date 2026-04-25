@@ -90,13 +90,22 @@ export const GridDensityForm = ({
         </TableGrid.Root>
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: '0.6rem',
+          minHeight: '2.4rem',
+          alignItems: 'center',
+        }}
+      >
         <Button
           onClick={onReset}
           disabled={isSaving}
           variant="default"
           dense
           aria-label="그리드 설정 초기화"
+          style={{ minWidth: '5.2rem' }}
         >
           초기화
         </Button>
@@ -106,6 +115,7 @@ export const GridDensityForm = ({
           variant="primary"
           dense
           aria-label="그리드 설정 저장"
+          style={{ minWidth: '5.2rem' }}
         >
           저장
         </Button>

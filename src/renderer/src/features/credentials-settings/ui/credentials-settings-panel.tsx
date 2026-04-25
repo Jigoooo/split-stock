@@ -1,5 +1,4 @@
-import { SafetySwitchPanel } from '@renderer/features/safety-switch';
-import { CredentialsForm } from '@renderer/features/save-credentials';
+import { SafetySwitchHeader } from '@renderer/features/safety-switch';
 import { AccountSelector } from '@renderer/features/switch-account';
 import { WatchGlobalToggle } from '@renderer/features/watch-global-toggle';
 import { trpc } from '@renderer/shared/api/trpc';
@@ -7,7 +6,6 @@ import { Button, TableGrid } from '@renderer/shared/ui';
 import { dialog } from '@renderer/shared/ui/dialog';
 import { Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useState } from 'react';
 import { toast } from 'sonner';
 
 const ENV_LABEL = { MOCK: '모의(MOCK)', PROD: '실전(PROD)' } as const;
@@ -15,27 +13,14 @@ const ENV_LABEL = { MOCK: '모의(MOCK)', PROD: '실전(PROD)' } as const;
 /**
  * 설정 → 계좌/보안 탭의 통합 컨테이너.
  *
- * 헤더(account-bar)와 동시에 사용되는 기능들 — 헤더는 "빠른 운용 접근",
- * 이 패널은 "관리/이력 + 위험 액션"을 담당. 모두 동일 store/tRPC 를 통해 자동 동기화.
- *
- * 섹션 순서(위 → 아래):
- *  1. 자격증명 추가 (dialog 로 분리)
- *  2. 자격증명 목록 / 삭제
- *  3. 계좌 전환
- *  4. 자동 감시 글로벌 토글
- *  5. 안전 스위치 (주문 차단)
- *
- * 환경 전환(PROD/MOCK)은 헤더의 SwitchEnvDialog 로 일원화한다 — 같은 환경에 다중 계정이 있을
- * 때 어느 계정으로 전환할지 모호해지는 문제 때문에 설정 탭에서는 노출하지 않는다.
+ * 헤더(account-bar)와 동일한 컴포넌트를 임베드하여 시각적 일관성을 보장한다.
+ * - 자격증명 추가는 헤더 셀렉트와 동일한 'add-account' 팝아웃을 연다.
+ * - 자동감시/주문 토글은 헤더형 컴포넌트를 그대로 재사용.
+ * - 환경(MOCK/PROD) 전환은 헤더 환경 배지에서만 가능.
  */
 export const CredentialsSettingsPanel = (): ReactElement => {
   return (
     <div style={{ display: 'grid', gap: '1.2rem' }}>
-      <div className="muted" style={{ fontSize: '0.85em' }}>
-        헤더의 계좌·환경·자동감시·안전 스위치는 이 탭과 실시간 동기화됩니다. 일상적 변경은 헤더에서,
-        관리·삭제는 이 탭에서 진행하세요. 환경(MOCK/PROD) 전환은 헤더의 환경 배지에서만 가능합니다.
-      </div>
-
       <CredentialsAddSection />
       <CredentialsListSection />
 
@@ -53,17 +38,24 @@ export const CredentialsSettingsPanel = (): ReactElement => {
         </div>
       </div>
 
-      <SafetySwitchPanel />
+      <div className="panel">
+        <div className="panel__title">주문 허용 상태</div>
+        <div className="panel__body">
+          <SafetySwitchHeader />
+        </div>
+      </div>
     </div>
   );
 };
 
 /**
- * 자격증명 추가 — 모달 다이얼로그로 분리.
- * 폼이 길어 시선 분산을 막고, 다른 섹션과 격리하기 위해 inline expand 가 아닌 modal 패턴 사용.
+ * 자격증명 추가 — 헤더 계좌 셀렉트의 "추가하기"와 동일한 팝아웃 윈도우를 연다.
+ * 두 진입점이 같은 자식 창을 공유하도록 통일.
  */
 function CredentialsAddSection(): ReactElement {
-  const [open, setOpen] = useState(false);
+  const handleOpen = (): void => {
+    void window.appShell?.openPopout('add-account');
+  };
 
   return (
     <div className="panel">
@@ -72,39 +64,19 @@ function CredentialsAddSection(): ReactElement {
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
       >
         <span>자격증명 추가</span>
-        <Button variant="primary" onClick={() => setOpen(true)} dense>
+        <Button variant="primary" onClick={handleOpen} dense>
           추가하기
         </Button>
       </div>
       <div className="panel__body muted" style={{ fontSize: '0.85em' }}>
         새 환경(MOCK/PROD)의 App Key / Secret 을 추가합니다. 추가 후 해당 환경으로 자동 전환됩니다.
       </div>
-
-      {open ? (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="자격증명 추가">
-          <div className="modal panel" style={{ maxWidth: '48rem', width: '90vw' }}>
-            <div
-              className="panel__title"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-            >
-              <span>자격증명 추가</span>
-              <Button onClick={() => setOpen(false)} dense aria-label="닫기">
-                닫기
-              </Button>
-            </div>
-            <div className="panel__body">
-              <CredentialsForm onSaved={() => setOpen(false)} />
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
 
 /**
  * 저장된 자격증명 목록 + 환경별 / 전체 삭제.
- * (기존 CredentialsSettingsPanel 의 본문을 분리한 sub-component.)
  */
 function CredentialsListSection(): ReactElement {
   const utils = trpc.useUtils();
@@ -219,13 +191,13 @@ function CredentialsListSection(): ReactElement {
               <TableGrid.Cell width={140}>환경</TableGrid.Cell>
               <TableGrid.Cell flex={1}>계좌번호</TableGrid.Cell>
               <TableGrid.Cell width={120}>현재 활성</TableGrid.Cell>
-              <TableGrid.Cell width={108}>작업</TableGrid.Cell>
+              <TableGrid.Cell width={64}>작업</TableGrid.Cell>
             </TableGrid.Header>
             <TableGrid.Body>
               {entries.map((e) => (
-                <TableGrid.Row key={e.env}>
+                <TableGrid.Row key={e.env} style={{ minHeight: '2.8rem' }}>
                   <TableGrid.Cell width={140}>
-                    <span className={`chip ${e.env === 'PROD' ? 'chip--down' : ''}`}>
+                    <span className={`chip ${e.env === 'PROD' ? 'chip--down' : 'chip--up'}`}>
                       {ENV_LABEL[e.env]}
                     </span>
                   </TableGrid.Cell>
@@ -235,10 +207,13 @@ function CredentialsListSection(): ReactElement {
                   <TableGrid.Cell width={120}>
                     {currentEnv === e.env ? <span className="chip chip--up">활성</span> : '-'}
                   </TableGrid.Cell>
-                  <TableGrid.Cell width={120}>
+                  <TableGrid.Cell width={64}>
                     <Button
                       iconLeading={<Trash2 size={14} />}
+                      iconOnly
+                      dense
                       disabled={pending}
+                      aria-label={`${ENV_LABEL[e.env]} 자격증명 삭제`}
                       onClick={() => {
                         void handleDeleteOne(e.env);
                       }}

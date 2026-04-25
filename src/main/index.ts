@@ -400,6 +400,19 @@ function bootstrapDeps(userDataDir: string) {
     maxRetries: pendingCancelCfg.maxRetries,
     reorderMode: 'NONE',
     onExpire: async (entry, attempt) => {
+      // 토글 OFF 후 메모리에 남아있던 watcher entry 가 만료되어도 KIS cancel 호출하지 않도록
+      // 매 호출마다 현재 enabled 를 재확인. 사용자가 OFF 한 시점부터는 자동취소가 일어나면 안 됨.
+      const currentCfg = readPendingCancelConfig(settingsRepo);
+      if (!currentCfg.enabled) {
+        eventLogger.log({
+          level: 'INFO',
+          category: 'ORDER',
+          message: 'pending-cancel.skip',
+          payload: { reason: 'feature_disabled', odno: entry.odno, attempt },
+        });
+        pendingOrderWatcher.cancel({ pdno: entry.pdno, side: entry.side, nth: entry.nth });
+        return;
+      }
       const env = factoryRef.factory?.getCurrentEnv() ?? null;
       const accountId = entry.accountId ?? factoryRef.factory?.getActiveAccountId() ?? null;
       if (!env || !accountId) {
