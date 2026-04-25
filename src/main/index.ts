@@ -66,11 +66,13 @@ import { initSentryFromSettings } from './monitoring/sentry';
 import { notifyTrade, notifyWatchOutcome } from './notification/trade-notifier';
 import { FeedBus } from './realtime/feed-bus';
 import { RealtimeService } from './realtime/realtime-service';
+import { ProtectionGuard } from './safety/protection-guard';
 import { ProtectionLimitsRepo } from './safety/protection-limits-repo';
 import { createRateGuardRepo } from './safety/rate-guard';
 import { SafetyStateRegistry } from './safety/safety-state';
 import { createTimeWindowRepo } from './safety/time-window';
 import { CredentialsRepo } from './security/credentials-repo';
+import { AutoBuyGuard } from './trading/auto-buy-guard';
 import { isAutoOrderBlockedError } from './trading/auto-order-errors';
 import { BalanceSync } from './trading/balance-sync';
 import { CurrentStateSync } from './trading/current-state-sync';
@@ -152,6 +154,7 @@ function bootstrapDeps(userDataDir: string) {
   const timeWindowRepo = createTimeWindowRepo(db);
   const rateGuardRepo = createRateGuardRepo(db);
   const protectionLimitsRepo = new ProtectionLimitsRepo(db);
+  const protectionGuard = new ProtectionGuard(db, protectionLimitsRepo);
   // 활성 계좌 보장 — 계좌 0개면 null. 자격증명 저장 시 자동 시드.
   const ensured = activeAccounts.ensureActive();
   const initialActiveAccountId = ensured.isOk() ? ensured.value : null;
@@ -388,7 +391,8 @@ function bootstrapDeps(userDataDir: string) {
 
   // NM-001: 미체결 자동취소 — 타임아웃 시 KIS cancel 호출.
   // onExpire 이후 성공 시 cancel(entry) 로 감시 해제, 실패 시 rearm() 으로 다음 사이클 대기.
-  // reorderMode='NONE' 고정 — 재주문은 이번 범위 밖(사용자가 시세 보고 직접 재주문).
+  // reorderMode='NONE' 고정 — 1.0 범위에서 재주문 미지원(사용자가 시세 보고 직접 재주문).
+  // pending-order-watcher 자체는 MARKET/LIMIT_AT_LAST_PRICE 도 지원하므로 향후 다시 활성화 가능.
   const pendingCancelCfg = readPendingCancelConfig(settingsRepo);
   const pendingOrderWatcher: PendingOrderWatcher = new PendingOrderWatcher({
     timer: realTimer,
@@ -498,6 +502,13 @@ function bootstrapDeps(userDataDir: string) {
     httpByEnv,
     logger: eventLogger,
   });
+  const autoBuyGuard = new AutoBuyGuard({
+    logger: eventLogger,
+    protectionGuard,
+    rateGuardRepo,
+    strategyRepo,
+    timeWindowRepo,
+  });
 
   const runWatchedOrder = async (order: WatchOrder, triggerPrice: number): Promise<void> => {
     await executeWatchOrder(
@@ -514,6 +525,7 @@ function bootstrapDeps(userDataDir: string) {
         lotsRepo,
         strategyRepo,
         marketSessionGuard,
+        autoBuyGuard,
       },
       order,
       triggerPrice,
@@ -584,6 +596,7 @@ function bootstrapDeps(userDataDir: string) {
           getCurrentEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
           lotsRepo,
           strategyRepo,
+          autoBuyGuard,
         },
         {
           accountId: input.accountId,
@@ -1074,6 +1087,7 @@ void app.whenReady().then(async () => {
     dbPath,
     destDirs: [join(userDataDir, 'backups')],
     logger: eventLogger,
+    settingsRepo,
   });
   backupScheduler.start();
   // 차수 수동편집(A7) 라우터에서 변경 후 즉시 백업 트리거에 사용.

@@ -5,9 +5,13 @@ import { protectionLimits } from '../db/schema';
 
 export interface ProtectionLimitsRow {
   accountId: number;
+  perSymbolDailyMaxBuysEnabled: boolean;
   perSymbolDailyMaxBuys: number | null;
+  dailyTotalMaxAmountEnabled: boolean;
   dailyTotalMaxAmount: number | null;
+  dailyTotalMaxCountEnabled: boolean;
   dailyTotalMaxCount: number | null;
+  accountTotalMaxAmountEnabled: boolean;
   accountTotalMaxAmount: number | null;
   rateGuardEnabled: boolean;
   rateGuardWindowSeconds: number | null;
@@ -20,9 +24,13 @@ export type ProtectionLimitsRepoError = { kind: 'DB_ERROR'; cause: unknown };
 function rowToLimits(row: typeof protectionLimits.$inferSelect): ProtectionLimitsRow {
   return {
     accountId: row.accountId,
+    perSymbolDailyMaxBuysEnabled: row.perSymbolDailyMaxBuysEnabled === 1,
     perSymbolDailyMaxBuys: row.perSymbolDailyMaxBuys ?? null,
+    dailyTotalMaxAmountEnabled: row.dailyTotalMaxAmountEnabled === 1,
     dailyTotalMaxAmount: row.dailyTotalMaxAmount ?? null,
+    dailyTotalMaxCountEnabled: row.dailyTotalMaxCountEnabled === 1,
     dailyTotalMaxCount: row.dailyTotalMaxCount ?? null,
+    accountTotalMaxAmountEnabled: row.accountTotalMaxAmountEnabled === 1,
     accountTotalMaxAmount: row.accountTotalMaxAmount ?? null,
     rateGuardEnabled: row.rateGuardEnabled === 1,
     rateGuardWindowSeconds: row.rateGuardWindowSeconds ?? null,
@@ -32,9 +40,13 @@ function rowToLimits(row: typeof protectionLimits.$inferSelect): ProtectionLimit
 }
 
 export interface SetProtectionLimitsInput {
+  perSymbolDailyMaxBuysEnabled?: boolean;
   perSymbolDailyMaxBuys?: number | null;
+  dailyTotalMaxAmountEnabled?: boolean;
   dailyTotalMaxAmount?: number | null;
+  dailyTotalMaxCountEnabled?: boolean;
   dailyTotalMaxCount?: number | null;
+  accountTotalMaxAmountEnabled?: boolean;
   accountTotalMaxAmount?: number | null;
   rateGuardEnabled?: boolean;
   rateGuardWindowSeconds?: number | null;
@@ -67,29 +79,81 @@ export class ProtectionLimitsRepo {
   ): Result<ProtectionLimitsRow, ProtectionLimitsRepoError> {
     try {
       const now = new Date();
+      const existingResult = this.get(accountId);
+      if (existingResult.isErr()) return err(existingResult.error);
+      const existing = existingResult.value;
+      const perSymbolDailyMaxBuys =
+        input.perSymbolDailyMaxBuys !== undefined
+          ? input.perSymbolDailyMaxBuys
+          : (existing?.perSymbolDailyMaxBuys ?? null);
+      const dailyTotalMaxAmount =
+        input.dailyTotalMaxAmount !== undefined
+          ? input.dailyTotalMaxAmount
+          : (existing?.dailyTotalMaxAmount ?? null);
+      const dailyTotalMaxCount =
+        input.dailyTotalMaxCount !== undefined
+          ? input.dailyTotalMaxCount
+          : (existing?.dailyTotalMaxCount ?? null);
+      const accountTotalMaxAmount =
+        input.accountTotalMaxAmount !== undefined
+          ? input.accountTotalMaxAmount
+          : (existing?.accountTotalMaxAmount ?? null);
+      const perSymbolDailyMaxBuysEnabled =
+        input.perSymbolDailyMaxBuysEnabled ??
+        existing?.perSymbolDailyMaxBuysEnabled ??
+        perSymbolDailyMaxBuys !== null;
+      const dailyTotalMaxAmountEnabled =
+        input.dailyTotalMaxAmountEnabled ??
+        existing?.dailyTotalMaxAmountEnabled ??
+        dailyTotalMaxAmount !== null;
+      const dailyTotalMaxCountEnabled =
+        input.dailyTotalMaxCountEnabled ??
+        existing?.dailyTotalMaxCountEnabled ??
+        dailyTotalMaxCount !== null;
+      const accountTotalMaxAmountEnabled =
+        input.accountTotalMaxAmountEnabled ??
+        existing?.accountTotalMaxAmountEnabled ??
+        accountTotalMaxAmount !== null;
+      const rateGuardEnabled = input.rateGuardEnabled ?? existing?.rateGuardEnabled ?? false;
+      const rateGuardWindowSeconds =
+        input.rateGuardWindowSeconds !== undefined
+          ? input.rateGuardWindowSeconds
+          : (existing?.rateGuardWindowSeconds ?? null);
+      const rateGuardMaxCount =
+        input.rateGuardMaxCount !== undefined
+          ? input.rateGuardMaxCount
+          : (existing?.rateGuardMaxCount ?? null);
       this.db
         .insert(protectionLimits)
         .values({
           accountId,
-          perSymbolDailyMaxBuys: input.perSymbolDailyMaxBuys ?? null,
-          dailyTotalMaxAmount: input.dailyTotalMaxAmount ?? null,
-          dailyTotalMaxCount: input.dailyTotalMaxCount ?? null,
-          accountTotalMaxAmount: input.accountTotalMaxAmount ?? null,
-          rateGuardEnabled: input.rateGuardEnabled ? 1 : 0,
-          rateGuardWindowSeconds: input.rateGuardWindowSeconds ?? null,
-          rateGuardMaxCount: input.rateGuardMaxCount ?? null,
+          perSymbolDailyMaxBuysEnabled: perSymbolDailyMaxBuysEnabled ? 1 : 0,
+          perSymbolDailyMaxBuys,
+          dailyTotalMaxAmountEnabled: dailyTotalMaxAmountEnabled ? 1 : 0,
+          dailyTotalMaxAmount,
+          dailyTotalMaxCountEnabled: dailyTotalMaxCountEnabled ? 1 : 0,
+          dailyTotalMaxCount,
+          accountTotalMaxAmountEnabled: accountTotalMaxAmountEnabled ? 1 : 0,
+          accountTotalMaxAmount,
+          rateGuardEnabled: rateGuardEnabled ? 1 : 0,
+          rateGuardWindowSeconds,
+          rateGuardMaxCount,
           updatedAt: now,
         })
         .onConflictDoUpdate({
           target: protectionLimits.accountId,
           set: {
-            perSymbolDailyMaxBuys: input.perSymbolDailyMaxBuys ?? null,
-            dailyTotalMaxAmount: input.dailyTotalMaxAmount ?? null,
-            dailyTotalMaxCount: input.dailyTotalMaxCount ?? null,
-            accountTotalMaxAmount: input.accountTotalMaxAmount ?? null,
-            rateGuardEnabled: input.rateGuardEnabled ? 1 : 0,
-            rateGuardWindowSeconds: input.rateGuardWindowSeconds ?? null,
-            rateGuardMaxCount: input.rateGuardMaxCount ?? null,
+            perSymbolDailyMaxBuysEnabled: perSymbolDailyMaxBuysEnabled ? 1 : 0,
+            perSymbolDailyMaxBuys,
+            dailyTotalMaxAmountEnabled: dailyTotalMaxAmountEnabled ? 1 : 0,
+            dailyTotalMaxAmount,
+            dailyTotalMaxCountEnabled: dailyTotalMaxCountEnabled ? 1 : 0,
+            dailyTotalMaxCount,
+            accountTotalMaxAmountEnabled: accountTotalMaxAmountEnabled ? 1 : 0,
+            accountTotalMaxAmount,
+            rateGuardEnabled: rateGuardEnabled ? 1 : 0,
+            rateGuardWindowSeconds,
+            rateGuardMaxCount,
             updatedAt: now,
           },
         })

@@ -59,7 +59,7 @@ export class ProtectionGuard {
 
     try {
       // 1. 종목별 일일 매수 횟수
-      if (limits.perSymbolDailyMaxBuys !== null) {
+      if (limits.perSymbolDailyMaxBuysEnabled && limits.perSymbolDailyMaxBuys !== null) {
         const symbolBuys = this.db
           .select()
           .from(orders)
@@ -84,7 +84,7 @@ export class ProtectionGuard {
       }
 
       // 2. 일일 전체 매수 횟수
-      if (limits.dailyTotalMaxCount !== null) {
+      if (limits.dailyTotalMaxCountEnabled && limits.dailyTotalMaxCount !== null) {
         const allBuys = this.db
           .select()
           .from(orders)
@@ -108,7 +108,7 @@ export class ProtectionGuard {
       }
 
       // 3. 일일 전체 매수 금액 합산 (price * qty)
-      if (limits.dailyTotalMaxAmount !== null) {
+      if (limits.dailyTotalMaxAmountEnabled && limits.dailyTotalMaxAmount !== null) {
         const allBuyOrders = this.db
           .select()
           .from(orders)
@@ -132,7 +132,7 @@ export class ProtectionGuard {
       }
 
       // 4. 계좌 총 오픈 포지션 금액 (OPEN 차수의 amountKrw 합산)
-      if (limits.accountTotalMaxAmount !== null) {
+      if (limits.accountTotalMaxAmountEnabled && limits.accountTotalMaxAmount !== null) {
         const openLotsResult = this.db
           .select({ total: sum(lots.amountKrw) })
           .from(lots)

@@ -4,9 +4,13 @@ import { trpc } from '@renderer/shared/api/trpc';
 import { useState, useTransition } from 'react';
 
 type RawFields = {
+  perSymbolDailyMaxBuysEnabled: boolean;
   perSymbolDailyMaxBuys: string;
+  dailyTotalMaxAmountEnabled: boolean;
   dailyTotalMaxAmount: string;
+  dailyTotalMaxCountEnabled: boolean;
   dailyTotalMaxCount: string;
+  accountTotalMaxAmountEnabled: boolean;
   accountTotalMaxAmount: string;
 };
 
@@ -32,13 +36,17 @@ export function useProtectionLimitsForm() {
 
   // 로컬 편집이 없으면 서버 데이터로 폴백
   const resolved: RawFields = raw ?? {
+    perSymbolDailyMaxBuysEnabled: limits?.perSymbolDailyMaxBuysEnabled ?? false,
     perSymbolDailyMaxBuys: String(limits?.perSymbolDailyMaxBuys ?? ''),
+    dailyTotalMaxAmountEnabled: limits?.dailyTotalMaxAmountEnabled ?? false,
     dailyTotalMaxAmount: String(limits?.dailyTotalMaxAmount ?? ''),
+    dailyTotalMaxCountEnabled: limits?.dailyTotalMaxCountEnabled ?? false,
     dailyTotalMaxCount: String(limits?.dailyTotalMaxCount ?? ''),
+    accountTotalMaxAmountEnabled: limits?.accountTotalMaxAmountEnabled ?? false,
     accountTotalMaxAmount: String(limits?.accountTotalMaxAmount ?? ''),
   };
 
-  const handleFieldChange = (field: keyof RawFields, value: string): void => {
+  const handleFieldChange = (field: keyof RawFields, value: string | boolean): void => {
     setRaw((prev) => ({ ...(prev ?? resolved), [field]: value }));
   };
 
@@ -51,9 +59,13 @@ export function useProtectionLimitsForm() {
     startTransition(() => {
       updateMutation.mutate({
         accountId,
+        perSymbolDailyMaxBuysEnabled: resolved.perSymbolDailyMaxBuysEnabled,
         perSymbolDailyMaxBuys: toNullable(resolved.perSymbolDailyMaxBuys),
+        dailyTotalMaxAmountEnabled: resolved.dailyTotalMaxAmountEnabled,
         dailyTotalMaxAmount: toNullable(resolved.dailyTotalMaxAmount),
+        dailyTotalMaxCountEnabled: resolved.dailyTotalMaxCountEnabled,
         dailyTotalMaxCount: toNullable(resolved.dailyTotalMaxCount),
+        accountTotalMaxAmountEnabled: resolved.accountTotalMaxAmountEnabled,
         accountTotalMaxAmount: toNullable(resolved.accountTotalMaxAmount),
       });
       setRaw(null);

@@ -1,7 +1,7 @@
 import { useActiveAccountId } from '@renderer/entities/account';
 import { useRateGuardSettings } from '@renderer/entities/rate-guard';
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, Checkbox, NumberInput } from '@renderer/shared/ui';
+import { Button, NumberInput, Switch } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useState, useTransition } from 'react';
 
@@ -84,44 +84,68 @@ export const RateGuard = (): ReactElement => {
       }}
     >
       <div className="muted" style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-        연속매수 방지 (N+1회 발생 시 자동매매 수동 전환)
+        연속 자동매수 방지
       </div>
 
-      {/* Checkbox 자체가 내부에 label을 렌더링하므로 외부 label 미사용 */}
-      <Checkbox
-        checked={resolvedEnabled}
-        onChange={(e) => setEnabled(e.target.checked)}
-        disabled={isPendingTrans}
-        label="활성화"
-      />
-
-      <div style={{ display: 'grid', gap: '0.3rem' }}>
-        <label htmlFor="rg-window" className="muted" style={{ fontSize: '1.1rem' }}>
-          감지 윈도우 (초, 1~3600)
-        </label>
-        <NumberInput
-          id="rg-window"
-          value={resolvedWindow}
-          onValueChange={(v) => setWindowRaw(v)}
-          aria-label="감지 윈도우 초"
-          disabled={!resolvedEnabled || isPendingTrans}
-          dense
-          inputMode="numeric"
-        />
-      </div>
-
-      <div style={{ display: 'grid', gap: '0.3rem' }}>
-        <label htmlFor="rg-max-count" className="muted" style={{ fontSize: '1.1rem' }}>
-          최대 매수 횟수 (1~100)
-        </label>
-        <NumberInput
-          id="rg-max-count"
-          value={resolvedMaxCount}
-          onValueChange={(v) => setMaxCountRaw(v)}
-          aria-label="최대 매수 횟수"
-          disabled={!resolvedEnabled || isPendingTrans}
-          dense
-          inputMode="numeric"
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(16rem, 1fr) minmax(20rem, 26rem) auto',
+          gap: '0.8rem',
+          alignItems: 'center',
+          padding: '0.8rem',
+          border: '0.1rem solid var(--border)',
+          borderRadius: '0.6rem',
+          background: resolvedEnabled ? 'var(--bg)' : 'var(--bg-2)',
+          opacity: resolvedEnabled ? 1 : 0.72,
+        }}
+      >
+        <div style={{ display: 'grid', gap: '0.2rem', minWidth: 0 }}>
+          <span style={{ fontWeight: 700 }}>짧은 시간 내 자동매수 시도</span>
+          <span className="muted" style={{ fontSize: '1.05rem' }}>
+            N+1번째 자동매수 시도는 차단하고 해당 종목은 매도만 ON으로 전환합니다.
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+          <div style={{ display: 'grid', gap: '0.3rem' }}>
+            <label htmlFor="rg-window" className="muted" style={{ fontSize: '1.05rem' }}>
+              감지 윈도우
+            </label>
+            <NumberInput
+              id="rg-window"
+              value={resolvedWindow}
+              onValueChange={(v) => setWindowRaw(v)}
+              aria-label="감지 윈도우 초"
+              disabled={!resolvedEnabled || isPendingTrans}
+              dense
+              inputMode="numeric"
+            />
+          </div>
+          <div style={{ display: 'grid', gap: '0.3rem' }}>
+            <label htmlFor="rg-max-count" className="muted" style={{ fontSize: '1.05rem' }}>
+              최대 시도 횟수
+            </label>
+            <NumberInput
+              id="rg-max-count"
+              value={resolvedMaxCount}
+              onValueChange={(v) => setMaxCountRaw(v)}
+              aria-label="최대 매수 시도 횟수"
+              disabled={!resolvedEnabled || isPendingTrans}
+              dense
+              inputMode="numeric"
+            />
+          </div>
+        </div>
+        <Switch
+          checked={resolvedEnabled}
+          onChange={(checked) => {
+            setEnabled(checked);
+            if (checked && resolvedWindow.trim() === '') setWindowRaw('40');
+            if (checked && resolvedMaxCount.trim() === '') setMaxCountRaw('5');
+          }}
+          disabled={isPendingTrans}
+          label={resolvedEnabled ? '사용' : '끄기'}
+          aria-label="연속 자동매수 방지 사용 여부"
         />
       </div>
 

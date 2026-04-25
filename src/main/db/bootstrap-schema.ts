@@ -161,9 +161,13 @@ const CREATE_STATEMENTS: readonly string[] = [
   )`,
   `CREATE TABLE IF NOT EXISTS protection_limits (
     account_id INTEGER PRIMARY KEY,
+    per_symbol_daily_max_buys_enabled INTEGER NOT NULL DEFAULT 0,
     per_symbol_daily_max_buys INTEGER,
+    daily_total_max_amount_enabled INTEGER NOT NULL DEFAULT 0,
     daily_total_max_amount INTEGER,
+    daily_total_max_count_enabled INTEGER NOT NULL DEFAULT 0,
     daily_total_max_count INTEGER,
+    account_total_max_amount_enabled INTEGER NOT NULL DEFAULT 0,
     account_total_max_amount INTEGER,
     rate_guard_enabled INTEGER NOT NULL DEFAULT 0,
     rate_guard_window_seconds INTEGER DEFAULT 40,

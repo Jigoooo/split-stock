@@ -7,8 +7,8 @@ import {
   useTradingWindows,
 } from '@renderer/entities/trading-window';
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, Checkbox, TextInput } from '@renderer/shared/ui';
-import type { ChangeEvent, ReactElement } from 'react';
+import { Button, Switch, TextInput } from '@renderer/shared/ui';
+import type { ReactElement } from 'react';
 import { useState, useTransition } from 'react';
 
 interface SlotRowProps {
@@ -37,10 +37,8 @@ const SlotRow = ({
   const [isPending, startTransition] = useTransition();
 
   const upsert = trpc.tradingWindows.upsert.useMutation({ onSuccess: onMutated });
-  const del = trpc.tradingWindows.delete.useMutation({ onSuccess: onMutated });
 
-  const handleToggle = (ev: ChangeEvent<HTMLInputElement>): void => {
-    const checked = ev.target.checked;
+  const handleToggle = (checked: boolean): void => {
     const s = hhmmToMinutes(startRaw);
     const e = hhmmToMinutes(endRaw);
     if (s === null || e === null) return;
@@ -71,12 +69,6 @@ const SlotRow = ({
     });
   };
 
-  const handleDelete = (): void => {
-    startTransition(() => {
-      del.mutate({ accountId, side, slot });
-    });
-  };
-
   const startId = `tw-${side}-${slot}-start`;
   const endId = `tw-${side}-${slot}-end`;
 
@@ -84,18 +76,22 @@ const SlotRow = ({
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'auto 1fr 1fr auto auto',
-        gap: '0.4rem',
-        alignItems: 'start',
+        gridTemplateColumns: 'minmax(10rem, 1fr) minmax(9rem, 11rem) minmax(9rem, 11rem) auto auto',
+        gap: '0.6rem',
+        alignItems: 'center',
+        padding: '0.8rem',
+        border: '0.1rem solid var(--border)',
+        borderRadius: '0.6rem',
+        background: enabled ? 'var(--bg)' : 'var(--bg-2)',
+        opacity: enabled ? 1 : 0.72,
       }}
     >
-      <Checkbox
-        checked={enabled}
-        onChange={handleToggle}
-        disabled={isPending}
-        aria-label={`${side} 슬롯 ${slot} 활성화`}
-        style={{ marginTop: '2rem' }}
-      />
+      <div style={{ display: 'grid', gap: '0.2rem', minWidth: 0 }}>
+        <span style={{ fontWeight: 700 }}>{slot}차 매수 시간대</span>
+        <span className="muted" style={{ fontSize: '1.05rem' }}>
+          자동매수 주문 제출 허용 구간
+        </span>
+      </div>
       <div style={{ display: 'grid', gap: '0.15rem' }}>
         <label htmlFor={startId} className="muted" style={{ fontSize: '1.0rem' }}>
           시작
@@ -106,6 +102,7 @@ const SlotRow = ({
           onChange={(e) => setStartRaw(e.target.value)}
           placeholder="09:00"
           aria-label={`${side} 슬롯 ${slot} 시작 시간`}
+          disabled={!enabled || isPending}
           dense
         />
         {startErr ? (
@@ -124,6 +121,7 @@ const SlotRow = ({
           onChange={(e) => setEndRaw(e.target.value)}
           placeholder="15:30"
           aria-label={`${side} 슬롯 ${slot} 종료 시간`}
+          disabled={!enabled || isPending}
           dense
         />
         {endErr ? (
@@ -132,24 +130,16 @@ const SlotRow = ({
           </span>
         ) : null}
       </div>
-      <Button
-        onClick={handleSave}
-        disabled={isPending}
-        dense
-        aria-label="저장"
-        style={{ marginTop: '1.4rem' }}
-      >
+      <Button onClick={handleSave} disabled={!enabled || isPending} dense aria-label="저장">
         저장
       </Button>
-      <Button
-        onClick={handleDelete}
+      <Switch
+        checked={enabled}
+        onChange={handleToggle}
         disabled={isPending}
-        dense
-        aria-label="삭제"
-        style={{ marginTop: '1.4rem' }}
-      >
-        삭제
-      </Button>
+        label={enabled ? '사용' : '끄기'}
+        aria-label={`${side} 슬롯 ${slot} 사용 여부`}
+      />
     </div>
   );
 };
@@ -162,13 +152,12 @@ interface SideSectionProps {
 }
 
 const SideSection = ({ side, accountId, windows, onMutated }: SideSectionProps): ReactElement => {
-  const sideLabel = side === 'BUY' ? '매수 허용 시간대' : '매도 허용 시간대';
   const slots: TradeSlot[] = [1, 2, 3];
 
   return (
     <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>
       <legend className="muted" style={{ fontWeight: 600, marginBottom: '0.4rem' }}>
-        {sideLabel}
+        매수 허용 시간대
       </legend>
       <div style={{ display: 'grid', gap: '0.5rem' }}>
         {slots.map((slot) => {
@@ -193,7 +182,7 @@ const SideSection = ({ side, accountId, windows, onMutated }: SideSectionProps):
 
 /**
  * 매매 시간대 설정 폼.
- * 매수/매도 각 1~3 슬롯, 슬롯 미설정 시 항상 허용.
+ * 자동매수 슬롯 1~3, 슬롯 미설정 시 항상 허용.
  */
 export const TimeWindows = (): ReactElement => {
   const { accountId } = useActiveAccountId();
@@ -233,10 +222,9 @@ export const TimeWindows = (): ReactElement => {
   return (
     <section aria-label="매매시간대" style={{ display: 'grid', gap: '1rem' }}>
       <div className="muted" style={{ fontSize: '1.1rem', fontWeight: 600 }}>
-        매매 시간대 (슬롯 미설정 시 항상 허용)
+        자동매수 허용 시간대 (슬롯 미설정 시 항상 허용)
       </div>
       <SideSection side="BUY" accountId={accountId} windows={windows} onMutated={refetch} />
-      <SideSection side="SELL" accountId={accountId} windows={windows} onMutated={refetch} />
     </section>
   );
 };

@@ -16,6 +16,7 @@ import type { EventLogger } from '../logging/event-logger';
 import type { SafetyStateRegistry } from '../safety/safety-state';
 import type { CredentialsRepo } from '../security/credentials-repo';
 import { assertCredMatchesEnv } from '../trpc/router-helpers';
+import type { AutoBuyGuardPort } from './auto-buy-guard';
 import type { LotsRepo } from './lots-repo';
 import type { AutoOrderMarketGuard } from './market-session-guard';
 import { createPendingBuyLot, linkPendingSellLot } from './order-lot-link';
@@ -36,6 +37,7 @@ export interface WatchOrderExecutorDeps {
   lotsRepo: LotsRepo;
   strategyRepo: StrategyRepo;
   marketSessionGuard?: AutoOrderMarketGuard;
+  autoBuyGuard?: AutoBuyGuardPort;
 }
 
 export interface StrategyOrderInput {
@@ -87,11 +89,6 @@ export async function executeWatchOrder(
     source: 'WATCH',
   });
 
-  const tokenResult = await deps.auth.getValidToken(env, cred.appKey, cred.appSecret);
-  if (tokenResult.isErr()) {
-    throw new Error(`토큰 발급 실패: ${tokenResult.error.kind}`);
-  }
-
   const division = order.orderType === 'MARKET' ? 'MARKET' : 'LIMIT';
   const limitPrice =
     division === 'LIMIT'
@@ -112,6 +109,21 @@ export async function executeWatchOrder(
         );
   if (qty <= 0) {
     throw new Error('주문 수량이 0주가 되어 주문할 수 없습니다.');
+  }
+  const estimatedAmountKrw = qty * Math.max(division === 'LIMIT' ? limitPrice : triggerPrice, 1);
+
+  if (order.side === 'BUY') {
+    await deps.autoBuyGuard?.assertAutoBuyAllowed({
+      accountId: order.accountId,
+      amountKrw: estimatedAmountKrw,
+      pdno: order.pdno,
+      source: 'WATCH',
+    });
+  }
+
+  const tokenResult = await deps.auth.getValidToken(env, cred.appKey, cred.appSecret);
+  if (tokenResult.isErr()) {
+    throw new Error(`토큰 발급 실패: ${tokenResult.error.kind}`);
   }
 
   const result = await orderCash(
@@ -262,6 +274,15 @@ export async function executeStrategyOrder(
   const safety = deps.safetyRegistry.get(input.accountId);
   if (!safety.canTrade(input.pdno)) {
     throw new Error('안전 스위치에 의해 해당 종목 거래가 차단됨');
+  }
+
+  if (input.side === 'BUY') {
+    await deps.autoBuyGuard?.assertAutoBuyAllowed({
+      accountId: input.accountId,
+      amountKrw: input.qty * Math.max(input.price, 1),
+      pdno: input.pdno,
+      source: 'STRATEGY',
+    });
   }
 
   const tokenResult = await deps.auth.getValidToken(env, cred.appKey, cred.appSecret);

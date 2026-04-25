@@ -149,9 +149,13 @@ export const timeWindows = sqliteTable('time_windows', {
  */
 export const protectionLimits = sqliteTable('protection_limits', {
   accountId: integer('account_id').primaryKey(), // FK → accounts.id
+  perSymbolDailyMaxBuysEnabled: integer('per_symbol_daily_max_buys_enabled').notNull().default(0), // boolean
   perSymbolDailyMaxBuys: integer('per_symbol_daily_max_buys'), // NULL = 미설정
+  dailyTotalMaxAmountEnabled: integer('daily_total_max_amount_enabled').notNull().default(0),
   dailyTotalMaxAmount: integer('daily_total_max_amount'),
+  dailyTotalMaxCountEnabled: integer('daily_total_max_count_enabled').notNull().default(0),
   dailyTotalMaxCount: integer('daily_total_max_count'),
+  accountTotalMaxAmountEnabled: integer('account_total_max_amount_enabled').notNull().default(0),
   accountTotalMaxAmount: integer('account_total_max_amount'),
   rateGuardEnabled: integer('rate_guard_enabled').notNull().default(0), // boolean
   rateGuardWindowSeconds: integer('rate_guard_window_seconds').default(40),

@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import type { SetProtectionLimitsInput } from '../../safety/protection-limits-repo';
 import { requireAccountId } from '../router-helpers';
 import { publicProcedure, router } from '../trpc-core';
 
@@ -7,9 +8,13 @@ const AccountIdField = z.number().int().positive();
 
 const ProtectionLimitsInputSchema = z.object({
   accountId: AccountIdField,
+  perSymbolDailyMaxBuysEnabled: z.boolean().optional(),
   perSymbolDailyMaxBuys: z.number().int().positive().nullable().optional(),
+  dailyTotalMaxAmountEnabled: z.boolean().optional(),
   dailyTotalMaxAmount: z.number().int().positive().nullable().optional(),
+  dailyTotalMaxCountEnabled: z.boolean().optional(),
   dailyTotalMaxCount: z.number().int().positive().nullable().optional(),
+  accountTotalMaxAmountEnabled: z.boolean().optional(),
   accountTotalMaxAmount: z.number().int().positive().nullable().optional(),
   rateGuardEnabled: z.boolean().optional(),
   rateGuardWindowSeconds: z.number().int().positive().nullable().optional(),
@@ -41,15 +46,31 @@ export const protectionRouter = router({
    */
   set: publicProcedure.input(ProtectionLimitsInputSchema).mutation(({ ctx, input }) => {
     const accountId = requireAccountId(input);
-    const r = ctx.protectionLimitsRepo.upsert(accountId, {
+    const next: SetProtectionLimitsInput = {
       perSymbolDailyMaxBuys: input.perSymbolDailyMaxBuys ?? null,
       dailyTotalMaxAmount: input.dailyTotalMaxAmount ?? null,
       dailyTotalMaxCount: input.dailyTotalMaxCount ?? null,
       accountTotalMaxAmount: input.accountTotalMaxAmount ?? null,
-      rateGuardEnabled: input.rateGuardEnabled ?? false,
-      rateGuardWindowSeconds: input.rateGuardWindowSeconds ?? null,
-      rateGuardMaxCount: input.rateGuardMaxCount ?? null,
-    });
+    };
+    if (input.perSymbolDailyMaxBuysEnabled !== undefined) {
+      next.perSymbolDailyMaxBuysEnabled = input.perSymbolDailyMaxBuysEnabled;
+    }
+    if (input.dailyTotalMaxAmountEnabled !== undefined) {
+      next.dailyTotalMaxAmountEnabled = input.dailyTotalMaxAmountEnabled;
+    }
+    if (input.dailyTotalMaxCountEnabled !== undefined) {
+      next.dailyTotalMaxCountEnabled = input.dailyTotalMaxCountEnabled;
+    }
+    if (input.accountTotalMaxAmountEnabled !== undefined) {
+      next.accountTotalMaxAmountEnabled = input.accountTotalMaxAmountEnabled;
+    }
+    if (input.rateGuardEnabled !== undefined) next.rateGuardEnabled = input.rateGuardEnabled;
+    if (input.rateGuardWindowSeconds !== undefined) {
+      next.rateGuardWindowSeconds = input.rateGuardWindowSeconds;
+    }
+    if (input.rateGuardMaxCount !== undefined) next.rateGuardMaxCount = input.rateGuardMaxCount;
+
+    const r = ctx.protectionLimitsRepo.upsert(accountId, next);
     if (r.isErr()) {
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
