@@ -10,6 +10,7 @@ import {
   storeAddWatchOrderPrefill,
   type WatchOrderFormPrefill,
 } from '@renderer/features/add-watch-order';
+import { RecommendButton } from '@renderer/features/ai-symbol-recommend';
 import { Button, type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useWatchTabs } from '../model/use-watch-tabs';
@@ -87,16 +88,32 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
         }}
       >
         <HtsTabs tabs={TABS} active={tab} onChange={setTab} ariaLabel="자동감시 4탭" />
-        <div style={{ marginLeft: 'auto', marginRight: '0.5rem', minWidth: '5rem' }}>
+        <div
+          style={{
+            marginLeft: 'auto',
+            marginRight: '0.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+          }}
+        >
           {tab === 'watching' && (
-            <Button
-              onClick={() => openAddWatchOrderPopout(null)}
-              variant="primary"
-              dense
-              style={{ whiteSpace: 'nowrap' }}
-            >
-              + 추가
-            </Button>
+            <>
+              <RecommendButton
+                dense
+                onPick={(pdno, pdName) => {
+                  openAddWatchOrderPopout({ pdno, pdName });
+                }}
+              />
+              <Button
+                onClick={() => openAddWatchOrderPopout(null)}
+                variant="primary"
+                dense
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                + 추가
+              </Button>
+            </>
           )}
         </div>
       </div>

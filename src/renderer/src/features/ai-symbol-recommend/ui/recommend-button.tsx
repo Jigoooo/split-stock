@@ -1,0 +1,58 @@
+import { Button } from '@renderer/shared/ui';
+import { Sparkles } from 'lucide-react';
+import type { ReactElement } from 'react';
+import { useSymbolRecommendations } from '../model/use-symbol-recommendations';
+import { RecommendModal } from './recommend-modal';
+
+export interface RecommendButtonProps {
+  /** 추천 결과 카드 클릭 시 호출 — 외부 폼 prefill 용. */
+  onPick?: (pdno: string, name: string) => void;
+  /** 라벨 변경. 기본 'AI 매직스플릿 추천'. */
+  label?: string;
+  dense?: boolean;
+}
+
+/**
+ * 자동감시 첫 플로우(종목 선택)를 보조하는 AI 추천 트리거.
+ * - default AI 키 미설정 시 disabled + 안내 툴팁.
+ * - 클릭 시 modal 오픈, mutation 자동 트리거.
+ */
+export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps): ReactElement => {
+  const { view, hasDefaultKey, isAiListLoading, open, close, refresh } = useSymbolRecommendations();
+
+  const disabled = isAiListLoading || !hasDefaultKey;
+  const title = !hasDefaultKey
+    ? '설정 → AI 탭에서 키를 등록하고 기본으로 지정하세요'
+    : 'AI 가 보유/감시 종목 중 매직스플릿 적합 Top 5 추천';
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        dense={dense ?? false}
+        iconLeading={<Sparkles size={14} />}
+        disabled={disabled}
+        onClick={open}
+        title={title}
+        aria-label="AI 매직스플릿 추천"
+        style={{
+          color: '#D97757',
+          borderColor: '#D97757',
+          borderStyle: 'solid',
+          borderWidth: '0.1rem',
+        }}
+      >
+        {label ?? 'AI 매직스플릿 추천'}
+      </Button>
+      <RecommendModal
+        view={view}
+        onClose={close}
+        onRefresh={refresh}
+        onPick={(pdno, name) => {
+          onPick?.(pdno, name);
+          close();
+        }}
+      />
+    </>
+  );
+};

@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { suggestSymbols } from '../../ai/suggest-symbols';
 import { publicProcedure, router } from '../trpc-core';
 
 const ProviderSchema = z.enum(['openai', 'anthropic']);
@@ -121,6 +122,42 @@ export const aiRouter = router({
           ok: false as const,
           message: cause instanceof Error ? cause.message : String(cause),
         };
+      }
+    }),
+
+  /**
+   * Phase 1 — AI 매직스플릿 종목 추천.
+   *
+   * 후보 풀(보유 + 자동감시) 안에서 매직스플릿 적합도 Top N. 사용자 입력 0.
+   * 활성 계좌 기준이며 계좌 미선택 시 BAD_REQUEST.
+   */
+  suggestSymbols: publicProcedure
+    .input(z.object({ topN: z.number().int().min(1).max(10).optional() }).optional())
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.aiCredentialsRepo || !ctx.llmClient) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI 모듈 미초기화' });
+      }
+      if (ctx.activeAccountId === null) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '활성 계좌가 없습니다. 계좌를 먼저 선택하세요.',
+        });
+      }
+      try {
+        return await suggestSymbols({
+          db: ctx.db,
+          accountId: ctx.activeAccountId,
+          candlesRepo: ctx.candlesRepo,
+          aiCredentialsRepo: ctx.aiCredentialsRepo,
+          llmClient: ctx.llmClient,
+          logger: ctx.logger,
+          ...(input?.topN !== undefined ? { topN: input.topN } : {}),
+        });
+      } catch (cause) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: cause instanceof Error ? cause.message : String(cause),
+        });
       }
     }),
 });
