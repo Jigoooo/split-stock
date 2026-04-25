@@ -132,8 +132,20 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
                 {o.division === 'MARKET' ? '시장가' : thousandSeparator(o.price)}
               </TableGrid.Cell>
               <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.status}>
-                <span className={`chip ${o.status === 'PARTIAL' ? 'chip--up' : ''}`}>
-                  {o.status === 'PARTIAL' ? '부분체결' : '미체결'}
+                <span style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
+                  <span className={`chip ${o.status === 'PARTIAL' ? 'chip--up' : ''}`}>
+                    {o.status === 'PARTIAL' ? '부분체결' : '미체결'}
+                  </span>
+                  {/* B2: KIS 응답에서 orgNo 가 누락되면 정정/취소 API 호출이 불가 → 사용자에게 별도 chip 으로
+                      경고. 이 행은 자동/수동 취소가 모두 막혀 PENDING 으로 영구 정체될 수 있음. */}
+                  {!o.orgNo ? (
+                    <span
+                      className="chip chip--down"
+                      title="원주문번호 누락 — 정정/취소 불가. KIS 잔고에서 직접 확인 필요"
+                    >
+                      orgNo ✕
+                    </span>
+                  ) : null}
                 </span>
               </TableGrid.Cell>
               <TableGrid.Cell
