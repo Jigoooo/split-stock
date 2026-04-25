@@ -1,6 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import type { StrategyAutoMode } from '@shared/contracts/strategy';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface SetPositionAutoModeInput {
   accountId: number;
@@ -22,7 +22,6 @@ interface SetPositionAutoModeInput {
 export function usePositionAutoMode(pdno: string, serverMode: StrategyAutoMode) {
   const utils = trpc.useUtils();
   const [optimisticMode, setOptimisticMode] = useState<StrategyAutoMode | null>(null);
-  const lastRequestIdRef = useRef(0);
 
   const mutation = trpc.strategy.setAutoModeQuick.useMutation({
     onSuccess: () => {
@@ -48,7 +47,6 @@ export function usePositionAutoMode(pdno: string, serverMode: StrategyAutoMode) 
 
   const setAutoMode = (input: SetPositionAutoModeInput): void => {
     setOptimisticMode(input.mode);
-    lastRequestIdRef.current += 1;
     mutation.mutate(input);
   };
 
