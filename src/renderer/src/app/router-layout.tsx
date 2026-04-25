@@ -41,11 +41,14 @@ const AppShellFrame = ({ children, popout, shell }: AppShellFrameProps): ReactEl
               <span className="app-header__section-label">메뉴</span>
               <HeaderPopoutButtons popout={popout} />
             </div>
-            <nav className="app-header__section app-header__section--session">
-              <Button onClick={() => shell.logout(false)} disabled={shell.isLoggingOut} dense>
-                로그아웃
-              </Button>
-            </nav>
+            <Button
+              onClick={() => shell.logout(false)}
+              disabled={shell.isLoggingOut}
+              dense
+              style={{ marginLeft: 'auto' }}
+            >
+              로그아웃
+            </Button>
           </>
         ) : null}
       </header>

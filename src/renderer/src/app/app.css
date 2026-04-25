@@ -208,11 +208,6 @@ body {
   flex: 0 1 auto;
 }
 
-.app-header__section--session {
-  margin-left: auto;
-  background: var(--bg);
-}
-
 .app-header__section-label {
   color: var(--fg-3);
   font-size: 1rem;
