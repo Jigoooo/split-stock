@@ -5,6 +5,7 @@ import type { FeedBus } from '../realtime/feed-bus';
 import type { SafetyStateRegistry } from '../safety/safety-state';
 import { isAutoOrderBlockedError } from './auto-order-errors';
 import { evaluate } from './fsm';
+import type { InFlightCoordinator } from './in-flight-coordinator';
 import type { LotsRepo } from './lots-repo';
 import type { AutoOrderMarketGuard } from './market-session-guard';
 import type { StrategyRepo } from './strategy-repo';
@@ -28,6 +29,8 @@ export interface StrategyExecutionEngineOptions {
   }) => Promise<void>;
   marketSessionGuard?: AutoOrderMarketGuard;
   onTrackedPdnosChanged?: (pdnos: string[]) => void;
+  /** WatchEngine 등 다른 source 와 cross-dedupe 위한 공유 coordinator (선택). */
+  inFlightCoordinator?: InFlightCoordinator;
 }
 
 export class StrategyExecutionEngine {
@@ -125,6 +128,13 @@ export class StrategyExecutionEngine {
     );
     if (actionableOrders.length === 0) return;
 
+    // cross-source dedupe: WatchEngine 이 같은 (accountId, pdno) 으로 동시에 fire 하지 못하도록.
+    if (
+      this.opts.inFlightCoordinator &&
+      !this.opts.inFlightCoordinator.tryAcquire(accountId, pdno)
+    ) {
+      return;
+    }
     this.inFlightPdnos.add(pdno);
     try {
       const guardOrder = actionableOrders[0];
@@ -207,6 +217,7 @@ export class StrategyExecutionEngine {
       }
     } finally {
       this.inFlightPdnos.delete(pdno);
+      this.opts.inFlightCoordinator?.release(accountId, pdno);
     }
   }
 

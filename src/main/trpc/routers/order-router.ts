@@ -112,51 +112,57 @@ export const orderRouter = router({
           message: `주문 실패: ${result.error.kind} - ${result.error.msg}`,
         });
       }
-      // PENDING 기록 — orgNo는 정정/취소 시 필수이므로 KIS 응답값을 저장
+      // PENDING 기록 — orgNo는 정정/취소 시 필수이므로 KIS 응답값을 저장.
+      // lot 링크 + orders insert 를 단일 트랜잭션으로 묶어 부분 실패 시 dangling state
+      // (KIS 에는 주문이 있지만 lot/orders 가 inconsistent) 방지.
       const now = new Date();
-      const linkedLot =
-        input.side === 'BUY'
-          ? createPendingBuyLot(
-              {
-                logger: ctx.logger,
-                lotsRepo: ctx.lotsRepo,
-              },
-              {
-                accountId,
-                pdno: input.pdno,
-                placedAt: now,
-                price: input.division === 'LIMIT' ? correctedPrice : 0,
-                qty: input.qty,
-                source: 'MANUAL',
-              },
-            )
-          : linkHighestPendingSellLot(
-              {
-                logger: ctx.logger,
-                lotsRepo: ctx.lotsRepo,
-              },
-              {
-                accountId,
-                pdno: input.pdno,
-                qty: input.qty,
-              },
-            );
-      ctx.db
-        .insert(orders)
-        .values({
-          accountId,
-          lotId: linkedLot.lotId,
-          odno: result.value.odno,
-          orgNo: result.value.orgNo ?? null,
-          pdno: input.pdno,
-          side: input.side,
-          division: input.division,
-          qty: input.qty,
-          price: correctedPrice,
-          status: 'PENDING',
-          placedAt: now,
-        })
-        .run();
+      const linkedLot = ctx.db.transaction((tx) => {
+        void tx;
+        const lot =
+          input.side === 'BUY'
+            ? createPendingBuyLot(
+                {
+                  logger: ctx.logger,
+                  lotsRepo: ctx.lotsRepo,
+                },
+                {
+                  accountId,
+                  pdno: input.pdno,
+                  placedAt: now,
+                  price: input.division === 'LIMIT' ? correctedPrice : 0,
+                  qty: input.qty,
+                  source: 'MANUAL',
+                },
+              )
+            : linkHighestPendingSellLot(
+                {
+                  logger: ctx.logger,
+                  lotsRepo: ctx.lotsRepo,
+                },
+                {
+                  accountId,
+                  pdno: input.pdno,
+                  qty: input.qty,
+                },
+              );
+        ctx.db
+          .insert(orders)
+          .values({
+            accountId,
+            lotId: lot.lotId,
+            odno: result.value.odno,
+            orgNo: result.value.orgNo ?? null,
+            pdno: input.pdno,
+            side: input.side,
+            division: input.division,
+            qty: input.qty,
+            price: correctedPrice,
+            status: 'PENDING',
+            placedAt: now,
+          })
+          .run();
+        return lot;
+      });
 
       // NM-001: 미체결 자동취소 감시 등록.
       // - 설정 enabled=false이면 스킵.

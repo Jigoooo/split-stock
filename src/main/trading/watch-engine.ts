@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Db } from '../db/client';
 import { watchOrders } from '../db/schema';
 import type { Timer } from '../kis/ws-client';
+import type { InFlightCoordinator } from './in-flight-coordinator';
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -112,6 +113,8 @@ export interface WatchEngineOptions {
   onExecuted?: (order: WatchOrder) => void;
   onFailed?: (order: WatchOrder, reason: string) => void;
   onWatchingPdnosChanged?: (pdnos: string[]) => void;
+  /** StrategyExecutionEngine 등 다른 source 와 cross-dedupe 위한 공유 coordinator (선택). */
+  inFlightCoordinator?: InFlightCoordinator;
 }
 
 interface QueueEntry {
@@ -455,6 +458,10 @@ export class WatchEngine {
       const matches =
         entry.comparator === 'LTE' ? price <= entry.targetPrice : price >= entry.targetPrice;
       if (!matches) continue;
+      // cross-source dedupe: StrategyExecutionEngine 등 다른 엔진이 같은 (accountId, pdno)
+      // 으로 fire 중이면 skip. coordinator 미주입 환경(테스트 등)에서는 무조건 통과.
+      const coordinator = this.opts.inFlightCoordinator;
+      if (coordinator && !coordinator.tryAcquire(entry.accountId, entry.pdno)) continue;
       entry.inFlight = true;
       void this.fire(entry, price);
     }
@@ -485,65 +492,78 @@ export class WatchEngine {
   /* ----------------------------- internals ------------------------------ */
 
   private async fire(entry: QueueEntry, price: number): Promise<void> {
-    const row = this.opts.db.select().from(watchOrders).where(eq(watchOrders.id, entry.id)).get();
-    if (!row) {
-      this.dequeue(entry.id);
-      return;
-    }
-    const order = rowToOrder(row);
-    // DB 레이스: 이미 다른 경로에서 상태가 바뀐 경우
-    if (order.status !== 'WATCHING') {
-      this.dequeue(entry.id);
-      return;
-    }
-    if (!this.isExecutionAllowed(order.accountId)) {
-      entry.inFlight = false;
-      return;
-    }
-
-    this.opts.onTriggered?.(order);
-
-    // 라우팅: 1) per-account → 2) 글로벌 fallback (deprecated, BC) → 3) FAILED
-    const perAccount = this.handlerRegistry.get(order.source);
-    const handler = perAccount?.get(order.accountId) ?? this.fallbackHandlers.get(order.source);
-    let result: ExecutionResult;
-    if (!handler) {
-      result = { ok: false, reason: `handler 미등록: source=${order.source}` };
-    } else {
-      try {
-        result = await handler(order, { price });
-      } catch (e) {
-        result = { ok: false, reason: e instanceof Error ? e.message : String(e) };
-      }
-    }
-
-    const now = new Date();
-    if (result.ok) {
-      this.opts.db
-        .update(watchOrders)
-        .set({ status: 'EXECUTED', executedAt: now, updatedAt: now })
-        .where(eq(watchOrders.id, order.id))
-        .run();
-      this.dequeue(order.id);
-      this.notifyWatchingPdnosChanged();
-      this.opts.onExecuted?.({ ...order, status: 'EXECUTED', executedAt: now, updatedAt: now });
-    } else {
-      if (result.keepWatching) {
-        entry.inFlight = false;
+    // try/finally 로 모든 종료 경로(정상·DB throw·핸들러 throw)에서 entry.inFlight 와
+    // coordinator 토큰을 복원·해제 보장. 누락 시 stuck inFlight=true 로 같은 entry 가
+    // 다음 tick 부터 영원히 fire 되지 않는 회귀를 방지.
+    const coordinator = this.opts.inFlightCoordinator;
+    let stillQueued = true;
+    try {
+      const row = this.opts.db.select().from(watchOrders).where(eq(watchOrders.id, entry.id)).get();
+      if (!row) {
+        this.dequeue(entry.id);
+        stillQueued = false;
         return;
       }
-      const reason = result.reason ?? 'unknown';
-      this.opts.db
-        .update(watchOrders)
-        .set({ status: 'FAILED', lastFailureReason: reason, updatedAt: now })
-        .where(eq(watchOrders.id, order.id))
-        .run();
-      this.dequeue(order.id);
-      this.notifyWatchingPdnosChanged();
-      this.opts.onFailed?.(
-        { ...order, status: 'FAILED', lastFailureReason: reason, updatedAt: now },
-        reason,
-      );
+      const order = rowToOrder(row);
+      // DB 레이스: 이미 다른 경로에서 상태가 바뀐 경우
+      if (order.status !== 'WATCHING') {
+        this.dequeue(entry.id);
+        stillQueued = false;
+        return;
+      }
+      if (!this.isExecutionAllowed(order.accountId)) {
+        return;
+      }
+
+      this.opts.onTriggered?.(order);
+
+      // 라우팅: 1) per-account → 2) 글로벌 fallback (deprecated, BC) → 3) FAILED
+      const perAccount = this.handlerRegistry.get(order.source);
+      const handler = perAccount?.get(order.accountId) ?? this.fallbackHandlers.get(order.source);
+      let result: ExecutionResult;
+      if (!handler) {
+        result = { ok: false, reason: `handler 미등록: source=${order.source}` };
+      } else {
+        try {
+          result = await handler(order, { price });
+        } catch (e) {
+          result = { ok: false, reason: e instanceof Error ? e.message : String(e) };
+        }
+      }
+
+      const now = new Date();
+      if (result.ok) {
+        this.opts.db
+          .update(watchOrders)
+          .set({ status: 'EXECUTED', executedAt: now, updatedAt: now })
+          .where(eq(watchOrders.id, order.id))
+          .run();
+        this.dequeue(order.id);
+        stillQueued = false;
+        this.notifyWatchingPdnosChanged();
+        this.opts.onExecuted?.({ ...order, status: 'EXECUTED', executedAt: now, updatedAt: now });
+      } else {
+        if (result.keepWatching) {
+          return;
+        }
+        const reason = result.reason ?? 'unknown';
+        this.opts.db
+          .update(watchOrders)
+          .set({ status: 'FAILED', lastFailureReason: reason, updatedAt: now })
+          .where(eq(watchOrders.id, order.id))
+          .run();
+        this.dequeue(order.id);
+        stillQueued = false;
+        this.notifyWatchingPdnosChanged();
+        this.opts.onFailed?.(
+          { ...order, status: 'FAILED', lastFailureReason: reason, updatedAt: now },
+          reason,
+        );
+      }
+    } finally {
+      // 큐에 남은 entry 만 inFlight 복원 (dequeue 된 entry 는 무관).
+      if (stillQueued) entry.inFlight = false;
+      coordinator?.release(entry.accountId, entry.pdno);
     }
   }
 

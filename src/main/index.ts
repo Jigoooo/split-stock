@@ -78,6 +78,7 @@ import { BalanceSync } from './trading/balance-sync';
 import { CurrentStateSync } from './trading/current-state-sync';
 import { DailyCandlesRepo } from './trading/daily-candles-repo';
 import { createEnvAwarePricePoller } from './trading/env-aware-price-poller';
+import { createInFlightCoordinator } from './trading/in-flight-coordinator';
 import { LotsRepo } from './trading/lots-repo';
 import { ManualOrderReconciler } from './trading/manual-order-reconciler';
 import { MarketSessionGuard } from './trading/market-session-guard';
@@ -278,11 +279,16 @@ function bootstrapDeps(userDataDir: string) {
   const syncStrategyPriceFeed = (pdnos: string[]): void => {
     syncTrackedPdnos(strategyTrackedPdnosRef, pdnos);
   };
+  // 자동감시·자동매매 cross-source dedupe 토큰. 같은 (accountId, pdno) 종목에 대해
+  // WatchEngine 과 StrategyExecutionEngine 가 동일 tick 으로 동시에 fire 하지 못하도록.
+  const inFlightCoordinator = createInFlightCoordinator();
+
   // 통합 자동감시주문 엔진 — 예약매수/사용자 감시를 단일 큐로 관리.
   // 계좌별 어댑터는 registerHandler로 핸들러를 주입한다.
   const watchEngine = new WatchEngine({
     db,
     timer: realTimer,
+    inFlightCoordinator,
     onWatchingPdnosChanged: syncWatchPriceFeed,
     onExecuted: (order) => {
       eventLogger.log({
@@ -592,6 +598,7 @@ function bootstrapDeps(userDataDir: string) {
     lotsRepo,
     strategyRepo,
     safetyRegistry,
+    inFlightCoordinator,
     getActiveAccountId: () => factoryRef.factory?.getActiveAccountId() ?? null,
     onTrackedPdnosChanged: syncStrategyPriceFeed,
     marketSessionGuard,
