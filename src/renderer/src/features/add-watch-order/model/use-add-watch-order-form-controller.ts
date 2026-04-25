@@ -43,6 +43,31 @@ export interface AddWatchOrderFormController {
   todayIso: string;
 }
 
+interface FormState {
+  pdno: string;
+  pdName: string;
+  targetPriceRaw: string;
+  orderType: WatchOrderType;
+  qtyMode: WatchQtyMode;
+  qtyRaw: string;
+  amountKrwRaw: string;
+  expiresAtIso: string;
+}
+
+function initialFormState(prefill: WatchOrderFormPrefill | null): FormState {
+  return {
+    pdno: prefill?.pdno ?? '',
+    pdName: prefill?.pdName ?? '',
+    targetPriceRaw: prefill?.targetPrice !== undefined ? String(prefill.targetPrice) : '',
+    orderType: prefill?.orderType ?? 'MARKET',
+    qtyMode: prefill?.qtyOrAmountMode ?? 'AMOUNT',
+    qtyRaw: prefill?.qty !== undefined ? String(prefill.qty) : '',
+    amountKrwRaw: prefill?.amountKrw !== undefined ? String(prefill.amountKrw) : '',
+    expiresAtIso:
+      prefill?.expiresAtMs !== undefined ? toIsoDateLocal(new Date(prefill.expiresAtMs)) : '',
+  };
+}
+
 export function useAddWatchOrderFormController({
   accountId,
   onClose,
@@ -53,44 +78,33 @@ export function useAddWatchOrderFormController({
   const createMutation = trpc.watch.create.useMutation();
   const updateMutation = trpc.watch.update.useMutation();
   const isEdit = prefill?.existingId !== undefined;
-  const [pdno, setPdno] = useState<string>(prefill?.pdno ?? '');
-  const [pdName, setPdName] = useState<string>(prefill?.pdName ?? '');
-  const [targetPriceRaw, setTargetPriceRaw] = useState<string>(
-    prefill?.targetPrice !== undefined ? String(prefill.targetPrice) : '',
-  );
-  const [orderType, setOrderType] = useState<WatchOrderType>(prefill?.orderType ?? 'MARKET');
-  const [qtyMode, setQtyMode] = useState<WatchQtyMode>(prefill?.qtyOrAmountMode ?? 'AMOUNT');
-  const [qtyRaw, setQtyRaw] = useState<string>(
-    prefill?.qty !== undefined ? String(prefill.qty) : '',
-  );
-  const [amountKrwRaw, setAmountKrwRaw] = useState<string>(
-    prefill?.amountKrw !== undefined ? String(prefill.amountKrw) : '',
-  );
-  const [expiresAtIso, setExpiresAtIso] = useState<string>(
-    prefill?.expiresAtMs !== undefined ? toIsoDateLocal(new Date(prefill.expiresAtMs)) : '',
-  );
+
+  const [form, setForm] = useState<FormState>(() => initialFormState(prefill));
   const [error, setError] = useState<string | null>(null);
 
+  const patch = <K extends keyof FormState>(key: K, value: FormState[K]): void => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
   const onPickStock = (entry: StockListEntry): void => {
-    setPdno(entry.pdno);
-    setPdName(entry.name);
+    setForm((prev) => ({ ...prev, pdno: entry.pdno, pdName: entry.name }));
     setError(null);
   };
 
   const onAmountQuick = (delta: number): void => {
-    const parsed = Number(amountKrwRaw);
+    const parsed = Number(form.amountKrwRaw);
     const current = Number.isFinite(parsed) && Number.isInteger(parsed) && parsed > 0 ? parsed : 0;
-    setAmountKrwRaw(String(current + delta));
+    patch('amountKrwRaw', String(current + delta));
   };
 
   const onSubmit = async (): Promise<void> => {
     const validation = validateAddWatchOrderForm({
-      pdno,
-      targetPriceRaw,
-      qtyMode,
-      qtyRaw,
-      amountKrwRaw,
-      expiresAtIso,
+      pdno: form.pdno,
+      targetPriceRaw: form.targetPriceRaw,
+      qtyMode: form.qtyMode,
+      qtyRaw: form.qtyRaw,
+      amountKrwRaw: form.amountKrwRaw,
+      expiresAtIso: form.expiresAtIso,
     });
     if ('error' in validation) {
       setError(validation.error);
@@ -102,11 +116,11 @@ export function useAddWatchOrderFormController({
     try {
       const payload = {
         accountId,
-        pdno,
+        pdno: form.pdno,
         targetPrice: value.targetPrice,
-        orderType,
-        qtyOrAmountMode: qtyMode,
-        ...(qtyMode === 'QTY'
+        orderType: form.orderType,
+        qtyOrAmountMode: form.qtyMode,
+        ...(form.qtyMode === 'QTY'
           ? { qty: value.qty as number }
           : { amountKrw: value.amountKrw as number }),
         ...(value.expiresAt !== undefined ? { expiresAt: value.expiresAt } : {}),
@@ -126,28 +140,28 @@ export function useAddWatchOrderFormController({
   };
 
   return {
-    amountKrwRaw,
+    amountKrwRaw: form.amountKrwRaw,
     error,
-    expiresAtIso,
+    expiresAtIso: form.expiresAtIso,
     isEdit,
     isPending: createMutation.isPending || updateMutation.isPending,
     onAmountQuick,
-    onAmountReset: () => setAmountKrwRaw(''),
-    onPickExpiry: (months) => setExpiresAtIso(addMonthsIso(months)),
+    onAmountReset: () => patch('amountKrwRaw', ''),
+    onPickExpiry: (months) => patch('expiresAtIso', addMonthsIso(months)),
     onPickStock,
     onSubmit,
-    orderType,
-    pdName,
-    pdno,
-    qtyMode,
-    qtyRaw,
-    setAmountKrwRaw,
-    setExpiresAtIso,
-    setOrderType,
-    setQtyMode,
-    setQtyRaw,
-    setTargetPriceRaw,
-    targetPriceRaw,
+    orderType: form.orderType,
+    pdName: form.pdName,
+    pdno: form.pdno,
+    qtyMode: form.qtyMode,
+    qtyRaw: form.qtyRaw,
+    setAmountKrwRaw: (v) => patch('amountKrwRaw', v),
+    setExpiresAtIso: (v) => patch('expiresAtIso', v),
+    setOrderType: (v) => patch('orderType', v),
+    setQtyMode: (v) => patch('qtyMode', v),
+    setQtyRaw: (v) => patch('qtyRaw', v),
+    setTargetPriceRaw: (v) => patch('targetPriceRaw', v),
+    targetPriceRaw: form.targetPriceRaw,
     todayIso: todayIsoLocal(),
   };
 }
