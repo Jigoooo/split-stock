@@ -1,15 +1,17 @@
-import type { IChartApi, IPriceLine, ISeriesApi, MouseEventParams, Time } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, MouseEventParams, Time } from 'lightweight-charts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  RectanglePrimitive,
-  TrendLinePrimitive,
-  VerticalLinePrimitive,
-} from './drawing-primitives';
+  type AttachedHandles,
+  attachDrawing,
+  detachAll,
+  emptyHandles,
+} from '../lib/drawing-attach';
+import { buildDrawing, toPointFromEvent } from '../lib/drawing-points';
+import { persist, readPersisted } from '../lib/drawing-storage';
 import {
   type Drawing,
   type DrawingPoint,
   type DrawingToolKind,
-  getDrawingStorageKey,
   POINTS_REQUIRED,
 } from './drawing-types';
 
@@ -33,162 +35,10 @@ import {
  * 클릭 핸들러는 useEffectEvent 대신 "latest-ref" 패턴으로 잡는다. React 19 에서
  * useEffectEvent 는 effect 안에서만 호출하도록 설계돼 있어 외부 라이브러리
  * (subscribeClick) 콜백에서는 경고를 띄우거나 동작이 불안정할 수 있다.
+ *
+ * 순수 helper / attach 로직은 lib/drawing-{storage,points,attach}.ts 로 분리되어
+ * 있고, 이 hook 은 chart/series 수명주기와 인터랙션 상태만 다룬다.
  */
-
-const randomId = (): string => {
-  try {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-  } catch {
-    // fall through
-  }
-  return `d-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-};
-
-const readPersisted = (pdno: string): Drawing[] => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(getDrawingStorageKey(pdno));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? (parsed as Drawing[]) : [];
-  } catch {
-    return [];
-  }
-};
-
-const persist = (pdno: string, drawings: Drawing[]): void => {
-  if (typeof window === 'undefined') return;
-  try {
-    if (drawings.length === 0) {
-      window.localStorage.removeItem(getDrawingStorageKey(pdno));
-      return;
-    }
-    window.localStorage.setItem(getDrawingStorageKey(pdno), JSON.stringify(drawings));
-  } catch {
-    // quota / privacy mode 는 치명적이지 않으므로 삼킨다.
-  }
-};
-
-type PrimitiveInstance = TrendLinePrimitive | RectanglePrimitive | VerticalLinePrimitive;
-
-interface AttachedHandles {
-  /** priceLines — HorizontalLine id → IPriceLine 핸들. */
-  priceLines: Map<string, IPriceLine>;
-  /** primitives — 기타 id → ISeriesPrimitive 인스턴스. */
-  primitives: Map<string, PrimitiveInstance>;
-}
-
-const emptyHandles = (): AttachedHandles => ({
-  priceLines: new Map(),
-  primitives: new Map(),
-});
-
-const attachDrawing = (
-  series: ISeriesApi<'Candlestick'>,
-  drawing: Drawing,
-  handles: AttachedHandles,
-): void => {
-  switch (drawing.tool) {
-    case 'HorizontalLine': {
-      const line = series.createPriceLine({
-        price: drawing.price,
-        color: '#1f2937',
-        lineWidth: 1,
-        axisLabelVisible: true,
-        title: '',
-      });
-      handles.priceLines.set(drawing.id, line);
-      return;
-    }
-    case 'VerticalLine': {
-      const prim = new VerticalLinePrimitive(drawing.time);
-      series.attachPrimitive(prim);
-      handles.primitives.set(drawing.id, prim);
-      return;
-    }
-    case 'TrendLine': {
-      const prim = new TrendLinePrimitive(drawing.p1, drawing.p2);
-      series.attachPrimitive(prim);
-      handles.primitives.set(drawing.id, prim);
-      return;
-    }
-    case 'Rectangle': {
-      const prim = new RectanglePrimitive(drawing.p1, drawing.p2);
-      series.attachPrimitive(prim);
-      handles.primitives.set(drawing.id, prim);
-      return;
-    }
-  }
-};
-
-const detachAll = (series: ISeriesApi<'Candlestick'> | null, handles: AttachedHandles): void => {
-  if (!series) {
-    handles.priceLines.clear();
-    handles.primitives.clear();
-    return;
-  }
-  for (const line of handles.priceLines.values()) {
-    try {
-      series.removePriceLine(line);
-    } catch {
-      // series 가 이미 destroy 된 경우 무시
-    }
-  }
-  for (const prim of handles.primitives.values()) {
-    try {
-      series.detachPrimitive(prim);
-    } catch {
-      // 동일
-    }
-  }
-  handles.priceLines.clear();
-  handles.primitives.clear();
-};
-
-/**
- * MouseEventParams → DrawingPoint.
- * - param.time 이 set 이면 바로 사용 (클릭이 데이터 범위 안).
- * - param.time 이 undefined 면 coordinateToTime 으로 대체 (데이터 범위 밖 클릭 허용).
- * - coordinateToTime 도 null 이면 point 생성 불가 → null 반환.
- */
-const toPointFromEvent = (
-  param: MouseEventParams<Time>,
-  chart: IChartApi,
-  series: ISeriesApi<'Candlestick'>,
-): DrawingPoint | null => {
-  if (!param.point) return null;
-  let time: Time | undefined = param.time;
-  if (!time) {
-    const fallback = chart.timeScale().coordinateToTime(param.point.x);
-    if (fallback !== null) time = fallback as Time;
-  }
-  if (!time) return null;
-  const price = series.coordinateToPrice(param.point.y);
-  if (price === null || !Number.isFinite(price)) return null;
-  return { time: String(time), price };
-};
-
-const buildDrawing = (tool: DrawingToolKind, points: DrawingPoint[]): Drawing | null => {
-  const id = randomId();
-  const first = points[0];
-  const second = points[1];
-  if (!first) return null;
-  switch (tool) {
-    case 'HorizontalLine':
-      return { id, tool, price: first.price };
-    case 'VerticalLine':
-      return { id, tool, time: first.time };
-    case 'TrendLine':
-      if (!second) return null;
-      return { id, tool, p1: first, p2: second };
-    case 'Rectangle':
-      if (!second) return null;
-      return { id, tool, p1: first, p2: second };
-  }
-};
-
 export interface UseDrawingToolsResult {
   activeTool: DrawingToolKind | null;
   connectHost: (chart: IChartApi, series: ISeriesApi<'Candlestick'>) => void;
