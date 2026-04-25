@@ -1,19 +1,16 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { Button } from '@renderer/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
-import { Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useSwitchAccount } from '../model/use-switch-account';
-
-interface AccountRow {
-  id: number;
-  env: 'MOCK' | 'PROD';
-  accountNo8: string;
-  displayName: string | null;
-  isActive: boolean;
-}
+import {
+  type AccountRow,
+  AccountSelectorList,
+  EnvDot,
+  formatAccountLabel,
+} from './account-selector-list';
 
 export interface AccountSelectorProps {
   /**
@@ -29,7 +26,8 @@ export interface AccountSelectorProps {
  *   - "+ 계좌 추가" 버튼으로 신규 등록 다이얼로그 오픈 (hideAddAccount 가 false 일 때)
  *
  * 활성 계좌 칩에는 env 배지 + 계좌번호 마지막 4자리(혹은 displayName)를 표시.
- * 전환 mutation 진행 중이면 셀렉터 잠금.
+ * 전환 mutation 진행 중이면 셀렉터 잠금. 드롭다운 listbox 렌더는
+ * AccountSelectorList 로 위임 — 본 파일은 query/mutation/popout 윈도우 통신을 담당.
  */
 export const AccountSelector = ({
   hideAddAccount = false,
@@ -154,98 +152,17 @@ export const AccountSelector = ({
       </Button>
 
       {open ? (
-        <div
-          role="listbox"
-          aria-label="계좌 목록"
-          className="panel"
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 0.4rem)',
-            left: 0,
-            zIndex: 50,
-            minWidth: '20rem',
-            padding: '0.4rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.2rem',
-            boxShadow: '0 8px 28px rgba(0, 0, 0, 0.25)',
+        <AccountSelectorList
+          accounts={all}
+          switching={switching}
+          deletePending={deleteMutation.isPending}
+          hideAddAccount={hideAddAccount}
+          onPick={(id) => {
+            void onPick(id);
           }}
-        >
-          {all.map((a) => (
-            <div
-              key={a.id}
-              className="account-selector__item"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '0.3rem 0.35rem 0.3rem 0.6rem',
-                borderRadius: 4,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  void onPick(a.id);
-                }}
-                disabled={switching || a.isActive}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.15rem 0',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: a.isActive ? 'default' : 'pointer',
-                  textAlign: 'left',
-                  font: 'inherit',
-                  color: 'inherit',
-                  fontWeight: a.isActive ? 600 : 400,
-                }}
-              >
-                <EnvDot env={a.env} />
-                <span>{formatAccountLabel(a)}</span>
-                {a.isActive ? (
-                  <span className="muted" style={{ fontSize: '1rem' }}>
-                    (현재)
-                  </span>
-                ) : null}
-              </button>
-              <button
-                type="button"
-                onClick={() => onDelete(a)}
-                disabled={deleteMutation.isPending}
-                aria-label={`${formatAccountLabel(a)} 계좌 삭제`}
-                title="계좌 삭제"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '0.3rem',
-                  background: 'transparent',
-                  border: 'none',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  color: 'var(--fg-2, #888)',
-                }}
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          ))}
-          {hideAddAccount ? null : (
-            <>
-              <div
-                aria-hidden
-                style={{ height: 1, background: 'var(--border)', margin: '0.3rem 0' }}
-              />
-              <Button type="button" onClick={onAddAccount} dense variant="primary">
-                + 계좌 추가
-              </Button>
-            </>
-          )}
-        </div>
+          onDelete={onDelete}
+          onAddAccount={onAddAccount}
+        />
       ) : null}
 
       {switchError ? (
@@ -256,22 +173,3 @@ export const AccountSelector = ({
     </div>
   );
 };
-
-function formatAccountLabel(a: AccountRow): string {
-  const tail = a.accountNo8.slice(-4);
-  const name = a.displayName?.trim();
-  return name && name.length > 0 ? `${name} · ${a.env} ${tail}` : `${a.env} · ${tail}`;
-}
-
-const EnvDot = ({ env }: { env: 'MOCK' | 'PROD' }): ReactElement => (
-  <span
-    aria-hidden
-    style={{
-      display: 'inline-block',
-      width: 8,
-      height: 8,
-      borderRadius: '50%',
-      background: env === 'PROD' ? 'var(--danger, #d4453a)' : 'var(--accent, #5b8def)',
-    }}
-  />
-);
