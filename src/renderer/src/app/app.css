@@ -1121,6 +1121,7 @@ body {
 
 .hts-btn--dense {
   min-height: 2.8rem;
+  min-width: 5.2rem;
   padding: 0.3rem 0.8rem;
   font-size: 1.1rem;
 }
