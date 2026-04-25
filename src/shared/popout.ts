@@ -60,10 +60,10 @@ export const POPOUT_ROUTE_CONFIG = {
   'add-account': {
     label: '계좌 추가',
     title: 'Split Stock · 계좌 추가',
-    defaultWidth: 840,
-    defaultHeight: 820,
-    minWidth: 520,
-    minHeight: 620,
+    defaultWidth: 410,
+    defaultHeight: 410,
+    minWidth: 380,
+    minHeight: 370,
   },
   'add-watch-order': {
     label: '자동감시 추가',

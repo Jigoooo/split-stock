@@ -27,6 +27,8 @@ export {
   dialog,
   useDialogStore,
 } from './dialog';
+export type { EnvironmentRadioGroupProps } from './environment-radio-group';
+export { EnvironmentRadioGroup } from './environment-radio-group';
 export type { ErrorBoundaryProps } from './error-boundary';
 export { ErrorBoundary, withSectionBoundary } from './error-boundary';
 export type { HtsTabItem, HtsTabsProps } from './hts-tabs';

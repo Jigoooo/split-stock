@@ -1,5 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, RadioGroup, Select, TextInput } from '@renderer/shared/ui';
+import { Button, EnvironmentRadioGroup, Select, TextInput } from '@renderer/shared/ui';
 import {
   ACCOUNT_PROD_CODE_OPTIONS,
   type AccountProdCode,
@@ -49,23 +49,19 @@ export const AddAccountPage = (): ReactElement => {
   const canSubmit = appKey.length > 0 && appSecret.length > 0 && accountNo8.length === 8;
 
   return (
-    <div className="panel" style={{ maxWidth: '44rem', margin: '0 auto' }}>
-      <form onSubmit={onSubmit}>
-        <div className="panel__body" style={{ display: 'grid', gap: '1rem' }}>
-          <div style={{ display: 'grid', gap: '0.35rem' }}>
-            <span className="muted" style={{ fontSize: '1.1rem' }}>
-              환경
-            </span>
-            <RadioGroup
+    <div className="add-account-page">
+      <form className="add-account-page__form" onSubmit={onSubmit}>
+        <div className="add-account-page__body">
+          <div className="add-account-page__field">
+            <span className="add-account-page__label">환경</span>
+            <EnvironmentRadioGroup
               name="add-account-env"
               ariaLabel="추가 계좌 환경"
               value={env}
               onChange={setEnv}
               dense
-              items={[
-                { value: 'MOCK', label: '모의투자', description: '주문 없이 흐름과 시세 점검.' },
-                { value: 'PROD', label: '실전', description: '실제 계좌 — 주문이 체결됩니다.' },
-              ]}
+              mockDescription="주문 없이 흐름과 시세 점검."
+              prodDescription="실제 계좌 - 주문이 체결됩니다."
             />
           </div>
 
@@ -77,7 +73,7 @@ export const AddAccountPage = (): ReactElement => {
               autoComplete="off"
               spellCheck={false}
               dense
-              style={{ width: '100%' }}
+              className="add-account-page__control"
             />
           </Row>
 
@@ -90,7 +86,7 @@ export const AddAccountPage = (): ReactElement => {
               autoComplete="off"
               spellCheck={false}
               dense
-              style={{ width: '100%' }}
+              className="add-account-page__control"
             />
           </Row>
 
@@ -102,8 +98,7 @@ export const AddAccountPage = (): ReactElement => {
               placeholder="12345678"
               inputMode="numeric"
               dense
-              className="num"
-              style={{ width: '16rem' }}
+              className="add-account-page__control num"
             />
           </Row>
 
@@ -113,7 +108,7 @@ export const AddAccountPage = (): ReactElement => {
               value={accountProdCd}
               onChange={(e) => setAccountProdCd(e.target.value as AccountProdCode)}
               dense
-              style={{ width: '18rem' }}
+              className="add-account-page__control"
             >
               {ACCOUNT_PROD_CODE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -130,10 +125,7 @@ export const AddAccountPage = (): ReactElement => {
           ) : null}
         </div>
 
-        <div
-          className="panel__body"
-          style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
-        >
+        <div className="add-account-page__actions">
           <Button onClick={onCancel} disabled={addMutation.isPending} dense type="button">
             취소
           </Button>
@@ -160,10 +152,10 @@ const Row = ({
   inputId: string;
   children: ReactElement;
 }): ReactElement => (
-  <label htmlFor={inputId} style={{ display: 'grid', gap: '0.35rem' }}>
-    <span className="muted" style={{ fontSize: '1.1rem' }}>
+  <div className="add-account-page__field">
+    <label className="add-account-page__label" htmlFor={inputId}>
       {label}
-    </span>
+    </label>
     {children}
-  </label>
+  </div>
 );

@@ -1,4 +1,4 @@
-import { Button, RadioGroup, TextInput } from '@renderer/shared/ui';
+import { Button, EnvironmentRadioGroup, TextInput } from '@renderer/shared/ui';
 import type { AccountProdCode, AppEnv, Credentials } from '@shared/contracts';
 import { type FormEvent, type ReactElement, useState } from 'react';
 import { useSaveCredentials } from '../model/use-save-credentials';
@@ -31,24 +31,12 @@ export const CredentialsForm = (): ReactElement => {
           <span className="muted" style={{ fontSize: '1.1rem' }}>
             환경
           </span>
-          <RadioGroup
+          <EnvironmentRadioGroup
             name="credentials-env"
             ariaLabel="접속 환경"
             value={env}
             onChange={setEnv}
             dense
-            items={[
-              {
-                value: 'MOCK',
-                label: '모의투자',
-                description: '주문 없이 흐름과 시세를 점검합니다.',
-              },
-              {
-                value: 'PROD',
-                label: '실전',
-                description: '실제 계좌로 주문이 체결됩니다.',
-              },
-            ]}
           />
         </div>
 

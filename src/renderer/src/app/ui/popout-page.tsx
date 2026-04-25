@@ -99,7 +99,7 @@ export interface PopoutPageProps {
 }
 
 export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => {
-  const isEdgeToEdgeRoute = route === 'add-watch-order';
+  const isEdgeToEdgeRoute = route === 'add-watch-order' || route === 'add-account';
   useEffect(() => {
     if (route === 'add-watch-order') return;
     document.title = getPopoutWindowTitle(route);

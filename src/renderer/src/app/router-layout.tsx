@@ -12,7 +12,6 @@ import { isPopoutRoute, type PopoutRoute } from './model/popout-route';
 import { useAppShell } from './model/use-app-shell';
 import { type PopoutApi, usePopoutState } from './model/use-popout-state';
 import { AccountBar } from './ui/account-bar';
-import { ConnectionStatusDot } from './ui/connection-status-dot';
 import { HeaderPopoutButtons } from './ui/header-popout-buttons';
 import { PanelWorkspace } from './ui/panel-workspace';
 import { PopoutPage } from './ui/popout-page';
@@ -38,9 +37,6 @@ const AppShellFrame = ({ children, popout, shell }: AppShellFrameProps): ReactEl
         <AccountBar env={shell.env} />
         {shell.env && popout ? (
           <>
-            <div className="app-header__section app-header__section--connection">
-              <ConnectionStatusDot />
-            </div>
             <div className="app-header__section app-header__section--tools">
               <span className="app-header__section-label">메뉴</span>
               <HeaderPopoutButtons popout={popout} />

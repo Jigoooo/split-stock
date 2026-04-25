@@ -15,7 +15,7 @@ export const SafetySwitchHeader = (): ReactElement | null => {
   const errorLocked = snap.errorLock.active;
 
   return (
-    <div className="header-toggle-control">
+    <div className="header-toggle-control header-toggle-control--order">
       <span className="header-toggle-control__label">주문</span>
       <Switch
         checked={snap.master}

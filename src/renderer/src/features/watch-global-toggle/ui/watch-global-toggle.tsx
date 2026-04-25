@@ -30,7 +30,7 @@ export const WatchGlobalToggle = (): ReactElement => {
   }
 
   return (
-    <div className="header-toggle-control">
+    <div className="header-toggle-control header-toggle-control--watch">
       <span className="header-toggle-control__label">감시</span>
       <Switch
         checked={state.globalEnabled}
@@ -39,7 +39,7 @@ export const WatchGlobalToggle = (): ReactElement => {
         disabled={setGlobal.isPending}
         tone={state.globalEnabled ? 'accent' : 'danger'}
       />
-      <span className="header-toggle-control__state">
+      <span className="header-toggle-control__state header-toggle-control__state--watch">
         {state.globalEnabled ? 'ON' : 'OFF'} ({state.totalTrackedCount})
       </span>
     </div>
