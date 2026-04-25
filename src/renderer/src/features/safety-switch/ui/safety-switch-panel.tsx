@@ -1,4 +1,4 @@
-import { Button } from '@renderer/shared/ui';
+import { Button, Switch } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useSafetySwitch } from '../model/use-safety-switch';
 
@@ -34,20 +34,26 @@ export const SafetySwitchPanel = (): ReactElement => {
         className="panel__body"
         style={{ display: 'flex', gap: '1.2rem', alignItems: 'center', flexWrap: 'wrap' }}
       >
-        <Button
-          disabled={errorLocked || setMasterPending}
-          onClick={() => setMaster(!snap.master)}
-          variant={snap.master ? 'primary' : 'danger'}
-        >
-          {snap.master ? '주문 가능' : '주문 차단'}
-        </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <Switch
+            checked={snap.master}
+            onChange={(checked) => setMaster(checked)}
+            disabled={errorLocked || setMasterPending}
+            label={snap.master ? '주문 가능' : '주문 차단'}
+            tone={snap.master ? 'accent' : 'danger'}
+            aria-label="주문 허용 토글"
+          />
+          <span className={snap.master ? 'chip chip--up' : 'chip chip--down'}>
+            {snap.master ? 'ON' : 'OFF'}
+          </span>
+        </div>
         {errorLocked && (
           <span className="chip chip--down" role="status">
             에러 잠금: {snap.errorLock.reason ?? '원인 불명'}
           </span>
         )}
         {errorLocked && (
-          <Button disabled={clearPending} onClick={clearErrorLock}>
+          <Button disabled={clearPending} onClick={clearErrorLock} dense>
             잠금 해제
           </Button>
         )}

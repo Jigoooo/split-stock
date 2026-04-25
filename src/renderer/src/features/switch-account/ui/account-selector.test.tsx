@@ -77,6 +77,8 @@ describe('AccountSelector', () => {
       onStockAssigned: vi.fn(() => () => undefined),
       broadcastAccountChanged: vi.fn(),
       onAccountChanged: vi.fn(() => () => undefined),
+      broadcastSettingsChanged: vi.fn(),
+      onSettingsChanged: vi.fn(() => () => undefined),
       setAlwaysOnTop: vi.fn().mockResolvedValue(undefined),
       fitContentHeight: vi.fn().mockResolvedValue(undefined),
     };

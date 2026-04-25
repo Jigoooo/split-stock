@@ -15,15 +15,25 @@ interface AccountRow {
   isActive: boolean;
 }
 
+export interface AccountSelectorProps {
+  /**
+   * 드롭다운 하단의 "+ 계좌 추가" 버튼 숨김 옵션.
+   * 설정 탭에서는 헤더의 진입점만 사용하도록 통일하기 위해 true 로 사용한다.
+   */
+  hideAddAccount?: boolean;
+}
+
 /**
  * 헤더용 계좌 셀렉터 — 활성 계좌를 칩으로 보여주고, 클릭 시 드롭다운에서
  *   - 다른 계좌로 전환 (한 줄 클릭)
- *   - "+ 계좌 추가" 버튼으로 신규 등록 다이얼로그 오픈
+ *   - "+ 계좌 추가" 버튼으로 신규 등록 다이얼로그 오픈 (hideAddAccount 가 false 일 때)
  *
  * 활성 계좌 칩에는 env 배지 + 계좌번호 마지막 4자리(혹은 displayName)를 표시.
  * 전환 mutation 진행 중이면 셀렉터 잠금.
  */
-export const AccountSelector = (): ReactElement | null => {
+export const AccountSelector = ({
+  hideAddAccount = false,
+}: AccountSelectorProps = {}): ReactElement | null => {
   const accountsQ = trpc.account.listAccounts.useQuery(undefined, {
     refetchOnWindowFocus: false,
     staleTime: 30_000,
@@ -222,10 +232,17 @@ export const AccountSelector = (): ReactElement | null => {
               </button>
             </div>
           ))}
-          <div aria-hidden style={{ height: 1, background: 'var(--border)', margin: '0.3rem 0' }} />
-          <Button type="button" onClick={onAddAccount} dense variant="primary">
-            + 계좌 추가
-          </Button>
+          {hideAddAccount ? null : (
+            <>
+              <div
+                aria-hidden
+                style={{ height: 1, background: 'var(--border)', margin: '0.3rem 0' }}
+              />
+              <Button type="button" onClick={onAddAccount} dense variant="primary">
+                + 계좌 추가
+              </Button>
+            </>
+          )}
         </div>
       ) : null}
 

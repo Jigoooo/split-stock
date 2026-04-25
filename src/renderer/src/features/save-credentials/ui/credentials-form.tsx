@@ -1,9 +1,15 @@
 import { Button, EnvironmentRadioGroup, TextInput } from '@renderer/shared/ui';
 import type { AccountProdCode, AppEnv, Credentials } from '@shared/contracts';
 import { type FormEvent, type ReactElement, useState } from 'react';
+import { toast } from 'sonner';
 import { useSaveCredentials } from '../model/use-save-credentials';
 
-export const CredentialsForm = (): ReactElement => {
+export interface CredentialsFormProps {
+  /** 저장 성공 직후 호출. 다이얼로그 닫기 등에 사용. */
+  onSaved?: () => void;
+}
+
+export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactElement => {
   const { save, isPending, error } = useSaveCredentials();
   const [env, setEnv] = useState<AppEnv>('MOCK');
   const [appKey, setAppKey] = useState('');
@@ -11,7 +17,7 @@ export const CredentialsForm = (): ReactElement => {
   const [accountNo8, setAccountNo8] = useState('');
   const [accountProdCd, setAccountProdCd] = useState<AccountProdCode>('01');
 
-  const onSubmit = (e: FormEvent<HTMLFormElement>): void => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
     const value: Credentials = {
       env,
@@ -20,11 +26,23 @@ export const CredentialsForm = (): ReactElement => {
       accountNo8,
       accountProdCd,
     };
-    void save(value);
+    try {
+      await save(value);
+      toast.success(`${env} 자격증명이 저장되었습니다`);
+      onSaved?.();
+    } catch (err) {
+      toast.error(`저장 실패: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 
   return (
-    <form onSubmit={onSubmit} className="panel" style={{ maxWidth: '44rem' }}>
+    <form
+      onSubmit={(e) => {
+        void onSubmit(e);
+      }}
+      className="panel"
+      style={{ maxWidth: '44rem' }}
+    >
       <div className="panel__title">한국투자증권 자격증명</div>
       <div className="panel__body" style={{ display: 'grid', gap: '1rem' }}>
         <div style={{ display: 'grid', gap: '0.35rem' }}>
