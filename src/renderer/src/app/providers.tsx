@@ -31,7 +31,9 @@ const SettingsSyncRuntime = (): null => {
     const shell = window.appShell;
     if (!shell?.onSettingsChanged) return;
     return shell.onSettingsChanged(() => {
-      void qc.invalidateQueries();
+      // refetchType:'all' 로 background(focus 안 된 부모창)의 inactive query 도 즉시 refetch.
+      // default 'active' 는 focus 시까지 대기 → popout 에서 변경 후 부모창 focus 전까지 동기화 지연.
+      void qc.invalidateQueries({ refetchType: 'all' });
     });
   }, [qc]);
 

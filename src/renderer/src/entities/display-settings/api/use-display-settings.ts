@@ -66,6 +66,7 @@ export function useUpdateDisplaySettings(): UseUpdateDisplaySettingsResult {
   const mutation = trpc.display.updateSettings.useMutation({
     onSuccess: () => {
       void utils.display.getSettings.invalidate();
+      window.appShell?.broadcastSettingsChanged?.('display');
     },
   });
   return {
@@ -83,6 +84,7 @@ export function useResetDisplaySettings(): UseResetDisplaySettingsResult {
   const mutation = trpc.display.resetSettings.useMutation({
     onSuccess: () => {
       void utils.display.getSettings.invalidate();
+      window.appShell?.broadcastSettingsChanged?.('display');
     },
   });
   return {

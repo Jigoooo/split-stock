@@ -15,6 +15,7 @@ export function usePriceCorrectionForm() {
   const updateMutation = trpc.priceCorrection.updateSettings.useMutation({
     onSuccess: () => {
       void utils.priceCorrection.getSettings.invalidate();
+      window.appShell?.broadcastSettingsChanged?.('priceCorrection');
       toast.success('호가 자동 보정 설정이 저장되었습니다');
     },
     onError: (err) => {
