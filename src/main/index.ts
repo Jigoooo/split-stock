@@ -64,7 +64,8 @@ import { TokenStore } from './kis/token-store';
 import { realTimer, type WsLike } from './kis/ws-client';
 import { cleanupOldEventLogs, createEventLogger, teeLoggers } from './logging/event-logger';
 import { createFileLogger } from './logging/file-logger';
-import { initSentryFromSettings } from './monitoring/sentry';
+// Sentry 일시 비활성화 — 향후 빌드 환경변수 방식으로 재활성화 예정.
+// import { initSentryFromSettings } from './monitoring/sentry';
 import { notifyTrade, notifyWatchOutcome } from './notification/trade-notifier';
 import { FeedBus } from './realtime/feed-bus';
 import { RealtimeService } from './realtime/realtime-service';
@@ -1153,19 +1154,15 @@ void app.whenReady().then(async () => {
   // 차수 수동편집(A7) 라우터에서 변경 후 즉시 백업 트리거에 사용.
   factory.setBackupScheduler(backupScheduler);
 
-  // Sentry opt-in 초기화 (DSN 미지정 시 no-op)
-  const sentryResult = await initSentryFromSettings({
-    settingsRepo,
-    isPackaged: app.isPackaged,
-  });
-  eventLogger.log({
-    level: 'INFO',
-    category: 'SYS',
-    message: sentryResult.active ? 'sentry.initialized' : 'sentry.skipped',
-    payload: sentryResult.active
-      ? { environment: sentryResult.environment }
-      : { reason: sentryResult.reason },
-  });
+  // Sentry 일시 비활성화 — 사용자 facing UI 로 DSN 을 노출할 가치가 낮아 호출만 끔.
+  // 코드(monitoring/sentry.ts, monitoring-router, features/error-reporting) 는 흔적으로 유지.
+  // 향후 활성화 시 빌드 환경변수(예: process.env.MAIN_VITE_SENTRY_DSN) 로 DSN 을 주입하고
+  // 아래 호출만 다시 살리는 형태가 권장. 현재는 settings 의 sentry.dsn 키를 읽는
+  // initSentryFromSettings 자체를 호출하지 않음.
+  // const sentryResult = await initSentryFromSettings({
+  //   settingsRepo,
+  //   isPackaged: app.isPackaged,
+  // });
 
   const win = createMainWindow();
   const ipcHandler = createIPCHandler({

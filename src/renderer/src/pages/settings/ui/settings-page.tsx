@@ -10,7 +10,8 @@ import {
   StrategySettingsSurface,
   type StrategySettingsTab,
 } from '@renderer/features/edit-strategy';
-import { SentrySettingsForm } from '@renderer/features/error-reporting';
+// Sentry 관측 탭은 일시 숨김 — features/error-reporting 의 SentrySettingsForm 은 흔적으로 유지.
+// import { SentrySettingsForm } from '@renderer/features/error-reporting';
 import { ActivePendingList, PendingCancelForm } from '@renderer/features/pending-cancel-settings';
 import { PriceCorrectionForm } from '@renderer/features/price-correction-settings';
 import { ErrorBoundary, type HtsTabItem, HtsTabs, OverlayScrollbar } from '@renderer/shared/ui';
@@ -18,12 +19,13 @@ import type { ReactElement, ReactNode } from 'react';
 import { useRef, useState } from 'react';
 
 // 라벨 정의와 id 유니온을 한 곳에서 동기화 (single source of truth).
+// 'monitoring'(Sentry DSN) 탭은 사용자 facing 가치가 낮아 일시 숨김 — 향후 빌드 환경변수
+// 방식으로 재활성화 시 다시 추가.
 const TOP_TABS = [
   { id: 'strategy', label: '매매설정관리' },
   { id: 'display', label: '표시' },
   { id: 'orders', label: '주문/체결' },
   { id: 'account', label: '계좌/보안' },
-  { id: 'monitoring', label: '관측' },
   { id: 'backup', label: '백업' },
 ] as const satisfies ReadonlyArray<HtsTabItem<string>>;
 
@@ -133,16 +135,6 @@ export const SettingsPage = (): ReactElement => {
           {topTab === 'account' ? (
             <Section name="보안 · 자격증명">
               <CredentialsSettingsPanel />
-            </Section>
-          ) : null}
-          {topTab === 'monitoring' ? (
-            <Section name="에러 보고 (Sentry)">
-              <div className="panel">
-                <div className="panel__title">에러 보고 (Sentry)</div>
-                <div className="panel__body">
-                  <SentrySettingsForm />
-                </div>
-              </div>
             </Section>
           ) : null}
           {topTab === 'backup' ? (
