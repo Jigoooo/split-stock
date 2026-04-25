@@ -1,11 +1,17 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { Button } from '@renderer/shared/ui';
+import type { ReactElement } from 'react';
 import { useState } from 'react';
 
 export interface DuplicatePathFormProps {
   onPathSelected?: (path: string) => void;
 }
 
-export function DuplicatePathForm({ onPathSelected }: DuplicatePathFormProps) {
+/**
+ * 2중 백업 외부 드라이브 경로 설정 폼.
+ * - 자동/수동 백업 시 1차 경로와 함께 외부 드라이브에 동시에 sha256 검증 저장.
+ */
+export function DuplicatePathForm({ onPathSelected }: DuplicatePathFormProps): ReactElement {
   const utils = trpc.useUtils();
   const [message, setMessage] = useState<string | null>(null);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -38,107 +44,56 @@ export function DuplicatePathForm({ onPathSelected }: DuplicatePathFormProps) {
     },
   });
 
-  const handlePickFolder = () => {
+  const handlePickFolder = (): void => {
     pickFolderMutation.mutate();
   };
 
-  const handleConfirmPath = () => {
+  const handleConfirmPath = (): void => {
     if (!selectedPath) {
-      setMessage('폴더를 선택해주세요.');
+      setMessage('폴더를 먼저 선택해 주세요.');
       return;
     }
     setPathMutation.mutate({ path: selectedPath });
   };
 
-  const handleClearPath = async () => {
-    if (!getDuplicatePath.data?.path) {
-      setMessage('설정된 경로가 없습니다.');
-      return;
-    }
-    // 경로 삭제는 빈 문자열로 설정 (또는 settings에서 직접 delete 호출)
-    // 여기서는 UI만 표시하고 실제 삭제는 사용자가 settings에서 수동으로 처리
-    setMessage('경로 삭제 기능은 설정 페이지에서 직접 관리하세요.');
-  };
-
   const currentPath = getDuplicatePath.data?.path;
+  const busy = pickFolderMutation.isPending || setPathMutation.isPending;
+  const isError = message !== null && (message.includes('실패') || message.includes('주세요'));
 
   return (
-    <div className="flex flex-col gap-4 p-4 border rounded bg-gray-50">
-      <div>
-        <h3 className="font-semibold text-sm mb-2">2중 백업 외부 드라이브 경로</h3>
+    <div style={{ display: 'grid', gap: '0.6rem' }}>
+      {currentPath ? (
+        <div className="muted" style={{ fontSize: '0.85em' }}>
+          현재 경로: <code style={{ fontFamily: 'monospace' }}>{currentPath}</code>
+        </div>
+      ) : (
+        <div className="muted" style={{ fontSize: '0.85em' }}>
+          2중 백업 경로가 설정되어 있지 않습니다.
+        </div>
+      )}
 
-        {/* 현재 설정된 경로 표시 */}
-        {currentPath && (
-          <div className="mb-3 p-2 bg-white border border-green-200 rounded text-xs">
-            <span className="text-gray-600">현재 경로: </span>
-            <span className="font-mono text-green-700">{currentPath}</span>
-          </div>
-        )}
+      {selectedPath ? (
+        <div className="muted" style={{ fontSize: '0.85em' }}>
+          선택된 경로: <code style={{ fontFamily: 'monospace' }}>{selectedPath}</code>
+        </div>
+      ) : null}
 
-        {/* 선택된 경로 (미확정) 표시 */}
-        {selectedPath && !setPathMutation.isPending && (
-          <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
-            <span className="text-gray-600">선택된 경로: </span>
-            <span className="font-mono text-blue-700">{selectedPath}</span>
-          </div>
-        )}
+      {message ? <span className={isError ? 'chip chip--down' : 'chip'}>{message}</span> : null}
 
-        {/* 메시지 표시 */}
-        {message && (
-          <div
-            className={`mb-3 p-2 rounded text-xs font-mono ${
-              message.includes('실패') || message.includes('없습니다')
-                ? 'bg-red-50 text-red-700 border border-red-200'
-                : 'bg-green-50 text-green-700 border border-green-200'
-            }`}
-          >
-            {message}
-          </div>
-        )}
+      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+        <Button onClick={handlePickFolder} disabled={busy} dense>
+          {pickFolderMutation.isPending ? '폴더 선택 중…' : '폴더 선택'}
+        </Button>
+        {selectedPath ? (
+          <Button variant="primary" onClick={handleConfirmPath} disabled={busy} dense>
+            {setPathMutation.isPending ? '설정 중…' : '경로 적용'}
+          </Button>
+        ) : null}
       </div>
 
-      {/* 버튼 그룹 */}
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={handlePickFolder}
-          disabled={
-            pickFolderMutation.isPending || setPathMutation.isPending || getDuplicatePath.isLoading
-          }
-          className="flex-1 px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-        >
-          {pickFolderMutation.isPending ? '폴더 선택 중...' : '폴더 선택'}
-        </button>
-
-        {selectedPath && (
-          <button
-            type="button"
-            onClick={handleConfirmPath}
-            disabled={setPathMutation.isPending}
-            className="flex-1 px-3 py-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            {setPathMutation.isPending ? '설정 중...' : '경로 설정'}
-          </button>
-        )}
-
-        {currentPath && (
-          <button
-            type="button"
-            onClick={handleClearPath}
-            disabled={getDuplicatePath.isLoading}
-            className="px-3 py-2 bg-gray-400 text-white text-xs rounded hover:bg-gray-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            정보
-          </button>
-        )}
-      </div>
-
-      {/* 안내 텍스트 */}
-      <div className="text-xs text-gray-600 mt-2">
-        <p>
-          외부 드라이브 경로를 선택하면 백업 시 기본 경로와 동시에 2중으로 저장됩니다. SHA-256
-          검증으로 파일 일치 여부를 확인합니다.
-        </p>
+      <div className="muted" style={{ fontSize: '0.8em' }}>
+        외부 드라이브 경로를 설정하면 자동/수동 백업 시 1차 경로와 함께 동시에 저장되며, SHA-256
+        해시로 일치 여부를 검증합니다.
       </div>
     </div>
   );

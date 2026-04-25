@@ -33,3 +33,67 @@ export function useBackupPanel() {
     importDatabase: () => importMutation.mutate(),
   };
 }
+
+export interface UseAutoBackupSettingsResult {
+  isPending: boolean;
+  isSaving: boolean;
+  error: { message: string } | null;
+  enabled: boolean;
+  retentionDays: number;
+  scheduledTimes: ReadonlyArray<string>;
+  isDirty: boolean;
+  setEnabled: (v: boolean) => void;
+  setRetentionDays: (v: number) => void;
+  save: () => void;
+  reset: () => void;
+}
+
+interface AutoBackupForm {
+  enabled: boolean;
+  retentionDays: number;
+}
+
+export function useAutoBackupSettings(): UseAutoBackupSettingsResult {
+  const query = trpc.backup.getAutoBackupSettings.useQuery();
+  const utils = trpc.useUtils();
+
+  const serverForm: AutoBackupForm = query.data
+    ? { enabled: query.data.enabled, retentionDays: query.data.retentionDays }
+    : { enabled: true, retentionDays: 10 };
+
+  const [localForm, setLocalForm] = useState<AutoBackupForm | null>(null);
+  const form = localForm ?? serverForm;
+
+  const updateMutation = trpc.backup.setAutoBackupSettings.useMutation({
+    onSuccess: () => {
+      void utils.backup.getAutoBackupSettings.invalidate();
+      setLocalForm(null);
+    },
+  });
+
+  const isDirty = localForm !== null && JSON.stringify(localForm) !== JSON.stringify(serverForm);
+
+  const patch = (partial: Partial<AutoBackupForm>): void => {
+    setLocalForm((prev) => ({ ...(prev ?? serverForm), ...partial }));
+  };
+
+  return {
+    isPending: query.isPending,
+    isSaving: updateMutation.isPending,
+    error: query.error
+      ? { message: query.error.message }
+      : updateMutation.error
+        ? { message: updateMutation.error.message }
+        : null,
+    enabled: form.enabled,
+    retentionDays: form.retentionDays,
+    scheduledTimes: query.data?.scheduledTimes ?? ['12:30', '15:20'],
+    isDirty,
+    setEnabled: (v) => patch({ enabled: v }),
+    setRetentionDays: (v) => patch({ retentionDays: v }),
+    save: () => {
+      updateMutation.mutate(form);
+    },
+    reset: () => setLocalForm(null),
+  };
+}

@@ -1,9 +1,14 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  BACKUP_AUTO_DEFAULTS,
+  readBackupAutoConfig,
+  SETTING_KEYS,
+  type SettingsRepo,
+} from '../db/settings-repo';
 import type { EventLogger } from '../logging/event-logger';
 import { exportDatabase } from './backup';
 
-const RETENTION_DAYS = 10;
 const SCHEDULED_TIMES: Array<{ hour: number; minute: number }> = [
   { hour: 12, minute: 30 },
   { hour: 15, minute: 20 },
@@ -12,9 +17,11 @@ const SCHEDULED_TIMES: Array<{ hour: number; minute: number }> = [
 export interface BackupSchedulerDeps {
   /** DB 원본 경로 */
   dbPath: string;
-  /** 백업 파일을 저장할 디렉토리 목록 (첫 번째가 1차, 나머지는 2차 백업) */
+  /** 백업 파일을 저장할 1차 디렉토리. 2차 경로(duplicate)는 settingsRepo에서 runtime read. */
   destDirs: string[];
   logger: EventLogger;
+  /** 자동 백업 enabled / retentionDays / duplicate 경로 runtime 조회용 (optional — 미주입 시 enabled=true, retention=10). */
+  settingsRepo?: SettingsRepo;
   /** 테스트 주입용 — Date.now() 대체 */
   now?: () => number;
   /** 테스트 주입용 — setInterval 대체 */
@@ -27,15 +34,19 @@ export interface BackupSchedulerDeps {
  * 자동 백업 스케줄러.
  *
  * 트리거:
- *  1. start() 호출 즉시 1회
+ *  1. start() 호출 즉시 1회 (autoBackupEnabled=true 일 때만)
  *  2. 매일 12:30 (로컬 시각)
  *  3. 매일 15:20 (로컬 시각)
  *
- * 10일 경과 백업 파일 자동 삭제.
- * destDirs[0]: 1차 저장소, destDirs[1+]: 2차(외부) 저장소.
+ * 보관 일수 경과 백업 파일 자동 삭제. 보관일수는 settingsRepo runtime read.
+ * destDirs[0]: 1차 저장소. settingsRepo의 BACKUP_DUPLICATE_PATH는 runtime에 추가 destDir로 합산.
+ *
+ * start() / stop() 멱등성 — 같은 상태에서 다시 호출해도 안전.
  */
 export class BackupScheduler {
-  private readonly deps: Required<BackupSchedulerDeps>;
+  private readonly deps: Required<Omit<BackupSchedulerDeps, 'settingsRepo'>> & {
+    settingsRepo: SettingsRepo | null;
+  };
   private timerId: ReturnType<typeof setInterval> | null = null;
   private lastCheckedMinute = -1;
 
@@ -47,11 +58,41 @@ export class BackupScheduler {
       dbPath: deps.dbPath,
       destDirs: deps.destDirs,
       logger: deps.logger,
+      settingsRepo: deps.settingsRepo ?? null,
     };
+  }
+
+  /** 자동 백업 활성 여부. settingsRepo 미주입 시 true(기존 동작 유지). */
+  private isEnabled(): boolean {
+    if (!this.deps.settingsRepo) return BACKUP_AUTO_DEFAULTS.enabled;
+    return readBackupAutoConfig(this.deps.settingsRepo).enabled;
+  }
+
+  /** 보관 일수. settingsRepo 미주입 시 기본값. */
+  private getRetentionDays(): number {
+    if (!this.deps.settingsRepo) return BACKUP_AUTO_DEFAULTS.retentionDays;
+    return readBackupAutoConfig(this.deps.settingsRepo).retentionDays;
+  }
+
+  /** 백업 시점에 사용할 디렉토리 목록 — primary + duplicate(설정된 경우). */
+  private getEffectiveDestDirs(): string[] {
+    if (!this.deps.settingsRepo) return this.deps.destDirs;
+    const duplicate = this.deps.settingsRepo.get(SETTING_KEYS.BACKUP_DUPLICATE_PATH);
+    return duplicate ? [...this.deps.destDirs, duplicate] : this.deps.destDirs;
   }
 
   start(): void {
     if (this.timerId !== null) return;
+
+    if (!this.isEnabled()) {
+      this.deps.logger.log({
+        level: 'INFO',
+        category: 'SYS',
+        message: 'backup.scheduler.skipped',
+        payload: { reason: 'auto_backup_disabled' },
+      });
+      return;
+    }
 
     // 즉시 1회 실행
     this.runBackup('startup');
@@ -73,6 +114,7 @@ export class BackupScheduler {
   /**
    * 외부 트리거 — 차수 수동편집 등 위험 변경 직후 즉시 백업 1회 실행.
    * `lastCheckedMinute` 은 건드리지 않으므로 정시 트리거(12:30/15:20)와 독립.
+   * autoBackupEnabled=false 라도 사용자 명시 변경에 대한 안전 백업이므로 실행.
    */
   triggerNow(reason: string): void {
     this.runBackup(`manual:${reason}`);
@@ -80,6 +122,8 @@ export class BackupScheduler {
 
   /** 테스트에서 직접 호출 가능 */
   tick(): void {
+    if (!this.isEnabled()) return;
+
     const now = new Date(this.deps.now());
     const currentMinute = now.getHours() * 60 + now.getMinutes();
 
@@ -108,8 +152,9 @@ export class BackupScheduler {
 
     const stamp = new Date(this.deps.now()).toISOString().replace(/[:.]/g, '-');
     const fileName = `split-stock-auto-${stamp}.db`;
+    const destDirs = this.getEffectiveDestDirs();
 
-    for (const dir of this.deps.destDirs) {
+    for (const dir of destDirs) {
       try {
         mkdirSync(dir, { recursive: true });
         const destPath = join(dir, fileName);
@@ -129,25 +174,23 @@ export class BackupScheduler {
       level: 'INFO',
       category: 'SYS',
       message: 'backup.scheduler.triggered',
-      payload: { trigger, fileName, dirs: this.deps.destDirs.length },
+      payload: { trigger, fileName, dirs: destDirs.length },
     });
   }
 
   private pruneOldBackups(dir: string): void {
     if (!existsSync(dir)) return;
 
-    const cutoffMs = this.deps.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    const retentionDays = this.getRetentionDays();
+    const cutoffMs = this.deps.now() - retentionDays * 24 * 60 * 60 * 1000;
     let pruned = 0;
 
     for (const name of readdirSync(dir)) {
       if (!name.startsWith('split-stock-auto-') || !name.endsWith('.db')) continue;
 
-      // 파일명에서 타임스탬프 파싱: split-stock-auto-2026-04-19T03-00-00-000Z.db
       const isoLike = name
         .replace('split-stock-auto-', '')
         .replace('.db', '')
-        // 되돌리기: '-' → ':' 단, 날짜 구분자('-')는 유지해야 하므로
-        // ISO 형식 재구성: YYYY-MM-DDTHH-MM-SS-mmmZ
         .replace(/T(\d{2})-(\d{2})-(\d{2})-(\d+)Z$/, 'T$1:$2:$3.$4Z');
 
       const ts = Date.parse(isoLike);

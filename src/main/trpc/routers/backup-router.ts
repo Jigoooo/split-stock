@@ -9,7 +9,7 @@ import {
   importDatabase,
   needsCredentialsReentry,
 } from '../../backup/backup';
-import { SETTING_KEYS } from '../../db/settings-repo';
+import { readBackupAutoConfig, SETTING_KEYS } from '../../db/settings-repo';
 import { publicProcedure, router } from '../trpc-core';
 
 // Electron dialog — CJS interop 회피용 lazy require
@@ -151,6 +151,54 @@ export const backupRouter = router({
         payload: { path: input.path },
       });
       return { ok: true as const, path: input.path };
+    }),
+
+  /**
+   * 자동 백업 설정 조회 — 토글/보관일수/다음 트리거 시각.
+   */
+  getAutoBackupSettings: publicProcedure.query(({ ctx }) => {
+    const cfg = readBackupAutoConfig(ctx.settingsRepo);
+    return {
+      enabled: cfg.enabled,
+      retentionDays: cfg.retentionDays,
+      scheduledTimes: ['12:30', '15:20'] as const,
+    };
+  }),
+
+  /**
+   * 자동 백업 설정 변경 — 변경 즉시 scheduler를 start/stop 으로 동기화.
+   */
+  setAutoBackupSettings: publicProcedure
+    .input(
+      z.object({
+        enabled: z.boolean(),
+        retentionDays: z.number().int().min(1).max(365),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      ctx.settingsRepo.set(SETTING_KEYS.BACKUP_AUTO_ENABLED, String(input.enabled));
+      ctx.settingsRepo.set(SETTING_KEYS.BACKUP_AUTO_RETENTION_DAYS, String(input.retentionDays));
+
+      // scheduler 즉시 동기화 — 토글 OFF→ON 전환 시 즉시 1회 백업 + retention 정리.
+      if (ctx.backupScheduler) {
+        if (input.enabled) {
+          ctx.backupScheduler.start();
+        } else {
+          ctx.backupScheduler.stop();
+        }
+      }
+
+      ctx.logger.log({
+        level: 'INFO',
+        category: 'SYS',
+        message: 'backup.auto_settings.updated',
+        payload: { enabled: input.enabled, retentionDays: input.retentionDays },
+      });
+      return {
+        ok: true as const,
+        enabled: input.enabled,
+        retentionDays: input.retentionDays,
+      };
     }),
 
   /**

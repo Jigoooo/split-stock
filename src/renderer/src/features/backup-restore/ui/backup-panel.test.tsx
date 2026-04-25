@@ -16,6 +16,23 @@ const useBackupPanelMock = vi.fn(() => ({
 
 vi.mock('../model/use-backup-panel', () => ({
   useBackupPanel: () => useBackupPanelMock(),
+  useAutoBackupSettings: () => ({
+    isPending: false,
+    isSaving: false,
+    error: null,
+    enabled: true,
+    retentionDays: 10,
+    scheduledTimes: ['12:30', '15:20'] as const,
+    isDirty: false,
+    setEnabled: () => {},
+    setRetentionDays: () => {},
+    save: () => {},
+    reset: () => {},
+  }),
+}));
+
+vi.mock('./duplicate-path-form', () => ({
+  DuplicatePathForm: () => null,
 }));
 
 import { BackupPanel } from './backup-panel';

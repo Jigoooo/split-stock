@@ -103,6 +103,10 @@ export const SETTING_KEYS = {
   // ── 백업 설정 ───────────────────────────────────────────────────
   /** 2중 백업 외부 드라이브 경로 */
   BACKUP_DUPLICATE_PATH: 'backup.duplicatePath',
+  /** 자동 백업 활성화 (기본: true) */
+  BACKUP_AUTO_ENABLED: 'backup.autoEnabled',
+  /** 자동 백업 보관 일수 (기본: 10일, 1~365 범위) */
+  BACKUP_AUTO_RETENTION_DAYS: 'backup.autoRetentionDays',
 } as const;
 
 export function watchGlobalEnabledKey(accountId: number): string {
@@ -122,6 +126,28 @@ export const FEES_DEFAULTS = {
   real: { buy: 0.015, sell: 0.015, tax: 0.2 },
   mock: { buy: 0.35, sell: 0.35, tax: 0.2 },
 } as const;
+
+export const BACKUP_AUTO_DEFAULTS = {
+  enabled: true,
+  retentionDays: 10,
+} as const;
+
+export function readBackupAutoConfig(repo: SettingsRepo): {
+  enabled: boolean;
+  retentionDays: number;
+} {
+  const enabledRaw = repo.get(SETTING_KEYS.BACKUP_AUTO_ENABLED);
+  const enabled = enabledRaw !== null ? enabledRaw === 'true' : BACKUP_AUTO_DEFAULTS.enabled;
+
+  const daysRaw = repo.get(SETTING_KEYS.BACKUP_AUTO_RETENTION_DAYS);
+  const days = daysRaw !== null ? Number(daysRaw) : BACKUP_AUTO_DEFAULTS.retentionDays;
+  const retentionDays =
+    Number.isFinite(days) && days >= 1 && days <= 365
+      ? Math.floor(days)
+      : BACKUP_AUTO_DEFAULTS.retentionDays;
+
+  return { enabled, retentionDays };
+}
 
 export function readFeesConfig(
   repo: SettingsRepo,
