@@ -4,13 +4,10 @@ import { readPendingCancelConfig, SETTING_KEYS } from '../../db/settings-repo';
 import { resolveAccountId } from '../router-helpers';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
-const ReorderModeSchema = z.enum(['NONE', 'MARKET', 'LIMIT_AT_LAST_PRICE']);
-
 const PendingCancelSettingsSchema = z.object({
   enabled: z.boolean(),
   timeoutMinutes: z.number().int().min(1).max(60),
   maxCancels: z.union([z.number().int().min(1).max(30), z.literal(-1)]),
-  reorderMode: ReorderModeSchema,
 });
 
 /**
@@ -37,7 +34,6 @@ export const pendingCancelRouter = router({
       enabled: cfg.enabled,
       timeoutMinutes: Math.round(cfg.timeoutMs / 60_000),
       maxCancels,
-      reorderMode: cfg.reorderMode,
     };
   }),
 
@@ -52,7 +48,6 @@ export const pendingCancelRouter = router({
       SETTING_KEYS.PENDING_CANCEL_MAX_RETRIES,
       input.maxCancels === -1 ? 'unlimited' : String(input.maxCancels),
     );
-    repo.set(SETTING_KEYS.PENDING_CANCEL_REORDER_MODE, input.reorderMode);
     return { ok: true as const };
   }),
 

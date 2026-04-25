@@ -1,21 +1,6 @@
-import { Button, Checkbox, NumberInput, RadioGroup } from '@renderer/shared/ui';
+import { Button, Checkbox, NumberInput } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
-import type { ReorderMode } from '../model/use-pending-cancel-settings';
 import { usePendingCancelSettings } from '../model/use-pending-cancel-settings';
-
-const REORDER_MODE_ITEMS: Array<{
-  value: ReorderMode;
-  label: string;
-  description: string;
-}> = [
-  { value: 'NONE', label: '취소만', description: '취소 후 재주문하지 않음' },
-  { value: 'MARKET', label: '시장가 재주문', description: '취소 후 시장가로 즉시 재주문' },
-  {
-    value: 'LIMIT_AT_LAST_PRICE',
-    label: '현재 시세 지정가 재주문',
-    description: '취소 후 현재 시세 기준 지정가로 재주문',
-  },
-];
 
 export const PendingCancelForm = (): ReactElement => {
   const {
@@ -27,7 +12,6 @@ export const PendingCancelForm = (): ReactElement => {
     setEnabled,
     setTimeoutMinutes,
     setMaxCancels,
-    setReorderMode,
     save,
     reset,
   } = usePendingCancelSettings();
@@ -108,17 +92,8 @@ export const PendingCancelForm = (): ReactElement => {
           </span>
         </div>
 
-        {/* 재주문 모드 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-          <span style={{ minWidth: '9rem' }}>취소 후 재주문</span>
-          <RadioGroup<ReorderMode>
-            name="pending-cancel-reorder-mode"
-            ariaLabel="취소 후 재주문 방식"
-            value={form.reorderMode}
-            items={REORDER_MODE_ITEMS}
-            onChange={setReorderMode}
-            dense
-          />
+        <div className="muted" style={{ fontSize: '0.85em' }}>
+          취소 후 자동 재주문은 현재 미지원입니다. 수동으로 다시 주문해 주세요.
         </div>
 
         {/* 저장 / 초기화 */}

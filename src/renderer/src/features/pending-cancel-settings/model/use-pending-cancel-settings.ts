@@ -1,13 +1,10 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { useState } from 'react';
 
-export type ReorderMode = 'NONE' | 'MARKET' | 'LIMIT_AT_LAST_PRICE';
-
 export interface PendingCancelFormState {
   enabled: boolean;
   timeoutMinutes: number;
   maxCancels: number;
-  reorderMode: ReorderMode;
 }
 
 export interface UsePendingCancelSettingsResult {
@@ -19,7 +16,6 @@ export interface UsePendingCancelSettingsResult {
   setEnabled: (v: boolean) => void;
   setTimeoutMinutes: (v: number) => void;
   setMaxCancels: (v: number) => void;
-  setReorderMode: (v: ReorderMode) => void;
   save: () => void;
   reset: () => void;
 }
@@ -28,20 +24,17 @@ const DEFAULT_FORM: PendingCancelFormState = {
   enabled: true,
   timeoutMinutes: 10,
   maxCancels: 5,
-  reorderMode: 'NONE',
 };
 
 function settingsToForm(data: {
   enabled: boolean;
   timeoutMinutes: number;
   maxCancels: number;
-  reorderMode: string;
 }): PendingCancelFormState {
   return {
     enabled: data.enabled,
     timeoutMinutes: data.timeoutMinutes,
     maxCancels: data.maxCancels,
-    reorderMode: data.reorderMode as ReorderMode,
   };
 }
 
@@ -80,7 +73,6 @@ export function usePendingCancelSettings(): UsePendingCancelSettingsResult {
     setEnabled: (v) => patch({ enabled: v }),
     setTimeoutMinutes: (v) => patch({ timeoutMinutes: v }),
     setMaxCancels: (v) => patch({ maxCancels: v }),
-    setReorderMode: (v) => patch({ reorderMode: v }),
     save: () => {
       updateMutation.mutate(form);
     },
