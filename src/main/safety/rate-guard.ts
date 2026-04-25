@@ -36,13 +36,17 @@ export function createRateGuardRepo(db: Db): RateGuardRepo {
         .where(eq(protectionLimits.accountId, accountId))
         .get();
 
+      // A3: 보수화된 기본값 — 신규 사용자가 명시적으로 끄지 않는 이상 자동매수 폭주 안전망 활성.
+      // - enabled=true: 폭주 방지가 기본 ON
+      // - windowSeconds=60: 1분 윈도우 (기존 40초보다 길게)
+      // - maxCount=3: 1분 내 동일 종목 자동매수 3회 초과 시 자동→수동 전환 (기존 5회보다 보수적)
       if (!row) {
-        return { enabled: false, windowSeconds: 40, maxCount: 5 };
+        return { enabled: true, windowSeconds: 60, maxCount: 3 };
       }
       return {
         enabled: row.rateGuardEnabled === 1,
-        windowSeconds: row.rateGuardWindowSeconds ?? 40,
-        maxCount: row.rateGuardMaxCount ?? 5,
+        windowSeconds: row.rateGuardWindowSeconds ?? 60,
+        maxCount: row.rateGuardMaxCount ?? 3,
       };
     },
 
