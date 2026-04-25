@@ -46,6 +46,7 @@ import { and, eq } from 'drizzle-orm';
 import WebSocket from 'ws';
 import { ActiveAccountRepo } from './account/active-account';
 import { AiCredentialsRepo } from './ai/ai-credentials-repo';
+import { DartClient } from './ai/dart-client';
 import { LlmClient } from './ai/llm-client';
 import { BackupScheduler } from './backup/scheduler';
 import { defaultDbPath, migrate, openDb } from './db/client';
@@ -184,6 +185,11 @@ function bootstrapDeps(userDataDir: string) {
     logger: eventLogger,
   });
   const llmClient = new LlmClient({ logger: eventLogger });
+  // DART REST 클라이언트 — 빌드 임베드 키 사용 (사용자 BYO X). 키 누락 시 isAvailable=false → 호출자에서 graceful skip.
+  const dartClient = new DartClient({
+    logger: eventLogger,
+    apiKey: process.env.DART_API_KEY ?? '',
+  });
   const protectionGuard = new ProtectionGuard(db, protectionLimitsRepo);
   // 활성 계좌 보장 — 계좌 0개면 null. 자격증명 저장 시 자동 시드.
   const ensured = activeAccounts.ensureActive();
@@ -757,6 +763,7 @@ function bootstrapDeps(userDataDir: string) {
     bus,
     aiCredentialsRepo,
     llmClient,
+    dartClient,
     initialActiveAccountId,
     realtimeFactory: (env) => {
       if (lastRealtime) {

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import babel from '@rolldown/plugin-babel';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
@@ -6,6 +7,39 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react';
 // (build.externalizeDeps: true가 기본값). electron은 devDependencies이므로
 // rollupOptions.external로 수동 추가.
 import { defineConfig } from 'electron-vite';
+
+/**
+ * .env.local 을 빌드타임에 직접 읽어 main 프로세스에 process.env.* 로 임베드.
+ * 사용자 BYO 가 아닌 키(DART/KRX 등)는 빌드 시 코드에 박는다 — 사용자가 따로 발급할 필요 X.
+ *
+ * dev/packaged 모두 main 코드에서 `process.env.DART_API_KEY` 로 접근.
+ */
+function loadEnvLocal(): Record<string, string> {
+  const envPath = resolve(__dirname, '.env.local');
+  try {
+    const content = readFileSync(envPath, 'utf-8');
+    const result: Record<string, string> = {};
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq < 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const value = trimmed.slice(eq + 1).trim();
+      if (key) result[key] = value;
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+const envLocal = loadEnvLocal();
+const EMBEDDED_KEYS = ['DART_API_KEY', 'KRX_API_KEY'] as const;
+const mainDefine: Record<string, string> = {};
+for (const key of EMBEDDED_KEYS) {
+  mainDefine[`process.env.${key}`] = JSON.stringify(envLocal[key] ?? process.env[key] ?? '');
+}
 
 /**
  * Main/Preload 빌드 전략:
@@ -27,6 +61,7 @@ export default defineConfig({
         '@shared': resolve(__dirname, 'src/shared'),
       },
     },
+    define: mainDefine,
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, 'src/main/index.ts') },

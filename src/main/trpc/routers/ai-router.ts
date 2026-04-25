@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { suggestStrategy } from '../../ai/suggest-strategy';
 import { suggestSymbols } from '../../ai/suggest-symbols';
 import { publicProcedure, router } from '../trpc-core';
 
@@ -122,6 +123,44 @@ export const aiRouter = router({
           ok: false as const,
           message: cause instanceof Error ? cause.message : String(cause),
         };
+      }
+    }),
+
+  /**
+   * Phase 2 — 종목별 매직스플릿 strategy 추천.
+   *
+   * 일봉 60/120일 통계 + DART 최근 공시(있으면) 를 LLM 컨텍스트로 주입해
+   * maxStages / 차수별 triggerDropPct + amountKrw + targetProfitPct 를 추천.
+   */
+  suggestStrategy: publicProcedure
+    .input(
+      z.object({
+        pdno: z.string().regex(/^\d{6}$/, 'pdno 는 6자리 숫자'),
+        desiredStages: z.number().int().min(2).max(10).optional(),
+        corpCode: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.aiCredentialsRepo || !ctx.llmClient || !ctx.dartClient) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI 모듈 미초기화' });
+      }
+      try {
+        return await suggestStrategy({
+          pdno: input.pdno,
+          candlesRepo: ctx.candlesRepo,
+          stockMasterRepo: ctx.stockMasterRepo,
+          aiCredentialsRepo: ctx.aiCredentialsRepo,
+          llmClient: ctx.llmClient,
+          dartClient: ctx.dartClient,
+          logger: ctx.logger,
+          ...(input.desiredStages !== undefined ? { desiredStages: input.desiredStages } : {}),
+          ...(input.corpCode !== undefined ? { corpCode: input.corpCode } : {}),
+        });
+      } catch (cause) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: cause instanceof Error ? cause.message : String(cause),
+        });
       }
     }),
 

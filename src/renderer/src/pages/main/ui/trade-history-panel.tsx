@@ -1,3 +1,4 @@
+import { RecommendStrategyButton } from '@renderer/features/ai-strategy-recommend';
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
 import { SymbolMemoForm } from '@renderer/features/symbol-memo';
 import { Button, type HtsTabItem, HtsTabs, OverlayScrollbar, Select } from '@renderer/shared/ui';
@@ -191,6 +192,13 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
           >
             {presetItems.length === 0 ? '템플릿 관리' : '템플릿 불러오기'}
           </Button>
+          <RecommendStrategyButton
+            pdno={pdno}
+            dense
+            onApply={(profile) => {
+              setInitialOverride(profile);
+            }}
+          />
         </div>
         <StrategyForm
           key={`${pdno}:${JSON.stringify(initial ?? {})}`}
