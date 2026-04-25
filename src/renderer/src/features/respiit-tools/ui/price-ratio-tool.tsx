@@ -3,6 +3,9 @@ import { Button, NumberInput, TextInput } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { usePriceRatioTool } from '../model/use-price-ratio-tool';
+import { PriceRatioConfirmModal } from './price-ratio-confirm-modal';
+import { PriceRatioPreviewTable } from './price-ratio-preview-table';
+import { PriceRatioStagesPicker } from './price-ratio-stages-picker';
 
 interface PriceRatioToolProps {
   isOpen: boolean;
@@ -12,24 +15,22 @@ interface PriceRatioToolProps {
 
 /**
  * 리스플릿 매입단가 % 일괄 증감 UI
- * - 종목 선택 (현재 활성 전략에서)
- * - 차수 multi-select (또는 "전체")
- * - 비율(%) 입력
- * - 미리보기 테이블
- * - 적용 버튼 → 확인 모달
+ * - 종목 선택 / 차수 multi-select / 비율(%) 입력 / 미리보기 테이블 / 적용 확인 모달
+ *   섹션은 각각 별도 컴포넌트로 분리 — 본 파일은 폼 조립과 mutation 호출만 담당.
  */
 export const PriceRatioTool = (props: PriceRatioToolProps): ReactElement | null => {
   const tool = usePriceRatioTool();
   const [isConfirming, setIsConfirming] = useState(false);
   const [showAllStages, setShowAllStages] = useState(true);
 
-  // 활성 전략 조회 (pdno 리스트 및 respiitPlan 확인용)
   const activeStrategy = trpc.strategy.getActive.useQuery(
     { pdno: tool.pdno },
     { enabled: !!tool.pdno },
   );
-
   const plan = activeStrategy.data?.profile?.respiitPlan;
+  const stageOptions = plan
+    ? plan.entries.map((e) => ({ nth: e.nth, buyPrice: e.buyPrice, qty: e.qty }))
+    : [];
 
   const handleGeneratePreview = (): void => {
     tool.generatePreview(plan ?? null);
@@ -51,13 +52,12 @@ export const PriceRatioTool = (props: PriceRatioToolProps): ReactElement | null 
     }
   };
 
-  const stageOptions = plan
-    ? plan.entries.map((e) => ({
-        nth: e.nth,
-        buyPrice: e.buyPrice,
-        qty: e.qty,
-      }))
-    : [];
+  const handleStagesAllToggle = (next: boolean): void => {
+    setShowAllStages(next);
+    if (next) {
+      tool.setStages('all');
+    }
+  };
 
   if (!props.isOpen) return null;
 
@@ -71,7 +71,6 @@ export const PriceRatioTool = (props: PriceRatioToolProps): ReactElement | null 
       <div className="modal panel">
         <div className="panel__title">리스플릿 매입단가 % 일괄 증감</div>
         <div className="panel__body" style={{ display: 'grid', gap: '1rem', padding: '1rem' }}>
-          {/* 종목 선택 */}
           <div>
             <label htmlFor="prr-pdno" style={{ display: 'grid', gap: '0.3rem' }}>
               <span className="muted">종목 (6자리)</span>
@@ -86,72 +85,14 @@ export const PriceRatioTool = (props: PriceRatioToolProps): ReactElement | null 
             </label>
           </div>
 
-          {/* 차수 선택 */}
-          {stageOptions.length > 0 && (
-            <div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <span className="muted">적용 차수</span>
-                <label
-                  style={{
-                    display: 'flex',
-                    gap: '0.3rem',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={showAllStages}
-                    onChange={(checkboxEvent: React.ChangeEvent<HTMLInputElement>) => {
-                      setShowAllStages(checkboxEvent.target.checked);
-                      if (checkboxEvent.target.checked) {
-                        tool.setStages('all');
-                      }
-                    }}
-                  />
-                  <span style={{ fontSize: '0.9rem' }}>전체</span>
-                </label>
-              </div>
-              {!showAllStages && (
-                <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  {stageOptions.map((stage: (typeof stageOptions)[0]) => (
-                    <label
-                      key={stage.nth}
-                      style={{
-                        display: 'flex',
-                        gap: '0.3rem',
-                        alignItems: 'center',
-                        cursor: 'pointer',
-                        padding: '0.3rem 0.5rem',
-                        borderRadius: '0.2rem',
-                        backgroundColor: 'var(--color-input-bg)',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={
-                          (tool.stages !== 'all' && tool.stages.includes(stage.nth)) ?? false
-                        }
-                        onChange={(checkboxEvent: React.ChangeEvent<HTMLInputElement>) => {
-                          if (tool.stages === 'all') return;
-                          const updated = checkboxEvent.target.checked
-                            ? [...tool.stages, stage.nth]
-                            : tool.stages.filter((s: number) => s !== stage.nth);
-                          tool.setStages(updated.sort((a: number, b: number) => a - b));
-                        }}
-                      />
-                      <span style={{ fontSize: '0.9rem' }}>
-                        {stage.nth}차 ({stage.qty.toLocaleString()}주 @
-                        {stage.buyPrice.toLocaleString()}원)
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          <PriceRatioStagesPicker
+            options={stageOptions}
+            showAll={showAllStages}
+            selected={tool.stages}
+            onToggleAll={handleStagesAllToggle}
+            onChangeSelected={tool.setStages}
+          />
 
-          {/* 비율 입력 */}
           <div>
             <label htmlFor="prr-ratio" style={{ display: 'grid', gap: '0.3rem' }}>
               <span className="muted">증감율 (%)</span>
@@ -173,70 +114,16 @@ export const PriceRatioTool = (props: PriceRatioToolProps): ReactElement | null 
             </label>
           </div>
 
-          {/* 에러 표시 */}
           {tool.error && (
             <div className="chip chip--down" role="alert">
               {tool.error}
             </div>
           )}
 
-          {/* 미리보기 테이블 */}
           {tool.preview && (
-            <div style={{ overflowX: 'auto' }}>
-              <table
-                style={{
-                  width: '100%',
-                  fontSize: '0.9rem',
-                  borderCollapse: 'collapse',
-                }}
-              >
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <th style={{ textAlign: 'left', padding: '0.5rem' }}>차수</th>
-                    <th style={{ textAlign: 'right', padding: '0.5rem' }}>변경 전</th>
-                    <th style={{ textAlign: 'right', padding: '0.5rem' }}>변경 후</th>
-                    <th style={{ textAlign: 'right', padding: '0.5rem' }}>수량</th>
-                    <th style={{ textAlign: 'right', padding: '0.5rem' }}>소계</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tool.preview.entries.map(
-                    (entry: (typeof tool.preview.entries)[0], idx: number) => {
-                      const original = plan?.entries[idx];
-                      return (
-                        <tr
-                          key={entry.nth}
-                          style={{
-                            borderBottom: '1px solid var(--color-border)',
-                            backgroundColor:
-                              original?.buyPrice !== entry.buyPrice
-                                ? 'var(--color-highlight-bg)'
-                                : '',
-                          }}
-                        >
-                          <td style={{ textAlign: 'left', padding: '0.5rem' }}>{entry.nth}차</td>
-                          <td style={{ textAlign: 'right', padding: '0.5rem' }}>
-                            {original?.buyPrice.toLocaleString()}원
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '0.5rem', fontWeight: 'bold' }}>
-                            {entry.buyPrice.toLocaleString()}원
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '0.5rem' }}>
-                            {entry.qty.toLocaleString()}주
-                          </td>
-                          <td style={{ textAlign: 'right', padding: '0.5rem' }}>
-                            {entry.amountKrw.toLocaleString()}원
-                          </td>
-                        </tr>
-                      );
-                    },
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <PriceRatioPreviewTable entries={tool.preview.entries} originals={plan?.entries} />
           )}
 
-          {/* 버튼 */}
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
             <Button onClick={props.onClose} dense>
               닫기
@@ -256,34 +143,13 @@ export const PriceRatioTool = (props: PriceRatioToolProps): ReactElement | null 
         </div>
       </div>
 
-      {/* 확인 모달 */}
       {isConfirming && tool.preview && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="적용 확인">
-          <div className="modal panel">
-            <div className="panel__title">적용 확인</div>
-            <div className="panel__body" style={{ padding: '1rem', display: 'grid', gap: '1rem' }}>
-              <p>
-                <strong>{tool.preview.entries.length}</strong>개 차수의 매입단가를{' '}
-                <strong>
-                  {tool.ratioPct > 0 ? '+' : ''}
-                  {tool.ratioPct}%
-                </strong>{' '}
-                변경하시겠습니까?
-              </p>
-              <p style={{ fontSize: '0.9rem', color: 'var(--color-text-secondary)' }}>
-                - 자동매매는 자동으로 OFF됩니다
-              </p>
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                <Button onClick={() => setIsConfirming(false)} dense>
-                  취소
-                </Button>
-                <Button onClick={handleConfirmApply} variant="primary" dense>
-                  확인
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PriceRatioConfirmModal
+          count={tool.preview.entries.length}
+          ratioPct={tool.ratioPct}
+          onCancel={() => setIsConfirming(false)}
+          onConfirm={handleConfirmApply}
+        />
       )}
     </div>
   );
