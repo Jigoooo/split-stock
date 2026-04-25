@@ -10,6 +10,7 @@ import {
   StrategySettingsSurface,
   type StrategySettingsTab,
 } from '@renderer/features/edit-strategy';
+import { SentrySettingsForm } from '@renderer/features/error-reporting';
 import { ActivePendingList, PendingCancelForm } from '@renderer/features/pending-cancel-settings';
 import { PriceCorrectionForm } from '@renderer/features/price-correction-settings';
 import { ErrorBoundary, type HtsTabItem, HtsTabs, OverlayScrollbar } from '@renderer/shared/ui';
@@ -22,6 +23,7 @@ const TOP_TABS = [
   { id: 'display', label: '표시' },
   { id: 'orders', label: '주문/체결' },
   { id: 'account', label: '계좌/보안' },
+  { id: 'monitoring', label: '관측' },
   { id: 'backup', label: '백업' },
 ] as const satisfies ReadonlyArray<HtsTabItem<string>>;
 
@@ -131,6 +133,16 @@ export const SettingsPage = (): ReactElement => {
           {topTab === 'account' ? (
             <Section name="보안 · 자격증명">
               <CredentialsSettingsPanel />
+            </Section>
+          ) : null}
+          {topTab === 'monitoring' ? (
+            <Section name="에러 보고 (Sentry)">
+              <div className="panel">
+                <div className="panel__title">에러 보고 (Sentry)</div>
+                <div className="panel__body">
+                  <SentrySettingsForm />
+                </div>
+              </div>
             </Section>
           ) : null}
           {topTab === 'backup' ? (

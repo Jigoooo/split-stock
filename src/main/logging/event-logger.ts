@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { lt } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { eventLogs } from '../db/schema';
 import { maskSecret } from '../security/mask-secret';
@@ -81,6 +82,27 @@ export function teeLoggers(...loggers: EventLogger[]): EventLogger {
       for (const l of loggers) l.log(entry);
     },
   };
+}
+
+/**
+ * event_logs 테이블에서 retentionDays 초과 row 를 일괄 삭제.
+ * 부팅 시 1회 호출 — 장기 운영 시 디스크/DB 비대를 막는다.
+ * 반환값은 삭제된 행 수 (가능한 경우, better-sqlite3 changes()).
+ */
+export function cleanupOldEventLogs(
+  db: Db,
+  retentionDays: number,
+  nowMs: number = Date.now(),
+): number {
+  if (retentionDays <= 0) return 0;
+  const cutoff = new Date(nowMs - retentionDays * 86_400_000);
+  try {
+    const result = db.delete(eventLogs).where(lt(eventLogs.ts, cutoff)).run();
+    return result.changes ?? 0;
+  } catch (cause) {
+    console.error('[event-logger] cleanup failed', { cause });
+    return 0;
+  }
 }
 
 export function createEventLogger(db: Db): EventLogger {

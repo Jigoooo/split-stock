@@ -60,7 +60,7 @@ import { KisHttpClient } from './kis/http-client';
 import { cancelOrRevise } from './kis/order';
 import { TokenStore } from './kis/token-store';
 import { realTimer, type WsLike } from './kis/ws-client';
-import { createEventLogger, teeLoggers } from './logging/event-logger';
+import { cleanupOldEventLogs, createEventLogger, teeLoggers } from './logging/event-logger';
 import { createFileLogger } from './logging/file-logger';
 import { initSentryFromSettings } from './monitoring/sentry';
 import { notifyTrade, notifyWatchOutcome } from './notification/trade-notifier';
@@ -121,6 +121,12 @@ function bootstrapDeps(userDataDir: string) {
   const fileLogger = createFileLogger({ dir: logsDir, retentionDays: 40 });
   // 부팅 시 1회 로테이션 — 40일 경과 파일 정리
   fileLogger.rotate();
+  // event_logs 테이블 retention — 30일 초과 row 삭제. 장기 운영 시 디스크/DB 비대 방지.
+  // 콘솔에 정리 결과를 한 줄 노출 (event_logger 자체에는 기록 안 함 — 자기참조 회피).
+  const removedLogs = cleanupOldEventLogs(db, 30);
+  if (removedLogs > 0) {
+    console.info(`[event-logger] cleaned up ${removedLogs} rows older than 30 days`);
+  }
   const eventLogger = teeLoggers(dbLogger, fileLogger);
   // KIS 공식 RPS 한도: 실전 20 req/s, 모의 5 req/s. 20% margin 확보해 실전 18/모의 4로 운영.
   // 모의에서 15 RPS 디폴트 유지 시 watchEngine/quote-feed 와 balance polling 동시 발생 시
