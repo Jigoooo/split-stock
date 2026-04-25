@@ -24,9 +24,8 @@ export function useWatchEventNotifications(): void {
             `자동감시 실패: ${base}${event.failureReason ? ` · ${event.failureReason}` : ''}`,
           );
           break;
-        case 'EXPIRED':
-          toast(`자동감시 만료: ${base}`);
-          break;
+        // EXPIRED 는 빈도가 높아 toast 제거. event_logs / reports 의 일일 운영 요약(자동감시 실행/실패)
+        // 으로 사용자가 사후 확인 가능. 만료된 watch 는 자동감시 탭의 '히스토리'에서도 노출.
       }
       void Promise.all([
         utils.account.getBalanceWithLots.invalidate(),

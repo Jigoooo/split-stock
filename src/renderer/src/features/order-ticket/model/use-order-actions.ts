@@ -1,6 +1,5 @@
 import { useActiveAccountId } from '@renderer/entities/account';
 import { trpc } from '@renderer/shared/api/trpc';
-import { toast } from 'sonner';
 
 interface PlaceInput {
   pdno: string;
@@ -22,31 +21,10 @@ interface UseOrderActionsReturn {
 export function useOrderActions(): UseOrderActionsReturn {
   const utils = trpc.useUtils();
   const { accountId } = useActiveAccountId();
+  // 자동보정 적용 안내는 toast 제거 — main event_logs 'order.price-correction.applied'
+  // 와 reports 의 일일 운영 요약 카드(호가 자동보정 카운트)로 사용자가 사후 확인.
   const place = trpc.order.placeCash.useMutation({
-    onSuccess: (data) => {
-      void utils.order.listActive.invalidate();
-      // 자동보정으로 입력가가 변경됐다면 사용자에게 명시적 안내 (KIS 에는 보정가가 들어감).
-      const correction = (
-        data as
-          | {
-              priceCorrection?: {
-                applied: boolean;
-                originalPrice?: number;
-                correctedPrice?: number;
-              };
-            }
-          | undefined
-      )?.priceCorrection;
-      if (
-        correction?.applied &&
-        correction.originalPrice !== undefined &&
-        correction.correctedPrice !== undefined
-      ) {
-        toast.info(
-          `호가 자동보정: ${correction.originalPrice.toLocaleString()} → ${correction.correctedPrice.toLocaleString()}원`,
-        );
-      }
-    },
+    onSuccess: () => utils.order.listActive.invalidate(),
   });
   const cancelMany = trpc.order.cancelMany.useMutation({
     onSuccess: () => utils.order.listActive.invalidate(),
