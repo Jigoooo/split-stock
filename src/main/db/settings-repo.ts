@@ -34,6 +34,8 @@ export type ReorderMode = 'NONE' | 'MARKET' | 'LIMIT_AT_LAST_PRICE';
 export const SETTING_KEYS = {
   LAST_ACTIVE_ENV: 'last_active_env',
   WATCH_GLOBAL_ENABLED_PREFIX: 'watch.global.enabled',
+  /** 안전 스위치 master(주문 허용) per-account 영속화 키 prefix. */
+  SAFETY_MASTER_PREFIX: 'safety.master',
   /** 미체결 자동 취소 활성화 여부 ('true'/'false'). */
   PENDING_CANCEL_ENABLED: 'pending_cancel_enabled',
   /** 미체결 지정가 주문 자동 취소 타임아웃 (분, 1~60). */
@@ -111,6 +113,21 @@ export const SETTING_KEYS = {
 
 export function watchGlobalEnabledKey(accountId: number): string {
   return `${SETTING_KEYS.WATCH_GLOBAL_ENABLED_PREFIX}.${accountId}`;
+}
+
+function safetyMasterKey(accountId: number): string {
+  return `${SETTING_KEYS.SAFETY_MASTER_PREFIX}.${accountId}`;
+}
+
+/** 영속화된 안전 스위치 master 값 — 미저장 시 기본 false (차단). */
+export function readSafetyMaster(repo: SettingsRepo, accountId: number): boolean {
+  const raw = repo.get(safetyMasterKey(accountId));
+  return raw === 'true';
+}
+
+/** 안전 스위치 master 변경 시 settings 영속화. */
+export function writeSafetyMaster(repo: SettingsRepo, accountId: number, on: boolean): void {
+  repo.set(safetyMasterKey(accountId), on ? 'true' : 'false');
 }
 
 export const PENDING_CANCEL_DEFAULTS = {

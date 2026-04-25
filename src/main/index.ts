@@ -51,8 +51,10 @@ import { orders } from './db/schema';
 import {
   readPendingCancelConfig,
   readRealtimeConfig,
+  readSafetyMaster,
   SETTING_KEYS,
   SettingsRepo,
+  writeSafetyMaster,
 } from './db/settings-repo';
 import { AuthService } from './kis/auth';
 import { KIS_BASE_URL } from './kis/endpoints';
@@ -148,8 +150,14 @@ function bootstrapDeps(userDataDir: string) {
   };
   const auth = new AuthService(httpByEnv, tokenStore);
   // per-account SafetyState 격리 registry. 각 계좌는 자체 master/symbol/errorLock 슬롯.
-  const safetyRegistry = new SafetyStateRegistry({ logger: eventLogger });
   const settingsRepo = new SettingsRepo(db);
+  // 안전 스위치 master 영속화 hooks 주입 — 부팅 시 settings 에서 복원, setMaster 시 자동 저장.
+  // 사용자가 ON 으로 설정한 뒤 앱을 닫고 다시 켰을 때 항상 차단으로 돌아가던 회귀 차단.
+  const safetyRegistry = new SafetyStateRegistry({
+    logger: eventLogger,
+    readMaster: (accountId) => readSafetyMaster(settingsRepo, accountId),
+    writeMaster: (accountId, on) => writeSafetyMaster(settingsRepo, accountId, on),
+  });
   const strategyRepo = new StrategyRepo(settingsRepo, eventLogger);
   const stockMasterRepo = new StockMasterRepo(db);
   const stockMasterSync = new StockMasterSyncService(stockMasterRepo, settingsRepo);

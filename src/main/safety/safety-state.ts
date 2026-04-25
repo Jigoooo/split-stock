@@ -170,6 +170,12 @@ export class SafetyStateRegistry {
     private readonly opts: {
       logger: EventLogger;
       now?: () => number;
+      /**
+       * 안전 스위치 master 값을 영속화/복원하기 위한 settings hooks.
+       * 미주입 시 in-memory 동작만 (테스트용).
+       */
+      readMaster?: (accountId: number) => boolean;
+      writeMaster?: (accountId: number, on: boolean) => void;
     },
   ) {}
 
@@ -179,15 +185,24 @@ export class SafetyStateRegistry {
   get(accountId: number): SafetyState {
     let state = this.states.get(accountId);
     if (state) return state;
+    // 부팅 후 첫 get 시 settings 에 영속화된 master 값을 복원해 lazy 생성.
+    // 사용자가 ON 설정 후 앱을 닫고 다시 켰을 때 차단으로 돌아가는 회귀 방지.
+    const persistedMaster = this.opts.readMaster?.(accountId) ?? false;
     state = createSafetyState({
       logger: this.opts.logger,
       ...(this.opts.now ? { now: this.opts.now } : {}),
       accountId,
+      initial: { master: persistedMaster },
     });
     this.states.set(accountId, state);
-    // inner state 변화를 registry 레벨로 fan-out.
+    // inner state 변화를 registry 레벨로 fan-out + master 변경 시 settings 영속화.
+    let lastMaster = persistedMaster;
     const unsub = state.subscribe((snapshot) => {
       for (const l of Array.from(this.listeners)) l({ accountId, snapshot });
+      if (snapshot.master !== lastMaster) {
+        lastMaster = snapshot.master;
+        this.opts.writeMaster?.(accountId, snapshot.master);
+      }
     });
     this.innerUnsubscribers.set(accountId, unsub);
     return state;
