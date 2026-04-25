@@ -16,7 +16,7 @@ export const ChartSettingsForm = ({
   onSave,
   onReset,
 }: ChartSettingsFormProps): ReactElement => (
-  <section aria-label="차트 설정" style={{ display: 'grid', gap: '1.2rem' }}>
+  <section aria-label="차트 설정" style={{ display: 'grid', gap: '1.8rem' }}>
     <MaSettingsSection isSaving={isSaving} onMaChange={onMaChange} resolvedMa={resolvedMa} />
     <VolumeSettingsSection
       isSaving={isSaving}

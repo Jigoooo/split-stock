@@ -4,9 +4,10 @@ export function useStockMasterSync() {
   const status = trpc.market.getStockMasterStatus.useQuery();
   const utils = trpc.useUtils();
   const syncMutation = trpc.market.syncStockMaster.useMutation({
-    onSuccess: async () => {
-      await utils.market.listAllStock.invalidate();
-      status.refetch();
+    // fire-and-forget: listAllStock 은 ~수천 row 라 await 하면 syncPending 이 길게 잡힘.
+    onSuccess: () => {
+      void utils.market.listAllStock.invalidate();
+      void status.refetch();
     },
   });
 

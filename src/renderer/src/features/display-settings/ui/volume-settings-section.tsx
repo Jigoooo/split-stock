@@ -15,38 +15,45 @@ export const VolumeSettingsSection = ({
   resolvedVolume,
 }: VolumeSettingsSectionProps): ReactElement => (
   <div>
-    <div className="muted" style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.6rem' }}>
+    <div
+      style={{
+        fontSize: '1.35rem',
+        fontWeight: 700,
+        color: 'var(--fg)',
+        marginBottom: '0.8rem',
+        paddingBottom: '0.4rem',
+        borderBottom: '0.1rem solid var(--border)',
+      }}
+    >
       거래량
     </div>
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, auto)',
-        gap: '0.8rem 1.6rem',
+        gridTemplateColumns: '7rem 9rem auto',
+        gap: '0.6rem 0.8rem',
         alignItems: 'center',
       }}
     >
-      <label htmlFor="vol-up-color" style={{ fontSize: '1.1rem' }}>
-        상승 색상
-      </label>
+      <span style={{ fontSize: '1.1rem' }}>상승 색상</span>
       <input
         id="vol-up-color"
         type="color"
         value={resolvedVolume.upColor.startsWith('rgba') ? '#dc2626' : resolvedVolume.upColor}
         disabled={isSaving}
         onChange={(event) => onVolumeChange('upColor', event.target.value)}
+        aria-label="거래량 상승 색상"
         style={colorInputStyle}
       />
       <span />
-      <label htmlFor="vol-down-color" style={{ fontSize: '1.1rem' }}>
-        하락 색상
-      </label>
+      <span style={{ fontSize: '1.1rem' }}>하락 색상</span>
       <input
         id="vol-down-color"
         type="color"
         value={resolvedVolume.downColor.startsWith('rgba') ? '#2563eb' : resolvedVolume.downColor}
         disabled={isSaving}
         onChange={(event) => onVolumeChange('downColor', event.target.value)}
+        aria-label="거래량 하락 색상"
         style={colorInputStyle}
       />
       <span />

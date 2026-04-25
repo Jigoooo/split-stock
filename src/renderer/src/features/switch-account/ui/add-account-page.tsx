@@ -6,7 +6,6 @@ import {
   type AppEnv,
   type Credentials,
 } from '@shared/contracts';
-import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, type ReactElement, useState } from 'react';
 
 /**
@@ -17,7 +16,6 @@ import { type FormEvent, type ReactElement, useState } from 'react';
  * 창을 닫는다.
  */
 export const AddAccountPage = (): ReactElement => {
-  const qc = useQueryClient();
   const [env, setEnv] = useState<AppEnv>('MOCK');
   const [appKey, setAppKey] = useState('');
   const [appSecret, setAppSecret] = useState('');
@@ -27,9 +25,9 @@ export const AddAccountPage = (): ReactElement => {
   );
 
   const addMutation = trpc.account.add.useMutation({
-    onSuccess: async (data) => {
-      await qc.invalidateQueries();
-      // 메인 창에 성공 브로드캐스트 — 메인이 listAccounts 재조회 + 토스트.
+    // 팝아웃의 query client 는 곧 close 되므로 자체 invalidate 는 의미 없음 — broadcast 만 하고
+    // 메인 창의 onAccountChanged 리스너가 자기 query client 를 무효화한다.
+    onSuccess: (data) => {
       window.appShell?.broadcastAccountChanged?.(data.accountId);
       window.close();
     },

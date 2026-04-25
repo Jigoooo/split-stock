@@ -18,8 +18,10 @@ export const SwitchEnvSection = (): ReactElement => {
   const utils = trpc.useUtils();
   const envQuery = trpc.auth.getEnv.useQuery();
   const setEnv = trpc.auth.setEnv.useMutation({
-    onSuccess: async () => {
-      await utils.invalidate();
+    // await 하면 모든 query refetch 가 끝날 때까지 setEnv.isPending=true 가 유지되어
+    // 전환 버튼이 길게 disable 됨 → fire-and-forget. 각 useQuery 가 자체 refetch.
+    onSuccess: () => {
+      void utils.invalidate();
       reset();
     },
   });

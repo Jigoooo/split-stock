@@ -77,8 +77,10 @@ function CredentialsListSection(): ReactElement {
   const stored = trpc.auth.listStored.useQuery();
   const { switchAccount, isPending: switching } = useSwitchAccount();
   const clearCredentials = trpc.auth.clearCredentials.useMutation({
-    onSuccess: async (_data, variables) => {
-      await Promise.all([utils.auth.listStored.invalidate(), utils.auth.getEnv.invalidate()]);
+    // fire-and-forget: invalidate refetch 를 await 하면 휴지통 버튼이 길게 disable 됨.
+    onSuccess: (_data, variables) => {
+      void utils.auth.listStored.invalidate();
+      void utils.auth.getEnv.invalidate();
       toast.success(`${ENV_LABEL[variables.env]} 자격증명이 삭제되었습니다`);
     },
     onError: (err) => {
@@ -86,8 +88,8 @@ function CredentialsListSection(): ReactElement {
     },
   });
   const logout = trpc.auth.logout.useMutation({
-    onSuccess: async () => {
-      await utils.invalidate();
+    onSuccess: () => {
+      void utils.invalidate();
       toast.success('로그아웃되었습니다');
     },
     onError: (err) => {
@@ -210,11 +212,20 @@ function CredentialsListSection(): ReactElement {
                     <TableGrid.Cell flex={1} numeric>
                       {e.accountNo8}
                     </TableGrid.Cell>
-                    <TableGrid.Cell width={140}>
+                    <TableGrid.Cell width={140} style={{ justifyContent: 'center' }}>
                       {isActive ? (
                         <span
                           className="chip chip--live"
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.3rem',
+                            minHeight: '2.8rem',
+                            minWidth: '7rem',
+                            padding: '0 0.8rem',
+                            boxSizing: 'border-box',
+                          }}
                         >
                           <Check size={12} aria-hidden />
                           현재 활성
@@ -229,6 +240,7 @@ function CredentialsListSection(): ReactElement {
                           onClick={() => {
                             void handleSwitch(e.accountId);
                           }}
+                          style={{ minWidth: '7rem' }}
                         >
                           전환
                         </Button>

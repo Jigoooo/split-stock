@@ -40,9 +40,9 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
     } = props;
     const { lots, position, strategyMeta } = row;
     const [isPending, startTransition] = useTransition();
-    const autoModeMutation = usePositionAutoMode(position.code);
-    const isSelected = selectedPdno === position.code;
     const autoMode = strategyMeta ? deriveStrategyAutoMode(strategyMeta) : 'ALL_OFF';
+    const autoModeMutation = usePositionAutoMode(position.code, autoMode);
+    const isSelected = selectedPdno === position.code;
     const pnlColorClass = getPnlColorClass(position.pnlAmount);
     const buyAmount = position.qty * position.avgPrice;
 
@@ -107,8 +107,7 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
           </TableGrid.Cell>
           <TableGrid.Cell width={POSITION_COLS.auto} className="positions-table__auto-cell">
             <Select
-              value={autoMode}
-              disabled={autoModeMutation.isPending}
+              value={autoModeMutation.displayMode}
               aria-label={`${position.name} 자동매매 상태`}
               className="positions-table__auto-select"
               dense

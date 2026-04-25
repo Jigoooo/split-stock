@@ -44,8 +44,10 @@ export const AccountSelector = ({
   const rootRef = useRef<HTMLDivElement>(null);
 
   const deleteMutation = trpc.account.delete.useMutation({
-    onSuccess: async (data, variables) => {
-      await qc.invalidateQueries();
+    // fire-and-forget: await 하면 모든 query refetch 가 끝날 때까지 deleteMutation.isPending
+    // 으로 휴지통 아이콘이 길게 disable 됨.
+    onSuccess: (data, variables) => {
+      void qc.invalidateQueries();
       window.appShell?.broadcastAccountChanged?.(variables.accountId);
       toast.success(data.loggedOut ? '계좌 삭제 — 로그아웃되었습니다' : '계좌가 삭제되었습니다');
     },

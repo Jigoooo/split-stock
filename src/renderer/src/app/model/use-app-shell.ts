@@ -35,18 +35,20 @@ export function useAppShell(): UseAppShellReturn {
       await queryClient.cancelQueries();
     },
     // 전환 성공 후 모든 쿼리 invalidate — UI 전체가 새 env 기준으로 재조회.
-    onSuccess: async () => {
-      await utils.invalidate();
+    // await 하면 무거운 query refetch 가 끝날 때까지 isSwitchingEnv=true 가 유지되어 UI 가
+    // 길게 disable 됨 → fire-and-forget. 각 useQuery 가 백그라운드에서 자체 refetch 한다.
+    onSuccess: () => {
+      void utils.invalidate();
     },
     // 실패해도 env 상태 revalidation 은 필요 (서버가 일부 상태만 바꿨을 수 있음).
-    onError: async () => {
-      await utils.auth.getEnv.invalidate();
+    onError: () => {
+      void utils.auth.getEnv.invalidate();
     },
   });
   const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: async () => {
-      await utils.auth.getEnv.invalidate();
-      await utils.auth.listStored.invalidate();
+    onSuccess: () => {
+      void utils.auth.getEnv.invalidate();
+      void utils.auth.listStored.invalidate();
     },
   });
 

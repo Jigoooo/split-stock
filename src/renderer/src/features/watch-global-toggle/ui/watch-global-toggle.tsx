@@ -15,10 +15,12 @@ export const WatchGlobalToggle = (): ReactElement => {
   const { accountId } = useActiveAccountId();
   const { isPending, state } = useWatchControlState();
   const setGlobal = trpc.watch.setGlobalEnabled.useMutation({
-    onSuccess: async (_data, variables) => {
-      await utils.watch.getControlState.invalidate();
-      await utils.watch.list.invalidate();
-      await utils.watch.history.invalidate();
+    // fire-and-forget: await 하면 watch.list 등 무거운 query refetch 가 끝날 때까지
+    // setGlobal.isPending 으로 스위치가 길게 disable 됨.
+    onSuccess: (_data, variables) => {
+      void utils.watch.getControlState.invalidate();
+      void utils.watch.list.invalidate();
+      void utils.watch.history.invalidate();
       window.appShell?.broadcastSettingsChanged?.('watch');
       toast.success(variables.enabled ? '자동감시 ON' : '자동감시 OFF');
     },

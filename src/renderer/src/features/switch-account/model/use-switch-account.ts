@@ -24,9 +24,12 @@ export interface UseSwitchAccountResult {
 export function useSwitchAccount(): UseSwitchAccountResult {
   const qc = useQueryClient();
   const setActive = trpc.account.setActive.useMutation({
-    onSuccess: async (_data, variables) => {
+    onSuccess: (_data, variables) => {
       // 활성 계좌 변경은 컨텍스트 자체가 바뀌므로 모든 query invalidate.
-      await qc.invalidateQueries();
+      // await 하면 무거운 query (orderbook/positions/balance 등) 의 refetch 가 끝날 때까지
+      // mutation 이 isPending 으로 잡혀 셀렉터가 길게 disable 됨 → fire-and-forget.
+      // 각 useQuery 는 백그라운드에서 자체 refetch 후 자연스럽게 재렌더된다.
+      void qc.invalidateQueries();
       // popout 윈도우들도 같은 계좌 컨텍스트를 따라가도록 broadcast.
       window.appShell?.broadcastAccountChanged?.(variables.accountId);
       window.appShell?.broadcastSettingsChanged?.('account');

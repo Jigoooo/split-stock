@@ -1,8 +1,8 @@
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
 import { SymbolMemoForm } from '@renderer/features/symbol-memo';
-import { Button, type HtsTabItem, HtsTabs, Select } from '@renderer/shared/ui';
+import { Button, type HtsTabItem, HtsTabs, OverlayScrollbar, Select } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
-import { type ReactElement, useState } from 'react';
+import { type ReactElement, useRef, useState } from 'react';
 import { type TradeHistoryTabKey, useTradeHistoryTabs } from '../model/use-trade-history-tabs';
 import { TradeHistoryList } from './trade-history-list';
 
@@ -14,10 +14,10 @@ export interface TradeHistoryPanelProps {
 }
 
 const ALL_TABS: ReadonlyArray<HtsTabItem<TradeHistoryTabKey>> = [
+  { id: 'strategy', label: '자동매매 설정' },
   { id: 'all', label: '전체보기' },
   { id: 'open', label: '진행중' },
   { id: 'closed', label: '종료' },
-  { id: 'strategy', label: '자동매매 설정' },
   { id: 'memo', label: '종목메모' },
 ];
 
@@ -72,9 +72,7 @@ export const TradeHistoryPanel = (props: TradeHistoryPanelProps): ReactElement =
           ))}
         {tab === 'memo' &&
           (pdno !== null ? (
-            <div style={{ overflow: 'auto' }}>
-              <SymbolMemoForm pdno={pdno} />
-            </div>
+            <MemoTabBody pdno={pdno} />
           ) : (
             <EmptyHint message="좌측에서 종목을 선택하면 해당 종목의 메모를 편집할 수 있습니다." />
           ))}
@@ -100,6 +98,8 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
   const presetItems = presets.data?.presets ?? [];
   const selectedPreset = presetItems.find((preset) => preset.name === selectedTemplate) ?? null;
 
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
   if (active.isPending || presets.isPending) {
     return (
       <div className="muted" style={{ overflow: 'auto', padding: '0.8rem' }}>
@@ -124,65 +124,103 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
         : '내장 기본값 적용 중';
 
   return (
-    <div style={{ overflow: 'auto', padding: '0.8rem', display: 'grid', gap: '0.8rem' }}>
-      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
-        <span className="chip">{sourceLabel}</span>
-        {active.data?.hasOverride ? (
+    <div
+      ref={scrollRef}
+      style={{
+        overflow: 'auto',
+        padding: 0,
+        scrollbarWidth: 'none',
+      }}
+    >
+      <OverlayScrollbar
+        containerRef={scrollRef}
+        orientation="vertical"
+        alwaysVisible={true}
+        offset={{ right: 2 }}
+      />
+      <div
+        style={{
+          padding: '0.8rem 1.6rem 0.8rem 0.8rem',
+          display: 'grid',
+          gap: '0.8rem',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="chip">{sourceLabel}</span>
+          {active.data?.hasOverride ? (
+            <Button
+              onClick={() => {
+                void clear();
+                setInitialOverride(null);
+              }}
+              disabled={isPending}
+              dense
+            >
+              기본값 사용
+            </Button>
+          ) : null}
+          <Select
+            value={selectedTemplate}
+            onChange={(event) => setSelectedTemplate(event.target.value)}
+            aria-label="불러올 템플릿 선택"
+            disabled={isPending || presetItems.length === 0}
+            dense
+            style={{ minWidth: '15rem' }}
+          >
+            <option value="">템플릿 선택</option>
+            {presetItems.map((preset) => (
+              <option key={preset.name} value={preset.name}>
+                {preset.name}
+              </option>
+            ))}
+          </Select>
           <Button
             onClick={() => {
-              void clear();
-              setInitialOverride(null);
+              if (presetItems.length === 0) {
+                onOpenStrategySettings?.();
+                return;
+              }
+              if (selectedPreset) setInitialOverride(selectedPreset.profile);
             }}
-            disabled={isPending}
+            disabled={
+              isPending ||
+              (presetItems.length === 0 && !onOpenStrategySettings) ||
+              (presetItems.length > 0 && !selectedPreset)
+            }
             dense
           >
-            기본값 사용
+            {presetItems.length === 0 ? '템플릿 관리' : '템플릿 불러오기'}
           </Button>
-        ) : null}
-        <Select
-          value={selectedTemplate}
-          onChange={(event) => setSelectedTemplate(event.target.value)}
-          aria-label="불러올 템플릿 선택"
-          disabled={isPending || presetItems.length === 0}
-          dense
-          style={{ minWidth: '15rem' }}
-        >
-          <option value="">템플릿 선택</option>
-          {presetItems.map((preset) => (
-            <option key={preset.name} value={preset.name}>
-              {preset.name}
-            </option>
-          ))}
-        </Select>
-        <Button
-          onClick={() => {
-            if (presetItems.length === 0) {
-              onOpenStrategySettings?.();
-              return;
-            }
-            if (selectedPreset) setInitialOverride(selectedPreset.profile);
+        </div>
+        <StrategyForm
+          key={`${pdno}:${JSON.stringify(initial ?? {})}`}
+          initial={initial}
+          disabled={isPending}
+          chrome="content"
+          submitLabel="종목 설정 저장"
+          onSubmit={(profile) => {
+            void save(profile);
+            setInitialOverride(null);
           }}
-          disabled={
-            isPending ||
-            (presetItems.length === 0 && !onOpenStrategySettings) ||
-            (presetItems.length > 0 && !selectedPreset)
-          }
-          dense
-        >
-          {presetItems.length === 0 ? '템플릿 관리' : '템플릿 불러오기'}
-        </Button>
+        />
       </div>
-      <StrategyForm
-        key={`${pdno}:${JSON.stringify(initial ?? {})}`}
-        initial={initial}
-        disabled={isPending}
-        chrome="content"
-        submitLabel="종목 설정 저장"
-        onSubmit={(profile) => {
-          void save(profile);
-          setInitialOverride(null);
-        }}
-      />
+    </div>
+  );
+};
+
+const MemoTabBody = ({ pdno }: { pdno: string }): ReactElement => {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  return (
+    <div
+      ref={scrollRef}
+      style={{
+        overflow: 'auto',
+        padding: '0.8rem',
+        scrollbarWidth: 'none',
+      }}
+    >
+      <OverlayScrollbar containerRef={scrollRef} orientation="vertical" alwaysVisible={true} />
+      <SymbolMemoForm pdno={pdno} />
     </div>
   );
 };

@@ -35,15 +35,15 @@ export function useEditStrategy(pdno: string | null): UseEditStrategyReturn {
   const active = trpc.strategy.getEffectiveForEdit.useQuery({ pdno });
   const presets = trpc.strategy.listPresets.useQuery();
 
-  const invalidateAll = async (): Promise<void> => {
-    await Promise.all([
-      utils.strategy.getActive.invalidate({ pdno }),
-      utils.strategy.getEffectiveForEdit.invalidate({ pdno }),
-      utils.strategy.getEffectiveForEdit.invalidate(),
-      utils.strategy.listPresets.invalidate(),
-      utils.account.getBalanceWithLots.invalidate(),
-      ...(pdno !== null ? [utils.account.getPositionOverlay.invalidate({ pdno })] : []),
-    ]);
+  // fire-and-forget: await 하면 무거운 query (getBalanceWithLots, getPositionOverlay 등)
+  // refetch 가 끝날 때까지 mutation.isPending 이 잡혀 저장/초기화 버튼이 길게 disable 됨.
+  const invalidateAll = (): void => {
+    void utils.strategy.getActive.invalidate({ pdno });
+    void utils.strategy.getEffectiveForEdit.invalidate({ pdno });
+    void utils.strategy.getEffectiveForEdit.invalidate();
+    void utils.strategy.listPresets.invalidate();
+    void utils.account.getBalanceWithLots.invalidate();
+    if (pdno !== null) void utils.account.getPositionOverlay.invalidate({ pdno });
   };
 
   const broadcast = (): void => {
@@ -52,7 +52,7 @@ export function useEditStrategy(pdno: string | null): UseEditStrategyReturn {
 
   const setActive = trpc.strategy.setActive.useMutation({
     onSuccess: async () => {
-      await invalidateAll();
+      invalidateAll();
       broadcast();
       toast.success(
         pdno === null ? '기본 매매설정이 저장되었습니다' : '활성 매매설정이 저장되었습니다',
@@ -64,7 +64,7 @@ export function useEditStrategy(pdno: string | null): UseEditStrategyReturn {
   });
   const clearActive = trpc.strategy.clearActive.useMutation({
     onSuccess: async () => {
-      await invalidateAll();
+      invalidateAll();
       broadcast();
       toast.success(
         pdno === null ? '기본 매매설정이 초기화되었습니다' : '종목별 설정이 초기화되었습니다',
@@ -76,7 +76,7 @@ export function useEditStrategy(pdno: string | null): UseEditStrategyReturn {
   });
   const savePreset = trpc.strategy.savePreset.useMutation({
     onSuccess: async (_data, variables) => {
-      await invalidateAll();
+      invalidateAll();
       broadcast();
       toast.success(`템플릿 "${variables.name}" 저장됨`);
     },
@@ -86,7 +86,7 @@ export function useEditStrategy(pdno: string | null): UseEditStrategyReturn {
   });
   const deletePreset = trpc.strategy.deletePreset.useMutation({
     onSuccess: async (_data, variables) => {
-      await invalidateAll();
+      invalidateAll();
       broadcast();
       toast.success(`템플릿 "${variables.name}" 삭제됨`);
     },

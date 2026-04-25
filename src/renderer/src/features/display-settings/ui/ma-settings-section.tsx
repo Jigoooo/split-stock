@@ -23,14 +23,23 @@ export const MaSettingsSection = ({
   resolvedMa,
 }: MaSettingsSectionProps): ReactElement => (
   <div>
-    <div className="muted" style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.6rem' }}>
+    <div
+      style={{
+        fontSize: '1.35rem',
+        fontWeight: 700,
+        color: 'var(--fg)',
+        marginBottom: '0.8rem',
+        paddingBottom: '0.4rem',
+        borderBottom: '0.1rem solid var(--border)',
+      }}
+    >
       이동평균선
     </div>
     <TableGrid.Root
       variant="hts"
       stickyHeader={false}
       overlayScrollbar={false}
-      style={{ height: 'auto' }}
+      style={{ height: 'auto', '--hts-row-height': '3.6rem' } as React.CSSProperties}
     >
       <TableGrid.Header>
         <TableGrid.Cell width={56}>표시</TableGrid.Cell>

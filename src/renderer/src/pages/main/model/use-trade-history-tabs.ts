@@ -20,7 +20,7 @@ export interface UseTradeHistoryTabsResult {
 }
 
 export function useTradeHistoryTabs(
-  initial: TradeHistoryTabKey = 'all',
+  initial: TradeHistoryTabKey = 'strategy',
 ): UseTradeHistoryTabsResult {
   const [tab, setTabRaw] = useState<TradeHistoryTabKey>(initial);
   const [isPending, startTransition] = useTransition();
