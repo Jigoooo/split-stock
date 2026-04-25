@@ -1,5 +1,6 @@
 import type { inferRouterInputs, inferRouterOutputs } from '@trpc/server';
 import { accountRouter } from './routers/account-router';
+import { aiRouter } from './routers/ai-router';
 import { authRouter } from './routers/auth-router';
 import { backupRouter } from './routers/backup-router';
 import { displayRouter } from './routers/display-router';
@@ -27,6 +28,7 @@ import { router } from './trpc-core';
 export const appRouter = router({
   auth: authRouter,
   account: accountRouter,
+  ai: aiRouter,
   backup: backupRouter,
   display: displayRouter,
   fees: feesRouter,

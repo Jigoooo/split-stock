@@ -1,5 +1,7 @@
 import type { AppEnv } from '@shared/contracts';
 import type { ActiveAccountRepo } from '../account/active-account';
+import type { AiCredentialsRepo } from '../ai/ai-credentials-repo';
+import type { LlmClient } from '../ai/llm-client';
 import type { BackupScheduler } from '../backup/scheduler';
 import type { Db } from '../db/client';
 import type { SettingsRepo } from '../db/settings-repo';
@@ -64,6 +66,10 @@ export interface Context {
   backupScheduler: BackupScheduler | null;
   /** 즉시주문 직후 잔고 polling 사이클 stale 윈도우를 줄이기 위한 즉시 갱신 핸들. */
   balanceSync: BalanceSync | null;
+  /** AI provider 키 저장소 — 없으면 AI 라우터가 비활성. */
+  aiCredentialsRepo: AiCredentialsRepo | null;
+  /** AI LLM 호출 추상 클라이언트. */
+  llmClient: LlmClient | null;
   currentEnv: AppEnv | null;
   setCurrentEnv: (env: AppEnv | null) => void;
   setActiveAccountId: (id: number | null) => void;

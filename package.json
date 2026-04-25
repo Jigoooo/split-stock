@@ -46,9 +46,11 @@
     "build:linux": "pnpm build && electron-builder --linux --config electron-builder.yml"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.91.1",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@floating-ui/react": "^0.27.19",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@sentry/electron": "^7.11.0",
     "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-router": "^1.168.23",
@@ -68,6 +70,7 @@
     "lightweight-charts": "^5.1.0",
     "lucide-react": "^1.8.0",
     "neverthrow": "^8.2.0",
+    "openai": "^6.34.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-resizable-panels": "^4.10.0",

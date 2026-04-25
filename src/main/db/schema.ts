@@ -273,3 +273,23 @@ export const watchOrders = sqliteTable('watch_orders', {
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   executedAt: integer('executed_at', { mode: 'timestamp_ms' }),
 });
+
+/**
+ * AI provider 키 카탈로그 — 사용자 BYO 로 등록한 OpenAI / Anthropic 키.
+ *
+ * 보안 불변식:
+ *  - api_key 평문 저장 금지. safeStorage.encryptString(plain) 결과를 BLOB 으로 저장.
+ *  - renderer 로 평문 송출 금지 — masked(prefix+****) 만 노출.
+ *
+ * is_default 는 동시에 1개만 true 여야 함 (라우터에서 enforce).
+ */
+export const aiProviderConfigs = sqliteTable('ai_provider_configs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  provider: text('provider').notNull(), // 'openai' | 'anthropic'
+  model: text('model').notNull(),
+  encryptedApiKey: blob('encrypted_api_key', { mode: 'buffer' }).notNull(),
+  apiKeyMasked: text('api_key_masked').notNull(),
+  isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});

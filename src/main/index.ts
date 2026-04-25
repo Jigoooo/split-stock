@@ -45,6 +45,8 @@ import { isRegularMarketOpenKst } from '@shared/trading/market-session';
 import { and, eq } from 'drizzle-orm';
 import WebSocket from 'ws';
 import { ActiveAccountRepo } from './account/active-account';
+import { AiCredentialsRepo } from './ai/ai-credentials-repo';
+import { LlmClient } from './ai/llm-client';
 import { BackupScheduler } from './backup/scheduler';
 import { defaultDbPath, migrate, openDb } from './db/client';
 import { orders } from './db/schema';
@@ -170,6 +172,18 @@ function bootstrapDeps(userDataDir: string) {
   const timeWindowRepo = createTimeWindowRepo(db);
   const rateGuardRepo = createRateGuardRepo(db);
   const protectionLimitsRepo = new ProtectionLimitsRepo(db);
+  // AI provider 키 저장소 + LLM 호출 추상 클라이언트 — Phase 1+ 종목 추천 / Phase 2 strategy 추천에 사용.
+  // 키 미등록 시에도 정상 부팅 (라우터에서 null 가드).
+  const aiCredentialsRepo = new AiCredentialsRepo({
+    db,
+    safeStorage: {
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+      encryptString: (plain) => safeStorage.encryptString(plain),
+      decryptString: (encrypted) => safeStorage.decryptString(encrypted),
+    },
+    logger: eventLogger,
+  });
+  const llmClient = new LlmClient({ logger: eventLogger });
   const protectionGuard = new ProtectionGuard(db, protectionLimitsRepo);
   // 활성 계좌 보장 — 계좌 0개면 null. 자격증명 저장 시 자동 시드.
   const ensured = activeAccounts.ensureActive();
@@ -741,6 +755,8 @@ function bootstrapDeps(userDataDir: string) {
     watchEngine,
     pendingOrderWatcher,
     bus,
+    aiCredentialsRepo,
+    llmClient,
     initialActiveAccountId,
     realtimeFactory: (env) => {
       if (lastRealtime) {
