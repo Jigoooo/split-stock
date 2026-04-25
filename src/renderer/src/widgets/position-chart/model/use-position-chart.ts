@@ -221,7 +221,18 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
               const older = await fetchDailyChartRef.current({ code: pdno, period, toMs });
               if (cancelled) return;
 
-              if (older.candles.length === 0) {
+              const olderOldestDate = older.candles[0]?.date ?? '';
+              const currentOldestDate = merged[0]?.date ?? '';
+              if (
+                older.candles.length === 0 ||
+                (currentOldestDate !== '' && olderOldestDate >= currentOldestDate)
+              ) {
+                if (older.candles.length > 0) {
+                  const mergedResult = mergeOlderCandles(merged, older.candles);
+                  merged = mergedResult.next;
+                  setCandles(merged);
+                  candlesRef.current = merged;
+                }
                 setReachedEnd(true);
                 reachedEndRef.current = true;
                 break;
@@ -283,9 +294,17 @@ export function usePositionChart(pdno: string): UsePositionChartResult {
 
       try {
         const older = await fetchDailyChartRef.current({ code: pdno, period, toMs });
-        if (older.candles.length === 0) {
+        // 빈 응답 또는 새로 받은 candle 중 oldest 보다 더 과거가 하나도 없으면 상장일 도달.
+        const olderOldestDate = older.candles[0]?.date ?? '';
+        if (older.candles.length === 0 || olderOldestDate >= oldest.date) {
           setReachedEnd(true);
           reachedEndRef.current = true;
+          if (older.candles.length > 0) {
+            const merged = mergeOlderCandles(current, older.candles);
+            current = merged.next;
+            setCandles(current);
+            candlesRef.current = current;
+          }
           return;
         }
 
