@@ -82,7 +82,6 @@ export const PositionChart = ({
           aria-label="차트 설정"
           title="차트 설정"
           onClick={openChartSettings}
-          style={{ alignSelf: 'center', display: 'inline-flex', alignItems: 'center' }}
         >
           차트 설정
         </Button>

@@ -1125,6 +1125,30 @@ body {
   width: 3rem;
   min-width: 3rem;
   padding: 0;
+  justify-content: center;
+  align-items: center;
+  /* line-height 1.35(.hts-btn) 영향으로 svg 가 baseline 기준이라 위로 떠 보이는 현상 차단. */
+  line-height: 1;
+}
+
+/* dense 와 icon-only 동시 적용 시 dense 의 min-width(5.2rem) 가 우선되어 버튼이 가로로
+   길어지고 아이콘이 좌측 padding 영역에 치우쳐 보이던 문제 차단. icon-only 면 항상
+   3rem 정사각형 박스로 강제. */
+.hts-btn--icon-only.hts-btn--dense {
+  min-width: 3rem;
+  width: 3rem;
+}
+
+/* icon-only 버튼 내부 svg 가 inline baseline 정렬로 살짝 위로 떠 보이는 문제 차단.
+   block 으로 만들면 부모 flex 의 align-items:center 가 svg 기하 중심을 정확히 잡는다. */
+.hts-btn--icon-only > span[aria-hidden] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+.hts-btn--icon-only svg {
+  display: block;
 }
 
 .hts-btn--primary {
