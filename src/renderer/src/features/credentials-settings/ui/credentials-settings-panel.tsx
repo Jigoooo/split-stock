@@ -1,19 +1,102 @@
+import { SafetySwitchPanel } from '@renderer/features/safety-switch';
+import { CredentialsForm } from '@renderer/features/save-credentials';
+import { AccountSelector } from '@renderer/features/switch-account';
+import { SwitchEnvSection } from '@renderer/features/switch-env';
+import { WatchGlobalToggle } from '@renderer/features/watch-global-toggle';
 import { trpc } from '@renderer/shared/api/trpc';
 import { Button, TableGrid } from '@renderer/shared/ui';
 import { dialog } from '@renderer/shared/ui/dialog';
 import type { ReactElement } from 'react';
+import { useState } from 'react';
 
 const ENV_LABEL = { MOCK: '모의(MOCK)', PROD: '실전(PROD)' } as const;
 
 /**
- * 저장된 KIS App Key / Secret 자격증명을 env 단위로 관리.
+ * 설정 → 계좌/보안 탭의 통합 컨테이너.
  *
- * UX 정책:
- * - 헤더에는 "로그아웃"만 노출 (일상적인 세션 종료).
- * - 자격증명 삭제 = rare + destructive 액션이므로 Settings 에서만 수행.
- * - 각 env 별 개별 삭제 + 전체 삭제(모든 env + 로그아웃) 경로 제공.
+ * 헤더(account-bar)와 동시에 사용되는 기능들 — 헤더는 "빠른 운용 접근",
+ * 이 패널은 "관리/이력 + 위험 액션"을 담당. 모두 동일 store/tRPC 를 통해 자동 동기화.
+ *
+ * 섹션 순서(위 → 아래):
+ *  1. 자격증명 추가 (collapsed by default)
+ *  2. 자격증명 목록 / 삭제
+ *  3. 계좌 전환
+ *  4. 자동 감시 글로벌 토글
+ *  5. 안전 스위치 (주문 차단)
+ *  6. 환경 전환 (PROD/MOCK) — 위험 액션이므로 가장 아래
  */
 export const CredentialsSettingsPanel = (): ReactElement => {
+  return (
+    <div style={{ display: 'grid', gap: '1.2rem' }}>
+      <div className="muted" style={{ fontSize: '0.85em' }}>
+        헤더의 계좌·환경·자동감시·안전 스위치는 이 탭과 실시간 동기화됩니다. 일상적 변경은 헤더에서,
+        관리·삭제·환경 전환은 이 탭에서 진행하세요.
+      </div>
+
+      <CredentialsAddSection />
+      <CredentialsListSection />
+
+      <div className="panel">
+        <div className="panel__title">계좌 전환</div>
+        <div className="panel__body">
+          <AccountSelector />
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel__title">자동 감시 (전역)</div>
+        <div className="panel__body">
+          <WatchGlobalToggle />
+        </div>
+      </div>
+
+      <SafetySwitchPanel />
+
+      <div className="panel">
+        <div className="panel__title">⚠ 환경 전환 (PROD 주의)</div>
+        <div className="panel__body">
+          <SwitchEnvSection />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * 자격증명 추가 — 기본은 접힘. App Key/Secret 입력 폼이 길어서 시선 분산 방지.
+ */
+function CredentialsAddSection(): ReactElement {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="panel">
+      <div
+        className="panel__title"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+      >
+        <span>자격증명 추가</span>
+        <Button onClick={() => setOpen((v) => !v)} dense>
+          {open ? '접기' : '추가하기'}
+        </Button>
+      </div>
+      {open ? (
+        <div className="panel__body">
+          <CredentialsForm />
+        </div>
+      ) : (
+        <div className="panel__body muted" style={{ fontSize: '0.85em' }}>
+          새 환경(MOCK/PROD)의 App Key / Secret 을 추가하려면 "추가하기"를 누르세요.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 저장된 자격증명 목록 + 환경별 / 전체 삭제.
+ * (기존 CredentialsSettingsPanel 의 본문을 분리한 sub-component.)
+ */
+function CredentialsListSection(): ReactElement {
   const utils = trpc.useUtils();
   const envQuery = trpc.auth.getEnv.useQuery();
   const stored = trpc.auth.listStored.useQuery();
@@ -83,8 +166,6 @@ export const CredentialsSettingsPanel = (): ReactElement => {
       ),
     });
     if (!confirmed) return;
-    // 활성 env 먼저 logout(clearStored=true) 로 현재 세션 + 해당 env cred 제거,
-    // 나머지 env 는 clearCredentials 로 개별 제거.
     if (currentEnv) {
       await logout.mutateAsync({ clearStored: true });
     }
@@ -98,9 +179,9 @@ export const CredentialsSettingsPanel = (): ReactElement => {
 
   return (
     <div className="panel">
-      <div className="panel__title">보안 · 자격증명</div>
+      <div className="panel__title">저장된 자격증명</div>
       <div className="panel__body" style={{ display: 'grid', gap: '0.8rem' }}>
-        <div className="muted" style={{ fontSize: '1.1rem' }}>
+        <div className="muted" style={{ fontSize: '0.85em' }}>
           저장된 KIS App Key / Secret 을 환경별로 관리합니다. 삭제 후에는 재로그인 시 다시 입력해야
           합니다.
         </div>
@@ -170,4 +251,4 @@ export const CredentialsSettingsPanel = (): ReactElement => {
       </div>
     </div>
   );
-};
+}
