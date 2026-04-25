@@ -5,9 +5,24 @@ import { DialogProvider } from '@renderer/shared/ui';
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import type { PropsWithChildren, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import superjson from 'superjson';
 import { ipcLink } from 'trpc-electron/renderer';
+
+const QuoteFeedCooldownRuntime = (): null => {
+  useEffect(() => {
+    const shell = window.appShell;
+    if (!shell?.onQuoteFeedCooldown) return;
+    return shell.onQuoteFeedCooldown(({ pdno, failures, reason }) => {
+      // 자동감시 중인 종목인데 시세가 끊겼다면 사용자가 즉시 인지해야 한다.
+      toast.warning(`${pdno} 시세 폴링 일시 중단`, {
+        description: `연속 ${failures}회 실패 (${reason}). 잠시 후 자동 재시도됩니다.`,
+        duration: 5000,
+      });
+    });
+  }, []);
+  return null;
+};
 
 const DisplaySettingsRuntime = (): null => {
   const { settings } = useGetDisplaySettings();
@@ -54,6 +69,7 @@ export const AppProviders = ({ children }: PropsWithChildren): ReactElement => {
       <QueryClientProvider client={queryClient}>
         <DisplaySettingsRuntime />
         <SettingsSyncRuntime />
+        <QuoteFeedCooldownRuntime />
         <Toaster
           position="top-right"
           theme="light"

@@ -380,6 +380,26 @@ function bootstrapDeps(userDataDir: string) {
     });
     watchEngine.onPrice(pdno, price);
   });
+  // C3: 시세 폴링이 5회 연속 실패해 cooldown 진입한 종목을 사용자에게 알림.
+  // 자동감시 중인 종목인데 시세가 안 들어오면 trigger 가 영원히 안 일어나는 상황을
+  // 사용자가 알아야 한다.
+  tieredFeed.on('cooldown', ({ pdno, failures, error }) => {
+    const reason = error.kind ?? 'unknown';
+    eventLogger.log({
+      level: 'WARN',
+      category: 'WATCH',
+      message: 'quote-feed.cooldown',
+      payload: { pdno, failures, reason },
+    });
+    for (const target of BrowserWindow.getAllWindows()) {
+      if (target.isDestroyed()) continue;
+      target.webContents.send('appShell:quote-feed-cooldown', {
+        pdno,
+        failures,
+        reason,
+      });
+    }
+  });
   sharedPriceFeedRef.feed = tieredFeed;
   for (const [pdno, count] of priceFeedRefCounts) {
     if (count > 0) {
@@ -778,6 +798,8 @@ function bootstrapDeps(userDataDir: string) {
   // 자격증명이 복원된 상태에서만 시작 (env 복원 블록 이후에도 start는 유효).
   // start() 자체는 no-op이므로 env가 없어도 safe.
   balanceSync.start();
+  // 즉시주문 직후 trpc 라우터에서 ctx.balanceSync.refresh() 호출로 즉시 갱신할 수 있도록 주입.
+  factory.setBalanceSync(balanceSync);
   const manualOrderReconciler = new ManualOrderReconciler({
     db,
     credentialsRepo,

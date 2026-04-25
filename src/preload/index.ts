@@ -62,6 +62,14 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:trade-event', handler);
     return () => ipcRenderer.off('appShell:trade-event', handler);
   },
+  onQuoteFeedCooldown: (
+    listener: (event: { pdno: string; failures: number; reason: string }) => void,
+  ): (() => void) => {
+    const handler = (_: unknown, event: { pdno: string; failures: number; reason: string }): void =>
+      listener(event);
+    ipcRenderer.on('appShell:quote-feed-cooldown', handler);
+    return () => ipcRenderer.off('appShell:quote-feed-cooldown', handler);
+  },
   setAlwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('appShell:setAlwaysOnTop', on),
   fitContentHeight: (height: number): Promise<void> =>
     ipcRenderer.invoke('appShell:fitContentHeight', height),
@@ -83,6 +91,9 @@ export type AppShellBridge = {
   onSettingsChanged: (listener: (scope: string) => void) => () => void;
   onWatchEvent?: (listener: (event: WatchOutcomeEvent) => void) => () => void;
   onTradeEvent?: (listener: (event: TradeExecutionEvent) => void) => () => void;
+  onQuoteFeedCooldown?: (
+    listener: (event: { pdno: string; failures: number; reason: string }) => void,
+  ) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;
   fitContentHeight: (height: number) => Promise<void>;
 };

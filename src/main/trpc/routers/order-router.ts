@@ -187,7 +187,39 @@ export const orderRouter = router({
           accountId,
         });
       }
-      return result.value;
+
+      // B4: 즉시주문 직후 잔고 즉시 갱신 트리거 — 30초 폴링 사이클 stale 윈도우에서
+      // 가용 현금 초과 매수가 일어나는 것을 줄임. 응답 대기는 안 함 (fire-and-forget).
+      void ctx.balanceSync?.refresh();
+
+      // B1: 보정 적용 시 사용자에게 명시적 안내가 가도록 응답에 priceCorrection 메타 포함.
+      const priceCorrection =
+        input.division === 'LIMIT' && correctedPrice !== input.price
+          ? {
+              applied: true as const,
+              originalPrice: input.price,
+              correctedPrice,
+              strategy: input.side === 'BUY' ? priceCorrectionCfg.buy : priceCorrectionCfg.sell,
+            }
+          : { applied: false as const };
+
+      if (priceCorrection.applied) {
+        ctx.logger.log({
+          level: 'INFO',
+          category: 'ORDER',
+          message: 'order.price-correction.applied',
+          payload: {
+            accountId,
+            pdno: input.pdno,
+            side: input.side,
+            originalPrice: priceCorrection.originalPrice,
+            correctedPrice: priceCorrection.correctedPrice,
+            strategy: priceCorrection.strategy,
+          },
+        });
+      }
+
+      return { ...result.value, priceCorrection };
     }),
 
   /**
