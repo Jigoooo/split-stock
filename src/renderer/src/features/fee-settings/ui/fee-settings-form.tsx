@@ -1,4 +1,5 @@
 import type { FeeEnv } from '@renderer/entities/fee-settings';
+import { NumberInput } from '@renderer/shared/ui';
 import { useState } from 'react';
 import { useFeeSettingsForm } from '../model/use-fee-settings-form';
 
@@ -33,14 +34,14 @@ export function FeeSettingsForm() {
           <label htmlFor={`${env}-buy`} className="block text-sm font-medium text-gray-700 mb-1">
             매입 수수료 (%)
           </label>
-          <input
+          <NumberInput
             id={`${env}-buy`}
-            type="number"
-            step="0.001"
-            min="0"
-            value={formData[env].buy}
-            onChange={(e) => handleFieldChange(env, 'buy', parseFloat(e.target.value) || 0)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            showSpinner
+            allowDecimal
+            step={0.001}
+            min={0}
+            value={String(formData[env].buy)}
+            onValueChange={(raw) => handleFieldChange(env, 'buy', parseFloat(raw || '0') || 0)}
             disabled={isSaving}
           />
           <p className="text-xs text-gray-500 mt-1">예: 0.015 (= 0.015%), 0.35 (= 0.35%)</p>
@@ -50,14 +51,14 @@ export function FeeSettingsForm() {
           <label htmlFor={`${env}-sell`} className="block text-sm font-medium text-gray-700 mb-1">
             매도 수수료 (%)
           </label>
-          <input
+          <NumberInput
             id={`${env}-sell`}
-            type="number"
-            step="0.001"
-            min="0"
-            value={formData[env].sell}
-            onChange={(e) => handleFieldChange(env, 'sell', parseFloat(e.target.value) || 0)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            showSpinner
+            allowDecimal
+            step={0.001}
+            min={0}
+            value={String(formData[env].sell)}
+            onValueChange={(raw) => handleFieldChange(env, 'sell', parseFloat(raw || '0') || 0)}
             disabled={isSaving}
           />
           <p className="text-xs text-gray-500 mt-1">예: 0.015 (= 0.015%), 0.35 (= 0.35%)</p>
@@ -67,14 +68,14 @@ export function FeeSettingsForm() {
           <label htmlFor={`${env}-tax`} className="block text-sm font-medium text-gray-700 mb-1">
             제세금 (%)
           </label>
-          <input
+          <NumberInput
             id={`${env}-tax`}
-            type="number"
-            step="0.001"
-            min="0"
-            value={formData[env].tax}
-            onChange={(e) => handleFieldChange(env, 'tax', parseFloat(e.target.value) || 0)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            showSpinner
+            allowDecimal
+            step={0.001}
+            min={0}
+            value={String(formData[env].tax)}
+            onValueChange={(raw) => handleFieldChange(env, 'tax', parseFloat(raw || '0') || 0)}
             disabled={isSaving}
           />
           <p className="text-xs text-gray-500 mt-1">예: 0.20 (= 0.20%)</p>

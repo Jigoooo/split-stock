@@ -1,3 +1,4 @@
+import { NumberInput } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import type { FeeRates, ProfitAmountState } from '../model/profit-calculator-types';
 import type { ProfitCalcResult } from '../model/use-profit-calc';
@@ -23,11 +24,12 @@ export const ProfitAmountForm = ({
       <label htmlFor="profit-buy-amount" style={styles.label}>
         매수금액 (원)
       </label>
-      <input
+      <NumberInput
         id="profit-buy-amount"
-        type="number"
-        value={input.buyAmount}
-        onChange={(event) => onInputChange({ ...input, buyAmount: Number(event.target.value) })}
+        showSpinner
+        step={1000}
+        value={String(input.buyAmount)}
+        onValueChange={(raw) => onInputChange({ ...input, buyAmount: Number(raw || '0') })}
         style={styles.input}
       />
     </div>
@@ -35,12 +37,14 @@ export const ProfitAmountForm = ({
       <label htmlFor="profit-rate" style={styles.label}>
         수익률 (%)
       </label>
-      <input
+      <NumberInput
         id="profit-rate"
-        type="number"
-        step="0.01"
-        value={input.profitRate}
-        onChange={(event) => onInputChange({ ...input, profitRate: Number(event.target.value) })}
+        showSpinner
+        allowDecimal
+        allowNegative
+        step={0.1}
+        value={String(input.profitRate)}
+        onValueChange={(raw) => onInputChange({ ...input, profitRate: Number(raw || '0') })}
         style={styles.input}
       />
     </div>

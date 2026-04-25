@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactElement, ReactNode } from 'react';
 
-type ButtonVariant = 'default' | 'primary' | 'danger';
+type ButtonVariant = 'default' | 'primary' | 'danger' | 'ghost' | 'ghost-danger';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -27,6 +27,8 @@ export const Button = ({
     iconOnly ? 'hts-btn--icon-only' : '',
     variant === 'primary' ? 'hts-btn--primary' : '',
     variant === 'danger' ? 'hts-btn--danger' : '',
+    variant === 'ghost' ? 'hts-btn--ghost' : '',
+    variant === 'ghost-danger' ? 'hts-btn--ghost hts-btn--ghost-danger' : '',
     active ? 'hts-btn--active' : '',
     className ?? '',
   ]

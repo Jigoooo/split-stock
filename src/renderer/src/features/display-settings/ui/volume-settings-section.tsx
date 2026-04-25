@@ -1,3 +1,4 @@
+import { NumberInput } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { colorInputStyle } from '../config/chart-settings-options';
 import type { VolumeChangeHandler } from '../model/chart-settings-form-types';
@@ -52,17 +53,25 @@ export const VolumeSettingsSection = ({
       <label htmlFor="vol-height" style={{ fontSize: '1.1rem' }}>
         높이 비율 (%)
       </label>
-      <input
-        id="vol-height"
-        type="number"
-        className="hts-input hts-input--dense hts-input--num"
-        min={10}
-        max={60}
-        value={resolvedVolume.heightPercent}
-        disabled={isSaving}
-        onChange={(event) => onVolumeChange('heightPercent', Number(event.target.value))}
-        style={{ width: '5rem' }}
-      />
+      <span style={{ width: '8.5rem', display: 'inline-flex' }}>
+        <NumberInput
+          id="vol-height"
+          dense
+          showSpinner
+          min={10}
+          max={60}
+          step={1}
+          value={String(resolvedVolume.heightPercent)}
+          disabled={isSaving}
+          onValueChange={(raw) => {
+            const next = Number(raw);
+            if (Number.isFinite(next) && next >= 10 && next <= 60) {
+              onVolumeChange('heightPercent', next);
+            }
+          }}
+          aria-label="거래량 높이 비율 (%)"
+        />
+      </span>
       <span className="muted" style={{ fontSize: '1rem' }}>
         10~60%
       </span>

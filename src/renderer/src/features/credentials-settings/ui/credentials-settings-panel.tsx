@@ -1,11 +1,11 @@
 import { SafetySwitchHeader } from '@renderer/features/safety-switch';
-import { AccountSelector } from '@renderer/features/switch-account';
+import { useSwitchAccount } from '@renderer/features/switch-account';
 import { WatchGlobalToggle } from '@renderer/features/watch-global-toggle';
 import { trpc } from '@renderer/shared/api/trpc';
 import { Button, TableGrid } from '@renderer/shared/ui';
 import { dialog } from '@renderer/shared/ui/dialog';
-import { Trash2 } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { Check, LogIn, Trash2 } from 'lucide-react';
+import type { CSSProperties, ReactElement } from 'react';
 import { toast } from 'sonner';
 
 const ENV_LABEL = { MOCK: '모의(MOCK)', PROD: '실전(PROD)' } as const;
@@ -23,13 +23,6 @@ export const CredentialsSettingsPanel = (): ReactElement => {
     <div style={{ display: 'grid', gap: '1.2rem' }}>
       <CredentialsAddSection />
       <CredentialsListSection />
-
-      <div className="panel">
-        <div className="panel__title">계좌 전환</div>
-        <div className="panel__body">
-          <AccountSelector hideAddAccount />
-        </div>
-      </div>
 
       <div className="panel">
         <div className="panel__title">자동 감시 (전역)</div>
@@ -82,6 +75,7 @@ function CredentialsListSection(): ReactElement {
   const utils = trpc.useUtils();
   const envQuery = trpc.auth.getEnv.useQuery();
   const stored = trpc.auth.listStored.useQuery();
+  const { switchAccount, isPending: switching } = useSwitchAccount();
   const clearCredentials = trpc.auth.clearCredentials.useMutation({
     onSuccess: async (_data, variables) => {
       await Promise.all([utils.auth.listStored.invalidate(), utils.auth.getEnv.invalidate()]);
@@ -165,15 +159,23 @@ function CredentialsListSection(): ReactElement {
     }
   };
 
-  const pending = clearCredentials.isPending || logout.isPending;
+  const pending = clearCredentials.isPending || logout.isPending || switching;
+
+  const handleSwitch = async (accountId: number): Promise<void> => {
+    try {
+      await switchAccount(accountId);
+    } catch {
+      /* hook 내부에서 toast 처리 */
+    }
+  };
 
   return (
     <div className="panel">
       <div className="panel__title">저장된 자격증명</div>
       <div className="panel__body" style={{ display: 'grid', gap: '0.8rem' }}>
         <div className="muted" style={{ fontSize: '0.85em' }}>
-          저장된 KIS App Key / Secret 을 환경별로 관리합니다. 삭제 후에는 재로그인 시 다시 입력해야
-          합니다.
+          환경별로 저장된 KIS App Key / Secret 을 관리합니다. <strong>전환</strong> 으로 활성 환경을
+          변경하고, <strong>휴지통</strong> 으로 자격증명을 삭제할 수 있습니다.
         </div>
         {stored.isLoading ? (
           <div className="muted">불러오는 중…</div>
@@ -185,44 +187,72 @@ function CredentialsListSection(): ReactElement {
             stickyHeader={false}
             overlayScrollbar={false}
             aria-label="저장된 자격증명 목록"
-            style={{ height: 'auto' }}
+            style={{ height: 'auto', '--hts-row-height': '3.4rem' } as CSSProperties}
           >
             <TableGrid.Header>
-              <TableGrid.Cell width={140}>환경</TableGrid.Cell>
+              <TableGrid.Cell width={120}>환경</TableGrid.Cell>
               <TableGrid.Cell flex={1}>계좌번호</TableGrid.Cell>
-              <TableGrid.Cell width={120}>현재 활성</TableGrid.Cell>
-              <TableGrid.Cell width={64}>작업</TableGrid.Cell>
+              <TableGrid.Cell width={140}>상태</TableGrid.Cell>
+              <TableGrid.Cell width={56} style={{ justifyContent: 'center' }}>
+                작업
+              </TableGrid.Cell>
             </TableGrid.Header>
             <TableGrid.Body>
-              {entries.map((e) => (
-                <TableGrid.Row key={e.env} style={{ minHeight: '2.8rem' }}>
-                  <TableGrid.Cell width={140}>
-                    <span className={`chip ${e.env === 'PROD' ? 'chip--down' : 'chip--up'}`}>
-                      {ENV_LABEL[e.env]}
-                    </span>
-                  </TableGrid.Cell>
-                  <TableGrid.Cell flex={1} numeric>
-                    {e.accountNo8}
-                  </TableGrid.Cell>
-                  <TableGrid.Cell width={120}>
-                    {currentEnv === e.env ? <span className="chip chip--up">활성</span> : '-'}
-                  </TableGrid.Cell>
-                  <TableGrid.Cell width={64}>
-                    <Button
-                      iconLeading={<Trash2 size={14} />}
-                      iconOnly
-                      dense
-                      disabled={pending}
-                      aria-label={`${ENV_LABEL[e.env]} 자격증명 삭제`}
-                      onClick={() => {
-                        void handleDeleteOne(e.env);
-                      }}
-                    >
-                      삭제
-                    </Button>
-                  </TableGrid.Cell>
-                </TableGrid.Row>
-              ))}
+              {entries.map((e) => {
+                const isActive = currentEnv === e.env;
+                return (
+                  <TableGrid.Row key={e.env}>
+                    <TableGrid.Cell width={120}>
+                      <span className={`chip ${e.env === 'PROD' ? 'chip--down' : 'chip--up'}`}>
+                        {ENV_LABEL[e.env]}
+                      </span>
+                    </TableGrid.Cell>
+                    <TableGrid.Cell flex={1} numeric>
+                      {e.accountNo8}
+                    </TableGrid.Cell>
+                    <TableGrid.Cell width={140}>
+                      {isActive ? (
+                        <span
+                          className="chip chip--live"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+                        >
+                          <Check size={12} aria-hidden />
+                          현재 활성
+                        </span>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          dense
+                          iconLeading={<LogIn size={13} />}
+                          disabled={pending}
+                          aria-label={`${ENV_LABEL[e.env]} 환경으로 전환`}
+                          onClick={() => {
+                            void handleSwitch(e.accountId);
+                          }}
+                        >
+                          전환
+                        </Button>
+                      )}
+                    </TableGrid.Cell>
+                    <TableGrid.Cell width={56} style={{ justifyContent: 'center' }}>
+                      <Button
+                        variant="ghost-danger"
+                        iconLeading={<Trash2 size={14} />}
+                        iconOnly
+                        dense
+                        disabled={pending}
+                        aria-label={`${ENV_LABEL[e.env]} 자격증명 삭제`}
+                        title="삭제"
+                        onClick={() => {
+                          void handleDeleteOne(e.env);
+                        }}
+                      >
+                        삭제
+                      </Button>
+                    </TableGrid.Cell>
+                  </TableGrid.Row>
+                );
+              })}
             </TableGrid.Body>
           </TableGrid.Root>
         )}

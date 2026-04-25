@@ -1180,6 +1180,32 @@ body {
   border-color: var(--fg);
 }
 
+/* ── ghost: transparent surface, hover-only feedback. 테이블 액션 컬럼 등 저시각잡음 영역용. ── */
+.hts-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--fg-3);
+  box-shadow: none;
+}
+
+.hts-btn--ghost:hover:not(:disabled) {
+  background: var(--accent-tint-12);
+  border-color: transparent;
+  color: var(--accent);
+  box-shadow: none;
+}
+
+.hts-btn--ghost:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: 0 0 0 0.2rem var(--accent-ring);
+}
+
+.hts-btn--ghost-danger:hover:not(:disabled) {
+  background: var(--up-soft);
+  color: var(--up);
+}
+
 .hts-segmented {
   display: inline-flex;
   gap: 0.25rem;

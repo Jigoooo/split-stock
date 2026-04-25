@@ -1,4 +1,4 @@
-import { Button, TableGrid } from '@renderer/shared/ui';
+import { Button, NumberInput, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
 interface GridDensityFormProps {
@@ -26,23 +26,25 @@ export const GridDensityForm = ({
         <label htmlFor="grid-row-height" style={{ fontSize: '1.2rem', whiteSpace: 'nowrap' }}>
           행 높이 (px)
         </label>
-        <input
-          id="grid-row-height"
-          type="number"
-          className="hts-input hts-input--dense hts-input--num"
-          min={18}
-          max={60}
-          value={rowHeightPx}
-          disabled={isSaving}
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if (Number.isFinite(val) && val >= 18 && val <= 60) {
-              onChange(val);
-            }
-          }}
-          aria-label="그리드 행 높이 px"
-          style={{ width: '6rem' }}
-        />
+        <span style={{ width: '8.5rem', display: 'inline-flex' }}>
+          <NumberInput
+            id="grid-row-height"
+            dense
+            showSpinner
+            min={18}
+            max={60}
+            step={1}
+            value={String(rowHeightPx)}
+            disabled={isSaving}
+            onValueChange={(raw) => {
+              const next = Number(raw);
+              if (Number.isFinite(next) && next >= 18 && next <= 60) {
+                onChange(next);
+              }
+            }}
+            aria-label="그리드 행 높이 px"
+          />
+        </span>
         <span className="muted" style={{ fontSize: '1rem' }}>
           18~60px
         </span>

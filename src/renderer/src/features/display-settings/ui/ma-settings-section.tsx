@@ -4,7 +4,7 @@ import {
   type MaPeriod,
   type MaSettings,
 } from '@renderer/entities/display-settings';
-import { Select, TableGrid } from '@renderer/shared/ui';
+import { NumberInput, Select, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { colorInputStyle, LINE_STYLE_OPTIONS, MA_LABEL } from '../config/chart-settings-options';
 import type { MaChangeHandler } from '../model/chart-settings-form-types';
@@ -14,6 +14,8 @@ interface MaSettingsSectionProps {
   onMaChange: MaChangeHandler;
   resolvedMa: (period: MaPeriod) => MaSettings;
 }
+
+const CELL_FLUSH_STYLE = { padding: '0.2rem 0.4rem' };
 
 export const MaSettingsSection = ({
   isSaving,
@@ -33,9 +35,10 @@ export const MaSettingsSection = ({
       <TableGrid.Header>
         <TableGrid.Cell width={56}>표시</TableGrid.Cell>
         <TableGrid.Cell width={64}>기간</TableGrid.Cell>
-        <TableGrid.Cell width={96}>색상</TableGrid.Cell>
-        <TableGrid.Cell width={72}>두께</TableGrid.Cell>
-        <TableGrid.Cell flex={1}>스타일</TableGrid.Cell>
+        <TableGrid.Cell width={56}>색상</TableGrid.Cell>
+        <TableGrid.Cell width={88}>두께</TableGrid.Cell>
+        <TableGrid.Cell width={120}>스타일</TableGrid.Cell>
+        <TableGrid.Cell flex={1}> </TableGrid.Cell>
       </TableGrid.Header>
       <TableGrid.Body>
         {MA_PERIODS.map((period) => {
@@ -52,7 +55,7 @@ export const MaSettingsSection = ({
                 />
               </TableGrid.Cell>
               <TableGrid.Cell width={64}>{MA_LABEL[period]}</TableGrid.Cell>
-              <TableGrid.Cell width={96}>
+              <TableGrid.Cell width={56} style={CELL_FLUSH_STYLE}>
                 <input
                   type="color"
                   value={ma.color.startsWith('rgba') ? '#888888' : ma.color}
@@ -62,20 +65,25 @@ export const MaSettingsSection = ({
                   style={colorInputStyle}
                 />
               </TableGrid.Cell>
-              <TableGrid.Cell width={72}>
-                <input
-                  type="number"
-                  className="hts-input hts-input--dense hts-input--num"
+              <TableGrid.Cell width={88} style={CELL_FLUSH_STYLE}>
+                <NumberInput
+                  dense
+                  showSpinner
                   min={1}
                   max={5}
-                  value={ma.width}
+                  step={1}
+                  value={String(ma.width)}
                   disabled={isSaving}
-                  onChange={(event) => onMaChange(period, 'width', Number(event.target.value))}
+                  onValueChange={(raw) => {
+                    const next = Number(raw);
+                    if (Number.isFinite(next) && next >= 1 && next <= 5) {
+                      onMaChange(period, 'width', next);
+                    }
+                  }}
                   aria-label={`${MA_LABEL[period]} 두께`}
-                  style={{ width: '4rem' }}
                 />
               </TableGrid.Cell>
-              <TableGrid.Cell flex={1}>
+              <TableGrid.Cell width={120} style={CELL_FLUSH_STYLE}>
                 <Select
                   dense
                   value={ma.style}
@@ -84,6 +92,7 @@ export const MaSettingsSection = ({
                     onMaChange(period, 'style', event.target.value as LineStyleType)
                   }
                   aria-label={`${MA_LABEL[period]} 스타일`}
+                  style={{ width: '100%' }}
                 >
                   {LINE_STYLE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -92,6 +101,7 @@ export const MaSettingsSection = ({
                   ))}
                 </Select>
               </TableGrid.Cell>
+              <TableGrid.Cell flex={1}> </TableGrid.Cell>
             </TableGrid.Row>
           );
         })}
