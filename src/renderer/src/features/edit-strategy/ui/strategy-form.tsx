@@ -20,7 +20,6 @@ export interface StrategyFormProps {
   initial: StrategyProfile | null;
   disabled?: boolean | undefined;
   onSubmit: (profile: StrategyProfile) => void;
-  onApplyPreset?: (profile: StrategyProfile) => void;
   presetName?: string;
   onSaveAsPreset?: (name: string, profile: StrategyProfile) => void;
   chrome?: FormChrome;
