@@ -1,8 +1,28 @@
 import { SafetySwitchHeader } from '@renderer/features/safety-switch';
 import { AccountSelector } from '@renderer/features/switch-account';
 import { WatchGlobalToggle } from '@renderer/features/watch-global-toggle';
+import { trpc } from '@renderer/shared/api/trpc';
 import type { AppEnv } from '@shared/contracts';
 import type { ReactElement } from 'react';
+
+/**
+ * REST 폴링으로 강등된 종목이 있을 때만 chip 으로 알림.
+ * 평소(WS 슬롯 안에 모두 들어감)에는 노출 안 함 — 헤더 다이어트.
+ */
+const RealtimeFallbackChip = (): ReactElement | null => {
+  const { data } = trpc.monitoring.getRealtimeStats.useQuery(undefined, {
+    refetchInterval: 5_000,
+  });
+  if (!data || data.restFallbackCount <= 0) return null;
+  return (
+    <span
+      className="chip chip--down"
+      title={`WS 슬롯 ${data.wsCount}/${data.capacity} · REST 폴링 ${data.restFallbackCount}종목 (capacity 초과)`}
+    >
+      REST {data.restFallbackCount}
+    </span>
+  );
+};
 
 export interface AccountBarProps {
   /** 현재 활성 환경 — null 일 때만 "연결 안 됨" 칩 표시. */
@@ -25,6 +45,7 @@ export const AccountBar = ({ env }: AccountBarProps): ReactElement => (
       <span className="app-header__section-label">상태</span>
       <SafetySwitchHeader />
       <WatchGlobalToggle />
+      <RealtimeFallbackChip />
     </div>
   </div>
 );
