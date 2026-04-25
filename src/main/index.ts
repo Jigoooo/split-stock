@@ -431,6 +431,10 @@ function bootstrapDeps(userDataDir: string) {
     timeoutMs: pendingCancelCfg.timeoutMs,
     maxRetries: pendingCancelCfg.maxRetries,
     reorderMode: 'NONE',
+    // A4: 토큰/네트워크 일시 실패 시 같은 간격으로 KIS hammering 하지 않도록 지수 백오프.
+    // 첫 만료는 timeoutMs 그대로, rearm 1회 → ×3, rearm 2회 → ×9, 그 이후도 ×9 cap.
+    backoffMultiplier: 3,
+    backoffMaxFactor: 9,
     onExpire: async (entry, attempt) => {
       // 토글 OFF 후 메모리에 남아있던 watcher entry 가 만료되어도 KIS cancel 호출하지 않도록
       // 매 호출마다 현재 enabled 를 재확인. 사용자가 OFF 한 시점부터는 자동취소가 일어나면 안 됨.

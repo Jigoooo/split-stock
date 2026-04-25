@@ -47,6 +47,15 @@ export interface PendingOrderWatcherOptions {
     mode: Exclude<ReorderMode, 'NONE'>,
     attempt: number,
   ) => Promise<string | null | undefined>;
+  /**
+   * A4: rearm 지수 백오프. 다음 만료 까지의 timeout 을 `timeoutMs * (multiplier ^ attempts)`
+   * 로 늘려 KIS 토큰/네트워크 일시 실패 시 hammering 을 막는다.
+   * - default 1 (백오프 없음, BC 보존)
+   * - 권장 3 (10s → 30s → 90s → ...)
+   */
+  backoffMultiplier?: number;
+  /** 백오프 cap — multiplier^attempts 가 이 값을 넘지 않도록 clamp. default 9. */
+  backoffMaxFactor?: number;
 }
 
 function keyId(k: PendingOrderKey): string {
@@ -133,6 +142,12 @@ export class PendingOrderWatcher {
 
   private arm(entry: Entry): void {
     entry.handle?.clear();
+    const multiplier = this.opts.backoffMultiplier ?? 1;
+    const maxFactor = this.opts.backoffMaxFactor ?? 9;
+    // 첫 발사: attempts=0 → factor=1, 두번째 rearm: attempts=1 → factor=multiplier, ...
+    const rawFactor = multiplier <= 1 ? 1 : multiplier ** entry.attempts;
+    const factor = Math.min(rawFactor, maxFactor);
+    const delayMs = Math.max(1, Math.floor(this.opts.timeoutMs * factor));
     entry.handle = this.opts.timer.setTimeout(() => {
       if (entry.disposed) return;
       entry.attempts += 1;
@@ -161,6 +176,6 @@ export class PendingOrderWatcher {
         });
       }
       // NONE 모드이면 caller가 직접 rearm() 호출 (기존 동작 유지)
-    }, this.opts.timeoutMs);
+    }, delayMs);
   }
 }
