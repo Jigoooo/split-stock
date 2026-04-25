@@ -1,13 +1,11 @@
-import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { highlightMatches } from '@renderer/shared/lib/search';
 import { Button, TextInput } from '@renderer/shared/ui';
-import { AnimatePresence, motion } from 'framer-motion';
 import { ExternalLink, RefreshCw, Search } from 'lucide-react';
 import type { ChangeEvent, CompositionEvent, KeyboardEvent, ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { StockListEntry } from '../model/use-stock-list';
 import { useStockList } from '../model/use-stock-list';
 import { useStockMasterSync } from '../model/use-stock-master-sync';
+import { StockPickerDropdown } from './stock-picker-dropdown';
 
 const MAX_VISIBLE = 40;
 
@@ -30,8 +28,11 @@ export interface StockPickerListProps {
 /**
  * 종목 검색 autocomplete 콤보박스.
  * - 상단: lucide Search 아이콘 + 인풋 + ExternalLink 팝아웃 + RefreshCw(마스터 동기화)
- * - 포커스/입력 시에만 드롭다운이 인풋 아래 표시 (`alwaysOpen`으로 강제 노출 가능)
+ * - 포커스/입력 시에만 드롭다운(StockPickerDropdown) 노출 (`alwaysOpen` 으로 강제 노출 가능)
  * - 한글 초성/퍼지/띄어쓰기 검색 (createKoreanSearchRegex) + 매칭 하이라이트
+ *
+ * 본 파일은 입력 / IME / 키보드 네비게이션 / 마스터 sync 액션을 다루고, 드롭다운 렌더는
+ * StockPickerDropdown 으로 위임한다.
  */
 export const StockPickerList = (props: StockPickerListProps): ReactElement => {
   const {
@@ -70,13 +71,6 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
 
   const visible = alwaysOpen ? list.entries : list.entries.slice(0, maxVisible);
   const open = alwaysOpen || (focused && keyword.trim().length > 0);
-  const dropdownMotionProps = alwaysOpen
-    ? {}
-    : {
-        initial: { opacity: 0, y: -3 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, y: -3 },
-      };
 
   const commit = (entry: StockListEntry): void => {
     pendingEnterSelectionRef.current = null;
@@ -196,78 +190,20 @@ export const StockPickerList = (props: StockPickerListProps): ReactElement => {
           종목 마스터가 비어 있습니다. 새로고침 아이콘으로 받아오세요.
         </div>
       ) : null}
-      <AnimatePresence initial={false}>
-        {open ? (
-          <motion.div
-            role="listbox"
-            aria-label="종목 검색 결과"
-            className="panel"
-            transition={{ duration: 0.1 }}
-            {...dropdownMotionProps}
-            style={{
-              position: alwaysOpen ? 'relative' : 'absolute',
-              top: alwaysOpen ? undefined : '100%',
-              left: 0,
-              right: 0,
-              marginTop: '0.3rem',
-              zIndex: 10,
-              maxHeight: alwaysOpen ? undefined : '28rem',
-              height: alwaysOpen ? '100%' : undefined,
-              overflowY: 'auto',
-              flex: alwaysOpen ? 1 : undefined,
-              minHeight: alwaysOpen ? 0 : undefined,
-            }}
-          >
-            {list.isLoading ? (
-              <div className="panel__body muted">로딩 중…</div>
-            ) : visible.length === 0 ? (
-              <div className="panel__body muted">결과 없음</div>
-            ) : (
-              visible.map((entry, idx) => {
-                const isActive = idx === activeIndex;
-                const isSelected = entry.pdno === selectedPdno;
-                return (
-                  <button
-                    type="button"
-                    key={entry.pdno}
-                    role="option"
-                    aria-selected={isActive}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      commit(entry);
-                    }}
-                    onMouseEnter={() => setActiveIndex(idx)}
-                    className={isActive ? 'hts-btn hts-btn--primary' : 'hts-btn'}
-                    style={{
-                      width: '100%',
-                      height: rowHeightPx,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'flex-start',
-                      gap: '0.8rem',
-                      borderRadius: 0,
-                      padding: dense ? '0 0.8rem' : '0 1rem',
-                      textAlign: 'left',
-                      background: isSelected && !isActive ? 'var(--up-soft)' : undefined,
-                    }}
-                  >
-                    <span className="num" style={{ minWidth: '6rem' }}>
-                      {highlightMatches(entry.pdno, keyword)}
-                    </span>
-                    <span style={{ flex: 1 }}>{highlightMatches(entry.name, keyword)}</span>
-                    {entry.sector ? <span className="muted">{entry.sector}</span> : null}
-                  </button>
-                );
-              })
-            )}
-            {!alwaysOpen && list.entries.length > visible.length ? (
-              <div className="panel__body muted" style={{ fontSize: '1rem' }}>
-                상위 {visible.length}건 표시 중 · 전체 {thousandSeparator(list.entries.length)}건
-              </div>
-            ) : null}
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      <StockPickerDropdown
+        open={open}
+        alwaysOpen={alwaysOpen}
+        isLoading={list.isLoading}
+        visible={visible}
+        totalCount={list.entries.length}
+        activeIndex={activeIndex}
+        selectedPdno={selectedPdno}
+        keyword={keyword}
+        rowHeightPx={rowHeightPx}
+        dense={dense}
+        onCommit={commit}
+        onHoverIndex={setActiveIndex}
+      />
     </div>
   );
 };
