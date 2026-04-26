@@ -82,7 +82,7 @@ export function HtsTabs<Id extends string = string>(props: HtsTabsProps<Id>): Re
               color: isActive ? 'var(--hts-text, inherit)' : 'var(--hts-muted, rgba(0,0,0,0.55))',
               background: 'transparent',
               border: 'none',
-              borderBottom: isActive ? '2px solid var(--up, #c0392b)' : '2px solid transparent',
+              borderBottom: isActive ? '2px solid var(--up)' : '2px solid transparent',
               marginBottom: '-1px', // 라인 위로 살짝 올라가 active border 가 라인을 덮음
               cursor: 'pointer',
               outline: 'none',
