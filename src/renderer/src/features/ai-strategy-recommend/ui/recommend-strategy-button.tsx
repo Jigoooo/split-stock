@@ -1,9 +1,10 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { Button } from '@renderer/shared/ui';
 import { DEFAULT_STRATEGY_PROFILE, type StrategyProfile } from '@shared/contracts';
-import { Sparkles } from 'lucide-react';
+import { Eye, Sparkles } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { toast } from 'sonner';
+import { StrategyPreviewModal } from './strategy-preview-modal';
 
 export interface RecommendStrategyButtonProps {
   pdno: string;
@@ -25,6 +26,7 @@ export const RecommendStrategyButton = ({
   const aiList = trpc.ai.listConfigs.useQuery();
   const hasDefault = (aiList.data?.configs ?? []).some((c) => c.isDefault);
   const [suggested, setSuggested] = useState<SuggestedView | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const mut = trpc.ai.suggestStrategy.useMutation({
     onSuccess: (res) => {
@@ -34,6 +36,7 @@ export const RecommendStrategyButton = ({
       }
       const profile = mergeIntoProfile(res.suggestion);
       setSuggested({ profile, reasoning: res.suggestion.reasoning });
+      setPreviewOpen(true);
     },
     onError: (err) => {
       toast.error(`AI strategy 추천 실패: ${err.message}`);
@@ -55,9 +58,16 @@ export const RecommendStrategyButton = ({
     onApply(suggested.profile, suggested.reasoning);
     toast.success('AI 추천 strategy 가 폼에 적용되었습니다. 저장 버튼으로 확정하세요.');
     setSuggested(null);
+    setPreviewOpen(false);
   };
 
-  const handleDismiss = (): void => setSuggested(null);
+  const handleDismiss = (): void => {
+    setPreviewOpen(false);
+  };
+
+  const handleReopenPreview = (): void => {
+    if (suggested) setPreviewOpen(true);
+  };
 
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -78,32 +88,30 @@ export const RecommendStrategyButton = ({
       >
         {mut.isPending ? '분석 중...' : 'AI 추천'}
       </Button>
-      {suggested ? (
-        <span
+      {suggested && !previewOpen ? (
+        <Button
+          variant="ghost"
+          dense
+          iconLeading={<Eye size={14} />}
+          onClick={handleReopenPreview}
+          title={suggested.reasoning}
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.4rem 0.8rem',
-            border: '0.1rem solid #D97757',
-            borderRadius: '0.4rem',
-            backgroundColor: 'rgba(217, 119, 87, 0.08)',
-            fontSize: '1.1rem',
-            color: 'var(--fg)',
+            color: '#D97757',
+            borderColor: '#D97757',
+            borderStyle: 'solid',
+            borderWidth: '0.1rem',
           }}
         >
-          <span title={suggested.reasoning}>
-            {suggested.profile.maxStages}차 / 첫 매수{' '}
-            {suggested.profile.buyRules[0]?.amountKrw.toLocaleString() ?? '?'}원
-          </span>
-          <Button variant="primary" dense onClick={handleApply}>
-            적용
-          </Button>
-          <Button variant="ghost" dense onClick={handleDismiss}>
-            취소
-          </Button>
-        </span>
+          {suggested.profile.maxStages}차 추천 · 상세 보기
+        </Button>
       ) : null}
+      <StrategyPreviewModal
+        open={previewOpen}
+        profile={suggested?.profile ?? null}
+        reasoning={suggested?.reasoning ?? ''}
+        onApply={handleApply}
+        onDismiss={handleDismiss}
+      />
     </div>
   );
 };

@@ -6,6 +6,14 @@ import type { RecommendationViewState } from '../model/use-symbol-recommendation
 import { ExtraPdnoPicker } from './extra-pdno-picker';
 import { RecommendCard } from './recommend-card';
 
+function formatRelative(ts: number): string {
+  const elapsedSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (elapsedSec < 60) return `${elapsedSec}초 전`;
+  const min = Math.floor(elapsedSec / 60);
+  if (min < 60) return `${min}분 전`;
+  return `${Math.floor(min / 60)}시간 전`;
+}
+
 export interface RecommendModalProps {
   view: RecommendationViewState;
   onClose: () => void;
@@ -75,7 +83,14 @@ export const RecommendModal = ({
                 marginBottom: '1.2rem',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.6rem',
+                  flexWrap: 'wrap',
+                }}
+              >
                 <Sparkles size={18} color="#D97757" />
                 <h2
                   style={{
@@ -87,6 +102,20 @@ export const RecommendModal = ({
                 >
                   AI 추천
                 </h2>
+                {view.fromCache && view.lastFetchedAt !== null ? (
+                  <span
+                    className="muted"
+                    title="LLM 비용 절감을 위해 10분 동안 결과를 캐시합니다. '다시 분석' 버튼으로 강제 재호출."
+                    style={{
+                      fontSize: '1rem',
+                      padding: '0.2rem 0.55rem',
+                      borderRadius: '999px',
+                      border: '0.1rem dashed var(--border)',
+                    }}
+                  >
+                    캐시됨 · {formatRelative(view.lastFetchedAt)}
+                  </span>
+                ) : null}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <Button

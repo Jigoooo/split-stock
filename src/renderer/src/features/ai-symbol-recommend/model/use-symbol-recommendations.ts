@@ -1,5 +1,16 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+
+const CACHE_TTL_MS = 10 * 60 * 1000; // 10분 — LLM 비용 절감 + 모달 재오픈 시 즉시 표시.
+
+interface RecommendCache {
+  ranked: RecommendedItem[];
+  emptyReason: string | null;
+  rejectedCount: number;
+  durationMs: number;
+  extras: ReadonlyArray<string>;
+  fetchedAt: number;
+}
 
 export interface RecommendedItem {
   pdno: string;
@@ -28,6 +39,10 @@ export interface RecommendationViewState {
   rejectedCount: number;
   durationMs: number;
   error: string | null;
+  /** 마지막 추천 결과 적재 시각 (ms epoch) — 캐시 anniversary 표시용. */
+  lastFetchedAt: number | null;
+  /** true 면 마지막 mutation 없이 캐시에서 복원된 결과. UI 가 "캐시됨" 안내. */
+  fromCache: boolean;
 }
 
 /**
@@ -44,13 +59,28 @@ export function useSymbolRecommendations() {
     rejectedCount: 0,
     durationMs: 0,
     error: null,
+    lastFetchedAt: null,
+    fromCache: false,
   });
+  const cacheRef = useRef<RecommendCache | null>(null);
 
   const aiList = trpc.ai.listConfigs.useQuery();
   const hasDefaultKey = (aiList.data?.configs ?? []).some((c) => c.isDefault);
 
+  // 모달 세션 동안 사용자가 stock-picker 로 추가한 pdno 목록 (max 10).
+  const [extraPdnos, setExtraPdnos] = useState<string[]>([]);
+
   const mut = trpc.ai.suggestSymbols.useMutation({
     onSuccess: (res) => {
+      const fetchedAt = Date.now();
+      cacheRef.current = {
+        ranked: res.ranked,
+        emptyReason: res.emptyReason,
+        rejectedCount: res.rejectedCount,
+        durationMs: res.durationMs,
+        extras: [...extraPdnos],
+        fetchedAt,
+      };
       setView((prev) => ({
         ...prev,
         isPending: false,
@@ -58,6 +88,8 @@ export function useSymbolRecommendations() {
         emptyReason: res.emptyReason,
         rejectedCount: res.rejectedCount,
         durationMs: res.durationMs,
+        lastFetchedAt: fetchedAt,
+        fromCache: false,
         error: null,
       }));
     },
@@ -70,10 +102,28 @@ export function useSymbolRecommendations() {
     },
   });
 
-  // 모달 세션 동안 사용자가 stock-picker 로 추가한 pdno 목록 (max 10).
-  const [extraPdnos, setExtraPdnos] = useState<string[]>([]);
-
   const open = (): void => {
+    // 캐시 적중 검사 — extras 동일 + 10분 이내면 LLM 호출 생략.
+    const cached = cacheRef.current;
+    const sameExtras =
+      cached !== null &&
+      cached.extras.length === extraPdnos.length &&
+      cached.extras.every((p, i) => p === extraPdnos[i]);
+    const fresh = cached !== null && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
+    if (cached && sameExtras && fresh) {
+      setView({
+        isOpen: true,
+        isPending: false,
+        ranked: cached.ranked,
+        emptyReason: cached.emptyReason,
+        rejectedCount: cached.rejectedCount,
+        durationMs: cached.durationMs,
+        lastFetchedAt: cached.fetchedAt,
+        fromCache: true,
+        error: null,
+      });
+      return;
+    }
     setView({
       isOpen: true,
       isPending: true,
@@ -81,6 +131,8 @@ export function useSymbolRecommendations() {
       emptyReason: null,
       rejectedCount: 0,
       durationMs: 0,
+      lastFetchedAt: null,
+      fromCache: false,
       error: null,
     });
     mut.mutate({ topN: 5, ...(extraPdnos.length > 0 ? { extraPdnos } : {}) });
@@ -91,7 +143,9 @@ export function useSymbolRecommendations() {
   };
 
   const refresh = (): void => {
-    setView((prev) => ({ ...prev, isPending: true, error: null }));
+    // 강제 재호출 — 캐시 무시.
+    cacheRef.current = null;
+    setView((prev) => ({ ...prev, isPending: true, fromCache: false, error: null }));
     mut.mutate({ topN: 5, ...(extraPdnos.length > 0 ? { extraPdnos } : {}) });
   };
 

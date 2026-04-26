@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import type { z } from 'zod';
+import { z } from 'zod';
 import type { EventLogger } from '../logging/event-logger';
 import type { AiProvider, AiProviderConfigWithKey } from './ai-credentials-repo';
 
@@ -115,6 +115,12 @@ export class LlmClient {
     const systemPrompt = buildSystemPrompt(req);
     const userMessages = req.messages.filter((m) => m.role !== 'system');
 
+    // schema 가 있으면 json_schema strict 모드로 LLM 단에서 형태 보장. 미지원 모델 fallback X —
+    // 실패 시 빈 응답으로 caller 가 graceful 처리. parse 실패율 ↓, 토큰 ↓.
+    const responseFormat = req.schema
+      ? buildOpenAiJsonSchema(req.schema, req.schemaName ?? 'AiResponse')
+      : undefined;
+
     const response = await client.chat.completions.create({
       model: req.config.model,
       max_tokens: req.maxOutputTokens ?? 1024,
@@ -122,7 +128,7 @@ export class LlmClient {
         ...(systemPrompt ? [{ role: 'system' as const, content: systemPrompt }] : []),
         ...userMessages.map((m) => ({ role: m.role, content: m.content })),
       ],
-      ...(req.schema ? { response_format: { type: 'json_object' as const } } : {}),
+      ...(responseFormat ? { response_format: responseFormat } : {}),
     });
 
     const choice = response.choices[0]?.message?.content;
@@ -190,6 +196,39 @@ function stripCodeFence(text: string): string {
  */
 export function providerLabel(p: AiProvider): string {
   return p === 'openai' ? 'OpenAI' : 'Claude';
+}
+
+/**
+ * zod schema → OpenAI json_schema response_format.
+ *
+ * - additionalProperties: false 강제 (strict 모드 요구사항)
+ * - 객체의 모든 properties 를 required 로 (OpenAI strict 가 모든 필드를 요구)
+ * - default 가 있는 필드는 zod 가 optional 처리하지만 strict 에서는 명시 필요 → 클라이언트 측 strict=false
+ *   로 fallback (parse 실패율 ↓ 효과는 유지). zod default 는 응답 검증 단에서 적용.
+ */
+function buildOpenAiJsonSchema<T>(
+  schema: z.ZodType<T>,
+  name: string,
+): {
+  type: 'json_schema';
+  json_schema: { name: string; schema: Record<string, unknown>; strict: boolean };
+} {
+  const jsonSchema = z.toJSONSchema(schema, { target: 'draft-7' }) as Record<string, unknown>;
+  // OpenAI 는 $schema 키를 거부하므로 제거.
+  delete jsonSchema.$schema;
+  // strict=false — zod default 필드가 optional 인 경우 strict 가 거부할 수 있어 안전하게.
+  return {
+    type: 'json_schema' as const,
+    json_schema: {
+      name: sanitizeSchemaName(name),
+      schema: jsonSchema,
+      strict: false,
+    },
+  };
+}
+
+function sanitizeSchemaName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
 }
 
 /**
