@@ -88,11 +88,18 @@ export const ReportsPage = (): ReactElement => {
             <span className="chip chip--down">{summaryError.message}</span>
           ) : summary ? (
             <>
-              <Kpi label="실현손익" value={formatKrwSigned(summary.realizedPnlKrw)} />
+              <Kpi
+                label="실현손익"
+                value={formatKrwSigned(summary.realizedPnlKrw)}
+                signOf={summary.realizedPnlKrw}
+              />
               <Kpi label="승률" value={`${(summary.winRate * 100).toFixed(1)}%`} />
               <Kpi
                 label="최대 Drawdown"
-                value={`-${thousandSeparator(summary.maxDrawdownKrw)}원`}
+                value={
+                  summary.maxDrawdownKrw === 0 ? '0원' : formatKrwSigned(-summary.maxDrawdownKrw)
+                }
+                signOf={summary.maxDrawdownKrw === 0 ? 0 : -1}
               />
               <Kpi label="청산 차수" value={`${thousandSeparator(summary.soldLots)}건`} />
               <Kpi label="체결 건수" value={`${thousandSeparator(summary.totalTrades)}건`} />
@@ -123,16 +130,37 @@ export const ReportsPage = (): ReactElement => {
   );
 };
 
-const Kpi = ({ label, value }: { label: string; value: string }): ReactElement => (
-  <div>
-    <div className="muted" style={{ fontSize: '1.1rem' }}>
-      {label}
+const Kpi = ({
+  label,
+  value,
+  signOf,
+}: {
+  label: string;
+  value: string;
+  signOf?: number;
+}): ReactElement => {
+  const color =
+    signOf === undefined
+      ? undefined
+      : signOf > 0
+        ? 'var(--up)'
+        : signOf < 0
+          ? 'var(--down)'
+          : 'var(--fg)';
+  return (
+    <div>
+      <div className="muted" style={{ fontSize: '1.1rem' }}>
+        {label}
+      </div>
+      <div
+        className="num"
+        style={{ fontSize: '1.6rem', fontWeight: 600, ...(color ? { color } : {}) }}
+      >
+        {value}
+      </div>
     </div>
-    <div className="num" style={{ fontSize: '1.6rem', fontWeight: 600 }}>
-      {value}
-    </div>
-  </div>
-);
+  );
+};
 
 function formatKrwSigned(v: number): string {
   const sign = v > 0 ? '+' : v < 0 ? '-' : '';
