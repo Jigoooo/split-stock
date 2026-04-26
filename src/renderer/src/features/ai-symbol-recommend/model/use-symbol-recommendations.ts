@@ -5,11 +5,14 @@ const CACHE_TTL_MS = 10 * 60 * 1000; // 10분 — LLM 비용 절감 + 모달 재
 
 interface RecommendCache {
   ranked: RecommendedItem[];
+  userInputResults: RecommendedItem[];
+  distribution: TierDistribution;
   emptyReason: string | null;
   rejectedCount: number;
   durationMs: number;
   extras: ReadonlyArray<string>;
   aiOff: boolean;
+  includeAutoDiscovery: boolean;
   fetchedAt: number;
 }
 
@@ -20,16 +23,37 @@ export interface RecommendedNewsItem {
   link: string;
 }
 
+export type RecommendTier = 'top' | 'strong' | 'moderate' | 'watch' | 'avoid';
+export type RecommendConfidence = 'high' | 'med' | 'low';
+
+export interface TierDistribution {
+  top: number;
+  strong: number;
+  moderate: number;
+  watch: number;
+  avoid: number;
+}
+
+export interface IndicatorReason {
+  indicator: string;
+  value: string;
+  meaning: string;
+}
+
 export interface RecommendedItem {
   pdno: string;
   name: string;
   score: number;
+  tier: RecommendTier;
+  confidence: RecommendConfidence;
   volatilityFit: 'low' | 'mid' | 'high';
   liquidityFit: 'good' | 'ok' | 'poor';
   summary: string;
   pros: string[];
   cons: string[];
   entryNote: string | null;
+  consensusCount: number;
+  citedTools: string[];
   sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO'>;
   stats: {
     lastClose: number | null;
@@ -41,12 +65,18 @@ export interface RecommendedItem {
   algoLabels: ReadonlyArray<string>;
   aiOff: boolean;
   news: ReadonlyArray<RecommendedNewsItem>;
+  conflicts: ReadonlyArray<string>;
+  indicatorReasons: ReadonlyArray<IndicatorReason>;
 }
 
 export interface RecommendationViewState {
   isOpen: boolean;
   isPending: boolean;
   ranked: RecommendedItem[];
+  /** 사용자가 입력한 종목(extras) 의 별도 평가 결과. recommended 와 분리. */
+  userInputResults: RecommendedItem[];
+  /** Tier 분포 — 모달 헤더 chip 표시용. */
+  distribution: TierDistribution;
   emptyReason: string | null;
   rejectedCount: number;
   durationMs: number;
@@ -56,6 +86,8 @@ export interface RecommendationViewState {
   /** true 면 마지막 mutation 없이 캐시에서 복원된 결과. UI 가 "캐시됨" 안내. */
   fromCache: boolean;
 }
+
+const EMPTY_DIST: TierDistribution = { top: 0, strong: 0, moderate: 0, watch: 0, avoid: 0 };
 
 /**
  * AI 매직스플릿 추천 hook — RecommendButton 클릭 시 mutation 트리거 + 결과 캐시.
@@ -67,6 +99,8 @@ export function useSymbolRecommendations() {
     isOpen: false,
     isPending: false,
     ranked: [],
+    userInputResults: [],
+    distribution: EMPTY_DIST,
     emptyReason: null,
     rejectedCount: 0,
     durationMs: 0,
@@ -83,23 +117,34 @@ export function useSymbolRecommendations() {
   const [extraPdnos, setExtraPdnos] = useState<string[]>([]);
   // AI 끄기 모드 — LLM 호출 없이 알고리즘 신호만으로 ranking. 키 미설정 시 자동 fallback.
   const [aiOff, setAiOff] = useState(false);
+  // D 풀 (자동 발굴) 활성화 — A∪B∪C 외에도 매직스플릿 사전 스크리닝 통과 종목 포함.
+  const [includeAutoDiscovery, setIncludeAutoDiscovery] = useState(true);
 
   const mut = trpc.ai.suggestSymbols.useMutation({
     onSuccess: (res) => {
       const fetchedAt = Date.now();
+      const distribution: TierDistribution =
+        (res as { distribution?: TierDistribution }).distribution ?? EMPTY_DIST;
+      const userInputResults: RecommendedItem[] =
+        (res as { userInputResults?: RecommendedItem[] }).userInputResults ?? [];
       cacheRef.current = {
         ranked: res.ranked,
+        userInputResults,
+        distribution,
         emptyReason: res.emptyReason,
         rejectedCount: res.rejectedCount,
         durationMs: res.durationMs,
         extras: [...extraPdnos],
         aiOff,
+        includeAutoDiscovery,
         fetchedAt,
       };
       setView((prev) => ({
         ...prev,
         isPending: false,
         ranked: res.ranked,
+        userInputResults,
+        distribution,
         emptyReason: res.emptyReason,
         rejectedCount: res.rejectedCount,
         durationMs: res.durationMs,
@@ -118,20 +163,21 @@ export function useSymbolRecommendations() {
   });
 
   const open = (): void => {
-    // 모달만 오픈 — LLM 자동 호출 X. 캐시 hit 면 즉시 표시, miss 면 빈 상태에서 사용자가
-    // '분석 시작' 버튼을 눌러야 mutation 트리거.
     const cached = cacheRef.current;
     const sameExtras =
       cached !== null &&
       cached.extras.length === extraPdnos.length &&
       cached.extras.every((p, i) => p === extraPdnos[i]);
     const sameMode = cached !== null && cached.aiOff === aiOff;
+    const sameAuto = cached !== null && cached.includeAutoDiscovery === includeAutoDiscovery;
     const fresh = cached !== null && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
-    if (cached && sameExtras && sameMode && fresh) {
+    if (cached && sameExtras && sameMode && sameAuto && fresh) {
       setView({
         isOpen: true,
         isPending: false,
         ranked: cached.ranked,
+        userInputResults: cached.userInputResults,
+        distribution: cached.distribution,
         emptyReason: cached.emptyReason,
         rejectedCount: cached.rejectedCount,
         durationMs: cached.durationMs,
@@ -145,6 +191,8 @@ export function useSymbolRecommendations() {
       isOpen: true,
       isPending: false,
       ranked: [],
+      userInputResults: [],
+      distribution: EMPTY_DIST,
       emptyReason: null,
       rejectedCount: 0,
       durationMs: 0,
@@ -154,14 +202,14 @@ export function useSymbolRecommendations() {
     });
   };
 
-  /** 명시적 분석 실행 — open() 자동 호출 안 함. UI 의 '분석 시작' / '다시 분석' 버튼이 호출. */
   const analyze = (): void => {
     cacheRef.current = null;
     setView((prev) => ({ ...prev, isPending: true, fromCache: false, error: null }));
     mut.mutate({
-      topN: 5,
+      topN: 8,
       ...(extraPdnos.length > 0 ? { extraPdnos } : {}),
       ...(aiOff ? { aiOff: true } : {}),
+      includeAutoDiscovery,
     });
   };
 
@@ -171,7 +219,12 @@ export function useSymbolRecommendations() {
 
   const toggleAiOff = (next: boolean): void => {
     setAiOff(next);
-    cacheRef.current = null; // 모드 바뀌면 캐시 무효
+    cacheRef.current = null;
+  };
+
+  const toggleAutoDiscovery = (next: boolean): void => {
+    setIncludeAutoDiscovery(next);
+    cacheRef.current = null;
   };
 
   const addExtraPdno = (pdno: string): void => {
@@ -194,11 +247,13 @@ export function useSymbolRecommendations() {
     isAiListLoading: aiList.isLoading,
     extraPdnos,
     aiOff,
+    includeAutoDiscovery,
     open,
     close,
     analyze,
     addExtraPdno,
     removeExtraPdno,
     toggleAiOff,
+    toggleAutoDiscovery,
   };
 }

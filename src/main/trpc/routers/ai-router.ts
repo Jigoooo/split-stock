@@ -241,6 +241,8 @@ export const aiRouter = router({
             .optional(),
           /** AI 끄기 — LLM 호출 없이 알고리즘 신호만으로 ranking. 키 미설정 시 자동 fallback. */
           aiOff: z.boolean().optional(),
+          /** 자동 발굴(D 풀) 포함 여부. 기본 true. UI 토글로 끌 수 있음. */
+          includeAutoDiscovery: z.boolean().optional(),
         })
         .optional(),
     )
@@ -260,12 +262,31 @@ export const aiRouter = router({
         newsFetcher?.isAvailable() && input?.aiOff !== true
           ? async (candidates: ReadonlyArray<{ pdno: string; name: string }>) => {
               const map = new Map<string, ReadonlyArray<NewsItem>>();
-              // 종목당 최신 5건 — LLM 이 교차 검증할 수 있게 표본 확장.
               for (const c of candidates) {
                 const news = await newsFetcher.searchByKeyword(c.name, 5);
                 if (news.length > 0) map.set(c.pdno, news);
               }
               return map;
+            }
+          : undefined;
+      // LLM tool: 추가 뉴스 검색 — 신뢰성 부족 시 능동 호출.
+      const searchNewsTool =
+        newsFetcher?.isAvailable() && input?.aiOff !== true
+          ? async (query: string, max: number) => {
+              return await newsFetcher.searchByKeyword(query, max);
+            }
+          : undefined;
+      // LLM tool: DART 공시 검색 — 자사주매입/유상증자 등 매수 결정 영향 큰 이벤트.
+      const dartClient = ctx.dartClient;
+      const getDartDisclosuresTool =
+        dartClient && input?.aiOff !== true
+          ? async (corpCode: string, days: number) => {
+              const items = await dartClient.listRecentDisclosures(corpCode, days, 10);
+              return items.map((i) => ({
+                date: i.rceptDt,
+                title: i.reportNm,
+                report: i.rceptNo,
+              }));
             }
           : undefined;
       try {
@@ -282,7 +303,12 @@ export const aiRouter = router({
             ? { extraPdnos: input.extraPdnos }
             : {}),
           ...(input?.aiOff === true ? { aiOff: true } : {}),
+          ...(input?.includeAutoDiscovery !== undefined
+            ? { includeAutoDiscovery: input.includeAutoDiscovery }
+            : {}),
           ...(fetchNews ? { fetchNews } : {}),
+          ...(searchNewsTool ? { searchNewsTool } : {}),
+          ...(getDartDisclosuresTool ? { getDartDisclosuresTool } : {}),
         });
       } catch (cause) {
         throw new TRPCError({

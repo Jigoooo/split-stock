@@ -4,8 +4,16 @@ import type { EventLogger } from '../logging/event-logger';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import type { AiCredentialsRepo } from './ai-credentials-repo';
 import { type AlgoSignals, computeAlgoSignals } from './algo/algo-signals';
+import {
+  applyTierQuota,
+  preRank,
+  scoreToTier,
+  summarizeTiers,
+  type Tier,
+  type TierDistribution,
+} from './algo/composite-score';
 import { buildCandidatePool, type CandidateEntry } from './build-candidate-pool';
-import type { LlmClient } from './llm-client';
+import type { LlmClient, ToolDef } from './llm-client';
 import type { NewsItem } from './news-fetcher';
 import { computeSymbolStats, type SymbolStat } from './symbol-stats';
 
@@ -18,10 +26,14 @@ export interface SuggestSymbolsInput {
   logger: EventLogger;
   /** 후보 풀 cap. 기본 30. */
   poolCap?: number;
-  /** 응답 Top N. 기본 5. */
+  /** 응답 Top N (recommended 분배). 기본 8 (top 2 + strong 3 + moderate 2 + watch 1 + avoid 1 - quota cap). */
   topN?: number;
   /** 사용자가 stock-picker 등으로 추가한 pdno 목록 — 보유/감시에 없어도 풀에 합쳐 추천. */
   extraPdnos?: ReadonlyArray<string>;
+  /**
+   * D 풀(자동 발굴) 포함 여부. 기본 true — A∪B∪C∪D 합집합. UI 토글로 끌 수 있음.
+   */
+  includeAutoDiscovery?: boolean;
   /**
    * 후보 pdno 목록의 일봉 캐시를 사전 보충. 호출자(ai-router)가 KIS env/auth 컨텍스트를
    * 들고 ensure 콜백을 주입. 미주입 시 캐시만 사용 (기존 동작).
@@ -35,15 +47,32 @@ export interface SuggestSymbolsInput {
     candidates: ReadonlyArray<{ pdno: string; name: string }>,
   ) => Promise<Map<string, ReadonlyArray<NewsItem>>>;
   /**
+   * Tool: search_news 콜백 — LLM 이 필요 시 추가 키워드로 뉴스 검색.
+   * (query, max?) → NewsItem[]. fetchNews 와 별도 — 사전 fetch 가 아닌 LLM 의 능동 호출.
+   */
+  searchNewsTool?: (query: string, max: number) => Promise<ReadonlyArray<NewsItem>>;
+  /**
+   * Tool: DART 공시 콜백. corpCode + days → 공시 텍스트 요약.
+   */
+  getDartDisclosuresTool?: (
+    corpCode: string,
+    days: number,
+  ) => Promise<ReadonlyArray<{ date: string; title: string; report: string }>>;
+  /**
    * AI 끄기 모드 — true 면 LLM 호출 0회, 알고리즘 신호만으로 ranking. 결과 카드의
    * pros/cons/entryNote 는 알고리즘 라벨에서 합성.
    */
   aiOff?: boolean;
 }
 
+const TierSchema = z.enum(['top', 'strong', 'moderate', 'watch', 'avoid']);
+const ConfidenceSchema = z.enum(['high', 'med', 'low']);
+
 const RankedItemSchema = z.object({
   pdno: z.string(),
   score: z.number().min(0).max(100),
+  tier: TierSchema,
+  confidence: ConfidenceSchema,
   volatilityFit: z.enum(['low', 'mid', 'high']),
   liquidityFit: z.enum(['good', 'ok', 'poor']),
   /** 한 줄 평 — 카드 기본 노출. */
@@ -54,10 +83,15 @@ const RankedItemSchema = z.object({
   cons: z.array(z.string().max(80)).max(3).default([]),
   /** 진입 시 참고할 한 줄 (예: "박스권 하단 근처 1차 매수 추천"). 없으면 null. */
   entryNote: z.string().max(160).nullable().default(null),
+  /** 몇 개 지표가 동의했는지 (LLM 판단). */
+  consensusCount: z.number().int().min(0).max(10).default(0),
+  /** 호출한 도구 이름 — 빈 배열이면 추가 검증 미수행 표시. */
+  citedTools: z.array(z.string()).default([]),
 });
 
 const SuggestionResponseSchema = z.object({
-  ranked: z.array(RankedItemSchema),
+  recommended: z.array(RankedItemSchema),
+  userInputResults: z.array(RankedItemSchema).default([]),
 });
 
 export interface RankedSymbolStats {
@@ -70,7 +104,7 @@ export interface RankedSymbolStats {
 export type RankedSymbol = z.infer<typeof RankedItemSchema> & {
   /** 응답에 lookup 한 종목명. */
   name: string;
-  /** 후보 출처 (보유/감시/수동). */
+  /** 후보 출처 (보유/감시/수동/자동발굴). */
   sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO'>;
   /** 통계 수치 — UI 에서 LLM 점수 근거를 직접 노출. */
   stats: RankedSymbolStats;
@@ -82,66 +116,80 @@ export type RankedSymbol = z.infer<typeof RankedItemSchema> & {
   aiOff: boolean;
   /** LLM 이 참조한(또는 AI off 시 미사용) 뉴스 원본. UI 카드 펼침 시 노출. */
   news: ReadonlyArray<NewsItem>;
+  /** 알고리즘이 제시한 모순 신호 — 빈 배열이면 충돌 없음. */
+  conflicts: ReadonlyArray<string>;
+  /** 지표별 사실 기반 사유 (UI 카드 펼침 노출). */
+  indicatorReasons: ReadonlyArray<{ indicator: string; value: string; meaning: string }>;
 };
 
 export interface SuggestSymbolsResult {
+  /** 자동 추천 — Top 8 분배 (top/strong/moderate/watch/avoid). */
   ranked: RankedSymbol[];
+  /** 사용자가 직접 추가(extras)한 종목의 별도 평가 결과. */
+  userInputResults: RankedSymbol[];
+  /** Tier 분포 요약 (UI 헤더). */
+  distribution: TierDistribution;
+  /** 분석에 들어간 후보 풀 크기 (A∪B∪C∪D 의 dedupe 후 cap 적용 결과). */
+  poolSize: number;
   /** 후보 풀 자체가 비었거나 default 키 미설정 시 사유. */
   emptyReason: string | null;
   /** LLM 응답 중 풀 외 pdno 가 있어 silently 제거된 개수. */
   rejectedCount: number;
-  /** LLM 호출 식별자 — 디버깅용. */
+  /** LLM 호출 시간 (ms). */
   durationMs: number;
 }
 
 /**
- * AI 매직스플릿 적합 종목 추천.
+ * AI 매직스플릿 적합 종목 추천 — 2-stage 흐름.
  *
- * 흐름:
- *   1) 후보 풀 빌드 (보유 + 자동감시) → cap=30
- *   2) 각 pdno 의 60/120일 통계 산출
- *   3) default AI config 로 LLM 호출 — 풀 외 pdno 응답은 silently reject
- *   4) Top N (기본 5) 반환
+ * Stage 1 (결정론, LLM 미호출):
+ *   1) buildCandidatePool → A∪B∪C∪D, cap 30 (D = screenMagicSplitFit)
+ *   2) ensureCandles → 일봉 보충
+ *   3) computeAlgoSignals (indicatorts: BB/MACD/Aroon/MFI/PSAR + S/R + conflicts)
+ *   4) preRank → Top 10 (composite score)
+ *   5) AI off 모드면 Top 5 즉시 반환 — 토큰 0.
  *
- * Hallucination 방지:
- *   - 응답 pdno 화이트리스트 검증 (rejectedCount 카운트)
- *   - schema 강제 + zod 파싱 실패 시 빈 ranked
+ * Stage 2 (LLM 합성·검증, 압축된 입력):
+ *   6) Top 10 만 LLM 입력 (30→10 토큰 ~64% 절감)
+ *   7) tools 노출: search_news, get_dart_disclosures
+ *   8) system prompt 강화: 합의 3+ / conflicts 인용 / 도구 호출 우선
+ *   9) 응답: recommended (Top 8 분배) + userInputResults
+ *
+ * Stage 3 (검증):
+ *   10) pdno 화이트리스트, algoScore vs LLM score 차이 30+ 시 cons prepend
  */
 export async function suggestSymbols(input: SuggestSymbolsInput): Promise<SuggestSymbolsResult> {
   const startedAt = Date.now();
   const aiOff = input.aiOff === true;
+  const includeAutoDiscovery = input.includeAutoDiscovery ?? true;
   const config = aiOff ? null : input.aiCredentialsRepo.getDefaultWithKey();
   if (!aiOff && !config) {
-    return {
-      ranked: [],
-      emptyReason:
-        'AI 키가 등록되지 않았습니다. 설정 → AI 탭에서 키를 등록하거나 "AI 끄기" 모드를 선택하세요.',
-      rejectedCount: 0,
-      durationMs: 0,
-    };
+    return emptyResult(
+      'AI 키가 등록되지 않았습니다. 설정 → AI 탭에서 키를 등록하거나 "AI 끄기" 모드를 선택하세요.',
+      startedAt,
+    );
   }
 
   const pool = buildCandidatePool({
     db: input.db,
     accountId: input.accountId,
     cap: input.poolCap ?? 30,
+    candlesRepo: input.candlesRepo,
+    includeAutoDiscovery,
     ...(input.extraPdnos && input.extraPdnos.length > 0 ? { extraPdnos: input.extraPdnos } : {}),
   });
   if (pool.length === 0) {
-    return {
-      ranked: [],
-      emptyReason:
-        '후보 풀이 비었습니다. 보유 종목이 있거나 자동감시에 등록된 종목이 있어야 합니다.',
-      rejectedCount: 0,
-      durationMs: 0,
-    };
+    return emptyResult(
+      '후보 풀이 비었습니다. 보유/감시 종목, 또는 일봉 캐시된 종목이 있어야 추천이 가능합니다.',
+      startedAt,
+    );
   }
 
   if (input.ensureCandles) {
     await input.ensureCandles(pool.map((p) => p.pdno));
   }
 
-  // 결정론적 알고리즘 신호 — AI on/off 모두 활용.
+  // === Stage 1 — 결정론 알고리즘 신호 ===
   const algoSignals = computeAlgoSignals({
     candlesRepo: input.candlesRepo,
     pdnos: pool.map((p) => p.pdno),
@@ -151,78 +199,84 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
   const stats = computeSymbolStats({
     candlesRepo: input.candlesRepo,
     pdnos: pool.map((p) => p.pdno),
+    precomputedSignals: algoByPdno,
   });
   const statsByPdno = new Map(stats.map((s) => [s.pdno, s]));
 
-  // AI 끄기 — LLM 호출 없이 algoScore 로 ranking + labels 합성.
+  // === Pre-rank — LLM 입력 압축 (30→Top 10) ===
+  const { top: topCandidates } = preRank({
+    candidates: pool,
+    signalsByPdno: algoByPdno,
+    topN: 10,
+  });
+
+  // 사용자가 extras 로 직접 넣은 종목 — Top 10 외에라도 LLM 검증 받게 분리.
+  const extraSet = new Set(input.extraPdnos ?? []);
+  const extraCandidates = pool.filter((c) => extraSet.has(c.pdno));
+
+  // AI 끄기 — 알고리즘만으로 결과 합성.
   if (aiOff) {
-    const ranked = buildAlgoOnlyRanked(pool, algoByPdno, statsByPdno).slice(0, input.topN ?? 5);
+    const ranked = buildAlgoOnlyRanked(topCandidates, algoByPdno, statsByPdno, input.topN ?? 8);
+    const userInputResults = buildAlgoOnlyRanked(
+      extraCandidates,
+      algoByPdno,
+      statsByPdno,
+      extraCandidates.length,
+    );
     input.logger.log({
       level: 'INFO',
       category: 'SYS',
       message: 'ai.suggest-symbols.algo-only',
-      payload: { poolSize: pool.length, topN: ranked.length, durationMs: Date.now() - startedAt },
+      payload: {
+        poolSize: pool.length,
+        topN: ranked.length,
+        userExtras: userInputResults.length,
+        durationMs: Date.now() - startedAt,
+      },
     });
     return {
       ranked,
+      userInputResults,
+      distribution: summarizeTiers(ranked),
+      poolSize: pool.length,
       emptyReason: ranked.length === 0 ? '추천 가능한 종목이 없습니다.' : null,
       rejectedCount: 0,
       durationMs: Date.now() - startedAt,
     };
   }
 
-  // AI on — 알고리즘 상위 N 만 뉴스 fetch (토큰/호출 절감).
-  const algoRanked = [...pool].sort((a, b) => {
-    const sa = algoByPdno.get(a.pdno)?.splitScore ?? -1;
-    const sb = algoByPdno.get(b.pdno)?.splitScore ?? -1;
-    return sb - sa;
-  });
-  const newsTargetN = Math.min(10, algoRanked.length);
-  const newsTargets = algoRanked.slice(0, newsTargetN);
+  // === Stage 2 — LLM 합성 ===
+  // 알고리즘 상위 + extras 만 뉴스 fetch (토큰/호출 절감).
+  const newsTargets = [...topCandidates, ...extraCandidates];
   const newsByPdno = input.fetchNews ? await input.fetchNews(newsTargets) : new Map();
 
   const userPrompt = buildPrompt({
-    pool,
+    topCandidates,
+    extras: extraCandidates,
     stats,
     algoByPdno,
     newsByPdno,
-    topN: input.topN ?? 5,
+    topN: input.topN ?? 8,
   });
 
-  // config 는 aiOff=false 분기에서만 도달 — 위에서 null 체크 완료.
   if (!config) {
-    return {
-      ranked: [],
-      emptyReason: 'AI 키가 등록되지 않았습니다.',
-      rejectedCount: 0,
-      durationMs: Date.now() - startedAt,
-    };
+    return emptyResult('AI 키가 등록되지 않았습니다.', startedAt);
   }
+
+  // === Tools — LLM 이 필요 시 호출 ===
+  const tools = buildTools(input);
 
   const result = await input.llmClient.chat({
     config,
     schema: SuggestionResponseSchema,
     schemaName: 'AiSymbolSuggestion',
     maxOutputTokens: 1500,
+    temperature: 0.2,
+    ...(tools.length > 0 ? { tools, maxToolIterations: 3 } : {}),
     messages: [
       {
         role: 'system',
-        content: [
-          '당신은 한국 주식 매직스플릿(분할매수/분할매도) 전략 보조 분석가입니다.',
-          '',
-          '핵심 원칙 (가장 중요):',
-          '1. 후보 풀에 명시된 pdno 코드 안에서만 추천. 풀 외 종목은 절대 포함 X.',
-          '2. 정보 신뢰성 우선. 추측/일반론 X. 가능하면 입력으로 받은 알고리즘 신호(algoScore/RSI/거래량 spike) + 뉴스 제목/요약/날짜를 직접 인용해 근거를 만든다.',
-          '3. 뉴스 분석 가이드:',
-          '   - 발행 일자(publishedAt)를 반드시 확인 — 최근일수록 가중치 높게.',
-          '   - 사실(공시·실적·자사주매입) > 의견(애널리스트 전망) > 기사 헤드라인 추측 순으로 신뢰.',
-          '   - 같은 종목 뉴스 여러 건 사이에 모순(긍정 vs 부정)이 보이면 cons 에 명시.',
-          '   - 어닝 발표 D-3 이내, 자사주매입 결정, 전환사채/유상증자, 임원 매도 같은 거래 영향 큰 이벤트는 entryNote 에 명시.',
-          '   - 헤드라인만 보고 단정 X. 요약 본문도 함께 검토.',
-          '4. 알고리즘 신호와 뉴스가 충돌하면 cons 에 충돌 사실을 적고 score 를 보수적으로 낮춘다.',
-          '5. summary 는 사실 기반의 한 줄. pros/cons 는 행동 가이드. entryNote 는 진입 시점/주의사항 1줄.',
-          '6. 데이터 부족(통계 부족 / 뉴스 0건)인 종목은 score 를 보수적으로 낮추고 cons 에 "데이터 부족" 명시.',
-        ].join('\n'),
+        content: SYSTEM_PROMPT,
       },
       { role: 'user', content: userPrompt },
     ],
@@ -233,46 +287,53 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       level: 'WARN',
       category: 'SYS',
       message: 'ai.suggest-symbols.parse-failed',
-      payload: { rawChars: result.text.length },
+      payload: { rawChars: result.text.length, toolCalls: result.toolCalls.length },
     });
-    return {
-      ranked: [],
-      emptyReason: 'AI 응답을 해석할 수 없습니다. 잠시 후 다시 시도하세요.',
-      rejectedCount: 0,
-      durationMs: Date.now() - startedAt,
-    };
+    return emptyResult('AI 응답을 해석할 수 없습니다. 잠시 후 다시 시도하세요.', startedAt);
   }
 
+  // === Stage 3 — 검증 + 합성 ===
   const allowedPdnos = new Set(pool.map((p) => p.pdno));
   const poolByPdno = new Map(pool.map((p) => [p.pdno, p]));
   let rejectedCount = 0;
-  const ranked: RankedSymbol[] = [];
-  for (const item of result.parsed.ranked) {
-    if (!allowedPdnos.has(item.pdno)) {
-      rejectedCount++;
-      continue;
+
+  const buildRanked = (items: ReadonlyArray<z.infer<typeof RankedItemSchema>>): RankedSymbol[] => {
+    const out: RankedSymbol[] = [];
+    for (const item of items) {
+      if (!allowedPdnos.has(item.pdno)) {
+        rejectedCount++;
+        continue;
+      }
+      const poolEntry = poolByPdno.get(item.pdno);
+      const stat = statsByPdno.get(item.pdno);
+      const algo = algoByPdno.get(item.pdno);
+      const cons = enrichCons(item, algo);
+      out.push({
+        ...item,
+        cons,
+        name: poolEntry?.name ?? item.pdno,
+        sources: poolEntry?.sources ?? [],
+        stats: {
+          lastClose: stat?.lastClose ?? null,
+          volatility60d: stat?.volatility60d ?? null,
+          avgVolume60d: stat?.avgVolume60d ?? null,
+          rangePct120d: stat?.rangePct120d ?? null,
+        },
+        algoScore: algo?.splitScore ?? null,
+        algoLabels: algo?.labels ?? [],
+        aiOff: false,
+        news: newsByPdno.get(item.pdno) ?? [],
+        conflicts: algo?.conflicts ?? [],
+        indicatorReasons: algo?.indicatorReasons ?? [],
+      });
     }
-    const poolEntry = poolByPdno.get(item.pdno);
-    const stat = statsByPdno.get(item.pdno);
-    const algo = algoByPdno.get(item.pdno);
-    ranked.push({
-      ...item,
-      name: poolEntry?.name ?? item.pdno,
-      sources: poolEntry?.sources ?? [],
-      stats: {
-        lastClose: stat?.lastClose ?? null,
-        volatility60d: stat?.volatility60d ?? null,
-        avgVolume60d: stat?.avgVolume60d ?? null,
-        rangePct120d: stat?.rangePct120d ?? null,
-      },
-      algoScore: algo?.splitScore ?? null,
-      algoLabels: algo?.labels ?? [],
-      aiOff: false,
-      news: newsByPdno.get(item.pdno) ?? [],
-    });
-  }
-  ranked.sort((a, b) => b.score - a.score);
-  const topped = ranked.slice(0, input.topN ?? 5);
+    return out;
+  };
+
+  const recommendedRaw = buildRanked(result.parsed.recommended);
+  // tier quota 적용 — top≤2 strong≤3 moderate≤2 watch≤1 avoid≤1.
+  const recommended = applyTierQuota(recommendedRaw).slice(0, input.topN ?? 8);
+  const userInputResults = buildRanked(result.parsed.userInputResults);
 
   input.logger.log({
     level: 'INFO',
@@ -282,103 +343,256 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       poolSize: pool.length,
       provider: config.provider,
       model: config.model,
-      topN: topped.length,
+      topN: recommended.length,
+      userInputN: userInputResults.length,
       rejectedCount,
+      toolCalls: result.toolCalls.length,
       durationMs: Date.now() - startedAt,
     },
   });
 
   return {
-    ranked: topped,
-    emptyReason: topped.length === 0 ? '추천할 만한 종목이 없습니다.' : null,
+    ranked: recommended,
+    userInputResults,
+    distribution: summarizeTiers(recommended),
+    poolSize: pool.length,
+    emptyReason: recommended.length === 0 ? '추천할 만한 종목이 없습니다.' : null,
     rejectedCount,
     durationMs: Date.now() - startedAt,
   };
 }
 
+const SYSTEM_PROMPT = [
+  '당신은 한국 주식 매직스플릿(분할매수/분할매도) 전략 보조 분석가입니다.',
+  '',
+  '핵심 원칙 (가장 중요):',
+  '1. 후보 풀에 명시된 pdno 코드 안에서만 추천. 풀 외 종목은 절대 포함 X.',
+  '2. 정보 신뢰성 우선. 추측/일반론 X. 알고리즘 신호(splitScore, RSI, BB, MFI, Aroon, conflicts, indicatorReasons)와 뉴스 제목/요약/날짜를 직접 인용해 근거 작성.',
+  '3. consensus 규칙: BB/RSI/MFI/momentum/Stochastic/CCI 중 3개 이상이 동일 방향(과매수 또는 과매도)일 때만 strong 신호로 판단. 1~2개 동의 = weak. consensusCount 필드에 동의 개수 명시.',
+  '4. conflicts 가 비어있지 않으면 cons 에 반드시 인용. 무시 X.',
+  '5. 데이터 부족(통계 부족 / 뉴스 0건)이면 confidence=low 로 표기 + cons 에 "데이터 부족" 명시.',
+  '6. 도구 사용 우선: 알고리즘 신호가 모호하거나 confidence=low 면 search_news / get_dart_disclosures 를 호출해 보강. 호출한 도구는 citedTools 에 기록. 빈 배열이면 "추가 검증 미수행" 으로 간주.',
+  '7. tier 매핑: score ≥85 top, 70-84 strong, 55-69 moderate, 40-54 watch, <40 avoid. 종목별로 tier 를 명시.',
+  '8. 응답 분배:',
+  '   - recommended: top/strong/moderate/watch/avoid 골고루 — 사용자에게 다양한 정보 제공.',
+  '   - userInputResults: 사용자가 입력한 종목(extras) 의 평가. recommended 와 별도. tier 분배 X.',
+  '9. summary 는 사실 기반 한 줄. pros/cons 는 행동 가이드. entryNote 는 진입 시점/주의사항 1줄.',
+  '10. 알고리즘 점수(algoScore) 와 LLM 점수(score) 차이가 30점 이상이면 그 이유를 cons 에 짧게 적기.',
+].join('\n');
+
 function buildPrompt(args: {
-  pool: ReadonlyArray<CandidateEntry>;
+  topCandidates: ReadonlyArray<CandidateEntry>;
+  extras: ReadonlyArray<CandidateEntry>;
   stats: ReadonlyArray<SymbolStat>;
   algoByPdno: Map<string, AlgoSignals>;
   newsByPdno: Map<string, ReadonlyArray<NewsItem>>;
   topN: number;
 }): string {
-  const { pool, stats, algoByPdno, newsByPdno, topN } = args;
+  const { topCandidates, extras, stats, algoByPdno, newsByPdno, topN } = args;
   const statsByPdno = new Map(stats.map((s) => [s.pdno, s]));
   const lines: string[] = [];
-  lines.push(`아래 ${pool.length}개 후보 종목 중 매직스플릿(분할매수/분할매도) 전략에 적합한`);
-  lines.push(`상위 ${topN}개를 골라 점수와 한 줄 평을 제시해 주세요.`);
-  lines.push('');
-  lines.push('매직스플릿 적합도 판단 기준:');
-  lines.push('- 변동성이 너무 낮으면 차수 진입 트리거 부족 (low fit), 너무 높으면 손실 위험');
-  lines.push('- 거래량이 충분해야 슬리피지 방지');
-  lines.push('- 박스권 폭이 적당하면 차수 간격 설계가 쉬움');
   lines.push(
-    '- 알고리즘 splitScore 는 결정론적 사전 점수 — 참고하되 맹신 X. 최신 뉴스/이벤트가 있으면 우선 반영',
+    `[recommended 풀 — ${topCandidates.length}개 사전 선별] 매직스플릿 적합도 상위 ${topN}개를`,
   );
+  lines.push('top/strong/moderate/watch/avoid tier 로 골고루 분류해 주세요.');
+  lines.push('');
+  if (extras.length > 0) {
+    lines.push(
+      `[user input — ${extras.length}개] 사용자가 직접 추가한 종목. recommended 와 별도로 평가.`,
+    );
+    lines.push('');
+  }
+  lines.push('매직스플릿 적합도 판단 기준:');
+  lines.push('- 변동성 적정 (너무 낮으면 차수 트리거 부족, 너무 높으면 손실 위험)');
+  lines.push('- 거래량 충분 (슬리피지 방지)');
+  lines.push('- 박스권 폭 적정 (차수 간격 설계 가능)');
+  lines.push('- BB position / RSI / MFI 등이 oversold consensus 일 때 1차 진입 매력 ↑');
+  lines.push('- Aroon strong-trend 면 매직스플릿 부적합 — 추세장 회피');
   lines.push('');
   lines.push('응답 JSON schema:');
   lines.push(
-    '{"ranked":[{"pdno":"<후보 풀의 pdno>","score":0~100,"volatilityFit":"low|mid|high","liquidityFit":"good|ok|poor","summary":"한 줄 평(120자 이내)","pros":["매직스플릿 적용 시 강점",...max 3],"cons":["주의점/리스크",...max 3],"entryNote":"진입 시 참고할 한 줄(160자 이내) 또는 null"}]}',
+    '{"recommended":[{"pdno":"<풀의 pdno>","score":0~100,"tier":"top|strong|moderate|watch|avoid","confidence":"high|med|low","volatilityFit":"low|mid|high","liquidityFit":"good|ok|poor","summary":"한 줄(120자)","pros":[max 3, 각 80자],"cons":[max 3, 각 80자],"entryNote":"한 줄(160자) or null","consensusCount":0~10,"citedTools":["search_news","get_dart_disclosures",...]}],"userInputResults":[...동일 schema...]}',
   );
-  lines.push('각 pros/cons 는 80자 이내 짧은 문장. 진단형이 아닌 행동 가이드로 작성.');
   lines.push('');
-  lines.push('후보 풀:');
-  for (const c of pool) {
-    const s = statsByPdno.get(c.pdno);
-    const algo = algoByPdno.get(c.pdno);
-    const sourcesLabel = c.sources.join('+');
-    const algoBits =
-      algo && algo.splitScore !== null
-        ? ` algoScore=${algo.splitScore}, RSI=${algo.rsi14 ?? 'n/a'}, momentum20d=${algo.momentum20d ?? 'n/a'}%, volSpike=${algo.volumeSpikeRatio ?? 'n/a'}x${algo.labels.length > 0 ? `, labels=[${algo.labels.join(', ')}]` : ''}`
-        : '';
-    if (!s || s.dataReason) {
-      lines.push(
-        `- ${c.pdno} (${c.name}) [${sourcesLabel}] — 통계 부족(${s?.dataReason ?? 'no-data'})${algoBits}`,
-      );
-    } else {
-      lines.push(
-        `- ${c.pdno} (${c.name}) [${sourcesLabel}] — close=${s.lastClose}, vol60d=${s.volatility60d ?? 'n/a'}%, avgVol60d=${s.avgVolume60d ?? 'n/a'}, range120d=${s.rangePct120d ?? 'n/a'}%${algoBits}`,
-      );
-    }
-    const news = newsByPdno.get(c.pdno);
-    if (news && news.length > 0) {
-      lines.push(`    뉴스 ${news.length}건 (최신순):`);
-      news.forEach((n, idx) => {
-        const summary = n.summary.length > 220 ? `${n.summary.slice(0, 220)}...` : n.summary;
-        lines.push(`    [${idx + 1}] ${n.publishedAt} | ${n.title}`);
-        if (summary) lines.push(`        ${summary}`);
-      });
-    } else {
-      lines.push('    (뉴스 없음 — 데이터 부족으로 보수적 평가 권장)');
+  lines.push('=== recommended 풀 ===');
+  for (const c of topCandidates) {
+    appendCandidateBlock(c, statsByPdno, algoByPdno, newsByPdno, lines);
+  }
+  if (extras.length > 0) {
+    lines.push('');
+    lines.push('=== user input ===');
+    for (const c of extras) {
+      appendCandidateBlock(c, statsByPdno, algoByPdno, newsByPdno, lines);
     }
   }
   lines.push('');
   lines.push('주의:');
   lines.push('- 후보 풀에 없는 pdno 는 응답에 포함하지 마세요.');
-  lines.push(
-    '- 뉴스 내용을 인용할 때 발행일과 헤드라인 핵심을 entryNote/cons/pros 에 직접 녹여 작성.',
-  );
-  lines.push(
-    '- 알고리즘 점수(algoScore) 와 LLM 점수(score) 차이가 크면 그 이유를 cons 에 짧게 적기.',
-  );
+  lines.push('- conflicts 가 있으면 반드시 cons 에 그대로 인용.');
+  lines.push('- consensusCount 는 BB/RSI/MFI/momentum/Stoch/CCI 중 동의한 개수.');
+  lines.push('- citedTools 는 호출한 도구 이름. 호출 안 했으면 빈 배열.');
   return lines.join('\n');
 }
 
+function appendCandidateBlock(
+  c: CandidateEntry,
+  statsByPdno: Map<string, SymbolStat>,
+  algoByPdno: Map<string, AlgoSignals>,
+  newsByPdno: Map<string, ReadonlyArray<NewsItem>>,
+  lines: string[],
+): void {
+  const s = statsByPdno.get(c.pdno);
+  const algo = algoByPdno.get(c.pdno);
+  const sourcesLabel = c.sources.join('+');
+  const algoBits =
+    algo && algo.splitScore !== null
+      ? [
+          `algoScore=${algo.splitScore}`,
+          `confidence=${algo.confidence}`,
+          algo.rsi14 !== null ? `RSI=${algo.rsi14}` : null,
+          algo.bollinger?.position !== undefined && algo.bollinger?.position !== null
+            ? `BB.pos=${(algo.bollinger.position * 100).toFixed(0)}%`
+            : null,
+          algo.mfi14 !== null ? `MFI=${algo.mfi14}` : null,
+          algo.aroon25
+            ? `Aroon=${Math.round(algo.aroon25.up)}/${Math.round(algo.aroon25.down)}`
+            : null,
+          algo.atr14 !== null ? `ATR=${algo.atr14}` : null,
+          algo.consensusLevel !== 'none'
+            ? `consensus=${algo.consensusLevel}/${algo.consensusDirection}(${algo.consensusCount})`
+            : null,
+          algo.divergence !== 'none' ? `OBV.div=${algo.divergence}` : null,
+        ]
+          .filter((x): x is string => x !== null)
+          .join(', ')
+      : '';
+  const conflictsBits =
+    algo && algo.conflicts.length > 0 ? `\n    conflicts: ${algo.conflicts.join(' | ')}` : '';
+  if (!s || s.dataReason) {
+    lines.push(
+      `- ${c.pdno} (${c.name}) [${sourcesLabel}] — 통계 부족(${s?.dataReason ?? 'no-data'}) ${algoBits}${conflictsBits}`,
+    );
+  } else {
+    lines.push(
+      `- ${c.pdno} (${c.name}) [${sourcesLabel}] — close=${s.lastClose}, vol60d=${s.volatility60d ?? 'n/a'}%, range120d=${s.rangePct120d ?? 'n/a'}% | ${algoBits}${conflictsBits}`,
+    );
+  }
+  if (algo && algo.indicatorReasons.length > 0) {
+    lines.push(
+      `    reasons: ${algo.indicatorReasons.map((r) => `[${r.indicator}] ${r.value}`).join(' / ')}`,
+    );
+  }
+  const news = newsByPdno.get(c.pdno);
+  if (news && news.length > 0) {
+    lines.push(`    뉴스 ${news.length}건:`);
+    news.forEach((n, idx) => {
+      const summary = n.summary.length > 200 ? `${n.summary.slice(0, 200)}...` : n.summary;
+      lines.push(`    [${idx + 1}] ${n.publishedAt} | ${n.title}`);
+      if (summary) lines.push(`        ${summary}`);
+    });
+  }
+}
+
+function buildTools(input: SuggestSymbolsInput): ToolDef[] {
+  const tools: ToolDef[] = [];
+  if (input.searchNewsTool) {
+    const searchNews = input.searchNewsTool;
+    const searchNewsParams = z.object({
+      query: z.string().min(1).max(60).describe('검색 키워드 — 보통 종목명'),
+      max: z.number().int().min(1).max(8).default(5),
+    });
+    const searchNewsTool: ToolDef<z.infer<typeof searchNewsParams>> = {
+      name: 'search_news',
+      description:
+        '특정 키워드(종목명, 이슈, 산업 키워드)로 한국 최신 뉴스 검색. 알고리즘 신호가 모호하거나 confidence=low 일 때 호출해 정보 보강.',
+      parameters: searchNewsParams,
+      run: async (args) => {
+        const items = await searchNews(args.query, args.max);
+        return JSON.stringify(
+          items.map((i) => ({
+            date: i.publishedAt,
+            title: i.title,
+            summary: i.summary.slice(0, 240),
+          })),
+        );
+      },
+    };
+    tools.push(searchNewsTool as ToolDef);
+  }
+  if (input.getDartDisclosuresTool) {
+    const getDart = input.getDartDisclosuresTool;
+    const dartParams = z.object({
+      corpCode: z.string().min(8).max(8).describe('DART corp_code (8자리)'),
+      days: z.number().int().min(1).max(60).default(30),
+    });
+    const dartTool: ToolDef<z.infer<typeof dartParams>> = {
+      name: 'get_dart_disclosures',
+      description:
+        'OpenDART 공시 검색 — corpCode + 최근 N일. 자사주매입/실적/유상증자 등 매수 결정에 직접 영향.',
+      parameters: dartParams,
+      run: async (args) => {
+        const items = await getDart(args.corpCode, args.days);
+        return JSON.stringify(items);
+      },
+    };
+    tools.push(dartTool as ToolDef);
+  }
+  return tools;
+}
+
 /**
- * AI 끄기 모드 — algoScore 내림차순으로 ranking 후 RankedSymbol 형태로 합성.
- * pros/cons/entryNote 는 알고리즘 라벨로부터 정성적 문구 생성 (LLM 없음).
+ * algoScore vs LLM score 30+ 차이 시 cons 에 자동 안내 prepend.
+ * conflicts 가 LLM cons 에 없으면 강제 prepend.
+ */
+function enrichCons(
+  item: z.infer<typeof RankedItemSchema>,
+  algo: AlgoSignals | undefined,
+): string[] {
+  const cons = [...(item.cons ?? [])];
+  if (algo) {
+    if (algo.splitScore !== null && Math.abs(algo.splitScore - item.score) >= 30) {
+      const note = `알고리즘 점수(${algo.splitScore}) vs LLM 점수(${item.score}) 차이 ≥30 — 추가 검증 권장`;
+      cons.unshift(note);
+    }
+    for (const conflict of algo.conflicts) {
+      if (!cons.some((c) => c.includes(conflict.split(' ')[0] ?? ''))) {
+        cons.unshift(conflict);
+      }
+    }
+    if (item.citedTools.length === 0 && item.confidence !== 'high') {
+      cons.unshift('추가 도구 검증 미수행 — 단일 알고리즘 판단');
+    }
+  }
+  return cons.slice(0, 5);
+}
+
+function emptyResult(reason: string, startedAt: number): SuggestSymbolsResult {
+  return {
+    ranked: [],
+    userInputResults: [],
+    distribution: { top: 0, strong: 0, moderate: 0, watch: 0, avoid: 0 },
+    poolSize: 0,
+    emptyReason: reason,
+    rejectedCount: 0,
+    durationMs: Date.now() - startedAt,
+  };
+}
+
+/**
+ * AI 끄기 모드 — algoScore 내림차순 + tier 매핑으로 합성. LLM 호출 없음.
  */
 function buildAlgoOnlyRanked(
   pool: ReadonlyArray<CandidateEntry>,
   algoByPdno: Map<string, AlgoSignals>,
   statsByPdno: Map<string, SymbolStat>,
+  topN: number,
 ): RankedSymbol[] {
   const ranked = [...pool]
     .map((c) => {
       const algo = algoByPdno.get(c.pdno);
       const stat = statsByPdno.get(c.pdno);
       const score = algo?.splitScore ?? 0;
+      const tier: Tier = scoreToTier(algo?.splitScore ?? null);
       const volComp = algo?.components.volatility ?? null;
       const liqComp = algo?.components.liquidity ?? null;
       const volatilityFit: 'low' | 'mid' | 'high' =
@@ -387,10 +601,13 @@ function buildAlgoOnlyRanked(
         liqComp === null ? 'ok' : liqComp >= 75 ? 'good' : liqComp >= 50 ? 'ok' : 'poor';
       const labels = algo?.labels ?? [];
       const pros: string[] = [];
-      const cons: string[] = [];
+      const cons: string[] = [...(algo?.conflicts ?? [])];
       if ((algo?.components.volatility ?? 0) >= 75) pros.push('변동성 적정 — 차수 트리거 충분');
       if ((algo?.components.liquidity ?? 0) >= 75) pros.push('거래량 충분 — 슬리피지 위험 낮음');
-      if ((algo?.components.range ?? 0) >= 75) pros.push('박스권 폭 적정 — 차수 간격 설계 용이');
+      if ((algo?.components.range ?? 0) >= 75) pros.push('박스권 폭 적정');
+      if (algo?.bollinger?.position !== null && (algo?.bollinger?.position ?? 1) <= 0.15) {
+        pros.push('BB 하단 근접 — 1차 진입 매력');
+      }
       if (algo?.rsi14 !== null && algo !== undefined) {
         if (algo.rsi14 !== null) {
           if (algo.rsi14 >= 70) cons.push(`RSI ${algo.rsi14} 과매수 — 진입 시점 지연 권장`);
@@ -400,15 +617,16 @@ function buildAlgoOnlyRanked(
       if (algo?.volumeSpikeRatio && algo.volumeSpikeRatio >= 1.5) {
         cons.push(`거래량 ${algo.volumeSpikeRatio}x spike — 이벤트 임박 가능성`);
       }
-      if ((algo?.components.volatility ?? 100) < 40) cons.push('변동성 낮음 — 차수 트리거 부족');
       const entryNote =
         algo?.box && algo.rsi14 !== null
-          ? `박스권 ${algo.box.low.toLocaleString()}~${algo.box.high.toLocaleString()} 중 RSI ${algo.rsi14}. 박스 하단 근처 1차 매수 검토.`
+          ? `박스권 ${algo.box.low.toLocaleString()}~${algo.box.high.toLocaleString()} 중 RSI ${algo.rsi14}. 박스 하단 1차 매수 검토.`
           : null;
       return {
         pdno: c.pdno,
         name: c.name,
         score,
+        tier,
+        confidence: algo?.confidence ?? 'low',
         volatilityFit,
         liquidityFit,
         summary:
@@ -420,6 +638,8 @@ function buildAlgoOnlyRanked(
         pros: pros.slice(0, 3),
         cons: cons.slice(0, 3),
         entryNote,
+        consensusCount: algo?.consensusCount ?? 0,
+        citedTools: [],
         sources: c.sources,
         stats: {
           lastClose: stat?.lastClose ?? null,
@@ -431,9 +651,10 @@ function buildAlgoOnlyRanked(
         algoLabels: labels,
         aiOff: true,
         news: [],
+        conflicts: algo?.conflicts ?? [],
+        indicatorReasons: algo?.indicatorReasons ?? [],
       } satisfies RankedSymbol;
     })
-    .filter((r) => r.score > 0)
     .sort((a, b) => b.score - a.score);
-  return ranked;
+  return applyTierQuota(ranked).slice(0, topN);
 }
