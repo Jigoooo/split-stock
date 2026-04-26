@@ -52,6 +52,7 @@ describe('CredentialsRepo', () => {
 
   const validCred: Credentials = {
     env: 'MOCK',
+    broker: 'KIS',
     appKey: 'PSKEY_abcdefghij',
     appSecret: 'PSSECRET_abcdefghij',
     accountNo8: '12345678',
@@ -160,7 +161,7 @@ describe('CredentialsRepo', () => {
       repo.saveCredentials(accountIdMock, validCred);
       const entries = repo.listEntries();
       expect(entries).toHaveLength(1);
-      expect(entries[0]).toEqual({ accountId: accountIdMock, env: 'MOCK' });
+      expect(entries[0]).toEqual({ accountId: accountIdMock, env: 'MOCK', broker: 'KIS' });
     });
   });
 });

@@ -1,6 +1,6 @@
-import type { AppEnv, Credentials } from '@shared/contracts';
+import type { AppEnv, BrokerId, Credentials } from '@shared/contracts';
 import { CredentialsSchema } from '@shared/contracts';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { err, ok, type Result } from 'neverthrow';
 import type { Db } from '../db/client';
 import { credentials as credentialsTable } from '../db/schema';
@@ -64,13 +64,24 @@ export class CredentialsRepo {
       if (existing.length > 0) {
         this.db
           .update(credentialsTable)
-          .set({ env: parsed.data.env, payload, updatedAt: now })
+          .set({
+            env: parsed.data.env,
+            broker: parsed.data.broker,
+            payload,
+            updatedAt: now,
+          })
           .where(eq(credentialsTable.accountId, accountId))
           .run();
       } else {
         this.db
           .insert(credentialsTable)
-          .values({ accountId, env: parsed.data.env, payload, updatedAt: now })
+          .values({
+            accountId,
+            env: parsed.data.env,
+            broker: parsed.data.broker,
+            payload,
+            updatedAt: now,
+          })
           .run();
       }
       return ok(undefined);
@@ -108,17 +119,25 @@ export class CredentialsRepo {
   }
 
   /**
-   * BC 호환: env 로 lookup. credentials.env 에 UNIQUE 인덱스가 있어 결과는 0~1 행.
+   * BC 호환: env 로 lookup. (env, broker) UNIQUE 로 같은 env 라도 broker 다르면 별행.
+   * broker 미지정 시 'KIS' fallback (기존 호출자가 KIS 만 다뤘으므로 안전).
    *
    * 새 코드는 ActiveAccountRepo 로 accountId 를 먼저 얻고 `loadCredentials(accountId)` 사용.
    */
-  loadCredentialsByEnv(env: AppEnv): Result<Credentials | null, CredentialsRepoError> {
+  loadCredentialsByEnv(
+    env: AppEnv,
+    broker: BrokerId = 'KIS',
+  ): Result<Credentials | null, CredentialsRepoError> {
     if (!this.safeStorage.isEncryptionAvailable()) {
       return err({ kind: 'ENCRYPTION_UNAVAILABLE' });
     }
     let rows: Array<typeof credentialsTable.$inferSelect>;
     try {
-      rows = this.db.select().from(credentialsTable).where(eq(credentialsTable.env, env)).all();
+      rows = this.db
+        .select()
+        .from(credentialsTable)
+        .where(and(eq(credentialsTable.env, env), eq(credentialsTable.broker, broker)))
+        .all();
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
     }
@@ -128,11 +147,14 @@ export class CredentialsRepo {
   }
 
   /**
-   * BC 호환: env 단위 삭제. UNIQUE 인덱스로 한 번에 1행만 삭제됨.
+   * BC 호환: env 단위 삭제. broker 미지정 시 'KIS' 만 삭제 (기존 호출자 호환).
    */
-  clearCredentialsByEnv(env: AppEnv): Result<void, CredentialsRepoError> {
+  clearCredentialsByEnv(env: AppEnv, broker: BrokerId = 'KIS'): Result<void, CredentialsRepoError> {
     try {
-      this.db.delete(credentialsTable).where(eq(credentialsTable.env, env)).run();
+      this.db
+        .delete(credentialsTable)
+        .where(and(eq(credentialsTable.env, env), eq(credentialsTable.broker, broker)))
+        .run();
       return ok(undefined);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
@@ -141,13 +163,14 @@ export class CredentialsRepo {
 
   /**
    * env 로 accountId 역추적 — auth-router 의 setEnv 호환용.
+   * broker 미지정 시 'KIS' fallback.
    */
-  resolveAccountIdByEnv(env: AppEnv): number | null {
+  resolveAccountIdByEnv(env: AppEnv, broker: BrokerId = 'KIS'): number | null {
     try {
       const row = this.db
         .select({ accountId: credentialsTable.accountId })
         .from(credentialsTable)
-        .where(eq(credentialsTable.env, env))
+        .where(and(eq(credentialsTable.env, env), eq(credentialsTable.broker, broker)))
         .all()[0];
       return row?.accountId ?? null;
     } catch {
@@ -156,15 +179,23 @@ export class CredentialsRepo {
   }
 
   /**
-   * 저장된 모든 entry — auth.listStored 용 (env, accountId 만).
+   * 저장된 모든 entry — auth.listStored 용 (accountId/env/broker).
    */
-  listEntries(): Array<{ accountId: number; env: AppEnv }> {
+  listEntries(): Array<{ accountId: number; env: AppEnv; broker: BrokerId }> {
     try {
       const rows = this.db
-        .select({ accountId: credentialsTable.accountId, env: credentialsTable.env })
+        .select({
+          accountId: credentialsTable.accountId,
+          env: credentialsTable.env,
+          broker: credentialsTable.broker,
+        })
         .from(credentialsTable)
         .all();
-      return rows.map((r) => ({ accountId: r.accountId, env: r.env as AppEnv }));
+      return rows.map((r) => ({
+        accountId: r.accountId,
+        env: r.env as AppEnv,
+        broker: (r.broker as BrokerId) ?? 'KIS',
+      }));
     } catch {
       return [];
     }

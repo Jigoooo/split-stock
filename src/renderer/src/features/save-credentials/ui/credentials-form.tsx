@@ -21,6 +21,7 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
     e.preventDefault();
     const value: Credentials = {
       env,
+      broker: 'KIS',
       appKey,
       appSecret,
       accountNo8,

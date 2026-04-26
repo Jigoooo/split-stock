@@ -40,7 +40,14 @@ export const AddAccountPage = (): ReactElement => {
 
   const onSubmit = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
-    const value: Credentials = { env, appKey, appSecret, accountNo8, accountProdCd };
+    const value: Credentials = {
+      env,
+      broker: 'KIS',
+      appKey,
+      appSecret,
+      accountNo8,
+      accountProdCd,
+    };
     addMutation.mutate(value);
   };
 

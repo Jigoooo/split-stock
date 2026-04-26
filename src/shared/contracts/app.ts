@@ -30,9 +30,13 @@ export const ACCOUNT_PROD_CODE_OPTIONS: ReadonlyArray<{
 /**
  * 증권사 자격 증명. 저장 시 반드시 safeStorage로 암호화.
  * accessToken은 24h 유효, 만료 6h 이내면 기존 토큰 재사용.
+ *
+ * Stage 5c: broker 필드 추가. 기존 행은 default 'KIS' 로 backfill (zod default).
+ * Kiwoom 활성화는 Stage 6.6 이후. Stage 5b 에서 wizard UI 가 broker 선택 후 저장.
  */
 export const CredentialsSchema = z.object({
   env: AppEnvSchema,
+  broker: z.enum(['KIS', 'KIWOOM']).default('KIS'),
   appKey: z.string().min(10),
   appSecret: z.string().min(10),
   accountNo8: z.string().regex(/^\d{8}$/, 'CANO(앞 8자리)는 숫자 8자리여야 합니다'),

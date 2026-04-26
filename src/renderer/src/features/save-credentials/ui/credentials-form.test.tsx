@@ -42,6 +42,7 @@ describe('CredentialsForm', () => {
     await waitFor(() =>
       expect(saveMock).toHaveBeenCalledWith({
         env: 'PROD',
+        broker: 'KIS',
         appKey: 'app-key',
         appSecret: 'app-secret',
         accountNo8: '12345678',
