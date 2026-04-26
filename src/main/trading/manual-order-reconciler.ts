@@ -1,13 +1,10 @@
-import type { AppEnv, TradeExecutionEvent } from '@shared/contracts';
+import type { DailyExecution, TradeExecutionEvent } from '@shared/contracts';
 import { eq, inArray } from 'drizzle-orm';
+import { realTimer, type Timer } from '../brokers/core/types';
+import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
 import { lots, orders, trades } from '../db/schema';
-import type { AuthService } from '../kis/auth';
-import { type DailyCcldOrder, inquireDailyCcld } from '../kis/domestic-stock';
-import type { KisHttpClient } from '../kis/http-client';
-import { realTimer, type Timer } from '../kis/ws-client';
 import type { EventLogger } from '../logging/event-logger';
-import type { CredentialsRepo } from '../security/credentials-repo';
 
 type OrderStatus = 'PENDING' | 'PARTIAL' | 'FILLED' | 'CANCELLED' | 'REJECTED';
 
@@ -27,9 +24,14 @@ interface PendingOrderRow {
 
 export interface ManualOrderReconcilerOptions {
   db: Db;
-  credentialsRepo: CredentialsRepo;
-  auth: AuthService;
-  httpByEnv: Record<AppEnv, KisHttpClient>;
+  /**
+   * 계좌별 BrokerPort 를 lazy 로 얻는 getter. 미준비(null) 면 해당 계좌 행은 skip.
+   *
+   * Stage 4 변경: KIS 직접 의존(httpByEnv/auth/credentialsRepo + inquireDailyCcld)
+   * 제거 → BrokerPort.listDailyExecutions 추상. Kiwoom 활성 시에도 동일 reconciler
+   * 로직 재사용 (KIS ka10076 / Kiwoom 체결조회 매핑은 mapper 책임).
+   */
+  getBrokerForAccount: (accountId: number) => BrokerPort | null;
   logger: EventLogger;
   onTradeExecution: (event: TradeExecutionEvent) => void;
   timer?: Timer;
@@ -57,7 +59,7 @@ export function resolveManualOrderDecision(input: {
   orderQty: number;
   localFilledQty: number;
   localPrice: number;
-  remote: DailyCcldOrder;
+  remote: DailyExecution;
 }): ReconcileDecision | null {
   const totalFilledQty = Math.min(input.orderQty, Math.max(0, input.remote.totalFilledQty));
   const deltaFilledQty = Math.max(0, totalFilledQty - input.localFilledQty);
@@ -170,80 +172,25 @@ export class ManualOrderReconciler {
         pendingRowsByAccount.set(row.accountId, accountRows);
       }
 
-      const credentialsCache = new Map<
-        number,
-        {
-          env: AppEnv;
-          appKey: string;
-          appSecret: string;
-          accountNo8: string;
-          accountProdCd: string;
-        }
-      >();
+      const brokerCache = new Map<number, BrokerPort | null>();
       const serverPendingByAccount = new Map<number, Set<string> | null>();
-      const tokenCache = new Map<
-        number,
-        {
-          env: AppEnv;
-          token: string;
-          appKey: string;
-          appSecret: string;
-          accountNo8: string;
-          accountProdCd: string;
-        }
-      >();
       const now = new Date();
 
       for (const row of pending) {
-        const credentials =
-          credentialsCache.get(row.accountId) ??
-          (() => {
-            const loaded = this.opts.credentialsRepo.loadCredentials(row.accountId);
-            if (loaded.isErr() || !loaded.value) {
-              this.opts.logger.log({
-                level: 'WARN',
-                category: 'ORDER',
-                message: 'manual-order-reconciler.credentials_missing',
-                payload: { accountId: row.accountId, odno: row.odno },
-              });
-              return null;
-            }
-            credentialsCache.set(row.accountId, loaded.value);
-            return loaded.value;
-          })();
-        if (!credentials) continue;
-
-        const authContext = {
-          env: credentials.env,
-          token: '',
-          appKey: credentials.appKey,
-          appSecret: credentials.appSecret,
-          accountNo8: credentials.accountNo8,
-          accountProdCd: credentials.accountProdCd,
-        } as const;
-        const cachedToken = tokenCache.get(row.accountId);
-        let resolvedAuthContext = cachedToken;
-        if (!resolvedAuthContext) {
-          const tokenResult = await this.opts.auth.getValidToken(
-            credentials.env,
-            credentials.appKey,
-            credentials.appSecret,
-          );
-          if (tokenResult.isErr()) {
+        let broker = brokerCache.get(row.accountId);
+        if (broker === undefined) {
+          broker = this.opts.getBrokerForAccount(row.accountId);
+          brokerCache.set(row.accountId, broker);
+          if (!broker) {
             this.opts.logger.log({
               level: 'WARN',
               category: 'ORDER',
-              message: 'manual-order-reconciler.token_error',
-              payload: { accountId: row.accountId, odno: row.odno, kind: tokenResult.error.kind },
+              message: 'manual-order-reconciler.broker_missing',
+              payload: { accountId: row.accountId, odno: row.odno },
             });
-            continue;
           }
-          resolvedAuthContext = {
-            ...authContext,
-            token: tokenResult.value.token,
-          };
-          tokenCache.set(row.accountId, resolvedAuthContext);
         }
+        if (!broker) continue;
 
         let serverPendingSet = serverPendingByAccount.get(row.accountId);
         if (serverPendingSet === undefined) {
@@ -252,18 +199,12 @@ export class ManualOrderReconciler {
             const placedAt = toDate(item.placedAt);
             return placedAt.getTime() < min.getTime() ? placedAt : min;
           }, toDate(row.placedAt));
-          const pendingSnapshot = await inquireDailyCcld(
-            {
-              http: this.opts.httpByEnv[credentials.env],
-              ...resolvedAuthContext,
-            },
-            {
-              from: oldestPlacedAt,
-              to: now,
-              side: 'ALL',
-              ccldDvsn: '02',
-            },
-          );
+          const pendingSnapshot = await broker.listDailyExecutions({
+            from: oldestPlacedAt,
+            to: now,
+            side: 'ALL',
+            filledOnly: false,
+          });
           if (pendingSnapshot.isErr()) {
             this.opts.logger.log({
               level: 'WARN',
@@ -271,30 +212,30 @@ export class ManualOrderReconciler {
               message: 'manual-order-reconciler.pending_snapshot_failed',
               payload: {
                 accountId: row.accountId,
+                brokerId: broker.brokerId,
                 kind: pendingSnapshot.error.kind,
                 msg: pendingSnapshot.error.msg,
               },
             });
             serverPendingSet = null;
           } else {
-            serverPendingSet = new Set(pendingSnapshot.value.map((entry) => entry.odno));
+            // 미체결만 추출 (remainingQty > 0 && !cancelled). KIS 의 ccldDvsn='02' 와 동등.
+            serverPendingSet = new Set(
+              pendingSnapshot.value
+                .filter((entry) => entry.remainingQty > 0 && !entry.cancelled)
+                .map((entry) => entry.brokerOrderId),
+            );
           }
           serverPendingByAccount.set(row.accountId, serverPendingSet);
         }
 
         const placedAt = toDate(row.placedAt);
-        const remoteResult = await inquireDailyCcld(
-          {
-            http: this.opts.httpByEnv[credentials.env],
-            ...resolvedAuthContext,
-          },
-          {
-            from: placedAt,
-            to: now,
-            orderNo: row.odno,
-            side: row.side === 'SELL' ? 'SELL' : 'BUY',
-          },
-        );
+        const remoteResult = await broker.listDailyExecutions({
+          from: placedAt,
+          to: now,
+          brokerOrderId: row.odno,
+          side: row.side === 'SELL' ? 'SELL' : 'BUY',
+        });
         if (remoteResult.isErr()) {
           this.opts.logger.log({
             level: 'WARN',
@@ -303,6 +244,7 @@ export class ManualOrderReconciler {
             payload: {
               accountId: row.accountId,
               odno: row.odno,
+              brokerId: broker.brokerId,
               kind: remoteResult.error.kind,
               msg: remoteResult.error.msg,
             },
@@ -310,7 +252,7 @@ export class ManualOrderReconciler {
           continue;
         }
 
-        const remote = remoteResult.value.find((entry) => entry.odno === row.odno);
+        const remote = remoteResult.value.find((entry) => entry.brokerOrderId === row.odno);
         const localTrades = this.opts.db
           .select()
           .from(trades)
@@ -354,7 +296,7 @@ export class ManualOrderReconciler {
           this.opts.onTradeExecution({
             accountId: row.accountId,
             odno: row.odno,
-            pdno: remote.pdno,
+            pdno: remote.symbol,
             name: remote.name,
             side: remote.side,
             status: decision.nextStatus === 'FILLED' ? 'FILLED' : 'PARTIAL',

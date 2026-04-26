@@ -12,8 +12,8 @@ describe('resolveManualOrderDecision', () => {
       localFilledQty: 0,
       localPrice: 70000,
       remote: {
-        odno: '1',
-        pdno: '005930',
+        brokerOrderId: '1',
+        symbol: '005930',
         name: '삼성전자',
         side: 'BUY',
         orderQty: 10,
@@ -43,8 +43,8 @@ describe('resolveManualOrderDecision', () => {
       localFilledQty: 2,
       localPrice: 70000,
       remote: {
-        odno: '1',
-        pdno: '005930',
+        brokerOrderId: '1',
+        symbol: '005930',
         name: '삼성전자',
         side: 'BUY',
         orderQty: 10,
@@ -74,8 +74,8 @@ describe('resolveManualOrderDecision', () => {
       localFilledQty: 0,
       localPrice: 70000,
       remote: {
-        odno: '1',
-        pdno: '005930',
+        brokerOrderId: '1',
+        symbol: '005930',
         name: '삼성전자',
         side: 'BUY',
         orderQty: 10,

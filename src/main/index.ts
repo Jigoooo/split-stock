@@ -849,9 +849,16 @@ function bootstrapDeps(userDataDir: string) {
   factory.setBalanceSync(balanceSync);
   const manualOrderReconciler = new ManualOrderReconciler({
     db,
-    credentialsRepo,
-    auth,
-    httpByEnv,
+    getBrokerForAccount: (accountId) => {
+      const ctx = factoryRef.factory;
+      if (!ctx) return null;
+      const env = ctx.getCurrentEnv();
+      const active = ctx.getActiveAccountId();
+      // BrokerPort cache 는 currentEnv + accountId 조합으로 hit. 다른 계좌 행은
+      // 활성 env 와 같은 broker 가 호출 가능하므로 active accountId 만 broker 부여.
+      if (env === null || active !== accountId) return null;
+      return ctx.getBroker();
+    },
     logger: eventLogger,
     onTradeExecution: (event) => {
       eventLogger.log({
