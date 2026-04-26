@@ -1,4 +1,4 @@
-import type { KisError } from '@shared/contracts';
+import type { Balance, BrokerError, KisError } from '@shared/contracts';
 import { CredentialsSchema } from '@shared/contracts';
 import { buildLotOverlay, type LotOverlaySnapshot } from '@shared/trading/lot-overlay';
 import { TRPCError } from '@trpc/server';
@@ -6,12 +6,51 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { lots as lotsTable } from '../../db/schema';
 import { SETTING_KEYS } from '../../db/settings-repo';
-import { inquireBalance } from '../../kis/domestic-stock';
 import { buildLotSyncMismatches } from '../../trading/current-state-sync';
 import type { LotStatus } from '../../trading/fsm';
 import type { LotSnapshotEntry } from '../../trading/lots-repo';
-import { assertCredMatchesEnv, resolveAccountId } from '../router-helpers';
+import { resolveAccountId } from '../router-helpers';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
+
+/**
+ * 도메인 Balance → 기존 KIS BalanceResult shape (renderer wire compat).
+ * Stage 8 까지 renderer 가 `position.code` 필드를 기대하므로 broker port
+ * 응답을 back-convert.
+ */
+function toLegacyBalance(b: Balance) {
+  return {
+    positions: b.positions.map((h) => ({
+      code: h.symbol,
+      name: h.name,
+      qty: h.qty,
+      avgPrice: h.avgPrice,
+      currentPrice: h.currentPrice,
+      evalAmount: h.evalAmount,
+      pnlAmount: h.pnlAmount,
+      pnlRate: h.pnlRate,
+    })),
+    deposit: b.deposit,
+    d2Deposit: b.d2Deposit,
+    totalEval: b.totalEval,
+    estimatedAsset: b.estimatedAsset,
+  };
+}
+
+/**
+ * BrokerError → KisError shape (renderer balanceErrorMessage 함수가 KisError 형태
+ * 가정). Stage 8 에서 renderer 를 BrokerError 로 전환 시 본 어댑터 제거.
+ */
+function toLegacyKisError(e: BrokerError): KisError {
+  const kind: KisError['kind'] =
+    e.kind === 'BUSINESS' ? 'API_BUSINESS' : e.kind === 'NOT_IMPLEMENTED' ? 'UNKNOWN' : e.kind;
+  return {
+    kind,
+    msg: e.msg,
+    ...(e.raw?.code !== undefined && { rt_cd: e.raw.code }),
+    ...(e.raw?.subCode !== undefined && { msg_cd: e.raw.subCode }),
+    ...(e.cause !== undefined && { cause: e.cause }),
+  };
+}
 
 /**
  * KIS error.cause 는 unknown — http-client 가 { status, body } 객체나 Error 를 그대로 전달.
@@ -44,18 +83,6 @@ function balanceDiagnostic(e: KisError): string {
     if (trimmed.length > 0) parts.push(`body=${trimmed.slice(0, 160)}`);
   }
   return parts.length > 0 ? ` [${parts.join(' · ')}]` : '';
-}
-
-/**
- * KIS 토큰 만료/인증 실패 판정 — KIS 는 EGW00123 / "기간이 만료된 token" / "토큰"
- * 류 msg 를 AUTH_FAILED 로 올려보낸다. (http-client 가 500+body JSON 도 파싱해서
- * AUTH_FAILED 로 reclassify 하므로 kind 만 봐도 대부분 충분.)
- */
-function isTokenExpired(e: KisError): boolean {
-  if (e.kind === 'AUTH_FAILED') return true;
-  if (e.msg_cd === 'EGW00123') return true;
-  if (e.msg && /토큰/.test(e.msg)) return true;
-  return false;
 }
 
 function balanceErrorMessage(e: KisError): string {
@@ -307,57 +334,26 @@ export const accountRouter = router({
     .input(z.object({ accountId: z.number().int().positive().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const env = ctx.currentEnv;
-      if (!env) {
-        throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
-      }
+      if (!env) throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
       const accountId = resolveAccountId(ctx, input ?? {});
-      const credResult = ctx.credentialsRepo.loadCredentials(accountId);
-      if (credResult.isErr() || !credResult.value) {
+      const broker = ctx.brokerForAccount(accountId);
+      if (!broker) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
           message: '자격증명 없음 — 로그인 필요',
         });
       }
-      const cred = credResult.value;
-      // env 전환 직후 stale accountId 유입 방어: cred.env !== currentEnv 이면 KIS 호출 전 차단.
-      assertCredMatchesEnv(cred, env);
-      const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
-      if (tokenResult.isErr()) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `토큰 발급 실패: ${tokenResult.error.kind}`,
-        });
-      }
-      const http = ctx.httpByEnv[env];
-      let r = await inquireBalance({
-        http,
-        env,
-        token: tokenResult.value.token,
-        appKey: cred.appKey,
-        appSecret: cred.appSecret,
-        accountNo8: cred.accountNo8,
-        accountProdCd: cred.accountProdCd,
-      });
+      let r = await broker.inquireBalance();
       // 서버측 조기 무효화(EGW00123 등) 감지 시 토큰 강제 재발급 후 1회 재시도.
-      if (r.isErr() && isTokenExpired(r.error)) {
-        ctx.auth.invalidate(env);
-        const fresh = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret, {
-          forceRefresh: true,
-        });
-        if (fresh.isOk()) {
-          r = await inquireBalance({
-            http,
-            env,
-            token: fresh.value.token,
-            appKey: cred.appKey,
-            appSecret: cred.appSecret,
-            accountNo8: cred.accountNo8,
-            accountProdCd: cred.accountProdCd,
-          });
+      if (r.isErr() && (r.error.kind === 'AUTH_FAILED' || r.error.raw?.subCode === 'EGW00123')) {
+        broker.invalidateSession();
+        const ensured = await broker.ensureSession({ forceRefresh: true });
+        if (ensured.isOk()) {
+          r = await broker.inquireBalance();
         }
       }
       if (r.isErr()) {
-        // 원인(status, body, rt_cd, msg_cd 등)은 운영 로그에만 기록 — 사용자에게는 친화 메시지.
+        const legacy = toLegacyKisError(r.error);
         ctx.logger.log({
           level: 'ERROR',
           category: 'SYS',
@@ -365,19 +361,20 @@ export const accountRouter = router({
           payload: {
             accountId,
             env,
-            kind: r.error.kind,
-            kisMsg: r.error.msg,
-            rt_cd: r.error.rt_cd,
-            msg_cd: r.error.msg_cd,
-            cause: serializeCause(r.error.cause),
+            brokerId: broker.brokerId,
+            kind: legacy.kind,
+            kisMsg: legacy.msg,
+            rt_cd: legacy.rt_cd,
+            msg_cd: legacy.msg_cd,
+            cause: serializeCause(legacy.cause),
           },
         });
         throw new TRPCError({
-          code: r.error.kind === 'AUTH_FAILED' ? 'UNAUTHORIZED' : 'INTERNAL_SERVER_ERROR',
-          message: balanceErrorMessage(r.error),
+          code: legacy.kind === 'AUTH_FAILED' ? 'UNAUTHORIZED' : 'INTERNAL_SERVER_ERROR',
+          message: balanceErrorMessage(legacy),
         });
       }
-      return r.value;
+      return toLegacyBalance(r.value);
     }),
 
   /**
@@ -397,56 +394,28 @@ export const accountRouter = router({
     .input(z.object({ accountId: z.number().int().positive().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const env = ctx.currentEnv;
-      if (!env) {
-        throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
-      }
+      if (!env) throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
       const accountId = resolveAccountId(ctx, input ?? {});
-      const credResult = ctx.credentialsRepo.loadCredentials(accountId);
-      if (credResult.isErr() || !credResult.value) {
+      const broker = ctx.brokerForAccount(accountId);
+      if (!broker) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
           message: '자격증명 없음 — 로그인 필요',
         });
       }
-      const cred = credResult.value;
-      // env 전환 직후 stale accountId 유입 방어: cred.env !== currentEnv 이면 KIS 호출 전 차단.
-      assertCredMatchesEnv(cred, env);
-      const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
-      if (tokenResult.isErr()) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `토큰 발급 실패: ${tokenResult.error.kind}`,
-        });
-      }
-      const http = ctx.httpByEnv[env];
-      let balance = await inquireBalance({
-        http,
-        env,
-        token: tokenResult.value.token,
-        appKey: cred.appKey,
-        appSecret: cred.appSecret,
-        accountNo8: cred.accountNo8,
-        accountProdCd: cred.accountProdCd,
-      });
-      // 토큰 조기 만료(EGW00123 등) 자동 재발급 후 1회 재시도.
-      if (balance.isErr() && isTokenExpired(balance.error)) {
-        ctx.auth.invalidate(env);
-        const fresh = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret, {
-          forceRefresh: true,
-        });
-        if (fresh.isOk()) {
-          balance = await inquireBalance({
-            http,
-            env,
-            token: fresh.value.token,
-            appKey: cred.appKey,
-            appSecret: cred.appSecret,
-            accountNo8: cred.accountNo8,
-            accountProdCd: cred.accountProdCd,
-          });
+      let balanceR = await broker.inquireBalance();
+      if (
+        balanceR.isErr() &&
+        (balanceR.error.kind === 'AUTH_FAILED' || balanceR.error.raw?.subCode === 'EGW00123')
+      ) {
+        broker.invalidateSession();
+        const ensured = await broker.ensureSession({ forceRefresh: true });
+        if (ensured.isOk()) {
+          balanceR = await broker.inquireBalance();
         }
       }
-      if (balance.isErr()) {
+      if (balanceR.isErr()) {
+        const legacy = toLegacyKisError(balanceR.error);
         ctx.logger.log({
           level: 'ERROR',
           category: 'SYS',
@@ -454,18 +423,20 @@ export const accountRouter = router({
           payload: {
             accountId,
             env,
-            kind: balance.error.kind,
-            kisMsg: balance.error.msg,
-            rt_cd: balance.error.rt_cd,
-            msg_cd: balance.error.msg_cd,
-            cause: serializeCause(balance.error.cause),
+            brokerId: broker.brokerId,
+            kind: legacy.kind,
+            kisMsg: legacy.msg,
+            rt_cd: legacy.rt_cd,
+            msg_cd: legacy.msg_cd,
+            cause: serializeCause(legacy.cause),
           },
         });
         throw new TRPCError({
-          code: balance.error.kind === 'AUTH_FAILED' ? 'UNAUTHORIZED' : 'INTERNAL_SERVER_ERROR',
-          message: balanceErrorMessage(balance.error),
+          code: legacy.kind === 'AUTH_FAILED' ? 'UNAUTHORIZED' : 'INTERNAL_SERVER_ERROR',
+          message: balanceErrorMessage(legacy),
         });
       }
+      const balance = { value: toLegacyBalance(balanceR.value) };
       // open/buying lot 조회 (per-account 격리) — 한 번의 select 로 모든 종목 조회 후 group.
       // DB 조회 실패 시 빈 객체로 fallback — 잔고 표시는 계속.
       let lotsByPdno: Record<string, LotSnapshotEntry[]> = {};
