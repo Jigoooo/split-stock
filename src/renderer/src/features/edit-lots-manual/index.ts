@@ -5,5 +5,4 @@ export { CsvImportDialog } from './ui/csv-import-dialog';
 export { EditLotsGrid } from './ui/edit-lots-grid';
 export { EditLotsModeToggle } from './ui/edit-lots-mode-toggle';
 export { LotRowFormModal } from './ui/lot-row-form-modal';
-export { PreviewModal } from './ui/preview-modal';
 export { UndoButton } from './ui/undo-button';

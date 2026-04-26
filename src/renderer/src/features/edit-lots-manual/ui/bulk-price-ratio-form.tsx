@@ -10,7 +10,7 @@ export interface BulkPriceRatioFormProps {
 
 /**
  * 액면분할 일괄 보정 — (accountId, pdno) 의 모든 차수 buyPrice 에 ratio 곱.
- * 적용 전 미리보기는 부모 PreviewModal 에 위임 (apply 호출 후 응답에 before/after 포함).
+ * 적용 후 응답에 before/after 가 포함되어 호출측에서 결과 비교 처리.
  */
 export const BulkPriceRatioForm = (props: BulkPriceRatioFormProps): ReactElement => {
   const { accountId, pdno, onApplied } = props;

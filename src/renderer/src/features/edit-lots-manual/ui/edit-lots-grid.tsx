@@ -170,7 +170,6 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
       </table>
       {modal.kind === 'add' && (
         <LotRowFormModal
-          mode="add"
           onSubmit={(row) => {
             void onAdd(row);
           }}
