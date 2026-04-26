@@ -11,11 +11,9 @@ interface UseAppShellReturn {
   pendingEnv: EnvValue | null;
   isInitializing: boolean;
   isSwitchingEnv: boolean;
-  isLoggingOut: boolean;
   requestEnvSwitch: (next: EnvValue) => void;
   confirmEnvSwitch: (target: EnvValue) => void;
   cancelEnvSwitch: () => void;
-  logout: (clearStored: boolean) => void;
 }
 
 export function useAppShell(): UseAppShellReturn {
@@ -45,13 +43,6 @@ export function useAppShell(): UseAppShellReturn {
       void utils.auth.getEnv.invalidate();
     },
   });
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: () => {
-      void utils.auth.getEnv.invalidate();
-      void utils.auth.listStored.invalidate();
-    },
-  });
-
   const requestEnvSwitch = (next: EnvValue): void => {
     if (next === env) return;
     setPendingEnv(next);
@@ -67,14 +58,6 @@ export function useAppShell(): UseAppShellReturn {
     setPendingEnv(null);
   };
 
-  const logout = (clearStored: boolean): void => {
-    const message = clearStored
-      ? '저장된 자격증명까지 삭제합니다. 다음에 재로그인 시 App Key/Secret을 다시 입력해야 합니다. 계속할까요?'
-      : '현재 환경을 로그아웃합니다. 자격증명은 유지되어 다음에 빠르게 재전환 가능합니다.';
-    if (!window.confirm(message)) return;
-    logoutMutation.mutate({ clearStored });
-  };
-
   const stored =
     storedQuery.data?.entries.map((entry) => ({
       env: entry.env,
@@ -87,10 +70,8 @@ export function useAppShell(): UseAppShellReturn {
     pendingEnv,
     isInitializing: envQuery.isPending,
     isSwitchingEnv: setEnv.isPending,
-    isLoggingOut: logoutMutation.isPending,
     requestEnvSwitch,
     confirmEnvSwitch,
     cancelEnvSwitch,
-    logout,
   };
 }

@@ -5,7 +5,6 @@ import {
   useWatchEventNotifications,
 } from '@renderer/features/trade-notifications';
 import { LoginPage } from '@renderer/pages/login';
-import { Button } from '@renderer/shared/ui';
 import { Navigate, Outlet } from '@tanstack/react-router';
 import type { ReactElement, ReactNode } from 'react';
 import { isPopoutRoute, type PopoutRoute } from './model/popout-route';
@@ -36,20 +35,10 @@ const AppShellFrame = ({ children, popout, shell }: AppShellFrameProps): ReactEl
       <header className="app-header">
         <AccountBar env={shell.env} />
         {shell.env && popout ? (
-          <>
-            <div className="app-header__section app-header__section--tools">
-              <span className="app-header__section-label">메뉴</span>
-              <HeaderPopoutButtons popout={popout} />
-            </div>
-            <Button
-              onClick={() => shell.logout(false)}
-              disabled={shell.isLoggingOut}
-              dense
-              style={{ marginLeft: 'auto' }}
-            >
-              로그아웃
-            </Button>
-          </>
+          <div className="app-header__section app-header__section--tools">
+            <span className="app-header__section-label">메뉴</span>
+            <HeaderPopoutButtons popout={popout} />
+          </div>
         ) : null}
       </header>
       <main
