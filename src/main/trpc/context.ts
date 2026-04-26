@@ -7,6 +7,7 @@ import type { LlmClient } from '../ai/llm-client';
 import type { NewsFetcher } from '../ai/news-fetcher';
 import type { BackupScheduler } from '../backup/scheduler';
 import { createBrokerPort } from '../brokers/factory';
+import { KisRealtimeAdapter } from '../brokers/kis/realtime-adapter';
 import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
 import type { SettingsRepo } from '../db/settings-repo';
@@ -166,6 +167,20 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     for (const port of brokerCache.values()) port.dispose();
     brokerCache.clear();
   };
+  /**
+   * KIS RealtimePort 어댑터 — context lifetime 동안 단일 인스턴스 (모든 broker 가
+   * 같은 RealtimeService + FeedBus 를 공유). bus 가 미준비(env 미선택) 면 미생성.
+   */
+  let kisRealtimeAdapter: KisRealtimeAdapter | null = null;
+  const ensureRealtimeAdapter = (): KisRealtimeAdapter | undefined => {
+    if (kisRealtimeAdapter) return kisRealtimeAdapter;
+    if (!deps.bus) return undefined;
+    kisRealtimeAdapter = new KisRealtimeAdapter({
+      getService: () => realtime,
+      bus: deps.bus,
+    });
+    return kisRealtimeAdapter;
+  };
   const brokerForAccount = (accountId: number): BrokerPort | null => {
     if (!currentEnv) return null;
     const key = `${currentEnv}:${accountId}`;
@@ -175,6 +190,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     if (credResult.isErr() || !credResult.value) return null;
     const cred = credResult.value;
     if (cred.env !== currentEnv) return null;
+    const realtimeAdapter = ensureRealtimeAdapter();
     const port = createBrokerPort({
       brokerId: 'KIS',
       deps: {
@@ -188,6 +204,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
           accountProdCd: cred.accountProdCd,
         },
         logger: deps.logger,
+        ...(realtimeAdapter !== undefined && { realtime: realtimeAdapter }),
       },
     });
     brokerCache.set(key, port);

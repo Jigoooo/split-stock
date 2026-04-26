@@ -40,6 +40,7 @@ import {
 } from './mappers/order';
 import { toOrderbookSnapshot } from './mappers/orderbook';
 import { toQuote } from './mappers/quote';
+import type { KisRealtimeAdapter } from './realtime-adapter';
 
 /**
  * KisAdapter 가 의존하는 외부 객체.
@@ -61,6 +62,11 @@ export interface KisAdapterDeps {
   logger: EventLogger;
   /** MOCK 환경 rate-limit 재시도 대기. 테스트에서 단축 가능. */
   rateLimitRetryDelayMs?: number;
+  /**
+   * RealtimePort 어댑터. 부트스트랩에서 RealtimeService + FeedBus 와 함께 주입.
+   * 미주입 시 realtime() 호출은 throw.
+   */
+  realtime?: KisRealtimeAdapter;
 }
 
 /**
@@ -257,7 +263,12 @@ export class KisAdapter implements BrokerPort {
   // ─── RealtimePort (Stage 4 까지 미구현) ─────────────────────────────────
 
   realtime(): RealtimePort {
-    throw new Error('KisAdapter.realtime() — Stage 4 에서 RealtimePort 어댑팅 예정');
+    if (!this.deps.realtime) {
+      throw new Error(
+        'KisAdapter.realtime() — RealtimePort 어댑터가 주입되지 않음 (부트스트랩 누락)',
+      );
+    }
+    return this.deps.realtime;
   }
 
   // ─── lifecycle ──────────────────────────────────────────────────────────
