@@ -15,7 +15,7 @@ export const CredentialsReentryBanner = (): ReactElement | null => {
 
   return (
     <div className="panel" role="alert">
-      <div className="panel__title">🔐 credentials 재입력 안내</div>
+      <div className="panel__title">credentials 재입력 안내</div>
       <div className="panel__body">
         <p>
           최근 DB를 복원했습니다. credentials는 OS 사용자 키로 암호화되어 있어 이전 환경의 값을
