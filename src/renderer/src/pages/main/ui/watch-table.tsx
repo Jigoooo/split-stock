@@ -53,7 +53,9 @@ export const WatchTable = ({
         </TableGrid.Row>
       ) : orders.length === 0 ? (
         <TableGrid.Row placeholder>
-          <TableGrid.Cell className="muted">없음</TableGrid.Cell>
+          <TableGrid.Cell className="muted">
+            자동감시 종목이 없습니다. 상단 "+ 추가" 버튼으로 시작하세요.
+          </TableGrid.Cell>
         </TableGrid.Row>
       ) : (
         orders.map((order) => (
