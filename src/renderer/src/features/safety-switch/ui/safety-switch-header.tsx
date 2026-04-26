@@ -6,11 +6,40 @@ import { useSafetySwitch } from '../model/use-safety-switch';
  * 헤더용 인라인 주문 허용 스위치 — 주문 가능/차단 버튼 + 에러 잠금 인디케이터.
  * panel 래퍼 없이 버튼/칩만 렌더해 헤더 공간을 차지하지 않음.
  */
-export const SafetySwitchHeader = (): ReactElement | null => {
+export const SafetySwitchHeader = (): ReactElement => {
   const { clearErrorLock, clearPending, error, isPending, setMaster, setMasterPending, snapshot } =
     useSafetySwitch();
 
-  if (isPending || error || !snapshot) return null;
+  if (isPending) {
+    return (
+      <div className="header-toggle-control header-toggle-control--order">
+        <span className="header-toggle-control__label">주문</span>
+        <span className="chip" role="status">
+          확인중…
+        </span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="header-toggle-control header-toggle-control--order">
+        <span className="header-toggle-control__label">주문</span>
+        <span className="chip chip--down" role="alert" title={error.message}>
+          상태 오류
+        </span>
+      </div>
+    );
+  }
+  if (!snapshot) {
+    return (
+      <div className="header-toggle-control header-toggle-control--order">
+        <span className="header-toggle-control__label">주문</span>
+        <span className="chip chip--down" role="alert">
+          상태 미수신
+        </span>
+      </div>
+    );
+  }
   const snap = snapshot;
   const errorLocked = snap.errorLock.active;
 
