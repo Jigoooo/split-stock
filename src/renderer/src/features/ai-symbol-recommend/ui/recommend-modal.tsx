@@ -235,16 +235,6 @@ export const RecommendModal = ({
                   variant="ghost"
                   iconOnly
                   dense
-                  iconLeading={<RefreshCw size={14} />}
-                  disabled={view.isPending}
-                  onClick={onAnalyze}
-                  aria-label={view.ranked.length > 0 ? '다시 분석' : '분석 시작'}
-                  title={view.ranked.length > 0 ? '다시 분석' : '분석 시작'}
-                />
-                <Button
-                  variant="ghost"
-                  iconOnly
-                  dense
                   iconLeading={<X size={14} />}
                   onClick={onClose}
                   aria-label="닫기"
@@ -404,6 +394,35 @@ export const RecommendModal = ({
                     AI 응답 중 {view.rejectedCount}건은 후보 풀 외 종목이라 제외됨.
                   </div>
                 ) : null}
+
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    paddingTop: '1.4rem',
+                    marginTop: '0.4rem',
+                    borderTop: '0.1rem solid var(--border)',
+                  }}
+                >
+                  <Button
+                    variant="primary"
+                    iconLeading={<RefreshCw size={14} />}
+                    disabled={view.isPending}
+                    onClick={onAnalyze}
+                    style={{
+                      backgroundColor: '#D97757',
+                      borderColor: '#D97757',
+                      minWidth: '14rem',
+                    }}
+                  >
+                    다시 분석
+                  </Button>
+                  <span className="muted" style={{ fontSize: '0.95rem' }}>
+                    설정/관심 종목을 바꾼 뒤 새 결과를 받으려면 다시 분석을 누르세요.
+                  </span>
+                </div>
               </div>
             )}
           </motion.div>
