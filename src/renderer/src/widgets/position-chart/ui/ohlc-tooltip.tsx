@@ -64,9 +64,10 @@ export const OhlcTooltip = ({ axisRightInset, state }: OhlcTooltipProps): ReactE
         lineHeight: 1.4,
         minWidth: 180,
         fontVariantNumeric: 'tabular-nums',
+        fontWeight: 600,
       }}
     >
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>{payload.date}</div>
+      <div style={{ fontWeight: 700, marginBottom: 4 }}>{payload.date}</div>
       <Row label="시가" value={fmt(payload.open)} />
       <Row label="고가" value={fmt(payload.high)} color={UP_COLOR} />
       <Row label="저가" value={fmt(payload.low)} color={DOWN_COLOR} />
