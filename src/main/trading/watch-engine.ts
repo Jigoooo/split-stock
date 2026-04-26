@@ -3,7 +3,7 @@ import { err, ok, type Result } from 'neverthrow';
 import { z } from 'zod';
 import type { Db } from '../db/client';
 import { watchOrders } from '../db/schema';
-import type { Timer } from '../kis/ws-client';
+import type { Timer } from '../brokers/core/types';
 import type { InFlightCoordinator } from './in-flight-coordinator';
 
 /* -------------------------------------------------------------------------- */

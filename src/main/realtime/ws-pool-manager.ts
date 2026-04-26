@@ -22,8 +22,8 @@
  *   - 체결가(H0STCNT0) + 호가(H0STASP0) 합산이 세션당 20개 (향후 60 확장 예정)
  *   - 같은 종목의 PRICE/ORDERBOOK 둘 다 활성화하면 슬롯 2개 소비
  */
-import type { Timer } from '../kis/ws-client';
-import { realTimer } from '../kis/ws-client';
+import type { Timer } from '../brokers/core/types';
+import { realTimer } from '../brokers/core/types';
 import type { EventLogger } from '../logging/event-logger';
 
 export type WsKind = 'PRICE' | 'ORDERBOOK' | 'BOTH';

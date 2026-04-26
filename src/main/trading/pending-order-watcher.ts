@@ -1,5 +1,5 @@
 import type { ReorderMode } from '../db/settings-repo';
-import type { Timer } from '../kis/ws-client';
+import type { Timer } from '../brokers/core/types';
 
 export type OrderSide = 'BUY' | 'SELL';
 

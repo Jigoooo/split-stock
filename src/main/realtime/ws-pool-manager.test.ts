@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Timer } from '../kis/ws-client';
+import type { Timer } from '../brokers/core/types';
 import type { EventLogger } from '../logging/event-logger';
 import {
   type RestFallbackAdapter,

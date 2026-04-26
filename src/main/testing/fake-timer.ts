@@ -1,4 +1,4 @@
-import type { Timer } from '../kis/ws-client';
+import type { Timer } from '../brokers/core/types';
 
 interface TimeoutEntry {
   cb: () => void;

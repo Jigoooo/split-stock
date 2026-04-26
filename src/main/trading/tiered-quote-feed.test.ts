@@ -1,7 +1,7 @@
 import type { KisError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { realTimer } from '../kis/ws-client';
+import { realTimer } from '../brokers/core/types';
 import type { EventLogger } from '../logging/event-logger';
 import { type PricePoller, type QuoteSnapshot, RotatingQuoteFeed } from './tiered-quote-feed';
 

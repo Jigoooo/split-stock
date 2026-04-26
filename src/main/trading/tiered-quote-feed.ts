@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { KisError } from '@shared/contracts';
 import type { Result } from 'neverthrow';
-import type { Timer } from '../kis/ws-client';
+import type { Timer } from '../brokers/core/types';
 import type { EventLogger } from '../logging/event-logger';
 
 /**

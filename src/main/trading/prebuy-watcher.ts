@@ -1,4 +1,4 @@
-import type { Timer } from '../kis/ws-client';
+import type { Timer } from '../brokers/core/types';
 import type { PrebuyOrder, PrebuyRepo } from './prebuy-repo';
 import type { WatchEngine, WatchHandler, WatchOrder } from './watch-engine';
 
