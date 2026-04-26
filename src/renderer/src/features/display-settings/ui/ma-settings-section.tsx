@@ -9,6 +9,22 @@ import type { ReactElement } from 'react';
 import { colorInputStyle, LINE_STYLE_OPTIONS, MA_LABEL } from '../config/chart-settings-options';
 import type { MaChangeHandler } from '../model/chart-settings-form-types';
 
+/**
+ * input[type=color] 는 #RRGGBB 만 지원. 저장된 색이 rgba()/rgb() 면
+ * RGB 채널을 hex 로 변환해 picker 초기값으로 노출 (alpha 손실은 감수).
+ * 잘못된 형식은 #888888 fallback.
+ */
+function colorToHex(color: string): string {
+  if (color.startsWith('#')) return color;
+  const m = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (!m) return '#888888';
+  const toHex = (n: string): string => {
+    const v = Math.max(0, Math.min(255, Number(n))).toString(16);
+    return v.length === 1 ? `0${v}` : v;
+  };
+  return `#${toHex(m[1] ?? '0')}${toHex(m[2] ?? '0')}${toHex(m[3] ?? '0')}`;
+}
+
 interface MaSettingsSectionProps {
   isSaving: boolean;
   onMaChange: MaChangeHandler;
@@ -67,7 +83,7 @@ export const MaSettingsSection = ({
               <TableGrid.Cell width={56} style={CELL_FLUSH_STYLE}>
                 <input
                   type="color"
-                  value={ma.color.startsWith('rgba') ? '#888888' : ma.color}
+                  value={colorToHex(ma.color)}
                   disabled={isSaving}
                   onChange={(event) => onMaChange(period, 'color', event.target.value)}
                   aria-label={`${MA_LABEL[period]} 색상`}
