@@ -104,8 +104,8 @@ function AutoBackupPanel(): ReactElement {
       <div className="panel__title">자동 백업</div>
       <div className="panel__body" style={{ display: 'grid', gap: '1rem' }}>
         {!auto.enabled ? (
-          <span className="chip chip--down">
-            ⚠ 자동 백업이 꺼져 있습니다. 데이터 손실에 주의하세요.
+          <span className="chip chip--down" role="alert">
+            자동 백업이 꺼져 있습니다. 데이터 손실에 주의하세요.
           </span>
         ) : null}
 
