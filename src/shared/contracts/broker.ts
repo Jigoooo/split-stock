@@ -11,8 +11,8 @@ export type BrokerId = z.infer<typeof BrokerIdSchema>;
 /**
  * 종목코드. KRX 6자리 숫자가 기본. 향후 NXT/SOR 라우팅 시 prefix 정책 별도 PR.
  */
-export const SymbolSchema = z.string().regex(/^\d{6}$/, '종목코드 6자리');
-export type Symbol = z.infer<typeof SymbolSchema>;
+export const StockSymbolSchema = z.string().regex(/^\d{6}$/, '종목코드 6자리');
+export type StockSymbol = z.infer<typeof StockSymbolSchema>;
 
 /**
  * 원(KRW). 정수.
@@ -43,7 +43,7 @@ export type RealtimeKind = z.infer<typeof RealtimeKindSchema>;
  */
 export const OrderIntentSchema = z.object({
   side: OrderSideSchema,
-  symbol: SymbolSchema,
+  symbol: StockSymbolSchema,
   qty: z.number().int().positive(),
   price: MoneySchema.nonnegative(), // MARKET이면 0
   kind: OrderKindSchema,
@@ -82,7 +82,7 @@ export type OrderAck = z.infer<typeof OrderAckSchema>;
  * KIS의 pdno/hldg_qty/prpr 등을 정규화.
  */
 export const HoldingSchema = z.object({
-  symbol: SymbolSchema,
+  symbol: StockSymbolSchema,
   name: z.string(),
   qty: z.number().int().nonnegative(),
   avgPrice: MoneySchema.nonnegative(),
@@ -109,7 +109,7 @@ export type Balance = z.infer<typeof BalanceSchema>;
  * 현재가 시세.
  */
 export const QuoteSchema = z.object({
-  symbol: SymbolSchema,
+  symbol: StockSymbolSchema,
   price: MoneySchema.nonnegative(),
   dayChange: MoneySchema,
   dayChangeRate: z.number(),
@@ -136,7 +136,7 @@ export type OrderbookLevel = z.infer<typeof OrderbookLevelSchema>;
  * 호가창 스냅샷 (10단계).
  */
 export const OrderbookSnapshotSchema = z.object({
-  symbol: SymbolSchema,
+  symbol: StockSymbolSchema,
   /** 시각 (HHMMSS 또는 ISO). adapter가 정규화. */
   time: z.string(),
   /** 매도 호가 (낮은 가격 우선). */
@@ -170,7 +170,7 @@ export type Candle = z.infer<typeof CandleSchema>;
  */
 export const DailyExecutionSchema = z.object({
   brokerOrderId: z.string(),
-  symbol: SymbolSchema,
+  symbol: StockSymbolSchema,
   name: z.string(),
   side: OrderSideSchema,
   orderQty: z.number().int().nonnegative(),
@@ -189,7 +189,7 @@ export type DailyExecution = z.infer<typeof DailyExecutionSchema>;
  * KIS의 H0STCNT0/H0STASP0/H0STCNI0과 Kiwoom의 0B/0D/00을 같은 형태로 흡수.
  */
 export const PriceTickEventSchema = z.object({
-  symbol: SymbolSchema,
+  symbol: StockSymbolSchema,
   price: MoneySchema.nonnegative(),
   volume: z.number().int().nonnegative(),
   /** 체결 시각 (HHMMSS 또는 ISO). */
@@ -207,7 +207,7 @@ export type OrderbookEvent = z.infer<typeof OrderbookEventSchema>;
 
 export const ExecNoticeEventSchema = z.object({
   brokerOrderId: z.string(),
-  symbol: SymbolSchema,
+  symbol: StockSymbolSchema,
   filledQty: z.number().int().nonnegative(),
   price: MoneySchema.nonnegative(),
   at: z.string(),
