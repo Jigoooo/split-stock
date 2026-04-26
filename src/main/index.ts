@@ -839,11 +839,8 @@ function bootstrapDeps(userDataDir: string) {
    *   balanceSync.refresh()를 호출하도록 RealtimeService에 연결 예정.
    */
   const balanceSync = new BalanceSync({
-    getEnv: () => factory.getCurrentEnv(),
+    getBroker: () => factory.getBroker(),
     getAccountId: () => factory.getActiveAccountId(),
-    credentialsRepo,
-    auth,
-    httpByEnv,
     lotsRepo,
     logger: eventLogger,
   });

@@ -1,11 +1,9 @@
-import type { AppEnv } from '@shared/contracts';
-import { MockAgent, setGlobalDispatcher } from 'undici';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Holding } from '@shared/contracts';
+import { describe, expect, it } from 'vitest';
+import { FakeBrokerAdapter } from '../brokers/__tests__/fake-broker-adapter';
+import type { Timer } from '../brokers/core/types';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
-import { KIS_BASE_URL, KIS_PATH } from '../kis/endpoints';
-import { KisHttpClient } from '../kis/http-client';
-import type { Timer } from '../kis/ws-client';
 import type { EventLogger } from '../logging/event-logger';
 import { BalanceSync } from './balance-sync';
 import { LotsRepo } from './lots-repo';
@@ -24,7 +22,6 @@ function createFakeLogger(): EventLogger & {
   };
 }
 
-/** 수동으로 tick하는 FakeTimer. setInterval 콜백을 즉시 호출하지 않음. */
 function createFakeTimer(): Timer & { tickInterval(): void } {
   let intervalCb: (() => void) | null = null;
   return {
@@ -32,7 +29,7 @@ function createFakeTimer(): Timer & { tickInterval(): void } {
       if (intervalCb) intervalCb();
     },
     setTimeout(cb, _ms) {
-      const h = setTimeout(cb, 0); // 테스트에서는 즉시 실행
+      const h = setTimeout(cb, 0);
       return { clear: () => clearTimeout(h) };
     },
     setInterval(cb, _ms) {
@@ -47,91 +44,49 @@ function createFakeTimer(): Timer & { tickInterval(): void } {
   };
 }
 
-function installMockAgent(): MockAgent {
-  const agent = new MockAgent();
-  agent.disableNetConnect();
-  setGlobalDispatcher(agent);
-  return agent;
-}
-
-/** KIS inquire-balance mock 응답 생성. */
-function makeBalanceReply(positions: Array<{ pdno: string; qty: number }>) {
+function makeHolding(pdno: string, qty: number, avgPrice = 70_000): Holding {
   return {
-    rt_cd: '0',
-    msg_cd: 'KIOK',
-    msg1: 'OK',
-    output1: positions.map((p) => ({
-      pdno: p.pdno,
-      prdt_name: `종목_${p.pdno}`,
-      hldg_qty: String(p.qty),
-      pchs_avg_pric: '70000',
-      prpr: '72000',
-      evlu_amt: String(p.qty * 72000),
-      evlu_pfls_amt: String(p.qty * 2000),
-      evlu_pfls_rt: '2.86',
-    })),
-    output2: [
-      {
-        dnca_tot_amt: '5000000',
-        tot_evlu_amt: '10000000',
-      },
-    ],
+    symbol: pdno,
+    name: `종목_${pdno}`,
+    qty,
+    avgPrice,
+    currentPrice: 72_000,
+    evalAmount: qty * 72_000,
+    pnlAmount: qty * 2_000,
+    pnlRate: 2.86,
   };
 }
 
-function makeAuthDeps(env: AppEnv, BASE: string) {
-  const httpByEnv: Record<AppEnv, KisHttpClient> = {
-    MOCK: new KisHttpClient({ baseUrl: BASE }),
-    PROD: new KisHttpClient({ baseUrl: BASE }),
-  };
-  const credentialsRepo = {
-    loadCredentialsByEnv: () => ({
-      isOk: () => true,
-      isErr: () => false,
-      value: {
-        accountNo8: '12345678',
-        accountProdCd: '01',
-        appKey: 'APPKEY',
-        appSecret: 'APPSECRET',
-      },
-    }),
-  } as unknown as import('../security/credentials-repo').CredentialsRepo;
+function makeFakeBroker(holdings: Holding[]): FakeBrokerAdapter {
+  return new FakeBrokerAdapter({
+    balance: {
+      positions: holdings,
+      deposit: 5_000_000,
+      d2Deposit: 4_500_000,
+      totalEval: 10_000_000,
+      estimatedAsset: 10_000_000,
+    },
+  });
+}
 
-  const auth = {
-    getValidToken: vi.fn().mockResolvedValue({
-      isOk: () => true,
-      isErr: () => false,
-      value: { token: 'FAKE_TOKEN' },
-    }),
-  } as unknown as import('../kis/auth').AuthService;
-
-  return { httpByEnv, credentialsRepo, auth, env };
+function setupDb(): { lotsRepo: LotsRepo } {
+  const db = createTestDb();
+  bootstrapSchema(db);
+  return { lotsRepo: new LotsRepo(db) };
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 describe('BalanceSync', () => {
-  let agent: MockAgent;
-  const BASE = KIS_BASE_URL.MOCK;
-
-  beforeEach(() => {
-    agent = installMockAgent();
-  });
-
   it('start() → setInterval 등록, stop() → 해제', () => {
     const timer = createFakeTimer();
     const logger = createFakeLogger();
-    const db = createTestDb();
-    bootstrapSchema(db);
-    const lotsRepo = new LotsRepo(db);
-    const { httpByEnv, credentialsRepo, auth } = makeAuthDeps('MOCK', BASE);
+    const { lotsRepo } = setupDb();
+    const broker = makeFakeBroker([]);
 
     const sync = new BalanceSync({
-      getEnv: () => 'MOCK',
+      getBroker: () => broker,
       getAccountId: () => 1,
-      credentialsRepo,
-      auth,
-      httpByEnv,
       lotsRepo,
       logger,
       timer,
@@ -140,25 +95,14 @@ describe('BalanceSync', () => {
 
     sync.start();
     sync.stop();
-    // stop 후 추가 tick은 poll을 호출하지 않음
     timer.tickInterval();
-    // auth.getValidToken이 호출되지 않아야 함 (폴링 중단됨)
-    expect(auth.getValidToken).not.toHaveBeenCalled();
+    expect(broker.callCount.inquireBalance).toBe(0);
   });
 
   it('refresh() → 즉시 inquireBalance 호출', async () => {
-    const pool = agent.get(BASE);
-    pool
-      .intercept({ path: new RegExp(KIS_PATH.INQUIRE_BALANCE.replace('/', '\\/')), method: 'GET' })
-      .reply(200, makeBalanceReply([{ pdno: '005930', qty: 14 }]));
-    // token endpoint (Approval)은 mock하지 않음 — getValidToken이 mock됨
-
     const timer = createFakeTimer();
     const logger = createFakeLogger();
-    const db = createTestDb();
-    bootstrapSchema(db);
-    const lotsRepo = new LotsRepo(db);
-    // lots-repo에 14주 OPEN 차수 삽입
+    const { lotsRepo } = setupDb();
     lotsRepo.insertLot({
       accountId: 1,
       pdno: '005930',
@@ -169,14 +113,11 @@ describe('BalanceSync', () => {
       status: 'OPEN',
       boughtAt: new Date(),
     });
+    const broker = makeFakeBroker([makeHolding('005930', 14)]);
 
-    const { httpByEnv, credentialsRepo, auth } = makeAuthDeps('MOCK', BASE);
     const sync = new BalanceSync({
-      getEnv: () => 'MOCK',
+      getBroker: () => broker,
       getAccountId: () => 1,
-      credentialsRepo,
-      auth,
-      httpByEnv,
       lotsRepo,
       logger,
       timer,
@@ -184,23 +125,16 @@ describe('BalanceSync', () => {
 
     await sync.refresh();
 
-    // balance-sync.fetched 로그가 찍혀야 함
+    expect(broker.callCount.inquireBalance).toBe(1);
     const fetchedLog = logger.entries.find((e) => e.message === 'balance-sync.fetched');
     expect(fetchedLog).toBeDefined();
     expect((fetchedLog?.payload as { positionCount: number }).positionCount).toBe(1);
   });
 
-  it('lots qty === KIS qty → drift 로그 없음', async () => {
-    const pool = agent.get(BASE);
-    pool
-      .intercept({ path: new RegExp(KIS_PATH.INQUIRE_BALANCE.replace('/', '\\/')), method: 'GET' })
-      .reply(200, makeBalanceReply([{ pdno: '005930', qty: 14 }]));
-
+  it('lots qty === broker qty → drift 로그 없음', async () => {
     const timer = createFakeTimer();
     const logger = createFakeLogger();
-    const db = createTestDb();
-    bootstrapSchema(db);
-    const lotsRepo = new LotsRepo(db);
+    const { lotsRepo } = setupDb();
     lotsRepo.insertLot({
       accountId: 1,
       pdno: '005930',
@@ -211,14 +145,11 @@ describe('BalanceSync', () => {
       status: 'OPEN',
       boughtAt: new Date(),
     });
+    const broker = makeFakeBroker([makeHolding('005930', 14)]);
 
-    const { httpByEnv, credentialsRepo, auth } = makeAuthDeps('MOCK', BASE);
     const sync = new BalanceSync({
-      getEnv: () => 'MOCK',
+      getBroker: () => broker,
       getAccountId: () => 1,
-      credentialsRepo,
-      auth,
-      httpByEnv,
       lotsRepo,
       logger,
       timer,
@@ -230,18 +161,10 @@ describe('BalanceSync', () => {
     expect(driftLog).toBeUndefined();
   });
 
-  it('lots qty !== KIS qty → drift WARN 로그 발생', async () => {
-    const pool = agent.get(BASE);
-    // KIS는 20주, lots-repo는 14주 → 괴리 6주
-    pool
-      .intercept({ path: new RegExp(KIS_PATH.INQUIRE_BALANCE.replace('/', '\\/')), method: 'GET' })
-      .reply(200, makeBalanceReply([{ pdno: '005930', qty: 20 }]));
-
+  it('lots qty !== broker qty → drift WARN 로그 발생', async () => {
     const timer = createFakeTimer();
     const logger = createFakeLogger();
-    const db = createTestDb();
-    bootstrapSchema(db);
-    const lotsRepo = new LotsRepo(db);
+    const { lotsRepo } = setupDb();
     lotsRepo.insertLot({
       accountId: 1,
       pdno: '005930',
@@ -252,14 +175,12 @@ describe('BalanceSync', () => {
       status: 'OPEN',
       boughtAt: new Date(),
     });
+    // broker 는 20주, lots 는 14주 → 괴리 6주
+    const broker = makeFakeBroker([makeHolding('005930', 20)]);
 
-    const { httpByEnv, credentialsRepo, auth } = makeAuthDeps('MOCK', BASE);
     const sync = new BalanceSync({
-      getEnv: () => 'MOCK',
+      getBroker: () => broker,
       getAccountId: () => 1,
-      credentialsRepo,
-      auth,
-      httpByEnv,
       lotsRepo,
       logger,
       timer,
@@ -282,24 +203,15 @@ describe('BalanceSync', () => {
     expect(payload.diff).toBe(6);
   });
 
-  it('KIS 보유는 있는데 lot row가 없으면 OPEN 1차를 자동 복구한다', async () => {
-    const pool = agent.get(BASE);
-    pool
-      .intercept({ path: new RegExp(KIS_PATH.INQUIRE_BALANCE.replace('/', '\\/')), method: 'GET' })
-      .reply(200, makeBalanceReply([{ pdno: '452450', qty: 6 }]));
-
+  it('broker 보유는 있는데 lot row 가 없으면 OPEN 1차를 자동 복구한다', async () => {
     const timer = createFakeTimer();
     const logger = createFakeLogger();
-    const db = createTestDb();
-    bootstrapSchema(db);
-    const lotsRepo = new LotsRepo(db);
-    const { httpByEnv, credentialsRepo, auth } = makeAuthDeps('MOCK', BASE);
+    const { lotsRepo } = setupDb();
+    const broker = makeFakeBroker([makeHolding('452450', 6)]);
+
     const sync = new BalanceSync({
-      getEnv: () => 'MOCK',
+      getBroker: () => broker,
       getAccountId: () => 1,
-      credentialsRepo,
-      auth,
-      httpByEnv,
       lotsRepo,
       logger,
       timer,
@@ -322,20 +234,14 @@ describe('BalanceSync', () => {
     );
   });
 
-  it('env null → poll skip (auth 호출 없음)', async () => {
+  it('broker null → poll skip', async () => {
     const timer = createFakeTimer();
     const logger = createFakeLogger();
-    const db = createTestDb();
-    bootstrapSchema(db);
-    const lotsRepo = new LotsRepo(db);
-    const { httpByEnv, credentialsRepo, auth } = makeAuthDeps('MOCK', BASE);
+    const { lotsRepo } = setupDb();
 
     const sync = new BalanceSync({
-      getEnv: () => null, // env 없음
+      getBroker: () => null,
       getAccountId: () => 1,
-      credentialsRepo,
-      auth,
-      httpByEnv,
       lotsRepo,
       logger,
       timer,
@@ -343,24 +249,18 @@ describe('BalanceSync', () => {
 
     await sync.refresh();
 
-    expect(auth.getValidToken).not.toHaveBeenCalled();
     expect(logger.entries).toHaveLength(0);
   });
 
-  it('accountId null → poll skip', async () => {
+  it('accountId null → poll skip (broker 호출 없음)', async () => {
     const timer = createFakeTimer();
     const logger = createFakeLogger();
-    const db = createTestDb();
-    bootstrapSchema(db);
-    const lotsRepo = new LotsRepo(db);
-    const { httpByEnv, credentialsRepo, auth } = makeAuthDeps('MOCK', BASE);
+    const { lotsRepo } = setupDb();
+    const broker = makeFakeBroker([]);
 
     const sync = new BalanceSync({
-      getEnv: () => 'MOCK',
-      getAccountId: () => null, // 계좌 없음
-      credentialsRepo,
-      auth,
-      httpByEnv,
+      getBroker: () => broker,
+      getAccountId: () => null,
       lotsRepo,
       logger,
       timer,
@@ -368,23 +268,18 @@ describe('BalanceSync', () => {
 
     await sync.refresh();
 
-    expect(auth.getValidToken).not.toHaveBeenCalled();
+    expect(broker.callCount.inquireBalance).toBe(0);
   });
 
   it('dispose() 후 refresh() 호출 → no-op', async () => {
     const timer = createFakeTimer();
     const logger = createFakeLogger();
-    const db = createTestDb();
-    bootstrapSchema(db);
-    const lotsRepo = new LotsRepo(db);
-    const { httpByEnv, credentialsRepo, auth } = makeAuthDeps('MOCK', BASE);
+    const { lotsRepo } = setupDb();
+    const broker = makeFakeBroker([]);
 
     const sync = new BalanceSync({
-      getEnv: () => 'MOCK',
+      getBroker: () => broker,
       getAccountId: () => 1,
-      credentialsRepo,
-      auth,
-      httpByEnv,
       lotsRepo,
       logger,
       timer,
@@ -393,6 +288,6 @@ describe('BalanceSync', () => {
     sync.dispose();
     await sync.refresh();
 
-    expect(auth.getValidToken).not.toHaveBeenCalled();
+    expect(broker.callCount.inquireBalance).toBe(0);
   });
 });

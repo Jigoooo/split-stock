@@ -1,21 +1,18 @@
-import type { AppEnv } from '@shared/contracts';
-import type { AuthService } from '../kis/auth';
-import { inquireBalance } from '../kis/domestic-stock';
-import type { KisHttpClient } from '../kis/http-client';
-import type { Timer } from '../kis/ws-client';
-import { realTimer } from '../kis/ws-client';
+import type { Holding } from '@shared/contracts';
+import type { Timer } from '../brokers/core/types';
+import { realTimer } from '../brokers/core/types';
+import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { EventLogger } from '../logging/event-logger';
-import type { CredentialsRepo } from '../security/credentials-repo';
 import type { LotsRepo } from './lots-repo';
 
 export interface BalanceSyncOptions {
-  /** 현재 활성 env를 lazy하게 얻는 getter. null이면 credentials 없으므로 skip. */
-  getEnv: () => AppEnv | null;
+  /**
+   * 현재 활성 BrokerPort 를 lazy 로 얻는 getter. null 이면 broker 미준비
+   * (env/credentials/account 미설정 등) → poll skip.
+   */
+  getBroker: () => BrokerPort | null;
   /** 현재 활성 accountId를 lazy하게 얻는 getter. null이면 skip. */
   getAccountId: () => number | null;
-  credentialsRepo: CredentialsRepo;
-  auth: AuthService;
-  httpByEnv: Record<AppEnv, KisHttpClient>;
   lotsRepo: LotsRepo;
   logger: EventLogger;
   timer?: Timer;
@@ -24,18 +21,21 @@ export interface BalanceSyncOptions {
 }
 
 /**
- * KIS 잔고 주기 polling + 체결통보(CNI) 즉시 갱신 지원 클래스.
+ * Broker 잔고 주기 polling + 체결통보(CNI) 즉시 갱신 지원 클래스.
  *
  * 역할:
- * - 30초(기본) 주기로 inquireBalance를 호출하여 KIS 서버 잔고를 pull.
- * - lots-repo의 OPEN 차수 qty 합과 KIS 응답 qty 간 괴리 발생 시 WARN 로그.
+ * - 30초(기본) 주기로 BrokerPort.inquireBalance 를 호출.
+ * - lots-repo의 OPEN 차수 qty 합과 broker 응답 qty 간 괴리 발생 시 WARN 로그.
  *   (자동 조정은 하지 않음 — 관측만. 조정은 비즈니스 판단이 필요.)
  * - `refresh()` 메서드로 즉시 갱신 강제 가능.
- *   (W1-7 Phase B: CNI AES 복호화 구현 이후 체결통보 수신 시 호출 예정.)
+ *   (Phase B: CNI AES 복호화 구현 이후 체결통보 수신 시 호출 예정.)
  * - per-account 격리: getAccountId()가 null이면 동작 건너뜀.
  *
- * 주의: env/credentials를 생성 시점이 아니라 매 poll 마다 lazy하게 읽음.
- * env 전환 후에도 인스턴스 재생성 없이 자동으로 새 환경 사용.
+ * 주의: broker 를 생성 시점이 아니라 매 poll 마다 lazy 하게 읽음.
+ * env/계좌 전환 후에도 인스턴스 재생성 없이 자동으로 새 broker 사용.
+ *
+ * Stage 4f: KIS 직접 의존(httpByEnv/auth/credentialsRepo/inquireBalance) →
+ * BrokerPort.inquireBalance 추상. Kiwoom 활성 시에도 동일 polling 로직 재사용.
  */
 export class BalanceSync {
   private readonly timer: Timer;
@@ -72,7 +72,6 @@ export class BalanceSync {
 
   /**
    * 즉시 잔고 갱신 — 폴링 사이클과 무관하게 강제 pull.
-   * CNI 체결통보 수신 시 호출 예정 (W1-7 Phase B: AES 복호화 구현 후).
    */
   async refresh(): Promise<void> {
     if (this.disposed) return;
@@ -97,43 +96,26 @@ export class BalanceSync {
   }
 
   private async doPoll(): Promise<void> {
-    const env = this.opts.getEnv();
-    if (!env) return; // env 미선택 시 조용히 skip
-
     const accountId = this.opts.getAccountId();
-    if (accountId === null) return; // 활성 계좌 없으면 skip
+    if (accountId === null) return;
 
-    const credResult = this.opts.credentialsRepo.loadCredentialsByEnv(env);
-    if (credResult.isErr() || !credResult.value) return; // credentials 없으면 skip
-    const cred = credResult.value;
+    const broker = this.opts.getBroker();
+    if (!broker) return;
 
-    const tokenResult = await this.opts.auth.getValidToken(env, cred.appKey, cred.appSecret);
-    if (tokenResult.isErr()) {
-      this.opts.logger.log({
-        level: 'WARN',
-        category: 'BALANCE',
-        message: 'balance-sync.token_error',
-        payload: { accountId, env, kind: tokenResult.error.kind },
-      });
-      return;
-    }
-
-    const balanceResult = await inquireBalance({
-      http: this.opts.httpByEnv[env],
-      env,
-      token: tokenResult.value.token,
-      appKey: cred.appKey,
-      appSecret: cred.appSecret,
-      accountNo8: cred.accountNo8,
-      accountProdCd: cred.accountProdCd,
-    });
+    const balanceResult = await broker.inquireBalance();
 
     if (balanceResult.isErr()) {
       this.opts.logger.log({
         level: 'WARN',
         category: 'BALANCE',
         message: 'balance-sync.fetch_error',
-        payload: { accountId, env, kind: balanceResult.error.kind, msg: balanceResult.error.msg },
+        payload: {
+          accountId,
+          brokerId: broker.brokerId,
+          env: broker.env,
+          kind: balanceResult.error.kind,
+          msg: balanceResult.error.msg,
+        },
       });
       return;
     }
@@ -144,34 +126,24 @@ export class BalanceSync {
       message: 'balance-sync.fetched',
       payload: {
         accountId,
-        env,
+        brokerId: broker.brokerId,
+        env: broker.env,
         positionCount: balanceResult.value.positions.length,
-        // 보안: 정확 금액 대신 bucket 마스킹 — 잔고 노출 최소화 (Wave 1 verifier H2).
         depositBucket: bucketAmount(balanceResult.value.deposit),
         totalEvalBucket: bucketAmount(balanceResult.value.totalEval),
       },
     });
 
-    // lots-repo OPEN 차수와 KIS 잔고 qty 괴리 감지 + orphan holding 복구
     this.detectDrift(accountId, balanceResult.value.positions);
   }
 
-  /**
-   * lots-repo의 OPEN 차수 qty 합과 KIS 잔고 qty 비교.
-   * 차이가 있으면 WARN 로그. 자동 조정은 하지 않음.
-   */
-  private detectDrift(
-    accountId: number,
-    kisPositions: Array<{ code: string; qty: number; avgPrice: number }>,
-  ): void {
-    // KIS 잔고 기준 pdno → qty 맵
-    const kisPositionByPdno = new Map<string, { qty: number; avgPrice: number }>();
-    for (const pos of kisPositions) {
-      if (pos.qty > 0) kisPositionByPdno.set(pos.code, { qty: pos.qty, avgPrice: pos.avgPrice });
+  private detectDrift(accountId: number, holdings: Holding[]): void {
+    const positionBySymbol = new Map<string, { qty: number; avgPrice: number }>();
+    for (const h of holdings) {
+      if (h.qty > 0) positionBySymbol.set(h.symbol, { qty: h.qty, avgPrice: h.avgPrice });
     }
 
-    // lots-repo에서 KIS 보유 종목의 OPEN 차수 qty 합 조회
-    for (const [pdno, position] of kisPositionByPdno) {
+    for (const [pdno, position] of positionBySymbol) {
       const snapResult = this.opts.lotsRepo.snapshot(accountId, pdno);
       if (snapResult.isErr()) continue;
 
@@ -221,23 +193,9 @@ export class BalanceSync {
         });
       }
     }
-
-    // lots-repo에는 있지만 KIS 잔고에 없는 종목 (0주 / 매도 완료 후 미반영 케이스)
-    // → 현재 구현에서는 별도 처리 없음 (SOLD 상태 lot은 정상이므로 노이즈 발생 가능)
   }
 }
 
-/**
- * 보안: 잔고 정확 금액 대신 자릿수 bucket으로 마스킹.
- * 운영 로그/Sentry에 평문 자산 규모가 흘러가는 것을 방지하면서도 자릿수 추세는 관측 가능.
- *
- * - 0~99,999원 → '<10만'
- * - ~999,999 → '<100만'
- * - ~9,999,999 → '<1천만'
- * - ~99,999,999 → '<1억'
- * - ~999,999,999 → '<10억'
- * - 1,000,000,000+ → '>=10억'
- */
 function bucketAmount(amount: number): string {
   if (!Number.isFinite(amount) || amount < 0) return 'unknown';
   if (amount < 100_000) return '<10만';
