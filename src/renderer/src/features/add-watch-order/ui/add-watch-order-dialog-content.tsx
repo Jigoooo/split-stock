@@ -35,7 +35,7 @@ export const AddWatchOrderDialogContent = ({
               flexDirection: 'column',
               boxSizing: 'border-box',
             }
-          : { minWidth: '600px', maxWidth: '720px', width: '600px' }
+          : { minWidth: 'min(600px, 92vw)', maxWidth: '720px', width: 'min(600px, 92vw)' }
       }
     >
       {isPageLayout ? null : (
