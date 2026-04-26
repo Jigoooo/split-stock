@@ -6,7 +6,7 @@ import type { Db } from '../../db/client';
 import { lots, orders, trades } from '../../db/schema';
 import { readPendingCancelConfig, readPriceCorrectionConfig } from '../../db/settings-repo';
 import { cancelOrRevise, orderCash } from '../../kis/order';
-import { correctLimitPrice } from '../../kis/price-correction';
+import { correctLimitPrice } from '@shared/market-rules';
 import { createPendingBuyLot, linkHighestPendingSellLot } from '../../trading/order-lot-link';
 import { assertCredMatchesEnv, requireAccountId, resolveAccountId } from '../router-helpers';
 import { authedProcedure, router } from '../trpc-core';

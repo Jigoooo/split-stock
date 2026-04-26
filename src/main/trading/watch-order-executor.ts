@@ -11,7 +11,7 @@ import {
 import type { AuthService } from '../kis/auth';
 import type { KisHttpClient } from '../kis/http-client';
 import { orderCash } from '../kis/order';
-import { correctLimitPrice } from '../kis/price-correction';
+import { correctLimitPrice } from '@shared/market-rules';
 import type { EventLogger } from '../logging/event-logger';
 import type { SafetyStateRegistry } from '../safety/safety-state';
 import type { CredentialsRepo } from '../security/credentials-repo';
