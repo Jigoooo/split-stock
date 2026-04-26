@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { KisError } from '@shared/contracts';
+import type { BrokerError } from '@shared/contracts';
 import type { Result } from 'neverthrow';
 import type { Timer } from '../brokers/core/types';
 import type { EventLogger } from '../logging/event-logger';
@@ -34,13 +34,13 @@ export interface QuoteSnapshot {
 }
 
 export interface PricePoller {
-  fetch(pdno: string): Promise<Result<{ price: number }, KisError>>;
+  fetch(pdno: string): Promise<Result<{ price: number }, BrokerError>>;
 }
 
 export interface QuoteFeedEvents {
   quote: (snapshot: QuoteSnapshot) => void;
   /** maxConsecutiveFailures 회 연속 실패 후 쿨다운 진입. */
-  cooldown: (info: { pdno: string; failures: number; error: KisError }) => void;
+  cooldown: (info: { pdno: string; failures: number; error: BrokerError }) => void;
 }
 
 export interface QuoteFeedOptions {

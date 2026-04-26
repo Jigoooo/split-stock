@@ -142,6 +142,12 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   getActiveAccountId: () => number | null;
   /** 현재 활성 env. 부트스트랩 외부에서 lazy 로 끌어 쓸 때 사용. */
   getCurrentEnv: () => AppEnv | null;
+  /**
+   * 현재 활성 계좌의 BrokerPort. trading/realtime 백그라운드 모듈이
+   * env/account 전환에 자동 반응하기 위해 lazy getter 로 노출.
+   * activeAccountId 가 null 이거나 자격증명 미준비/env mismatch 면 null.
+   */
+  getBroker: () => BrokerPort | null;
 } {
   const { realtimeFactory, initialActiveAccountId, ...deps } = opts;
   let currentEnv: AppEnv | null = null;
@@ -271,5 +277,6 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     getRealtime: () => realtime,
     getActiveAccountId: () => activeAccountId,
     getCurrentEnv: () => currentEnv,
+    getBroker: () => (activeAccountId !== null ? brokerForAccount(activeAccountId) : null),
   };
 }

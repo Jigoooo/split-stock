@@ -397,10 +397,7 @@ function bootstrapDeps(userDataDir: string) {
   const tieredFeed = new RotatingQuoteFeed({
     timer: realTimer,
     poller: createEnvAwarePricePoller({
-      getEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
-      credentialsRepo,
-      auth,
-      httpByEnv,
+      getBroker: () => factoryRef.factory?.getBroker() ?? null,
     }),
     logger: eventLogger,
     getRatePerSec: () => {

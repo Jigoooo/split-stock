@@ -1,4 +1,4 @@
-import type { KisError } from '@shared/contracts';
+import type { BrokerError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { realTimer } from '../brokers/core/types';
@@ -21,9 +21,9 @@ function makeOkPoller(prices: Record<string, number>): PricePoller {
   };
 }
 
-function makeErrPoller(error: KisError): PricePoller {
+function makeErrPoller(error: BrokerError): PricePoller {
   return {
-    fetch: async (): Promise<Result<{ price: number }, KisError>> => err(error),
+    fetch: async (): Promise<Result<{ price: number }, BrokerError>> => err(error),
   };
 }
 
@@ -137,7 +137,7 @@ describe('RotatingQuoteFeed (회전 폴링 큐)', () => {
     const cooldowns: Array<{ pdno: string }> = [];
     const errPoller: PricePoller = {
       fetch: async (pdno) => {
-        if (pdno === 'BAD') return err({ kind: 'NETWORK', msg: 'down' });
+        if (pdno === 'BAD') return err({ brokerId: 'KIS', kind: 'NETWORK', msg: 'down' });
         return ok({ price: 999 });
       },
     };
@@ -174,7 +174,7 @@ describe('RotatingQuoteFeed (회전 폴링 큐)', () => {
     const flakyPoller: PricePoller = {
       fetch: async () => {
         attempts += 1;
-        if (attempts <= 2) return err({ kind: 'NETWORK', msg: 'transient' });
+        if (attempts <= 2) return err({ brokerId: 'KIS', kind: 'NETWORK', msg: 'transient' });
         return ok({ price: 42 });
       },
     };
@@ -222,7 +222,7 @@ describe('RotatingQuoteFeed (회전 폴링 큐)', () => {
   it('에러 poller 만 있을 때도 사이클이 멈추지 않음', async () => {
     const feed = new RotatingQuoteFeed({
       timer: realTimer,
-      poller: makeErrPoller({ kind: 'NETWORK', msg: 'always down' }),
+      poller: makeErrPoller({ brokerId: 'KIS', kind: 'NETWORK', msg: 'always down' }),
       logger: noopLogger(),
       ratePerSec: 15,
     });
