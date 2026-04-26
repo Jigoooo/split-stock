@@ -128,32 +128,96 @@ brokers/kiwoom/
 
 `factory.ts` 의 분기에 KiwoomAdapter 추가 (현재 `NOT_IMPLEMENTED` 에러 throw).
 
-### Kiwoom REST endpoint 매핑 (cluefin 기준)
+### Kiwoom REST endpoint 매핑
 
-| Domain | api-id | path | 비고 |
-|---|---|---|---|
-| placeOrder(BUY) | kt10000 | /api/dostk/ordr | dmst_stex_tp/stk_cd/ord_qty/trde_tp/ord_uv |
-| placeOrder(SELL) | kt10001 | /api/dostk/ordr | 동일 |
-| amendOrder | kt10002 | /api/dostk/ordr | orig_ord_no/mdfy_qty/mdfy_uv |
-| cancelOrder | kt10003 | /api/dostk/ordr | orig_ord_no/cncl_qty (전량=`'0'`) |
-| inquireBalance | kt00018 | /api/dostk/acnt | (cluefin 미커버 — 공식 문서 참조 필요) |
-| listDailyExecutions(filledOnly=false) | ka10075 | /api/dostk/acnt | 미체결 |
-| listDailyExecutions(filledOnly=true) | ka10076 | /api/dostk/acnt | 체결 |
-| getQuote | ka10006 | /api/dostk/mrkcond | |
-| getOrderbook | ka10004 | /api/dostk/mrkcond | 10단계 호가 |
-| getDailyOhlcv | ka10081/82/83 | /api/dostk/chart | period 별 |
-| isTradingDay | (Kiwoom 미제공) | — | shared/market-rules KRX 휴장일 폴백 |
+**Base URL** (공식 https://openapi.kiwoom.com 가이드 + KiwoomRestApi.Net 검증):
+- PROD: `https://api.kiwoom.com`
+- MOCK: `https://mockapi.kiwoom.com` (KRX 만 지원)
+
+**OAuth**: `POST /oauth2/token` body `{grant_type:'client_credentials', appkey, secretkey}` →
+`{token_type, token, expires_dt:'YYYYMMDDHHMMSS', return_code:0, return_msg:'정상...'}`
+
+**공통 헤더**:
+- `authorization: Bearer <token>`
+- `api-id: <kt/ka prefix>`
+- `cont-yn: 'N'|'Y'` (페이지네이션)
+- `next-key: ''|<key>` (페이지네이션)
+
+**도메인 ↔ api-id 매핑** (KiwoomRestApi.Net 검증):
+
+| Domain 메서드 | api-id | path | body 필드 | 비고 |
+|---|---|---|---|---|
+| `placeOrder(BUY)` | `kt10000` | `/api/dostk/ordr` | `dmst_stex_tp`, `stk_cd`, `ord_qty`, `trde_tp`, `ord_uv`, `cond_uv?` | KRX/NXT/SOR |
+| `placeOrder(SELL)` | `kt10001` | `/api/dostk/ordr` | 동일 | |
+| `amendOrder` | `kt10002` | `/api/dostk/ordr` | `dmst_stex_tp`, `orig_ord_no`, `stk_cd`, `mdfy_qty`, `mdfy_uv`, `mdfy_cond_uv?` | |
+| `cancelOrder` | `kt10003` | `/api/dostk/ordr` | `dmst_stex_tp`, `orig_ord_no`, `stk_cd`, `cncl_qty` (`0`=전량) | |
+| `inquireBalance` (계좌평가잔고내역) | `kt00018` | `/api/dostk/acnt` | `qry_tp`, `dmst_stex_tp` | 보유종목 + 평가금액 |
+| (예수금) | `kt00001` | `/api/dostk/acnt` | — | 예수금/D+2 분리 조회용 |
+| (계좌평가현황) | `kt00004` | `/api/dostk/acnt` | — | totalEval 보강 |
+| `listDailyExecutions(filledOnly=false)` | `ka10075` | `/api/dostk/acnt` | `all_stk_tp`, `trde_tp`, `stex_tp`, `stk_cd?` | 미체결요청 |
+| `listDailyExecutions(filledOnly=true)` | `ka10076` | `/api/dostk/acnt` | `qry_tp`, `sell_tp`, `stex_tp`, `stk_cd?`, `ord_no?` | 체결요청 |
+| `getQuote` | `ka10006` | `/api/dostk/mrkcond` | `stk_cd` | 현재가 |
+| `getOrderbook` | `ka10004` | `/api/dostk/mrkcond` | `stk_cd` | 10단계 호가 |
+| `getDailyOhlcv(D)` | `ka10081` | `/api/dostk/chart` | `stk_cd`, `base_dt`, `upd_stkpc_tp` | 일봉 |
+| `getDailyOhlcv(W)` | `ka10082` | `/api/dostk/chart` | 동일 | 주봉 |
+| `getDailyOhlcv(M)` | `ka10083` | `/api/dostk/chart` | 동일 | 월봉 |
+| `isTradingDay` | (Kiwoom 미제공) | — | — | shared/market-rules KRX 휴장일 폴백 |
+
+**참고 (필요 시 추가 활용 가능한 endpoint)**:
+- `ka10072`/`ka10073`/`ka10074` — 일자별/기간별 실현손익 (회고 use-case 활용)
+- `kt00007`/`kt00009` — 계좌별 주문체결 상세 / 현황 (manual reconciler 보강)
+
+**페이지네이션**: 응답 헤더 `cont-yn === 'Y'` 면 다음 페이지 존재. 다음 요청에
+`cont-yn: 'Y'`, `next-key: <응답 헤더값>` 보냄. mapper 안에서 loop until `cont-yn === 'N'`.
 
 ### Kiwoom WebSocket
 
-cluefin 미구현. 공식 endpoint:
+**Endpoint** (KiwoomRestApi.Net 검증):
 - PROD: `wss://api.kiwoom.com:10000/api/dostk/websocket`
 - MOCK: `wss://mockapi.kiwoom.com:10000/api/dostk/websocket`
 
-JSON 프로토콜:
-- Login: `{trnm: 'LOGIN', token}`
-- Subscribe: `{trnm: 'REG', grp_no: '1', refresh: '1', data: [{item: ['005930'], type: ['0B']}]}`
-- 종목 type: `0B`=체결, `0D`=호가, `00`=체결통보, `04`=잔고변경
+**프로토콜** (JSON):
+
+```jsonc
+// 1. Login
+{ "trnm": "LOGIN", "token": "<access_token>" }
+// 2. Subscribe (REG)
+{
+  "trnm": "REG",
+  "grp_no": "1",
+  "refresh": "1",
+  "data": [{ "item": ["005930"], "type": ["0B", "0D"] }]
+}
+// 3. Unsubscribe (REMOVE)
+{ "trnm": "REMOVE", "grp_no": "1", "data": [{ "item": ["005930"], "type": ["0B"] }] }
+// 4. 실시간 데이터 (REAL)
+{ "trnm": "REAL", "data": [{ "type": "0B", "name": "주식체결", "item": "005930", "values": {...} }] }
+```
+
+**서비스 type 코드** (전체 — KiwoomRestApi.Net `KiwoomWebSocketServiceName`):
+
+| code | 이름 | 도메인 매핑 |
+|---|---|---|
+| `00` | 주문체결 | `RealtimeEvent.EXEC_NOTICE` |
+| `04` | 잔고 | (잔고 변경 자동 트리거 — `BalanceSync.refresh()` 연계 가능) |
+| `0A` | 주식기세 | (옵션 — 사용 안 함) |
+| `0B` | 주식체결 | `RealtimeEvent.TICK` |
+| `0C` | 주식우선호가 | (옵션) |
+| `0D` | 주식호가잔량 | `RealtimeEvent.ORDERBOOK` |
+| `0E` | 주식시간외호가 | (장외 — 옵션) |
+| `0F` | 주식당일거래원 | (옵션) |
+| `0G` | ETF NAV | (옵션) |
+| `0H` | 주식예상체결 | (옵션 — 동시호가 시간) |
+
+**조건검색** (선택 기능, kt10000-3 이외 별도):
+- `ka10171` 조건검색 목록 (`{trnm: 'CNSRLST'}`)
+- `ka10172` 조건검색 일반 (`{trnm: 'CNSRREQ', seq, search_type:'0', stex_tp:'K', cont_yn, next_key}`)
+- `ka10173` 조건검색 실시간 (`search_type:'1'`)
+
+**용량/제약**:
+- WS 동시 구독 한도: 미공개 (KIS 의 20 종목 보다 큰 것으로 알려짐). Stage 6.5 라이브 검증 시 confirm
+- Mock 환경 KRX 만 지원 (NXT/SOR 라우팅은 PROD 만)
+- Rate limit: 공식 가이드 미공개. KiwoomRestApi.Net 은 별도 limiter 없이 동작 — 보수적 추정 5-10 rps
 
 ## 마이그레이션 진행 (commit hash)
 
@@ -171,6 +235,12 @@ JSON 프로토콜:
 | 4f | c96aa96 | BalanceSync → BrokerPort.inquireBalance |
 | 4g | f4f1b39 | MarketSessionGuard → BrokerPort.isTradingDay |
 | 4h | 602e54c | correctLimitPrice import → @shared/market-rules |
+| 4i | e3bd372 | brokers/AGENTS.md 아키텍처 가이드 |
+| 4j | a5ef92f | ManualOrderReconciler → BrokerPort.listDailyExecutions |
+| 4k | a866955 | watch-order-executor (executeWatch/StrategyOrder) → BrokerPort.placeOrder |
+| 4l | 8f84b06 | account-router (getBalance + getBalanceWithLots) → BrokerPort + 백컨버터 |
+| 4m | c2c3e22 | market-router (getOrderbook + getPrice) → BrokerPort + 백컨버터 |
+| 4n | 6894923 | order-router (placeCash + amend + cancelMany) → BrokerPort + 백컨버터 |
 
 ## 잔여 stage
 
