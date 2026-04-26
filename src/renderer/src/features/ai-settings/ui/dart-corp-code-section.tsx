@@ -34,9 +34,12 @@ export const DartCorpCodeSection = (): ReactElement => {
   const stale = status.data?.stale ?? true;
 
   let statusLabel: string;
+  let statusTitle: string | undefined;
   let statusTone: 'ok' | 'warn' | 'off';
   if (!available) {
-    statusLabel = '키 미설정 (빌드 임베드 환경변수 확인)';
+    statusLabel = '기능 비활성 — 관리자 설정 필요';
+    statusTitle =
+      'OpenDART API 키가 빌드 시점에 임베드되어야 합니다. 시스템 관리자에게 문의하세요.';
     statusTone = 'off';
   } else if (stale) {
     statusLabel = '갱신 필요 (없음 또는 30일 이상 경과)';
@@ -91,6 +94,7 @@ export const DartCorpCodeSection = (): ReactElement => {
             border: `0.1rem solid ${tone.color}`,
             alignSelf: 'flex-start',
           }}
+          {...(statusTitle ? { title: statusTitle } : {})}
         >
           {statusLabel}
         </span>
