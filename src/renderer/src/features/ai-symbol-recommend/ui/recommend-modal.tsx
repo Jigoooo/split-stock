@@ -2,8 +2,9 @@ import { Button } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
 import type { ReactElement } from 'react';
-import type { RecommendationViewState, RecommendedItem } from '../model/use-symbol-recommendations';
+import type { RecommendationViewState } from '../model/use-symbol-recommendations';
 import { ExtraPdnoPicker } from './extra-pdno-picker';
+import { RecommendCard } from './recommend-card';
 
 export interface RecommendModalProps {
   view: RecommendationViewState;
@@ -14,27 +15,6 @@ export interface RecommendModalProps {
   onAddExtra: (pdno: string) => void;
   onRemoveExtra: (pdno: string) => void;
 }
-
-const VOL_LABEL: Record<RecommendedItem['volatilityFit'], string> = {
-  low: '변동성 낮음',
-  mid: '변동성 적정',
-  high: '변동성 높음',
-};
-const VOL_TONE: Record<RecommendedItem['volatilityFit'], string> = {
-  low: 'chip--down',
-  mid: 'chip--live',
-  high: 'chip--up',
-};
-const LIQ_LABEL: Record<RecommendedItem['liquidityFit'], string> = {
-  good: '유동성 양호',
-  ok: '유동성 보통',
-  poor: '유동성 부족',
-};
-const LIQ_TONE: Record<RecommendedItem['liquidityFit'], string> = {
-  good: 'chip--live',
-  ok: 'chip',
-  poor: 'chip--down',
-};
 
 export const RecommendModal = ({
   view,
@@ -105,7 +85,7 @@ export const RecommendModal = ({
                     color: 'var(--fg)',
                   }}
                 >
-                  AI 매직스플릿 추천
+                  AI 추천
                 </h2>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -186,76 +166,7 @@ export const RecommendModal = ({
             ) : (
               <div style={{ display: 'grid', gap: '0.8rem' }}>
                 {view.ranked.map((item) => (
-                  <motion.button
-                    key={item.pdno}
-                    type="button"
-                    onClick={() => onPick(item.pdno, item.name)}
-                    whileHover={{ y: -1, backgroundColor: 'var(--bg-2, rgba(0,0,0,0.03))' }}
-                    transition={{ duration: 0.15 }}
-                    style={{
-                      textAlign: 'left',
-                      padding: '1.2rem',
-                      borderRadius: '0.6rem',
-                      border: '0.1rem solid var(--border)',
-                      background: 'var(--bg)',
-                      cursor: 'pointer',
-                      display: 'grid',
-                      gap: '0.6rem',
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '0.6rem',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                        <span
-                          style={{
-                            fontSize: '1.35rem',
-                            fontWeight: 700,
-                            color: 'var(--fg)',
-                          }}
-                        >
-                          {item.name}
-                        </span>
-                        <span
-                          style={{
-                            fontFamily: 'monospace',
-                            fontSize: '1.1rem',
-                            color: 'var(--fg-2)',
-                          }}
-                        >
-                          ({item.pdno})
-                        </span>
-                      </div>
-                      <span
-                        className="chip chip--live"
-                        style={{ minWidth: '4.4rem', justifyContent: 'center' }}
-                      >
-                        {item.score}점
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <span className={`chip ${VOL_TONE[item.volatilityFit]}`}>
-                        {VOL_LABEL[item.volatilityFit]}
-                      </span>
-                      <span className={`chip ${LIQ_TONE[item.liquidityFit]}`}>
-                        {LIQ_LABEL[item.liquidityFit]}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: '1.15rem',
-                        color: 'var(--fg)',
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {item.summary}
-                    </div>
-                  </motion.button>
+                  <RecommendCard key={item.pdno} item={item} onPick={onPick} />
                 ))}
                 {view.rejectedCount > 0 ? (
                   <div className="muted" style={{ fontSize: '1rem', marginTop: '0.4rem' }}>

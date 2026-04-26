@@ -52,7 +52,7 @@ export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps):
           borderWidth: '0.1rem',
         }}
       >
-        {label ?? 'AI 매직스플릿 추천'}
+        {label ?? 'AI 추천'}
       </Button>
       <RecommendModal
         view={view}

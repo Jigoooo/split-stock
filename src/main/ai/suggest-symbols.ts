@@ -32,16 +32,34 @@ const RankedItemSchema = z.object({
   score: z.number().min(0).max(100),
   volatilityFit: z.enum(['low', 'mid', 'high']),
   liquidityFit: z.enum(['good', 'ok', 'poor']),
+  /** 한 줄 평 — 카드 기본 노출. */
   summary: z.string().min(1).max(120),
+  /** 매직스플릿 적용 시 강점. 0~3개. */
+  pros: z.array(z.string().max(80)).max(3).default([]),
+  /** 주의점/리스크. 0~3개. */
+  cons: z.array(z.string().max(80)).max(3).default([]),
+  /** 진입 시 참고할 한 줄 (예: "박스권 하단 근처 1차 매수 추천"). 없으면 null. */
+  entryNote: z.string().max(160).nullable().default(null),
 });
 
 const SuggestionResponseSchema = z.object({
   ranked: z.array(RankedItemSchema),
 });
 
+export interface RankedSymbolStats {
+  lastClose: number | null;
+  volatility60d: number | null;
+  avgVolume60d: number | null;
+  rangePct120d: number | null;
+}
+
 export type RankedSymbol = z.infer<typeof RankedItemSchema> & {
   /** 응답에 lookup 한 종목명. */
   name: string;
+  /** 후보 출처 (보유/감시/수동). */
+  sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL'>;
+  /** 통계 수치 — UI 에서 LLM 점수 근거를 직접 노출. */
+  stats: RankedSymbolStats;
 };
 
 export interface SuggestSymbolsResult {
@@ -139,7 +157,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
   }
 
   const allowedPdnos = new Set(pool.map((p) => p.pdno));
-  const nameByPdno = new Map(pool.map((p) => [p.pdno, p.name]));
+  const poolByPdno = new Map(pool.map((p) => [p.pdno, p]));
   let rejectedCount = 0;
   const ranked: RankedSymbol[] = [];
   for (const item of result.parsed.ranked) {
@@ -147,7 +165,19 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       rejectedCount++;
       continue;
     }
-    ranked.push({ ...item, name: nameByPdno.get(item.pdno) ?? item.pdno });
+    const poolEntry = poolByPdno.get(item.pdno);
+    const stat = statsByPdno.get(item.pdno);
+    ranked.push({
+      ...item,
+      name: poolEntry?.name ?? item.pdno,
+      sources: poolEntry?.sources ?? [],
+      stats: {
+        lastClose: stat?.lastClose ?? null,
+        volatility60d: stat?.volatility60d ?? null,
+        avgVolume60d: stat?.avgVolume60d ?? null,
+        rangePct120d: stat?.rangePct120d ?? null,
+      },
+    });
   }
   ranked.sort((a, b) => b.score - a.score);
   const topped = ranked.slice(0, input.topN ?? 5);
@@ -165,9 +195,6 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       durationMs: Date.now() - startedAt,
     },
   });
-
-  // statsByPdno 는 디버깅 용도 — 결과에는 노출 X (renderer 가 필요시 별도 query).
-  void statsByPdno;
 
   return {
     ranked: topped,
@@ -194,8 +221,9 @@ function buildPrompt(
   lines.push('');
   lines.push('응답 JSON schema:');
   lines.push(
-    '{"ranked":[{"pdno":"<후보 풀의 pdno>","score":0~100,"volatilityFit":"low|mid|high","liquidityFit":"good|ok|poor","summary":"한 줄 평(120자 이내)"}]}',
+    '{"ranked":[{"pdno":"<후보 풀의 pdno>","score":0~100,"volatilityFit":"low|mid|high","liquidityFit":"good|ok|poor","summary":"한 줄 평(120자 이내)","pros":["매직스플릿 적용 시 강점",...max 3],"cons":["주의점/리스크",...max 3],"entryNote":"진입 시 참고할 한 줄(160자 이내) 또는 null"}]}',
   );
+  lines.push('각 pros/cons 는 80자 이내 짧은 문장. 진단형이 아닌 행동 가이드로 작성.');
   lines.push('');
   lines.push('후보 풀:');
   for (const c of pool) {

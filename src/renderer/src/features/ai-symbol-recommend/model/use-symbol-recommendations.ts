@@ -8,6 +8,16 @@ export interface RecommendedItem {
   volatilityFit: 'low' | 'mid' | 'high';
   liquidityFit: 'good' | 'ok' | 'poor';
   summary: string;
+  pros: string[];
+  cons: string[];
+  entryNote: string | null;
+  sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL'>;
+  stats: {
+    lastClose: number | null;
+    volatility60d: number | null;
+    avgVolume60d: number | null;
+    rangePct120d: number | null;
+  };
 }
 
 export interface RecommendationViewState {
