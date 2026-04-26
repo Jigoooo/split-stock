@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { inquireDailyChart, inquireOrderbook, inquirePrice } from '../../kis/domestic-stock';
+import { inquireOrderbook, inquirePrice } from '../../kis/domestic-stock';
 
 function toIsoDate(d: Date): string {
   const yyyy = d.getFullYear();
@@ -122,23 +122,30 @@ export const marketRouter = router({
       const fromStr = toIsoDate(from);
       const toStr = toIsoDate(to);
       const cached = ctx.candlesRepo.getInRange(input.code, input.period, fromStr, toStr);
-      // 최근 chunk(toMs 미지정)는 오늘 부분체결 바 갱신을 위해 항상 KIS 재조회.
-      // 과거 chunk는 cache에 30건 이상 있으면 KIS 호출 생략.
+      // 최근 chunk(toMs 미지정)는 오늘 부분체결 바 갱신을 위해 항상 broker 재조회.
+      // 과거 chunk는 cache에 30건 이상 있으면 broker 호출 생략.
       const isRecent = input.toMs === undefined;
       if (!isRecent && cached.length >= 30) {
         return { candles: cached, toMs: to.getTime() };
       }
 
-      const r = await inquireDailyChart(
-        {
-          http: ctx.httpByEnv[env],
-          env,
-          token: tokenResult.value.token,
-          appKey: cred.appKey,
-          appSecret: cred.appSecret,
-        },
-        { code: input.code, from, to, period: input.period },
-      );
+      // Stage 4c: BrokerPort.getDailyOhlcv 추상으로 전환. activeAccountId fallback 사용
+      // (market-router 는 계좌 지정 없이 env-credentials 로 호출되던 read-only API 였음).
+      const accountId = ctx.activeAccountId;
+      const broker = accountId !== null ? ctx.brokerForAccount(accountId) : null;
+      if (!broker) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: '활성 계좌의 broker 가 준비되지 않았습니다',
+        });
+      }
+      void tokenResult; // ensureSession 은 broker 내부에서 처리
+      const r = await broker.getDailyOhlcv({
+        symbol: input.code,
+        from,
+        to,
+        period: input.period,
+      });
       if (r.isErr()) {
         // 네트워크/상장이전 등으로 실패했어도 cache에 이미 있는 것만이라도 보여주면 UX에 유리.
         if (cached.length > 0) {
