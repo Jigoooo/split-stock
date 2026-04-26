@@ -4,6 +4,7 @@ import type { AiCredentialsRepo } from '../ai/ai-credentials-repo';
 import type { DartClient } from '../ai/dart-client';
 import type { DartCorpCodeRepo } from '../ai/dart-corp-code-repo';
 import type { LlmClient } from '../ai/llm-client';
+import type { NewsFetcher } from '../ai/news-fetcher';
 import type { BackupScheduler } from '../backup/scheduler';
 import type { Db } from '../db/client';
 import type { SettingsRepo } from '../db/settings-repo';
@@ -76,6 +77,8 @@ export interface Context {
   dartClient: DartClient | null;
   /** DART corp_code 매핑 저장소 — stock_code(6) → corp_code(8). 30일 캐시. */
   dartCorpCodeRepo: DartCorpCodeRepo | null;
+  /** Naver Open API 뉴스 fetcher — AI 추천 시 종목별 최신 뉴스 컨텍스트. 키 미설정 시 isAvailable=false. */
+  newsFetcher: NewsFetcher | null;
   currentEnv: AppEnv | null;
   setCurrentEnv: (env: AppEnv | null) => void;
   setActiveAccountId: (id: number | null) => void;

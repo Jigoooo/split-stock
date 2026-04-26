@@ -22,6 +22,9 @@ export interface RecommendModalProps {
   extras: ReadonlyArray<string>;
   onAddExtra: (pdno: string) => void;
   onRemoveExtra: (pdno: string) => void;
+  aiOff: boolean;
+  onToggleAiOff: (next: boolean) => void;
+  hasDefaultKey: boolean;
 }
 
 export const RecommendModal = ({
@@ -32,6 +35,9 @@ export const RecommendModal = ({
   extras,
   onAddExtra,
   onRemoveExtra,
+  aiOff,
+  onToggleAiOff,
+  hasDefaultKey,
 }: RecommendModalProps): ReactElement => {
   return (
     <AnimatePresence>
@@ -117,7 +123,35 @@ export const RecommendModal = ({
                   </span>
                 ) : null}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <label
+                  title={
+                    hasDefaultKey
+                      ? 'ON: 알고리즘 + LLM(공시/뉴스 컨텍스트)\nOFF: 알고리즘만 (LLM 호출 0회)'
+                      : 'AI 키 미등록 — 알고리즘 전용으로만 동작합니다'
+                  }
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.3rem 0.7rem',
+                    borderRadius: '999px',
+                    border: '0.1rem solid var(--border)',
+                    fontSize: '1rem',
+                    color: 'var(--fg-2)',
+                    cursor: hasDefaultKey ? 'pointer' : 'not-allowed',
+                    opacity: hasDefaultKey ? 1 : 0.7,
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!aiOff}
+                    disabled={!hasDefaultKey}
+                    onChange={(e) => onToggleAiOff(!e.currentTarget.checked)}
+                    style={{ accentColor: '#D97757', margin: 0 }}
+                  />
+                  AI 사용
+                </label>
                 <Button
                   variant="ghost"
                   iconOnly

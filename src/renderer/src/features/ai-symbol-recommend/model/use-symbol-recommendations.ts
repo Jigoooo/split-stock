@@ -9,6 +9,7 @@ interface RecommendCache {
   rejectedCount: number;
   durationMs: number;
   extras: ReadonlyArray<string>;
+  aiOff: boolean;
   fetchedAt: number;
 }
 
@@ -69,6 +70,8 @@ export function useSymbolRecommendations() {
 
   // 모달 세션 동안 사용자가 stock-picker 로 추가한 pdno 목록 (max 10).
   const [extraPdnos, setExtraPdnos] = useState<string[]>([]);
+  // AI 끄기 모드 — LLM 호출 없이 알고리즘 신호만으로 ranking. 키 미설정 시 자동 fallback.
+  const [aiOff, setAiOff] = useState(false);
 
   const mut = trpc.ai.suggestSymbols.useMutation({
     onSuccess: (res) => {
@@ -79,6 +82,7 @@ export function useSymbolRecommendations() {
         rejectedCount: res.rejectedCount,
         durationMs: res.durationMs,
         extras: [...extraPdnos],
+        aiOff,
         fetchedAt,
       };
       setView((prev) => ({
@@ -103,14 +107,15 @@ export function useSymbolRecommendations() {
   });
 
   const open = (): void => {
-    // 캐시 적중 검사 — extras 동일 + 10분 이내면 LLM 호출 생략.
+    // 캐시 적중 검사 — extras + aiOff 동일 + 10분 이내면 LLM 호출 생략.
     const cached = cacheRef.current;
     const sameExtras =
       cached !== null &&
       cached.extras.length === extraPdnos.length &&
       cached.extras.every((p, i) => p === extraPdnos[i]);
+    const sameMode = cached !== null && cached.aiOff === aiOff;
     const fresh = cached !== null && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
-    if (cached && sameExtras && fresh) {
+    if (cached && sameExtras && sameMode && fresh) {
       setView({
         isOpen: true,
         isPending: false,
@@ -135,7 +140,11 @@ export function useSymbolRecommendations() {
       fromCache: false,
       error: null,
     });
-    mut.mutate({ topN: 5, ...(extraPdnos.length > 0 ? { extraPdnos } : {}) });
+    mut.mutate({
+      topN: 5,
+      ...(extraPdnos.length > 0 ? { extraPdnos } : {}),
+      ...(aiOff ? { aiOff: true } : {}),
+    });
   };
 
   const close = (): void => {
@@ -146,7 +155,16 @@ export function useSymbolRecommendations() {
     // 강제 재호출 — 캐시 무시.
     cacheRef.current = null;
     setView((prev) => ({ ...prev, isPending: true, fromCache: false, error: null }));
-    mut.mutate({ topN: 5, ...(extraPdnos.length > 0 ? { extraPdnos } : {}) });
+    mut.mutate({
+      topN: 5,
+      ...(extraPdnos.length > 0 ? { extraPdnos } : {}),
+      ...(aiOff ? { aiOff: true } : {}),
+    });
+  };
+
+  const toggleAiOff = (next: boolean): void => {
+    setAiOff(next);
+    cacheRef.current = null; // 모드 바뀌면 캐시 무효
   };
 
   const addExtraPdno = (pdno: string): void => {
@@ -168,10 +186,12 @@ export function useSymbolRecommendations() {
     hasDefaultKey,
     isAiListLoading: aiList.isLoading,
     extraPdnos,
+    aiOff,
     open,
     close,
     refresh,
     addExtraPdno,
     removeExtraPdno,
+    toggleAiOff,
   };
 }

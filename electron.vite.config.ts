@@ -35,7 +35,12 @@ function loadEnvLocal(): Record<string, string> {
 }
 
 const envLocal = loadEnvLocal();
-const EMBEDDED_KEYS = ['DART_API_KEY', 'KRX_API_KEY'] as const;
+const EMBEDDED_KEYS = [
+  'DART_API_KEY',
+  'KRX_API_KEY',
+  'NAVER_CLIENT_ID',
+  'NAVER_CLIENT_SECRET',
+] as const;
 const mainDefine: Record<string, string> = {};
 for (const key of EMBEDDED_KEYS) {
   mainDefine[`process.env.${key}`] = JSON.stringify(envLocal[key] ?? process.env[key] ?? '');

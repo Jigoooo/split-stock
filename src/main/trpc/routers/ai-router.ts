@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { ensureDailyCandles } from '../../ai/ensure-candles';
+import type { NewsItem } from '../../ai/news-fetcher';
 import { suggestStrategy } from '../../ai/suggest-strategy';
 import { suggestSymbols } from '../../ai/suggest-symbols';
 import type { Context } from '../context';
@@ -238,6 +239,8 @@ export const aiRouter = router({
             .array(z.string().regex(/^\d{6}$/))
             .max(10)
             .optional(),
+          /** AI 끄기 — LLM 호출 없이 알고리즘 신호만으로 ranking. 키 미설정 시 자동 fallback. */
+          aiOff: z.boolean().optional(),
         })
         .optional(),
     )
@@ -251,6 +254,19 @@ export const aiRouter = router({
           message: '활성 계좌가 없습니다. 계좌를 먼저 선택하세요.',
         });
       }
+      // 알고리즘 상위 N (기본 8) 만 뉴스 fetch — Naver 일일 한도 + 응답 시간 트레이드오프.
+      const newsFetcher = ctx.newsFetcher;
+      const fetchNews =
+        newsFetcher?.isAvailable() && input?.aiOff !== true
+          ? async (candidates: ReadonlyArray<{ pdno: string; name: string }>) => {
+              const map = new Map<string, ReadonlyArray<NewsItem>>();
+              for (const c of candidates) {
+                const news = await newsFetcher.searchByKeyword(c.name, 3);
+                if (news.length > 0) map.set(c.pdno, news);
+              }
+              return map;
+            }
+          : undefined;
       try {
         return await suggestSymbols({
           db: ctx.db,
@@ -264,6 +280,8 @@ export const aiRouter = router({
           ...(input?.extraPdnos && input.extraPdnos.length > 0
             ? { extraPdnos: input.extraPdnos }
             : {}),
+          ...(input?.aiOff === true ? { aiOff: true } : {}),
+          ...(fetchNews ? { fetchNews } : {}),
         });
       } catch (cause) {
         throw new TRPCError({

@@ -49,6 +49,7 @@ import { AiCredentialsRepo } from './ai/ai-credentials-repo';
 import { DartClient } from './ai/dart-client';
 import { DartCorpCodeRepo } from './ai/dart-corp-code-repo';
 import { LlmClient } from './ai/llm-client';
+import { NewsFetcher } from './ai/news-fetcher';
 import { BackupScheduler } from './backup/scheduler';
 import { defaultDbPath, migrate, openDb } from './db/client';
 import { orders } from './db/schema';
@@ -195,6 +196,11 @@ function bootstrapDeps(userDataDir: string) {
     db,
     logger: eventLogger,
     apiKey: process.env.DART_API_KEY ?? '',
+  });
+  const newsFetcher = new NewsFetcher({
+    logger: eventLogger,
+    naverClientId: process.env.NAVER_CLIENT_ID ?? '',
+    naverClientSecret: process.env.NAVER_CLIENT_SECRET ?? '',
   });
   const protectionGuard = new ProtectionGuard(db, protectionLimitsRepo);
   // 활성 계좌 보장 — 계좌 0개면 null. 자격증명 저장 시 자동 시드.
@@ -771,6 +777,7 @@ function bootstrapDeps(userDataDir: string) {
     llmClient,
     dartClient,
     dartCorpCodeRepo,
+    newsFetcher,
     initialActiveAccountId,
     realtimeFactory: (env) => {
       if (lastRealtime) {

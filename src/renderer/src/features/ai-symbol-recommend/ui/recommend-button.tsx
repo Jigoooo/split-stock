@@ -23,17 +23,19 @@ export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps):
     hasDefaultKey,
     isAiListLoading,
     extraPdnos,
+    aiOff,
     open,
     close,
     refresh,
     addExtraPdno,
     removeExtraPdno,
+    toggleAiOff,
   } = useSymbolRecommendations();
 
-  const disabled = isAiListLoading || !hasDefaultKey;
+  const disabled = isAiListLoading;
   const title = !hasDefaultKey
-    ? '설정 → AI 탭에서 키를 등록하고 기본으로 지정하세요'
-    : 'AI 가 보유/감시 종목 중 매직스플릿 적합 Top 5 추천';
+    ? 'AI 키 미등록 — 알고리즘 전용 모드로 추천. 설정 → AI 탭에서 키를 등록하면 LLM 활용.'
+    : 'AI 또는 알고리즘으로 매직스플릿 적합 Top 5 추천';
 
   return (
     <>
@@ -65,6 +67,9 @@ export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps):
         extras={extraPdnos}
         onAddExtra={addExtraPdno}
         onRemoveExtra={removeExtraPdno}
+        aiOff={aiOff}
+        onToggleAiOff={toggleAiOff}
+        hasDefaultKey={hasDefaultKey}
       />
     </>
   );
