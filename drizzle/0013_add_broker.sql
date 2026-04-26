@@ -4,14 +4,12 @@
 -- credentials.env unique → (env, broker) unique 로 확장: 같은 env 라도 broker 다르면 별행 가능.
 -- access_tokens PK env → (broker, env): broker 별 토큰 캐시 격리 (6h 재사용 정책 보존).
 
--- 1) credentials.broker 컬럼 추가 (default 'KIS')
 ALTER TABLE `credentials` ADD COLUMN `broker` TEXT NOT NULL DEFAULT 'KIS';
-
--- 기존 unique index 제거 (env only) → (env, broker) 로 재생성
+--> statement-breakpoint
 DROP INDEX IF EXISTS `credentials_env_uniq`;
+--> statement-breakpoint
 CREATE UNIQUE INDEX `credentials_env_broker_uniq` ON `credentials` (`env`, `broker`);
-
--- 2) access_tokens 테이블 재생성 (SQLite 는 PK 변경 직접 ALTER 불가)
+--> statement-breakpoint
 CREATE TABLE `access_tokens_new` (
   `broker` TEXT NOT NULL DEFAULT 'KIS',
   `env` TEXT NOT NULL,
@@ -21,7 +19,10 @@ CREATE TABLE `access_tokens_new` (
   `issued_at` INTEGER NOT NULL,
   PRIMARY KEY (`broker`, `env`)
 );
+--> statement-breakpoint
 INSERT INTO `access_tokens_new` (`broker`, `env`, `token`, `token_type`, `expires_at`, `issued_at`)
   SELECT 'KIS', `env`, `token`, `token_type`, `expires_at`, `issued_at` FROM `access_tokens`;
+--> statement-breakpoint
 DROP TABLE `access_tokens`;
+--> statement-breakpoint
 ALTER TABLE `access_tokens_new` RENAME TO `access_tokens`;
