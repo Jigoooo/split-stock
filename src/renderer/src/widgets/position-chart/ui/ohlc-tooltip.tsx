@@ -9,6 +9,9 @@ interface OhlcTooltipProps {
 
 const ROI_W = 200;
 const ROI_H = 90;
+const UP_COLOR = '#d73333';
+const DOWN_COLOR = '#2d4fca';
+const NEUTRAL_COLOR = '#666';
 
 const fmt = (n: number): string =>
   thousandSeparator(Math.round(n), { allowNegative: true, allowDecimal: false });
@@ -40,8 +43,10 @@ export const OhlcTooltip = ({ axisRightInset, state }: OhlcTooltipProps): ReactE
   const delta = payload.prevClose !== null ? payload.close - payload.prevClose : null;
   const rate = delta !== null && payload.prevClose ? (delta / payload.prevClose) * 100 : null;
   const dir = delta === null || delta === 0 ? 0 : delta > 0 ? 1 : -1;
-  const deltaColor = dir === 1 ? '#d73333' : dir === -1 ? '#2d4fca' : '#666';
+  const deltaColor = dir === 1 ? UP_COLOR : dir === -1 ? DOWN_COLOR : NEUTRAL_COLOR;
   const sign = dir === 1 ? '+' : dir === -1 ? '−' : '';
+  // 종가 색은 전일 대비 등락 방향과 통일. prevClose 가 없으면 중립.
+  const closeColor = dir === 0 ? undefined : deltaColor;
 
   return (
     <div
@@ -63,9 +68,13 @@ export const OhlcTooltip = ({ axisRightInset, state }: OhlcTooltipProps): ReactE
     >
       <div style={{ fontWeight: 600, marginBottom: 4 }}>{payload.date}</div>
       <Row label="시가" value={fmt(payload.open)} />
-      <Row label="고가" value={fmt(payload.high)} />
-      <Row label="저가" value={fmt(payload.low)} />
-      <Row label="종가" value={fmt(payload.close)} />
+      <Row label="고가" value={fmt(payload.high)} color={UP_COLOR} />
+      <Row label="저가" value={fmt(payload.low)} color={DOWN_COLOR} />
+      {closeColor !== undefined ? (
+        <Row label="종가" value={fmt(payload.close)} color={closeColor} />
+      ) : (
+        <Row label="종가" value={fmt(payload.close)} />
+      )}
       {delta !== null && rate !== null ? (
         <Row
           label="등락"
