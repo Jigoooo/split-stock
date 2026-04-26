@@ -67,7 +67,7 @@ export const RecommendModal = ({
             exit={{ opacity: 0, scale: 0.97, y: 6 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             style={{
-              width: '52rem',
+              width: '68rem',
               maxWidth: 'calc(100vw - 3.2rem)',
               maxHeight: 'calc(100vh - 3.2rem)',
               overflowY: 'auto',

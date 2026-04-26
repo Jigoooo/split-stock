@@ -13,6 +13,13 @@ interface RecommendCache {
   fetchedAt: number;
 }
 
+export interface RecommendedNewsItem {
+  publishedAt: string;
+  title: string;
+  summary: string;
+  link: string;
+}
+
 export interface RecommendedItem {
   pdno: string;
   name: string;
@@ -30,6 +37,10 @@ export interface RecommendedItem {
     avgVolume60d: number | null;
     rangePct120d: number | null;
   };
+  algoScore: number | null;
+  algoLabels: ReadonlyArray<string>;
+  aiOff: boolean;
+  news: ReadonlyArray<RecommendedNewsItem>;
 }
 
 export interface RecommendationViewState {

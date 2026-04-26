@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, ChevronUp, Minus, Plus, Target } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, Minus, Newspaper, Plus, Target } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import type { RecommendedItem } from '../model/use-symbol-recommendations';
 
@@ -44,7 +44,8 @@ export const RecommendCard = ({ item, onPick }: RecommendCardProps): ReactElemen
     item.pros.length > 0 ||
     item.cons.length > 0 ||
     item.entryNote !== null ||
-    hasAnyStat(item.stats);
+    hasAnyStat(item.stats) ||
+    item.news.length > 0;
 
   return (
     <div
@@ -167,6 +168,7 @@ export const RecommendCard = ({ item, onPick }: RecommendCardProps): ReactElemen
                   {item.pros.length > 0 ? <ProConList items={item.pros} kind="pro" /> : null}
                   {item.cons.length > 0 ? <ProConList items={item.cons} kind="con" /> : null}
                   {item.entryNote ? <EntryNote note={item.entryNote} /> : null}
+                  {item.news.length > 0 ? <NewsSection news={item.news} /> : null}
                 </div>
               </motion.div>
             ) : null}
@@ -264,6 +266,82 @@ function ProConList({
         {items.map((it) => (
           <li key={it} style={{ fontSize: '1.1rem', color: 'var(--fg)', lineHeight: 1.5 }}>
             {it}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function NewsSection({ news }: { news: RecommendedItem['news'] }): ReactElement {
+  return (
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.4rem',
+          marginBottom: '0.4rem',
+          color: 'var(--fg-2)',
+          fontWeight: 700,
+          fontSize: '1.05rem',
+        }}
+      >
+        <Newspaper size={14} />
+        참조 뉴스 ({news.length})
+      </div>
+      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: '0.4rem' }}>
+        {news.map((n) => (
+          <li
+            key={n.link}
+            style={{
+              padding: '0.55rem 0.7rem',
+              borderRadius: '0.4rem',
+              border: '0.1rem solid var(--border)',
+              background: 'var(--bg)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.5rem',
+                marginBottom: '0.25rem',
+              }}
+            >
+              <span style={{ fontSize: '0.95rem', color: 'var(--fg-2)' }}>{n.publishedAt}</span>
+              <a
+                href={n.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title={n.link}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  fontSize: '0.95rem',
+                  color: '#D97757',
+                  textDecoration: 'none',
+                }}
+              >
+                원문 <ExternalLink size={10} />
+              </a>
+            </div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--fg)' }}>{n.title}</div>
+            {n.summary ? (
+              <div
+                style={{
+                  fontSize: '1rem',
+                  color: 'var(--fg-2)',
+                  lineHeight: 1.5,
+                  marginTop: '0.25rem',
+                }}
+              >
+                {n.summary}
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>

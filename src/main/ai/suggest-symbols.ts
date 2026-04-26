@@ -80,6 +80,8 @@ export type RankedSymbol = z.infer<typeof RankedItemSchema> & {
   algoLabels: ReadonlyArray<string>;
   /** AI 끄기 모드로 생성된 결과인지. */
   aiOff: boolean;
+  /** LLM 이 참조한(또는 AI off 시 미사용) 뉴스 원본. UI 카드 펼침 시 노출. */
+  news: ReadonlyArray<NewsItem>;
 };
 
 export interface SuggestSymbolsResult {
@@ -252,6 +254,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       algoScore: algo?.splitScore ?? null,
       algoLabels: algo?.labels ?? [],
       aiOff: false,
+      news: newsByPdno.get(item.pdno) ?? [],
     });
   }
   ranked.sort((a, b) => b.score - a.score);
@@ -403,6 +406,7 @@ function buildAlgoOnlyRanked(
         algoScore: algo?.splitScore ?? null,
         algoLabels: labels,
         aiOff: true,
+        news: [],
       } satisfies RankedSymbol;
     })
     .filter((r) => r.score > 0)
