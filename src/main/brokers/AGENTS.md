@@ -241,6 +241,15 @@ brokers/kiwoom/
 | 4l | 8f84b06 | account-router (getBalance + getBalanceWithLots) → BrokerPort + 백컨버터 |
 | 4m | c2c3e22 | market-router (getOrderbook + getPrice) → BrokerPort + 백컨버터 |
 | 4n | 6894923 | order-router (placeCash + amend + cancelMany) → BrokerPort + 백컨버터 |
+| 4o | ecddccd | Kiwoom 공식 가이드/KiwoomRestApi.Net 검증 매핑 표 |
+| 4p | ed3745f | KisRealtimeAdapter — RealtimePort 본문 구현 |
+| 5a | 427dcea | credentials.broker 컬럼 + access_tokens (broker, env) PK 마이그레이션 |
+| 6a | 3efd018 | KiwoomAuth + KiwoomHttpClient + endpoints metadata |
+| 6b | f63a490 | KiwoomAdapter stub + factory 분기 활성 |
+| 6c | 875cc0a | KiwoomAdapter — ensureSession + placeOrder/cancel/amend |
+| 6d | 0dd9079 | KiwoomAdapter — balance/quote/orderbook/chart/executions/isTradingDay |
+| 6e | (HEAD~1) | KiwoomSocketClient + KiwoomRealtimeAdapter (JSON WS) |
+| 7 | (HEAD) | kis/price-{tick,correction} deprecation shim 제거 |
 
 ## 잔여 stage
 
