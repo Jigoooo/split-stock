@@ -1,47 +1,12 @@
-import type { AppEnv, Credentials } from '@shared/contracts';
-import { ok } from 'neverthrow';
-import { MockAgent, setGlobalDispatcher } from 'undici';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { KIS_BASE_URL } from '../kis/endpoints';
-import { KisHttpClient } from '../kis/http-client';
+import { describe, expect, it, vi } from 'vitest';
+import { FakeBrokerAdapter } from '../brokers/__tests__/fake-broker-adapter';
 import { AutoOrderBlockedError } from './auto-order-errors';
 import { MarketSessionGuard } from './market-session-guard';
 
-const BASE = KIS_BASE_URL.MOCK;
-
-function setupMock(): MockAgent {
-  const agent = new MockAgent();
-  agent.disableNetConnect();
-  setGlobalDispatcher(agent);
-  return agent;
-}
-
-function credentials(): Credentials {
-  return {
-    env: 'MOCK',
-    appKey: 'APPKEY',
-    appSecret: 'APPSECRET',
-    accountNo8: '12345678',
-    accountProdCd: '01',
-  };
-}
-
-function createGuard(agent: MockAgent, now: Date) {
+function createGuard(broker: FakeBrokerAdapter | null, now: Date) {
   const logger = { log: vi.fn() };
   const guard = new MarketSessionGuard({
-    auth: {
-      getValidToken: vi.fn(async () =>
-        ok({ token: 'tk_test', tokenType: 'Bearer', issuedAt: 0, expiresAt: Date.now() + 1000 }),
-      ),
-    } as never,
-    credentialsRepo: {
-      loadCredentials: vi.fn(() => ok(credentials())),
-    } as never,
-    getCurrentEnv: () => 'MOCK' as AppEnv,
-    httpByEnv: {
-      MOCK: new KisHttpClient({ baseUrl: BASE, dispatcher: agent }),
-      PROD: new KisHttpClient({ baseUrl: KIS_BASE_URL.PROD, dispatcher: agent }),
-    },
+    getBroker: () => broker,
     logger: logger as never,
     now: () => now,
   });
@@ -49,14 +14,9 @@ function createGuard(agent: MockAgent, now: Date) {
 }
 
 describe('MarketSessionGuard', () => {
-  let agent: MockAgent;
-
-  beforeEach(() => {
-    agent = setupMock();
-  });
-
-  it('주말에는 KIS 호출 전에 자동주문을 차단한다', async () => {
-    const { guard } = createGuard(agent, new Date('2026-04-25T14:05:00+09:00'));
+  it('주말에는 broker 호출 전에 자동주문을 차단한다', async () => {
+    const broker = new FakeBrokerAdapter();
+    const { guard } = createGuard(broker, new Date('2026-04-25T14:05:00+09:00'));
 
     await expect(
       guard.assertAutoOrderAllowed({
@@ -65,27 +25,43 @@ describe('MarketSessionGuard', () => {
         side: 'SELL',
         source: 'STRATEGY',
       }),
-    ).rejects.toMatchObject({
-      code: 'MARKET_WEEKEND',
-    });
+    ).rejects.toMatchObject({ code: 'MARKET_WEEKEND' });
+    expect(broker.callCount.isTradingDay).toBe(0);
+  });
+
+  it('정규장 시간이 아니면 차단한다', async () => {
+    const broker = new FakeBrokerAdapter();
+    // 평일이지만 새벽 5시 — 정규장 시간 외
+    const { guard } = createGuard(broker, new Date('2026-04-24T05:00:00+09:00'));
+
+    await expect(
+      guard.assertAutoOrderAllowed({
+        accountId: 1,
+        pdno: '452450',
+        side: 'BUY',
+        source: 'WATCH',
+      }),
+    ).rejects.toMatchObject({ code: 'MARKET_TIME_CLOSED' });
+  });
+
+  it('broker 미준비 시 MARKET_SESSION_UNKNOWN 차단', async () => {
+    const { guard } = createGuard(null, new Date('2026-04-24T10:00:00+09:00'));
+
+    await expect(
+      guard.assertAutoOrderAllowed({
+        accountId: 1,
+        pdno: '452450',
+        side: 'SELL',
+        source: 'STRATEGY',
+      }),
+    ).rejects.toMatchObject({ code: 'MARKET_SESSION_UNKNOWN' });
   });
 
   it('정규장 개장일은 허용하고 하루 결과를 캐시한다', async () => {
-    const pool = agent.get(BASE);
-    pool.intercept({ path: /chk-holiday/, method: 'GET' }).reply(200, {
-      rt_cd: '0',
-      msg_cd: 'OK',
-      msg1: 'success',
-      output: {
-        bass_dt: '20260424',
-        wday_dvsn_cd: '5',
-        bzdy_yn: 'Y',
-        tr_day_yn: 'Y',
-        opnd_yn: 'Y',
-        sttl_day_yn: 'Y',
-      },
+    const broker = new FakeBrokerAdapter({
+      // 평일 10시 + isTradingDayFn 의 default 가 평일 true 라 OK.
     });
-    const { guard } = createGuard(agent, new Date('2026-04-24T10:00:00+09:00'));
+    const { guard } = createGuard(broker, new Date('2026-04-24T10:00:00+09:00'));
     const input = {
       accountId: 1,
       pdno: '452450',
@@ -95,24 +71,15 @@ describe('MarketSessionGuard', () => {
 
     await expect(guard.assertAutoOrderAllowed(input)).resolves.toBeUndefined();
     await expect(guard.assertAutoOrderAllowed(input)).resolves.toBeUndefined();
+    // 두 번째 호출은 캐시 hit — broker 1 회만 호출
+    expect(broker.callCount.isTradingDay).toBe(1);
   });
 
-  it('KIS 개장일여부가 N이면 자동주문을 차단한다', async () => {
-    const pool = agent.get(BASE);
-    pool.intercept({ path: /chk-holiday/, method: 'GET' }).reply(200, {
-      rt_cd: '0',
-      msg_cd: 'OK',
-      msg1: 'success',
-      output: {
-        bass_dt: '20260424',
-        wday_dvsn_cd: '5',
-        bzdy_yn: 'N',
-        tr_day_yn: 'N',
-        opnd_yn: 'N',
-        sttl_day_yn: 'N',
-      },
+  it('broker.isTradingDay 가 false 면 자동주문을 차단한다', async () => {
+    const broker = new FakeBrokerAdapter({
+      isTradingDayFn: () => false, // 강제 false (예: 임시 휴장일)
     });
-    const { guard } = createGuard(agent, new Date('2026-04-24T10:00:00+09:00'));
+    const { guard } = createGuard(broker, new Date('2026-04-24T10:00:00+09:00'));
 
     await expect(
       guard.assertAutoOrderAllowed({
@@ -122,5 +89,21 @@ describe('MarketSessionGuard', () => {
         source: 'WATCH',
       }),
     ).rejects.toBeInstanceOf(AutoOrderBlockedError);
+  });
+
+  it('broker.isTradingDay 가 에러 반환 시 MARKET_SESSION_UNKNOWN', async () => {
+    const broker = new FakeBrokerAdapter({
+      forceError: { brokerId: 'KIS', kind: 'NETWORK', msg: 'down' },
+    });
+    const { guard } = createGuard(broker, new Date('2026-04-24T10:00:00+09:00'));
+
+    await expect(
+      guard.assertAutoOrderAllowed({
+        accountId: 1,
+        pdno: '452450',
+        side: 'BUY',
+        source: 'STRATEGY',
+      }),
+    ).rejects.toMatchObject({ code: 'MARKET_SESSION_UNKNOWN' });
   });
 });

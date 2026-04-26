@@ -583,10 +583,7 @@ function bootstrapDeps(userDataDir: string) {
     },
   });
   const marketSessionGuard = new MarketSessionGuard({
-    auth,
-    credentialsRepo,
-    getCurrentEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
-    httpByEnv,
+    getBroker: () => factoryRef.factory?.getBroker() ?? null,
     logger: eventLogger,
   });
   const autoBuyGuard = new AutoBuyGuard({
