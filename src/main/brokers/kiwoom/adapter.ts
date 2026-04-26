@@ -157,17 +157,25 @@ export class KiwoomAdapter implements BrokerPort {
     const tokenResult = await this.token();
     if (tokenResult.isErr()) return err(tokenResult.error);
     const apiId = p.filledOnly ? KIWOOM_API_ID.FILLED_ORDERS : KIWOOM_API_ID.UNFILLED_ORDERS;
-    const body: Record<string, string> = {
-      stex_tp: this.deps.defaultExchange ?? '1',
-      ...(p.symbol !== undefined && { stk_cd: p.symbol }),
-      ...(p.brokerOrderId !== undefined && { ord_no: p.brokerOrderId }),
-      // ka10075: all_stk_tp / trde_tp 필수, ka10076: qry_tp / sell_tp 필수.
-      // Stage 6.5 라이브 검증 시 정확한 필수 필드 보정.
-      all_stk_tp: '0',
-      trde_tp: '0',
-      qry_tp: '0',
-      sell_tp: '0',
-    };
+    // ka10075(미체결) 와 ka10076(체결) 은 필수 필드가 다름 — cluefin metadata 기준:
+    //   ka10075 (미체결): all_stk_tp / trde_tp / stex_tp / stk_cd?
+    //   ka10076 (체결):   qry_tp / sell_tp / stex_tp / stk_cd? / ord_no?
+    // 0=전체 (구분 미지정). side 필터는 server-side trde_tp/sell_tp 가 아닌
+    // client-side 로 처리 (도메인 OrderSide 와 1:1 매핑이 모호하므로 안전).
+    const body: Record<string, string> = p.filledOnly
+      ? {
+          qry_tp: '0',
+          sell_tp: '0',
+          stex_tp: this.deps.defaultExchange ?? '1',
+          ...(p.symbol !== undefined && { stk_cd: p.symbol }),
+          ...(p.brokerOrderId !== undefined && { ord_no: p.brokerOrderId }),
+        }
+      : {
+          all_stk_tp: '0',
+          trde_tp: '0',
+          stex_tp: this.deps.defaultExchange ?? '1',
+          ...(p.symbol !== undefined && { stk_cd: p.symbol }),
+        };
     const r = await this.deps.http.post<KiwoomUnexecutedResponseWire | KiwoomExecutedResponseWire>(
       KIWOOM_PATH.ACCOUNT,
       body,

@@ -44,7 +44,8 @@ export function toKiwoomModifyOrderBody(
   return {
     dmst_stex_tp: defaultExchange,
     orig_ord_no: amend.brokerOrderId,
-    stk_cd: '',
+    // Kiwoom kt10002 는 stk_cd 필수. 호출측이 symbol 을 같이 전달.
+    stk_cd: amend.symbol ?? '',
     mdfy_qty: String(amend.qty ?? 0),
     mdfy_uv: String(amend.price ?? 0),
   };
@@ -62,7 +63,8 @@ export function toKiwoomCancelOrderBody(
   return {
     dmst_stex_tp: defaultExchange,
     orig_ord_no: input.brokerOrderId,
-    stk_cd: '',
+    // Kiwoom kt10003 는 stk_cd 필수. 호출측이 symbol 을 같이 전달.
+    stk_cd: input.symbol ?? '',
     cncl_qty: isAll ? '0' : String(input.qty ?? 0),
   };
 }

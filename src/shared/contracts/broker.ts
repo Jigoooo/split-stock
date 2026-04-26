@@ -63,6 +63,11 @@ export const OrderAmendIntentSchema = z.object({
   kind: OrderKindSchema.optional(),
   /** 전량 취소 (KIS qtyAllOrder, Kiwoom cncl_qty='0'). */
   qtyAllOrder: z.boolean().optional(),
+  /**
+   * 정정/취소 대상 종목 코드. KIS 는 무시(원주문 식별자만으로 충분), Kiwoom 은
+   * kt10002/kt10003 body 의 stk_cd 필수 필드로 사용.
+   */
+  symbol: StockSymbolSchema.optional(),
 });
 export type OrderAmendIntent = z.infer<typeof OrderAmendIntentSchema>;
 

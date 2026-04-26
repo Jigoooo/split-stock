@@ -31,6 +31,8 @@ async function brokerCancel(
     price: number;
     division: 'LIMIT' | 'MARKET';
     qtyAllOrder: boolean;
+    /** Kiwoom kt10003 stk_cd 필수. KIS 는 무시. */
+    symbol?: string;
   },
 ) {
   return broker.cancelOrder({
@@ -41,6 +43,7 @@ async function brokerCancel(
     kind: params.division,
     qtyAllOrder: params.qtyAllOrder,
     all: params.qtyAllOrder,
+    ...(params.symbol !== undefined && { symbol: params.symbol }),
   });
 }
 
@@ -53,6 +56,8 @@ async function brokerAmend(
     price: number;
     division: 'LIMIT' | 'MARKET';
     qtyAllOrder: boolean;
+    /** Kiwoom kt10002 stk_cd 필수. KIS 는 무시. */
+    symbol?: string;
   },
 ) {
   return broker.amendOrder({
@@ -62,6 +67,7 @@ async function brokerAmend(
     price: params.price,
     kind: params.division,
     qtyAllOrder: params.qtyAllOrder,
+    ...(params.symbol !== undefined && { symbol: params.symbol }),
   });
 }
 
@@ -274,6 +280,12 @@ export const orderRouter = router({
       if (!broker) {
         throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
       }
+      // Kiwoom kt10002/kt10003 은 stk_cd 필수 — orders 테이블에서 원주문 종목 조회.
+      const orderRow = ctx.db
+        .select({ pdno: orders.pdno })
+        .from(orders)
+        .where(and(eq(orders.odno, input.orgOdno), eq(orders.accountId, accountId)))
+        .get();
       const amendParams = {
         orgOrgNo: input.orgOrgNo,
         orgOdno: input.orgOdno,
@@ -281,6 +293,7 @@ export const orderRouter = router({
         price: input.price,
         division: input.division,
         qtyAllOrder: input.qtyAllOrder,
+        ...(orderRow?.pdno !== undefined && { symbol: orderRow.pdno }),
       };
       const r =
         input.action === 'cancel'
@@ -442,6 +455,7 @@ export const orderRouter = router({
           qty: remainingQty,
           price: 0,
           qtyAllOrder: true,
+          symbol: row.pdno,
         });
         if (r.isOk()) {
           ctx.db
