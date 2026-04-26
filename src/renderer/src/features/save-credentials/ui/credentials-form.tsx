@@ -1,6 +1,6 @@
 import { Button, EnvironmentRadioGroup, TextInput } from '@renderer/shared/ui';
 import type { AccountProdCode, AppEnv, Credentials } from '@shared/contracts';
-import { type FormEvent, type ReactElement, useState } from 'react';
+import { type FormEvent, type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useSaveCredentials } from '../model/use-save-credentials';
 
@@ -14,8 +14,14 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
   const [env, setEnv] = useState<AppEnv>('MOCK');
   const [appKey, setAppKey] = useState('');
   const [appSecret, setAppSecret] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
   const [accountNo8, setAccountNo8] = useState('');
   const [accountProdCd, setAccountProdCd] = useState<AccountProdCode>('01');
+  const canSubmit =
+    appKey.length > 0 && appSecret.length > 0 && accountNo8.length === 8 && !isPending;
+  useEffect(() => {
+    document.getElementById('credentials-app-key')?.focus();
+  }, []);
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -72,16 +78,27 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
         </Row>
 
         <Row label="App Secret" inputId="credentials-app-secret">
-          <TextInput
-            id="credentials-app-secret"
-            type="password"
-            value={appSecret}
-            onChange={(e) => setAppSecret(e.target.value)}
-            autoComplete="off"
-            spellCheck={false}
-            dense
-            style={{ width: '100%' }}
-          />
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'stretch' }}>
+            <TextInput
+              id="credentials-app-secret"
+              type={showSecret ? 'text' : 'password'}
+              value={appSecret}
+              onChange={(e) => setAppSecret(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              dense
+              style={{ width: '100%' }}
+            />
+            <Button
+              type="button"
+              dense
+              onClick={() => setShowSecret((prev) => !prev)}
+              aria-pressed={showSecret}
+              aria-label={showSecret ? 'App Secret 숨기기' : 'App Secret 보이기'}
+            >
+              {showSecret ? '숨김' : '표시'}
+            </Button>
+          </div>
         </Row>
 
         <Row label="계좌 (앞 8자리)" inputId="credentials-account-no8">
@@ -121,7 +138,7 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
         )}
 
         <div style={{ display: 'flex', gap: '0.6rem' }}>
-          <Button type="submit" variant="primary" disabled={isPending}>
+          <Button type="submit" variant="primary" disabled={!canSubmit}>
             {isPending ? '저장 중…' : '저장하고 접속'}
           </Button>
         </div>
