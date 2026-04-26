@@ -127,14 +127,23 @@ export const authRouter = router({
    * 한 env 당 정확히 1개 (UNIQUE INDEX 보장).
    */
   listStored: publicProcedure.query(({ ctx }) => {
-    const envs: Array<'MOCK' | 'PROD'> = ['MOCK', 'PROD'];
-    const result: Array<{ env: 'MOCK' | 'PROD'; accountNo8: string; accountId: number }> = [];
-    for (const env of envs) {
-      const accountId = ctx.credentialsRepo.resolveAccountIdByEnv(env);
-      if (accountId === null) continue;
-      const cred = ctx.credentialsRepo.loadCredentials(accountId);
+    // Stage 5b-1: broker 단위로 격리된 entries 반환. KIS/KIWOOM 모두 노출.
+    const entries = ctx.credentialsRepo.listEntries();
+    const result: Array<{
+      env: 'MOCK' | 'PROD';
+      broker: 'KIS' | 'KIWOOM';
+      accountNo8: string;
+      accountId: number;
+    }> = [];
+    for (const entry of entries) {
+      const cred = ctx.credentialsRepo.loadCredentials(entry.accountId);
       if (cred.isOk() && cred.value) {
-        result.push({ env, accountNo8: cred.value.accountNo8, accountId });
+        result.push({
+          env: entry.env,
+          broker: entry.broker,
+          accountNo8: cred.value.accountNo8,
+          accountId: entry.accountId,
+        });
       }
     }
     return { entries: result };

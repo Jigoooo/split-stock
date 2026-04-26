@@ -51,6 +51,9 @@ import { DartCorpCodeRepo } from './ai/dart-corp-code-repo';
 import { LlmClient } from './ai/llm-client';
 import { NewsFetcher } from './ai/news-fetcher';
 import { BackupScheduler } from './backup/scheduler';
+import { KiwoomHttpClient } from './brokers/kiwoom/http-client';
+import { KIWOOM_BASE_URL } from './brokers/kiwoom/metadata/endpoints';
+import { KiwoomTokenStore } from './brokers/kiwoom/token-store';
 import { defaultDbPath, migrate, openDb } from './db/client';
 import { orders } from './db/schema';
 import {
@@ -155,6 +158,18 @@ function bootstrapDeps(userDataDir: string) {
     }),
   };
   const auth = new AuthService(httpByEnv, tokenStore);
+
+  // Kiwoom REST 클라이언트 (PROD/MOCK 각각, 보수적 8rps). 사용자가 Kiwoom 자격증명을
+  // 등록하지 않으면 실제 호출 없음 — 인스턴스만 미리 만들어 ctx 주입.
+  const kiwoomHttpByEnv = {
+    MOCK: new KiwoomHttpClient({ baseUrl: KIWOOM_BASE_URL.MOCK, rateLimitRps: 8 }),
+    PROD: new KiwoomHttpClient({ baseUrl: KIWOOM_BASE_URL.PROD, rateLimitRps: 8 }),
+  };
+  const kiwoomTokenStore = new KiwoomTokenStore(db);
+  // Kiwoom WS factory — 실제 WebSocket 연결. 라이브 검증 시 socket-client 가 사용.
+  const kiwoomWsFactory = ((url: string) => new WebSocket(url)) as unknown as (
+    env: AppEnv,
+  ) => unknown;
   // per-account SafetyState 격리 registry. 각 계좌는 자체 master/symbol/errorLock 슬롯.
   const settingsRepo = new SettingsRepo(db);
   // 안전 스위치 master 영속화 hooks 주입 — 부팅 시 settings 에서 복원, setMaster 시 자동 저장.
@@ -754,6 +769,9 @@ function bootstrapDeps(userDataDir: string) {
     settingsRepo,
     auth,
     httpByEnv,
+    kiwoomHttpByEnv,
+    kiwoomTokenStore,
+    kiwoomWsFactory,
     safetyRegistry,
     logger: eventLogger,
     strategyRepo,

@@ -8,6 +8,10 @@ import type { NewsFetcher } from '../ai/news-fetcher';
 import type { BackupScheduler } from '../backup/scheduler';
 import { createBrokerPort } from '../brokers/factory';
 import { KisRealtimeAdapter } from '../brokers/kis/realtime-adapter';
+import { KiwoomAuth } from '../brokers/kiwoom/auth';
+import type { KiwoomHttpClient } from '../brokers/kiwoom/http-client';
+import { KiwoomSocketClient } from '../brokers/kiwoom/socket-client';
+import type { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
 import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
 import type { SettingsRepo } from '../db/settings-repo';
@@ -39,6 +43,13 @@ export interface Context {
   settingsRepo: SettingsRepo;
   auth: AuthService;
   httpByEnv: Record<AppEnv, KisHttpClient>;
+  /** Kiwoom REST 클라이언트 (env 별). 사용자가 Kiwoom 자격증명을 등록하지 않으면
+   *  미사용. */
+  kiwoomHttpByEnv: Record<AppEnv, KiwoomHttpClient>;
+  kiwoomTokenStore: KiwoomTokenStore;
+  /** Kiwoom WS 인스턴스 빌더 — 동일 (env, account) 에서는 1개 인스턴스 재사용.
+   *  KiwoomAdapter 가 RealtimePort 구현 시 사용. Stage 6.5 라이브 검증 시 주입. */
+  kiwoomWsFactory: ((env: AppEnv) => unknown) | null;
   /**
    * 활성 계좌의 SafetyState — registry.get(activeAccountId).
    * 라우터에서 명시적으로 다른 계좌를 다룰 때는 `safetyRegistry.get(otherId)` 사용.
@@ -190,23 +201,59 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     if (credResult.isErr() || !credResult.value) return null;
     const cred = credResult.value;
     if (cred.env !== currentEnv) return null;
-    const realtimeAdapter = ensureRealtimeAdapter();
-    const port = createBrokerPort({
-      brokerId: 'KIS',
-      deps: {
+
+    let port: BrokerPort;
+    if (cred.broker === 'KIWOOM') {
+      // Kiwoom: env 별 http + 계좌별 auth + 단일 socket(필요 시).
+      const auth = new KiwoomAuth({
         env: currentEnv,
-        httpByEnv: deps.httpByEnv,
-        authService: deps.auth,
-        credentials: {
-          appKey: cred.appKey,
-          appSecret: cred.appSecret,
-          accountNo8: cred.accountNo8,
-          accountProdCd: cred.accountProdCd,
+        appKey: cred.appKey,
+        // CredentialsSchema 의 appSecret 을 Kiwoom 의 secretKey 로 사용
+        secretKey: cred.appSecret,
+      });
+      const socket = new KiwoomSocketClient({
+        env: currentEnv,
+        getToken: () => null, // Stage 6.5 라이브 시 cachedToken 노출 hook 추가 가능
+        // realtimeFactory ws (deps.kiwoomWsFactory) 가 없으면 socket 미작동.
+        // 라이브 라이트 검증 시 main/index.ts 에서 wsFactory 주입 (Stage 6.5)
+        factory: ((url: string) => {
+          throw new Error(`Kiwoom WS factory not wired (env=${currentEnv}, url=${url})`);
+        }) as never,
+      });
+      port = createBrokerPort({
+        brokerId: 'KIWOOM',
+        deps: {
+          env: currentEnv,
+          auth,
+          http: deps.kiwoomHttpByEnv[currentEnv],
+          tokenStore: deps.kiwoomTokenStore,
+          credentials: {
+            appKey: cred.appKey,
+            secretKey: cred.appSecret,
+            accountNo: `${cred.accountNo8}${cred.accountProdCd}`,
+          },
+          socket,
         },
-        logger: deps.logger,
-        ...(realtimeAdapter !== undefined && { realtime: realtimeAdapter }),
-      },
-    });
+      });
+    } else {
+      const realtimeAdapter = ensureRealtimeAdapter();
+      port = createBrokerPort({
+        brokerId: 'KIS',
+        deps: {
+          env: currentEnv,
+          httpByEnv: deps.httpByEnv,
+          authService: deps.auth,
+          credentials: {
+            appKey: cred.appKey,
+            appSecret: cred.appSecret,
+            accountNo8: cred.accountNo8,
+            accountProdCd: cred.accountProdCd,
+          },
+          logger: deps.logger,
+          ...(realtimeAdapter !== undefined && { realtime: realtimeAdapter }),
+        },
+      });
+    }
     brokerCache.set(key, port);
     return port;
   };
