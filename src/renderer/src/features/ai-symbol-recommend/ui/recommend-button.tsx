@@ -24,12 +24,14 @@ export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps):
     isAiListLoading,
     extraPdnos,
     aiOff,
+    includeAutoDiscovery,
     open,
     close,
     analyze,
     addExtraPdno,
     removeExtraPdno,
     toggleAiOff,
+    toggleAutoDiscovery,
   } = useSymbolRecommendations();
 
   const disabled = isAiListLoading;
@@ -69,6 +71,8 @@ export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps):
         onRemoveExtra={removeExtraPdno}
         aiOff={aiOff}
         onToggleAiOff={toggleAiOff}
+        includeAutoDiscovery={includeAutoDiscovery}
+        onToggleAutoDiscovery={toggleAutoDiscovery}
         hasDefaultKey={hasDefaultKey}
       />
     </>

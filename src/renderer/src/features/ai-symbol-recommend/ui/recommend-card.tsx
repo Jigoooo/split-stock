@@ -1,7 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, ChevronUp, ExternalLink, Minus, Newspaper, Plus, Target } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
-import type { RecommendedItem } from '../model/use-symbol-recommendations';
+import type { RecommendedItem, RecommendTier } from '../model/use-symbol-recommendations';
+import { ConsensusBar } from './consensus-bar';
+import { IndicatorReasonsList } from './indicator-reasons-list';
 
 const VOL_LABEL: Record<RecommendedItem['volatilityFit'], string> = {
   low: '변동성 낮음',
@@ -30,6 +32,31 @@ const SOURCE_LABEL: Record<'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO', string> = {
   AUTO: '자동발굴',
 };
 
+const TIER_LABEL: Record<RecommendTier, string> = {
+  top: 'TOP',
+  strong: 'STRONG',
+  moderate: 'MODERATE',
+  watch: 'WATCH',
+  avoid: 'AVOID',
+};
+const TIER_COLOR: Record<RecommendTier, { bg: string; fg: string }> = {
+  top: { bg: '#D97757', fg: '#ffffff' },
+  strong: { bg: '#16a34a', fg: '#ffffff' },
+  moderate: { bg: '#94a3b8', fg: '#ffffff' },
+  watch: { bg: '#ca8a04', fg: '#ffffff' },
+  avoid: { bg: '#d4453a', fg: '#ffffff' },
+};
+const CONFIDENCE_LABEL: Record<RecommendedItem['confidence'], string> = {
+  high: '신뢰도 ↑',
+  med: '신뢰도 중',
+  low: '신뢰도 ↓',
+};
+const CONFIDENCE_TONE: Record<RecommendedItem['confidence'], string> = {
+  high: 'chip--live',
+  med: 'chip',
+  low: 'chip--down',
+};
+
 export interface RecommendCardProps {
   item: RecommendedItem;
   onPick: (pdno: string, name: string) => void;
@@ -46,7 +73,10 @@ export const RecommendCard = ({ item, onPick }: RecommendCardProps): ReactElemen
     item.cons.length > 0 ||
     item.entryNote !== null ||
     hasAnyStat(item.stats) ||
-    item.news.length > 0;
+    item.news.length > 0 ||
+    item.indicatorReasons.length > 0 ||
+    item.conflicts.length > 0 ||
+    item.consensusCount > 0;
 
   return (
     <div
@@ -104,12 +134,25 @@ export const RecommendCard = ({ item, onPick }: RecommendCardProps): ReactElemen
               </span>
             ))}
           </div>
-          <span
-            className="chip chip--live"
-            style={{ minWidth: '4.4rem', justifyContent: 'center' }}
-          >
-            {item.score}점
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span
+              style={{
+                minWidth: '5.2rem',
+                padding: '0.18rem 0.6rem',
+                borderRadius: '0.4rem',
+                fontSize: '0.95rem',
+                fontWeight: 700,
+                textAlign: 'center',
+                background: TIER_COLOR[item.tier].bg,
+                color: TIER_COLOR[item.tier].fg,
+              }}
+            >
+              {TIER_LABEL[item.tier]}
+            </span>
+            <span className="chip" style={{ minWidth: '4.4rem', justifyContent: 'center' }}>
+              {item.score}점
+            </span>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <span className={`chip ${VOL_TONE[item.volatilityFit]}`}>
@@ -118,6 +161,18 @@ export const RecommendCard = ({ item, onPick }: RecommendCardProps): ReactElemen
           <span className={`chip ${LIQ_TONE[item.liquidityFit]}`}>
             {LIQ_LABEL[item.liquidityFit]}
           </span>
+          <span className={`chip ${CONFIDENCE_TONE[item.confidence]}`}>
+            {CONFIDENCE_LABEL[item.confidence]}
+          </span>
+          {item.consensusCount > 0 ? (
+            <span
+              className="chip"
+              style={{ fontSize: '0.95rem' }}
+              title="BB/RSI/MFI/Stoch/CCI/momentum 중 동의한 지표 수"
+            >
+              합의 {item.consensusCount}
+            </span>
+          ) : null}
         </div>
         <div style={{ fontSize: '1.15rem', color: 'var(--fg)', lineHeight: 1.5 }}>
           {item.summary}
@@ -165,7 +220,23 @@ export const RecommendCard = ({ item, onPick }: RecommendCardProps): ReactElemen
                 style={{ overflow: 'hidden' }}
               >
                 <div style={{ padding: '1rem 1.2rem', display: 'grid', gap: '0.9rem' }}>
+                  {/* 섹션 1 — 기본 진단 */}
                   {hasAnyStat(item.stats) ? <StatRow stats={item.stats} /> : null}
+                  {/* 섹션 2 — 지표별 사유 */}
+                  {item.indicatorReasons.length > 0 ? (
+                    <IndicatorReasonsList reasons={item.indicatorReasons} />
+                  ) : null}
+                  {/* 섹션 3 — 합의·충돌 + 도구 호출 */}
+                  {item.consensusCount > 0 ||
+                  item.conflicts.length > 0 ||
+                  item.citedTools.length > 0 ? (
+                    <ConsensusBar
+                      count={item.consensusCount}
+                      conflicts={item.conflicts}
+                      citedTools={item.citedTools}
+                    />
+                  ) : null}
+                  {/* 섹션 4 — pros/cons + 진입 가이드 + 뉴스 */}
                   {item.pros.length > 0 ? <ProConList items={item.pros} kind="pro" /> : null}
                   {item.cons.length > 0 ? <ProConList items={item.cons} kind="con" /> : null}
                   {item.entryNote ? <EntryNote note={item.entryNote} /> : null}

@@ -2,9 +2,48 @@ import { Button } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
 import type { ReactElement } from 'react';
-import type { RecommendationViewState } from '../model/use-symbol-recommendations';
+import type {
+  RecommendationViewState,
+  TierDistribution,
+} from '../model/use-symbol-recommendations';
 import { ExtraPdnoPicker } from './extra-pdno-picker';
 import { RecommendCard } from './recommend-card';
+
+const TIER_LABELS: Record<keyof TierDistribution, string> = {
+  top: 'TOP',
+  strong: 'STRONG',
+  moderate: 'MODERATE',
+  watch: 'WATCH',
+  avoid: 'AVOID',
+};
+
+function DistributionChips({ distribution }: { distribution: TierDistribution }): ReactElement {
+  const tiers: Array<keyof TierDistribution> = ['top', 'strong', 'moderate', 'watch', 'avoid'];
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexWrap: 'wrap' }}>
+      {tiers
+        .filter((t) => distribution[t] > 0)
+        .map((t) => (
+          <span
+            key={t}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.2rem',
+              padding: '0.1rem 0.55rem',
+              borderRadius: '999px',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              color: '#ffffff',
+              backgroundColor: TIER_COLORS[t],
+            }}
+          >
+            {TIER_LABELS[t]} {distribution[t]}
+          </span>
+        ))}
+    </div>
+  );
+}
 
 function formatRelative(ts: number): string {
   const elapsedSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
@@ -24,8 +63,18 @@ export interface RecommendModalProps {
   onRemoveExtra: (pdno: string) => void;
   aiOff: boolean;
   onToggleAiOff: (next: boolean) => void;
+  includeAutoDiscovery: boolean;
+  onToggleAutoDiscovery: (next: boolean) => void;
   hasDefaultKey: boolean;
 }
+
+const TIER_COLORS: Record<'top' | 'strong' | 'moderate' | 'watch' | 'avoid', string> = {
+  top: '#D97757',
+  strong: '#16a34a',
+  moderate: '#94a3b8',
+  watch: '#ca8a04',
+  avoid: '#d4453a',
+};
 
 export const RecommendModal = ({
   view,
@@ -37,8 +86,16 @@ export const RecommendModal = ({
   onRemoveExtra,
   aiOff,
   onToggleAiOff,
+  includeAutoDiscovery,
+  onToggleAutoDiscovery,
   hasDefaultKey,
 }: RecommendModalProps): ReactElement => {
+  const distributionTotal =
+    view.distribution.top +
+    view.distribution.strong +
+    view.distribution.moderate +
+    view.distribution.watch +
+    view.distribution.avoid;
   return (
     <AnimatePresence>
       {view.isOpen ? (
@@ -124,6 +181,28 @@ export const RecommendModal = ({
                 ) : null}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <label
+                  title="ON: 보유/감시/수동 + 매직스플릿 친화 자동 발굴 종목 합집합으로 분석&#10;OFF: 보유/감시/수동만"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.3rem 0.7rem',
+                    borderRadius: '999px',
+                    border: '0.1rem solid var(--border)',
+                    fontSize: '1rem',
+                    color: 'var(--fg-2)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={includeAutoDiscovery}
+                    onChange={(e) => onToggleAutoDiscovery(e.currentTarget.checked)}
+                    style={{ accentColor: '#D97757', margin: 0 }}
+                  />
+                  자동 발굴
+                </label>
                 <label
                   title={
                     hasDefaultKey
@@ -256,12 +335,72 @@ export const RecommendModal = ({
                 </Button>
               </div>
             ) : (
-              <div style={{ display: 'grid', gap: '0.8rem' }}>
-                {view.ranked.map((item) => (
-                  <RecommendCard key={item.pdno} item={item} onPick={onPick} />
-                ))}
+              <div style={{ display: 'grid', gap: '1.4rem' }}>
+                <section style={{ display: 'grid', gap: '0.6rem' }}>
+                  <header
+                    style={{
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: '0.5rem',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <h3
+                      style={{
+                        margin: 0,
+                        fontSize: '1.25rem',
+                        fontWeight: 700,
+                        color: 'var(--fg)',
+                      }}
+                    >
+                      AI 추천 ({view.ranked.length})
+                    </h3>
+                    {distributionTotal > 0 ? (
+                      <DistributionChips distribution={view.distribution} />
+                    ) : null}
+                  </header>
+                  <div style={{ display: 'grid', gap: '0.8rem' }}>
+                    {view.ranked.map((item) => (
+                      <RecommendCard key={item.pdno} item={item} onPick={onPick} />
+                    ))}
+                  </div>
+                </section>
+
+                {view.userInputResults.length > 0 ? (
+                  <section style={{ display: 'grid', gap: '0.6rem' }}>
+                    <header
+                      style={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: '0.5rem',
+                        paddingTop: '1rem',
+                        borderTop: '0.1rem dashed var(--border)',
+                      }}
+                    >
+                      <h3
+                        style={{
+                          margin: 0,
+                          fontSize: '1.25rem',
+                          fontWeight: 700,
+                          color: 'var(--fg)',
+                        }}
+                      >
+                        내 종목 검증 ({view.userInputResults.length})
+                      </h3>
+                      <span className="muted" style={{ fontSize: '0.95rem' }}>
+                        직접 추가한 종목의 별도 평가 — 추천과 분리
+                      </span>
+                    </header>
+                    <div style={{ display: 'grid', gap: '0.8rem' }}>
+                      {view.userInputResults.map((item) => (
+                        <RecommendCard key={`user-${item.pdno}`} item={item} onPick={onPick} />
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
                 {view.rejectedCount > 0 ? (
-                  <div className="muted" style={{ fontSize: '1rem', marginTop: '0.4rem' }}>
+                  <div className="muted" style={{ fontSize: '1rem' }}>
                     AI 응답 중 {view.rejectedCount}건은 후보 풀 외 종목이라 제외됨.
                   </div>
                 ) : null}
