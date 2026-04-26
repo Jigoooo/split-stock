@@ -2,7 +2,6 @@ import { trpc } from '@renderer/shared/api/trpc';
 import { Button } from '@renderer/shared/ui';
 import { type ReactElement, useState } from 'react';
 import { LotRowFormModal } from './lot-row-form-modal';
-import { PreviewModal } from './preview-modal';
 
 export interface EditLotsGridProps {
   accountId: number;
@@ -21,11 +20,7 @@ interface LotRowVm {
   boughtAtMs: number;
 }
 
-type ModalState =
-  | { kind: 'closed' }
-  | { kind: 'add' }
-  | { kind: 'edit'; row: LotRowVm }
-  | { kind: 'preview'; action: 'insert' | 'update' | 'delete' | 'move'; payload: unknown };
+type ModalState = { kind: 'closed' } | { kind: 'add' };
 
 /**
  * 수동편집 모드의 차수 grid — 실제 lots 데이터를 trpc.lotsManual.exportCsv 응답을 파싱하지 않고
@@ -48,29 +43,27 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
 
   const utils = trpc.useUtils();
   const insertMutation = trpc.lotsManual.insert.useMutation();
-  const updateMutation = trpc.lotsManual.update.useMutation();
-  const deleteMutation = trpc.lotsManual.delete.useMutation();
-  const moveMutation = trpc.lotsManual.move.useMutation();
-  // 현재 행 조회: 별도 list 엔드포인트가 없어 exportCsv 응답에서 파싱하기보다
-  // 새로 도입한 lots.snapshot 의 OPEN 차수 기반으로 표시.
-  // 본 grid 는 latest snapshot 기준이라 일자별 텍스트 뷰와 다른 UX.
+  // 현재 행 조회: lots.snapshot 의 OPEN 차수 기반으로 표시.
+  // 주의: snapshot 은 실 DB lotId 를 보유하지 않아(LotSnapshotEntry 에 id 필드 없음)
+  // 행 단위 update/delete/move 는 본 컴포넌트에서 비활성화한다.
+  // 활성화하려면 (1) snapshot 에 lotId 추가, 또는 (2) 별도 listLots 엔드포인트 도입 필요.
   const today = new Date().toISOString().slice(0, 10);
   const snapQuery = trpc.lots.snapshot.useQuery(
     { accountId, date: today, pdno },
     { staleTime: 1_000 },
   );
 
-  const rows: LotRowVm[] =
-    snapQuery.data?.snapshots[0]?.lots.map((l, idx) => ({
-      // snapshot 은 lotId 미보유 — 인덱스 기반 가짜 id 로 표시만 가능. 행 액션은 nth 로 대신 lotId 를
-      // 사용자가 명시 입력하는 폼으로 안내.
-      id: idx + 1,
+  // displayKey 는 React key 전용 — DB id 가 아님. 행 액션 mutation 인자로 절대 사용 금지.
+  const rows: Array<LotRowVm & { displayKey: string }> =
+    snapQuery.data?.snapshots[0]?.lots.map((l) => ({
+      id: -1,
       nth: l.nth,
       buyPrice: l.buyPrice,
       qty: l.qty,
       amountKrw: l.amountKrw,
       status: l.status,
       boughtAtMs: l.boughtAt,
+      displayKey: `${l.nth}-${l.boughtAt}`,
     })) ?? [];
 
   const refresh = (): void => {
@@ -93,32 +86,6 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
     refresh();
   };
 
-  const onUpdate = async (lotId: number, changes: Partial<LotRowVm>): Promise<void> => {
-    await updateMutation.mutateAsync({
-      accountId,
-      pdno,
-      lotId,
-      changes: {
-        ...(changes.buyPrice !== undefined ? { buyPrice: changes.buyPrice } : {}),
-        ...(changes.qty !== undefined ? { qty: changes.qty } : {}),
-        ...(changes.amountKrw !== undefined ? { amountKrw: changes.amountKrw } : {}),
-        ...(changes.boughtAtMs !== undefined ? { boughtAtMs: changes.boughtAtMs } : {}),
-      },
-    });
-    setModal({ kind: 'closed' });
-    refresh();
-  };
-
-  const onDelete = async (lotId: number): Promise<void> => {
-    await deleteMutation.mutateAsync({ accountId, pdno, lotId });
-    refresh();
-  };
-
-  const onMove = async (lotId: number, newNth: number): Promise<void> => {
-    await moveMutation.mutateAsync({ accountId, pdno, lotId, newNth });
-    refresh();
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
       <div
@@ -131,7 +98,21 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
           fontSize: '0.95rem',
         }}
       >
-        ⚠️ 장부상만 변경됩니다 — KIS 실제 잔고와 불일치할 수 있습니다.
+        장부상만 변경됩니다 — KIS 실제 잔고와 불일치할 수 있습니다.
+      </div>
+      <div
+        role="note"
+        className="muted"
+        style={{
+          padding: '0.4rem 0.6rem',
+          background: 'var(--bg-2, #f6f7f9)',
+          border: '1px dashed var(--border, #d0d4dc)',
+          borderRadius: '0.25rem',
+          fontSize: '0.9rem',
+        }}
+      >
+        본 화면에서는 새 차수 추가만 가능합니다. 기존 차수 수정/이동/삭제는 데이터 정합성 검토 후
+        재오픈 예정입니다.
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <strong>{pdno}</strong>
@@ -160,7 +141,10 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
             </tr>
           ) : (
             rows.map((r) => (
-              <tr key={r.id} style={{ borderBottom: '1px solid var(--color-border, #eee)' }}>
+              <tr
+                key={r.displayKey}
+                style={{ borderBottom: '1px solid var(--color-border, #eee)' }}
+              >
                 <td style={{ padding: '0.4rem' }}>{r.nth}차</td>
                 <td style={{ padding: '0.4rem' }}>{r.status}</td>
                 <td style={{ padding: '0.4rem', textAlign: 'right' }}>
@@ -174,40 +158,10 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
                   {new Date(r.boughtAtMs).toISOString().slice(0, 10)}
                 </td>
                 <td
-                  style={{
-                    padding: '0.4rem',
-                    textAlign: 'right',
-                    display: 'flex',
-                    gap: '0.3rem',
-                    justifyContent: 'flex-end',
-                  }}
+                  className="muted"
+                  style={{ padding: '0.4rem', textAlign: 'right', fontSize: '0.85em' }}
                 >
-                  <Button onClick={() => setModal({ kind: 'edit', row: r })} dense>
-                    수정
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      const newNth = Number(
-                        window.prompt(`새 차수 번호 (현재 ${r.nth})`, String(r.nth)),
-                      );
-                      if (Number.isInteger(newNth) && newNth > 0 && newNth !== r.nth) {
-                        void onMove(r.id, newNth);
-                      }
-                    }}
-                    dense
-                  >
-                    이동
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      if (window.confirm(`${r.nth}차 행을 삭제합니다. 계속하시겠습니까?`)) {
-                        void onDelete(r.id);
-                      }
-                    }}
-                    dense
-                  >
-                    삭제
-                  </Button>
+                  비활성
                 </td>
               </tr>
             ))
@@ -221,30 +175,6 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
             void onAdd(row);
           }}
           onClose={() => setModal({ kind: 'closed' })}
-        />
-      )}
-      {modal.kind === 'edit' && (
-        <LotRowFormModal
-          mode="edit"
-          initial={modal.row}
-          onSubmit={(row) => {
-            void onUpdate(modal.row.id, row);
-          }}
-          onClose={() => setModal({ kind: 'closed' })}
-        />
-      )}
-      {/* PreviewModal 은 본 행별 편집에서는 폼 자체가 변경 사항을 명확히 보여주므로 별도 미리보기 생략. */}
-      {/* bulk 보정/CSV 임포트 같은 다중-행 변경에서 PreviewModal 사용 (BulkPriceRatioForm 자체에 확인 모달 내장). */}
-      {modal.kind === 'preview' && <span aria-hidden /> /* 향후 별도 미리보기 트리거 슬롯 */}
-      {/* PreviewModal 컴포넌트는 features/index 에서 export — 호출측이 자체 use case 에서 활용. */}
-      {false && (
-        <PreviewModal
-          open={false}
-          title=""
-          before={{ rows: [], totalQty: 0, totalCost: 0 }}
-          after={{ rows: [], totalQty: 0, totalCost: 0 }}
-          onCancel={() => {}}
-          onConfirm={() => {}}
         />
       )}
     </div>
