@@ -90,11 +90,27 @@ export const KIWOOM_WS_TYPE = {
   ORDERBOOK: '0D',
 } as const;
 
-/** Kiwoom 거래소 구분 (dmst_stex_tp). */
+/**
+ * Kiwoom 거래소 구분 — 두 가지 컨벤션이 endpoint 마다 다르므로 명확히 분리.
+ *
+ * 1. **주문/잔고/계좌** 계열 (kt10000~3, kt00018, kt00004): `dmst_stex_tp` 필드,
+ *    값은 **문자열 코드** `'KRX' | 'NXT' | 'SOR'` (length 3~6). 공식 검증.
+ * 2. **조회** 계열 (ka10075 미체결, ka10076 체결): `stex_tp` 필드, 값은 **숫자
+ *    코드** `'0'(통합) | '1'(KRX) | '2'(NXT)` (length 1). 공식 검증.
+ *
+ * `KIWOOM_EXCHANGE` 는 BC 호환을 위해 주문/잔고 컨벤션(문자열)으로 유지.
+ */
 export const KIWOOM_EXCHANGE = {
+  KRX: 'KRX',
+  NXT: 'NXT',
+  SOR: 'SOR',
+} as const;
+
+/** ka10075 미체결 / ka10076 체결 의 stex_tp — 숫자 코드. */
+export const KIWOOM_QUERY_EXCHANGE = {
+  ALL: '0',
   KRX: '1',
   NXT: '2',
-  SOR: '3',
 } as const;
 
 /** Kiwoom 주문 구분 (trde_tp). */

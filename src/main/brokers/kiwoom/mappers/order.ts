@@ -2,6 +2,9 @@ import type { OrderAck, OrderAmendIntent, OrderIntent } from '@shared/contracts'
 import type { CancelOrderInput } from '../../ports';
 import { KIWOOM_EXCHANGE, KIWOOM_ORDER_TYPE } from '../metadata/endpoints';
 
+/** 주문/잔고 endpoint 의 dmst_stex_tp — 문자열 코드 ('KRX'|'NXT'|'SOR'). */
+export type KiwoomOrderExchange = 'KRX' | 'NXT' | 'SOR';
+
 /** Kiwoom 주문 응답 wire shape — kt10000~3 공통 필드. */
 export interface KiwoomOrderResponseWire {
   return_code?: number | string;
@@ -17,11 +20,11 @@ export interface KiwoomOrderResponseWire {
  *
  * - clientOrderId 는 Kiwoom idempotency 미지원 → drop
  * - kind LIMIT → trde_tp '0' (보통), MARKET → '3' (시장가, ord_uv 빈 문자)
- * - dmst_stex_tp: 기본 '1' (KRX). NXT/SOR 라우팅은 호출측에서 별도 옵션
+ * - dmst_stex_tp: 기본 'KRX' 문자열 코드. NXT/SOR 라우팅은 호출측에서 옵션
  */
 export function toKiwoomPlaceOrderBody(
   intent: OrderIntent,
-  defaultExchange: '1' | '2' | '3' = KIWOOM_EXCHANGE.KRX,
+  defaultExchange: KiwoomOrderExchange = KIWOOM_EXCHANGE.KRX,
 ): Record<string, string> {
   const isMarket = intent.kind === 'MARKET';
   return {
@@ -39,7 +42,7 @@ export function toKiwoomPlaceOrderBody(
  */
 export function toKiwoomModifyOrderBody(
   amend: OrderAmendIntent,
-  defaultExchange: '1' | '2' | '3' = KIWOOM_EXCHANGE.KRX,
+  defaultExchange: KiwoomOrderExchange = KIWOOM_EXCHANGE.KRX,
 ): Record<string, string> {
   return {
     dmst_stex_tp: defaultExchange,
@@ -57,7 +60,7 @@ export function toKiwoomModifyOrderBody(
  */
 export function toKiwoomCancelOrderBody(
   input: CancelOrderInput,
-  defaultExchange: '1' | '2' | '3' = KIWOOM_EXCHANGE.KRX,
+  defaultExchange: KiwoomOrderExchange = KIWOOM_EXCHANGE.KRX,
 ): Record<string, string> {
   const isAll = input.all === true || input.qtyAllOrder === true;
   return {

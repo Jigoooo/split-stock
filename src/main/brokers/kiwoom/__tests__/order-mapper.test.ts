@@ -18,7 +18,7 @@ describe('toKiwoomPlaceOrderBody', () => {
     };
     const body = toKiwoomPlaceOrderBody(intent);
     expect(body).toEqual({
-      dmst_stex_tp: '1',
+      dmst_stex_tp: 'KRX',
       stk_cd: '005930',
       ord_qty: '10',
       trde_tp: '0',
@@ -60,8 +60,8 @@ describe('toKiwoomPlaceOrderBody', () => {
       price: 70_000,
       kind: 'LIMIT',
     };
-    expect(toKiwoomPlaceOrderBody(intent, '2').dmst_stex_tp).toBe('2');
-    expect(toKiwoomPlaceOrderBody(intent, '3').dmst_stex_tp).toBe('3');
+    expect(toKiwoomPlaceOrderBody(intent, 'NXT').dmst_stex_tp).toBe('NXT');
+    expect(toKiwoomPlaceOrderBody(intent, 'SOR').dmst_stex_tp).toBe('SOR');
   });
 });
 
@@ -73,7 +73,7 @@ describe('toKiwoomModifyOrderBody', () => {
       price: 71_000,
     });
     expect(body).toEqual({
-      dmst_stex_tp: '1',
+      dmst_stex_tp: 'KRX',
       orig_ord_no: '0001',
       stk_cd: '',
       mdfy_qty: '5',

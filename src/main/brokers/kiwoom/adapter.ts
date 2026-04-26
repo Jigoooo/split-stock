@@ -27,6 +27,7 @@ import {
   toKiwoomDailyExecution,
 } from './mappers/executions';
 import {
+  type KiwoomOrderExchange,
   type KiwoomOrderResponseWire,
   toKiwoomCancelOrderBody,
   toKiwoomModifyOrderBody,
@@ -35,7 +36,12 @@ import {
 } from './mappers/order';
 import { type KiwoomOrderbookWire, toKiwoomOrderbook } from './mappers/orderbook';
 import { type KiwoomQuoteWire, toKiwoomQuote } from './mappers/quote';
-import { KIWOOM_API_ID, KIWOOM_PATH } from './metadata/endpoints';
+import {
+  KIWOOM_API_ID,
+  KIWOOM_EXCHANGE,
+  KIWOOM_PATH,
+  KIWOOM_QUERY_EXCHANGE,
+} from './metadata/endpoints';
 import { KiwoomRealtimeAdapter } from './realtime-adapter';
 import type { KiwoomSocketClient } from './socket-client';
 import { KiwoomTokenStore } from './token-store';
@@ -52,8 +58,14 @@ export interface KiwoomAdapterDeps {
     /** Kiwoom 계좌번호 (10자리). */
     accountNo: string;
   };
-  /** 주문 시 거래소 기본값 (KRX/NXT/SOR). 미지정 시 '1' (KRX). */
-  defaultExchange?: '1' | '2' | '3';
+  /**
+   * 주문/잔고 endpoint(kt10000~3, kt00018) 의 dmst_stex_tp 기본값.
+   *
+   * Kiwoom 공식: 주문/잔고는 'KRX'|'NXT'|'SOR' 문자열 코드 (length 3~6),
+   * 조회(ka10075/76) 의 stex_tp 는 별도 숫자 코드 ('0'|'1'|'2') — 이 adapter 가
+   * KIWOOM_QUERY_EXCHANGE 로 변환. 미지정 시 'KRX'.
+   */
+  defaultExchange?: KiwoomOrderExchange;
   /** RealtimePort 본문에 사용할 KiwoomSocketClient. 미주입 시 realtime() throw. */
   socket?: KiwoomSocketClient;
 }
@@ -162,18 +174,27 @@ export class KiwoomAdapter implements BrokerPort {
     //   ka10076 (체결):   qry_tp / sell_tp / stex_tp / stk_cd? / ord_no?
     // 0=전체 (구분 미지정). side 필터는 server-side trde_tp/sell_tp 가 아닌
     // client-side 로 처리 (도메인 OrderSide 와 1:1 매핑이 모호하므로 안전).
+    // ka10075/76 의 stex_tp 는 숫자 코드 ('0'=통합, '1'=KRX, '2'=NXT) — 주문/잔고
+    // 의 'KRX'/'NXT'/'SOR' 문자열과 다른 컨벤션. defaultExchange(주문 기본값)
+    // 를 query 컨벤션으로 매핑: KRX→'1', NXT→'2', SOR→'0'(통합 폴백).
+    const queryStex =
+      this.deps.defaultExchange === 'NXT'
+        ? KIWOOM_QUERY_EXCHANGE.NXT
+        : this.deps.defaultExchange === 'SOR'
+          ? KIWOOM_QUERY_EXCHANGE.ALL
+          : KIWOOM_QUERY_EXCHANGE.KRX;
     const body: Record<string, string> = p.filledOnly
       ? {
           qry_tp: '0',
           sell_tp: '0',
-          stex_tp: this.deps.defaultExchange ?? '1',
+          stex_tp: queryStex,
           ...(p.symbol !== undefined && { stk_cd: p.symbol }),
           ...(p.brokerOrderId !== undefined && { ord_no: p.brokerOrderId }),
         }
       : {
           all_stk_tp: '0',
           trde_tp: '0',
-          stex_tp: this.deps.defaultExchange ?? '1',
+          stex_tp: queryStex,
           ...(p.symbol !== undefined && { stk_cd: p.symbol }),
         };
     const r = await this.deps.http.post<KiwoomUnexecutedResponseWire | KiwoomExecutedResponseWire>(
@@ -200,7 +221,7 @@ export class KiwoomAdapter implements BrokerPort {
     if (tokenResult.isErr()) return err(tokenResult.error);
     const body: Record<string, string> = {
       qry_tp: '1',
-      dmst_stex_tp: this.deps.defaultExchange ?? '1',
+      dmst_stex_tp: this.deps.defaultExchange ?? KIWOOM_EXCHANGE.KRX,
     };
     const r = await this.deps.http.post<KiwoomBalanceWire>(
       KIWOOM_PATH.ACCOUNT,
