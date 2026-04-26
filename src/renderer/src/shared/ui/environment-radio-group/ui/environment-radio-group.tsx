@@ -1,6 +1,6 @@
 import type { AppEnv } from '@shared/contracts';
 import type { ReactElement, ReactNode } from 'react';
-import { RadioGroup } from './radio-group';
+import { RadioGroup } from '../../radio-group';
 
 export interface EnvironmentRadioGroupProps {
   value: AppEnv;

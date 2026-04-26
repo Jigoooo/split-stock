@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { CSSProperties, InputHTMLAttributes, ReactElement } from 'react';
-import { thousandSeparator } from '../lib/formatter';
+import { thousandSeparator } from '../../../lib/formatter';
 
 type NativeInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'>;
 
