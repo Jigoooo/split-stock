@@ -3,7 +3,7 @@ import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy'
 import { SymbolMemoForm } from '@renderer/features/symbol-memo';
 import { Button, type HtsTabItem, HtsTabs, OverlayScrollbar, Select } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
-import { type ReactElement, useRef, useState } from 'react';
+import { type ReactElement, useMemo, useRef, useState } from 'react';
 import { type TradeHistoryTabKey, useTradeHistoryTabs } from '../model/use-trade-history-tabs';
 import { TradeHistoryList } from './trade-history-list';
 
@@ -35,6 +35,15 @@ const ALL_TABS: ReadonlyArray<HtsTabItem<TradeHistoryTabKey>> = [
 export const TradeHistoryPanel = (props: TradeHistoryPanelProps): ReactElement => {
   const { accountId, pdno } = props;
   const { setTab, tab } = useTradeHistoryTabs();
+  const tabs = useMemo<ReadonlyArray<HtsTabItem<TradeHistoryTabKey>>>(
+    () =>
+      pdno === null
+        ? ALL_TABS.map((t) =>
+            t.id === 'strategy' || t.id === 'memo' ? { ...t, badge: '종목 선택' } : t,
+          )
+        : ALL_TABS,
+    [pdno],
+  );
 
   return (
     <section
@@ -48,7 +57,7 @@ export const TradeHistoryPanel = (props: TradeHistoryPanelProps): ReactElement =
       }}
       aria-label="매매내역 패널"
     >
-      <HtsTabs tabs={ALL_TABS} active={tab} onChange={setTab} ariaLabel="매매내역 5탭" />
+      <HtsTabs tabs={tabs} active={tab} onChange={setTab} ariaLabel="매매내역 5탭" />
       <div
         style={{
           flex: 1,
