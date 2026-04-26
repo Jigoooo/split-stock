@@ -1,6 +1,7 @@
-import type { AppEnv } from '@shared/contracts';
+import { correctLimitPrice } from '@shared/market-rules';
 import { hasActiveCycle } from '@shared/trading/next-nth';
 import { and, eq } from 'drizzle-orm';
+import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
 import { lots, orders } from '../db/schema';
 import {
@@ -8,14 +9,8 @@ import {
   readPriceCorrectionConfig,
   type SettingsRepo,
 } from '../db/settings-repo';
-import type { AuthService } from '../kis/auth';
-import type { KisHttpClient } from '../kis/http-client';
-import { orderCash } from '../kis/order';
-import { correctLimitPrice } from '@shared/market-rules';
 import type { EventLogger } from '../logging/event-logger';
 import type { SafetyStateRegistry } from '../safety/safety-state';
-import type { CredentialsRepo } from '../security/credentials-repo';
-import { assertCredMatchesEnv } from '../trpc/router-helpers';
 import type { AutoBuyGuardPort } from './auto-buy-guard';
 import type { LotsRepo } from './lots-repo';
 import type { AutoOrderMarketGuard } from './market-session-guard';
@@ -27,13 +22,18 @@ import type { WatchOrder } from './watch-engine';
 export interface WatchOrderExecutorDeps {
   db: Db;
   settingsRepo: SettingsRepo;
-  credentialsRepo: CredentialsRepo;
-  auth: AuthService;
-  httpByEnv: Record<AppEnv, KisHttpClient>;
+  /**
+   * 활성 계좌의 BrokerPort 를 lazy 로 얻는 getter. broker null 이면 자격증명/
+   * 환경 미준비 → 주문 실패.
+   *
+   * Stage 4k 변경: KIS 직접 의존(httpByEnv/auth/credentialsRepo + orderCash)
+   * 제거 → BrokerPort.placeOrder 추상. Kiwoom 활성 시에도 동일 자동매매 로직
+   * 재사용.
+   */
+  getBrokerForAccount: (accountId: number) => BrokerPort | null;
   safetyRegistry: SafetyStateRegistry;
   pendingOrderWatcher: PendingOrderWatcher | null;
   logger: EventLogger;
-  getCurrentEnv: () => AppEnv | null;
   lotsRepo: LotsRepo;
   strategyRepo: StrategyRepo;
   marketSessionGuard?: AutoOrderMarketGuard;
@@ -67,15 +67,8 @@ export async function executeWatchOrder(
     }
   }
 
-  const env = deps.getCurrentEnv();
-  if (!env) throw new Error('환경 미선택');
-
-  const credResult = deps.credentialsRepo.loadCredentials(order.accountId);
-  if (credResult.isErr() || !credResult.value) {
-    throw new Error('자격증명 없음');
-  }
-  const cred = credResult.value;
-  assertCredMatchesEnv(cred, env);
+  const broker = deps.getBrokerForAccount(order.accountId);
+  if (!broker) throw new Error('자격증명 없음 또는 환경 미선택');
 
   const safety = deps.safetyRegistry.get(order.accountId);
   if (!safety.canTrade(order.pdno)) {
@@ -121,30 +114,13 @@ export async function executeWatchOrder(
     });
   }
 
-  const tokenResult = await deps.auth.getValidToken(env, cred.appKey, cred.appSecret);
-  if (tokenResult.isErr()) {
-    throw new Error(`토큰 발급 실패: ${tokenResult.error.kind}`);
-  }
-
-  const result = await orderCash(
-    {
-      http: deps.httpByEnv[env],
-      env,
-      token: tokenResult.value.token,
-      appKey: cred.appKey,
-      appSecret: cred.appSecret,
-      accountNo8: cred.accountNo8,
-      accountProdCd: cred.accountProdCd,
-      logger: deps.logger,
-    },
-    {
-      side: order.side,
-      pdno: order.pdno,
-      qty,
-      price: division === 'LIMIT' ? limitPrice : 0,
-      division,
-    },
-  );
+  const result = await broker.placeOrder({
+    side: order.side,
+    symbol: order.pdno,
+    qty,
+    price: division === 'LIMIT' ? limitPrice : 0,
+    kind: division,
+  });
   if (result.isErr()) {
     throw new Error(`주문 실패: ${result.error.kind} - ${result.error.msg}`);
   }
@@ -211,8 +187,8 @@ export async function executeWatchOrder(
     .values({
       accountId: order.accountId,
       lotId: linkedLot.lotId,
-      odno: result.value.odno,
-      orgNo: result.value.orgNo ?? null,
+      odno: result.value.brokerOrderId,
+      orgNo: result.value.brokerOrgNo ?? null,
       pdno: order.pdno,
       side: order.side,
       division,
@@ -242,15 +218,15 @@ export async function executeWatchOrder(
   if (
     pendingCfg.enabled &&
     division === 'LIMIT' &&
-    result.value.orgNo &&
+    result.value.brokerOrgNo &&
     deps.pendingOrderWatcher
   ) {
     deps.pendingOrderWatcher.register({
       pdno: order.pdno,
       side: order.side,
       nth: linkedLot.nth ?? order.nth ?? Date.now() % 1_000_000,
-      odno: result.value.odno,
-      orgNo: result.value.orgNo,
+      odno: result.value.brokerOrderId,
+      orgNo: result.value.brokerOrgNo,
       qty,
       accountId: order.accountId,
     });
@@ -261,15 +237,8 @@ export async function executeStrategyOrder(
   deps: WatchOrderExecutorDeps,
   input: StrategyOrderInput,
 ): Promise<void> {
-  const env = deps.getCurrentEnv();
-  if (!env) throw new Error('환경 미선택');
-
-  const credResult = deps.credentialsRepo.loadCredentials(input.accountId);
-  if (credResult.isErr() || !credResult.value) {
-    throw new Error('자격증명 없음');
-  }
-  const cred = credResult.value;
-  assertCredMatchesEnv(cred, env);
+  const broker = deps.getBrokerForAccount(input.accountId);
+  if (!broker) throw new Error('자격증명 없음 또는 환경 미선택');
 
   const safety = deps.safetyRegistry.get(input.accountId);
   if (!safety.canTrade(input.pdno)) {
@@ -285,30 +254,13 @@ export async function executeStrategyOrder(
     });
   }
 
-  const tokenResult = await deps.auth.getValidToken(env, cred.appKey, cred.appSecret);
-  if (tokenResult.isErr()) {
-    throw new Error(`토큰 발급 실패: ${tokenResult.error.kind}`);
-  }
-
-  const result = await orderCash(
-    {
-      http: deps.httpByEnv[env],
-      env,
-      token: tokenResult.value.token,
-      appKey: cred.appKey,
-      appSecret: cred.appSecret,
-      accountNo8: cred.accountNo8,
-      accountProdCd: cred.accountProdCd,
-      logger: deps.logger,
-    },
-    {
-      side: input.side,
-      pdno: input.pdno,
-      qty: input.qty,
-      price: input.division === 'LIMIT' ? input.price : 0,
-      division: input.division,
-    },
-  );
+  const result = await broker.placeOrder({
+    side: input.side,
+    symbol: input.pdno,
+    qty: input.qty,
+    price: input.division === 'LIMIT' ? input.price : 0,
+    kind: input.division,
+  });
   if (result.isErr()) {
     throw new Error(`주문 실패: ${result.error.kind} - ${result.error.msg}`);
   }
@@ -348,8 +300,8 @@ export async function executeStrategyOrder(
     .values({
       accountId: input.accountId,
       lotId: linkedLot.lotId,
-      odno: result.value.odno,
-      orgNo: result.value.orgNo ?? null,
+      odno: result.value.brokerOrderId,
+      orgNo: result.value.brokerOrgNo ?? null,
       pdno: input.pdno,
       side: input.side,
       division: input.division,
@@ -364,15 +316,15 @@ export async function executeStrategyOrder(
   if (
     pendingCfg.enabled &&
     input.division === 'LIMIT' &&
-    result.value.orgNo &&
+    result.value.brokerOrgNo &&
     deps.pendingOrderWatcher
   ) {
     deps.pendingOrderWatcher.register({
       pdno: input.pdno,
       side: input.side,
       nth: linkedLot.nth ?? input.nth,
-      odno: result.value.odno,
-      orgNo: result.value.orgNo,
+      odno: result.value.brokerOrderId,
+      orgNo: result.value.brokerOrgNo,
       qty: input.qty,
       accountId: input.accountId,
     });

@@ -599,13 +599,14 @@ function bootstrapDeps(userDataDir: string) {
       {
         db,
         settingsRepo,
-        credentialsRepo,
-        auth,
-        httpByEnv,
+        getBrokerForAccount: (accountId) => {
+          const ctx = factoryRef.factory;
+          if (!ctx || ctx.getActiveAccountId() !== accountId) return null;
+          return ctx.getBroker();
+        },
         safetyRegistry,
         pendingOrderWatcher,
         logger: eventLogger,
-        getCurrentEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
         lotsRepo,
         strategyRepo,
         marketSessionGuard,
@@ -672,13 +673,14 @@ function bootstrapDeps(userDataDir: string) {
         {
           db,
           settingsRepo,
-          credentialsRepo,
-          auth,
-          httpByEnv,
+          getBrokerForAccount: (accountId) => {
+            const ctx = factoryRef.factory;
+            if (!ctx || ctx.getActiveAccountId() !== accountId) return null;
+            return ctx.getBroker();
+          },
           safetyRegistry,
           pendingOrderWatcher,
           logger: eventLogger,
-          getCurrentEnv: () => factoryRef.factory?.getCurrentEnv() ?? null,
           lotsRepo,
           strategyRepo,
           autoBuyGuard,
