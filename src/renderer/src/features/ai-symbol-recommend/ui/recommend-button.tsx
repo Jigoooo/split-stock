@@ -26,7 +26,7 @@ export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps):
     aiOff,
     open,
     close,
-    refresh,
+    analyze,
     addExtraPdno,
     removeExtraPdno,
     toggleAiOff,
@@ -59,7 +59,7 @@ export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps):
       <RecommendModal
         view={view}
         onClose={close}
-        onRefresh={refresh}
+        onAnalyze={analyze}
         onPick={(pdno, name) => {
           onPick?.(pdno, name);
           close();

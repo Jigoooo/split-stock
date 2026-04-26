@@ -17,7 +17,7 @@ function formatRelative(ts: number): string {
 export interface RecommendModalProps {
   view: RecommendationViewState;
   onClose: () => void;
-  onRefresh: () => void;
+  onAnalyze: () => void;
   onPick: (pdno: string, name: string) => void;
   extras: ReadonlyArray<string>;
   onAddExtra: (pdno: string) => void;
@@ -30,7 +30,7 @@ export interface RecommendModalProps {
 export const RecommendModal = ({
   view,
   onClose,
-  onRefresh,
+  onAnalyze,
   onPick,
   extras,
   onAddExtra,
@@ -158,9 +158,9 @@ export const RecommendModal = ({
                   dense
                   iconLeading={<RefreshCw size={14} />}
                   disabled={view.isPending}
-                  onClick={onRefresh}
-                  aria-label="다시 분석"
-                  title="다시 분석"
+                  onClick={onAnalyze}
+                  aria-label={view.ranked.length > 0 ? '다시 분석' : '분석 시작'}
+                  title={view.ranked.length > 0 ? '다시 분석' : '분석 시작'}
                 />
                 <Button
                   variant="ghost"
@@ -225,6 +225,35 @@ export const RecommendModal = ({
                 }}
               >
                 {view.emptyReason}
+              </div>
+            ) : view.ranked.length === 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '1.2rem',
+                  padding: '4rem 1.5rem',
+                  textAlign: 'center',
+                }}
+              >
+                <Sparkles size={32} color="#D97757" />
+                <div style={{ fontSize: '1.25rem', color: 'var(--fg)', lineHeight: 1.6 }}>
+                  관심 종목 추가 / AI 사용 토글 등을 설정한 뒤<br />
+                  <strong>분석 시작</strong> 버튼을 눌러주세요.
+                </div>
+                <Button
+                  variant="primary"
+                  iconLeading={<Sparkles size={14} />}
+                  onClick={onAnalyze}
+                  style={{
+                    backgroundColor: '#D97757',
+                    borderColor: '#D97757',
+                    minWidth: '12rem',
+                  }}
+                >
+                  분석 시작
+                </Button>
               </div>
             ) : (
               <div style={{ display: 'grid', gap: '0.8rem' }}>

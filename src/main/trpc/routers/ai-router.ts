@@ -260,8 +260,9 @@ export const aiRouter = router({
         newsFetcher?.isAvailable() && input?.aiOff !== true
           ? async (candidates: ReadonlyArray<{ pdno: string; name: string }>) => {
               const map = new Map<string, ReadonlyArray<NewsItem>>();
+              // 종목당 최신 5건 — LLM 이 교차 검증할 수 있게 표본 확장.
               for (const c of candidates) {
-                const news = await newsFetcher.searchByKeyword(c.name, 3);
+                const news = await newsFetcher.searchByKeyword(c.name, 5);
                 if (news.length > 0) map.set(c.pdno, news);
               }
               return map;

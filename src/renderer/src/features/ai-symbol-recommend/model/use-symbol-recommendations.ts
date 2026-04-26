@@ -118,7 +118,8 @@ export function useSymbolRecommendations() {
   });
 
   const open = (): void => {
-    // 캐시 적중 검사 — extras + aiOff 동일 + 10분 이내면 LLM 호출 생략.
+    // 모달만 오픈 — LLM 자동 호출 X. 캐시 hit 면 즉시 표시, miss 면 빈 상태에서 사용자가
+    // '분석 시작' 버튼을 눌러야 mutation 트리거.
     const cached = cacheRef.current;
     const sameExtras =
       cached !== null &&
@@ -142,7 +143,7 @@ export function useSymbolRecommendations() {
     }
     setView({
       isOpen: true,
-      isPending: true,
+      isPending: false,
       ranked: [],
       emptyReason: null,
       rejectedCount: 0,
@@ -151,6 +152,12 @@ export function useSymbolRecommendations() {
       fromCache: false,
       error: null,
     });
+  };
+
+  /** 명시적 분석 실행 — open() 자동 호출 안 함. UI 의 '분석 시작' / '다시 분석' 버튼이 호출. */
+  const analyze = (): void => {
+    cacheRef.current = null;
+    setView((prev) => ({ ...prev, isPending: true, fromCache: false, error: null }));
     mut.mutate({
       topN: 5,
       ...(extraPdnos.length > 0 ? { extraPdnos } : {}),
@@ -160,17 +167,6 @@ export function useSymbolRecommendations() {
 
   const close = (): void => {
     setView((prev) => ({ ...prev, isOpen: false }));
-  };
-
-  const refresh = (): void => {
-    // 강제 재호출 — 캐시 무시.
-    cacheRef.current = null;
-    setView((prev) => ({ ...prev, isPending: true, fromCache: false, error: null }));
-    mut.mutate({
-      topN: 5,
-      ...(extraPdnos.length > 0 ? { extraPdnos } : {}),
-      ...(aiOff ? { aiOff: true } : {}),
-    });
   };
 
   const toggleAiOff = (next: boolean): void => {
@@ -200,7 +196,7 @@ export function useSymbolRecommendations() {
     aiOff,
     open,
     close,
-    refresh,
+    analyze,
     addExtraPdno,
     removeExtraPdno,
     toggleAiOff,

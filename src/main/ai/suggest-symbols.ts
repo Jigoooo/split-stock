@@ -207,8 +207,22 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
     messages: [
       {
         role: 'system',
-        content:
-          '당신은 한국 주식 매직스플릿(분할매수/분할매도) 전략 보조 분석가입니다. 후보 풀에 명시된 pdno 코드 안에서만 추천하세요. 풀 외 종목은 절대 응답에 포함하지 마세요.',
+        content: [
+          '당신은 한국 주식 매직스플릿(분할매수/분할매도) 전략 보조 분석가입니다.',
+          '',
+          '핵심 원칙 (가장 중요):',
+          '1. 후보 풀에 명시된 pdno 코드 안에서만 추천. 풀 외 종목은 절대 포함 X.',
+          '2. 정보 신뢰성 우선. 추측/일반론 X. 가능하면 입력으로 받은 알고리즘 신호(algoScore/RSI/거래량 spike) + 뉴스 제목/요약/날짜를 직접 인용해 근거를 만든다.',
+          '3. 뉴스 분석 가이드:',
+          '   - 발행 일자(publishedAt)를 반드시 확인 — 최근일수록 가중치 높게.',
+          '   - 사실(공시·실적·자사주매입) > 의견(애널리스트 전망) > 기사 헤드라인 추측 순으로 신뢰.',
+          '   - 같은 종목 뉴스 여러 건 사이에 모순(긍정 vs 부정)이 보이면 cons 에 명시.',
+          '   - 어닝 발표 D-3 이내, 자사주매입 결정, 전환사채/유상증자, 임원 매도 같은 거래 영향 큰 이벤트는 entryNote 에 명시.',
+          '   - 헤드라인만 보고 단정 X. 요약 본문도 함께 검토.',
+          '4. 알고리즘 신호와 뉴스가 충돌하면 cons 에 충돌 사실을 적고 score 를 보수적으로 낮춘다.',
+          '5. summary 는 사실 기반의 한 줄. pros/cons 는 행동 가이드. entryNote 는 진입 시점/주의사항 1줄.',
+          '6. 데이터 부족(통계 부족 / 뉴스 0건)인 종목은 score 를 보수적으로 낮추고 cons 에 "데이터 부족" 명시.',
+        ].join('\n'),
       },
       { role: 'user', content: userPrompt },
     ],
@@ -329,15 +343,25 @@ function buildPrompt(args: {
     }
     const news = newsByPdno.get(c.pdno);
     if (news && news.length > 0) {
-      const sample = news.slice(0, 3);
-      for (const n of sample) {
-        const summary = n.summary.length > 80 ? `${n.summary.slice(0, 80)}...` : n.summary;
-        lines.push(`    · ${n.publishedAt} | ${n.title} — ${summary}`);
-      }
+      lines.push(`    뉴스 ${news.length}건 (최신순):`);
+      news.forEach((n, idx) => {
+        const summary = n.summary.length > 220 ? `${n.summary.slice(0, 220)}...` : n.summary;
+        lines.push(`    [${idx + 1}] ${n.publishedAt} | ${n.title}`);
+        if (summary) lines.push(`        ${summary}`);
+      });
+    } else {
+      lines.push('    (뉴스 없음 — 데이터 부족으로 보수적 평가 권장)');
     }
   }
   lines.push('');
-  lines.push('주의: 후보 풀에 없는 pdno 는 응답에 포함하지 마세요.');
+  lines.push('주의:');
+  lines.push('- 후보 풀에 없는 pdno 는 응답에 포함하지 마세요.');
+  lines.push(
+    '- 뉴스 내용을 인용할 때 발행일과 헤드라인 핵심을 entryNote/cons/pros 에 직접 녹여 작성.',
+  );
+  lines.push(
+    '- 알고리즘 점수(algoScore) 와 LLM 점수(score) 차이가 크면 그 이유를 cons 에 짧게 적기.',
+  );
   return lines.join('\n');
 }
 
