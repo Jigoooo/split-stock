@@ -1,7 +1,7 @@
 import { useActiveAccountId } from '@renderer/entities/account';
 import { useWatchControlState } from '@renderer/entities/watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
-import { Switch } from '@renderer/shared/ui';
+import { alertDialog, Switch } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { toast } from 'sonner';
 
@@ -37,13 +37,29 @@ export const WatchGlobalToggle = (): ReactElement => {
     return <span className="chip">자동감시 …</span>;
   }
 
+  const handleChange = (enabled: boolean): void => {
+    if (!enabled && state.totalTrackedCount > 0) {
+      void (async () => {
+        const confirmed = await alertDialog.confirm({
+          title: '자동감시 전체 정지',
+          message: `현재 ${state.totalTrackedCount}건이 감시 중입니다. 전체 정지하시겠습니까?`,
+          confirmText: '전체 정지',
+          cancelText: '취소',
+        });
+        if (confirmed) setGlobal.mutate({ enabled: false });
+      })();
+      return;
+    }
+    setGlobal.mutate({ enabled });
+  };
+
   return (
     <div className="header-toggle-control header-toggle-control--watch">
       <span className="header-toggle-control__label">감시</span>
       <Switch
         checked={state.globalEnabled}
         aria-label={`자동감시 ${state.globalEnabled ? 'ON' : 'OFF'} (${state.totalTrackedCount})`}
-        onChange={(enabled) => setGlobal.mutate({ enabled })}
+        onChange={handleChange}
         disabled={setGlobal.isPending}
         tone={state.globalEnabled ? 'accent' : 'danger'}
       />
