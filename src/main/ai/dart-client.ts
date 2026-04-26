@@ -127,19 +127,10 @@ export class DartClient {
   }
 
   private async ensureCorpCodeCache(): Promise<Map<string, string>> {
-    if (this.corpCodeCache) return this.corpCodeCache;
-    // OpenDART corpCode.xml 은 zip 응답이라 파싱이 무겁다. 대신 해당 종목 1건만
-    // company.json 으로 조회하는 우회는 corp_code 가 미리 필요해 불가.
-    // 합리적 단순화: 캐시 미존재 시 빈 Map 사용 → 호출자는 stock_code → corp_code 매핑을
-    // 실패로 인지 (warn 로그). 배포 단계에서 stock_master 와 동시 sync 하는 별도 파이프라인을
-    // 두는 게 정공법. Phase 2 MVP 에서는 caller 에 corp_code 직접 입력 path 도 허용.
-    this.opts.logger.log({
-      level: 'WARN',
-      category: 'SYS',
-      message: 'dart.corp-code.cache-empty',
-      payload: { hint: 'corp_code 직접 입력 또는 후속 phase 에서 sync 파이프라인 추가' },
-    });
-    this.corpCodeCache = new Map();
+    // 실제 stock_code → corp_code 매핑은 DartCorpCodeRepo (DB 적재) 가 담당.
+    // 본 in-memory cache 는 사용 안 함 — 상위 ai-router 에서 dartCorpCodeRepo.findByStockCode
+    // 로 lookup 후 corpCode 를 명시 주입한다.
+    if (!this.corpCodeCache) this.corpCodeCache = new Map();
     return this.corpCodeCache;
   }
 

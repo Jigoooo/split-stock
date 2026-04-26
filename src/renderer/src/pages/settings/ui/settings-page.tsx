@@ -1,4 +1,4 @@
-import { AiKeysSection } from '@renderer/features/ai-settings';
+import { AiKeysSection, DartCorpCodeSection } from '@renderer/features/ai-settings';
 import { BackupPanel } from '@renderer/features/backup-restore';
 import {
   ChartSettingsForm,
@@ -141,9 +141,14 @@ export const SettingsPage = (): ReactElement => {
             </Section>
           ) : null}
           {topTab === 'ai' ? (
-            <Section name="AI 키 관리">
-              <AiKeysSection />
-            </Section>
+            <div style={{ display: 'grid', gap: '1.2rem' }}>
+              <Section name="AI 키 관리">
+                <AiKeysSection />
+              </Section>
+              <Section name="DART 매핑">
+                <DartCorpCodeSection />
+              </Section>
+            </div>
           ) : null}
           {topTab === 'backup' ? (
             <Section name="백업/복원">
