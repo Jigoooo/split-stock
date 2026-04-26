@@ -30,7 +30,7 @@ export interface RecommendedItem {
   pros: string[];
   cons: string[];
   entryNote: string | null;
-  sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL'>;
+  sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO'>;
   stats: {
     lastClose: number | null;
     volatility60d: number | null;

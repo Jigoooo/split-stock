@@ -71,7 +71,7 @@ export type RankedSymbol = z.infer<typeof RankedItemSchema> & {
   /** 응답에 lookup 한 종목명. */
   name: string;
   /** 후보 출처 (보유/감시/수동). */
-  sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL'>;
+  sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO'>;
   /** 통계 수치 — UI 에서 LLM 점수 근거를 직접 노출. */
   stats: RankedSymbolStats;
   /** 결정론적 알고리즘 점수 (0~100). LLM 점수와 비교해 일관성 검증 가능. */

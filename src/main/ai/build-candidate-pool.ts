@@ -1,6 +1,10 @@
 import { and, eq, inArray, ne } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { lots as lotsTable, stockMaster, watchOrders } from '../db/schema';
+import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
+import { screenMagicSplitFit } from './algo/screen-magic-split-fit';
+
+export type CandidateSource = 'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO';
 
 export interface CandidatePoolInput {
   db: Db;
@@ -12,12 +16,21 @@ export interface CandidatePoolInput {
    * "관심은 있지만 아직 안 산 종목" 추천 가능하게 함.
    */
   extraPdnos?: ReadonlyArray<string>;
+  /**
+   * D 풀(자동 발굴) 활성화 — A∪B∪C 외에도 매직스플릿 사전 스크리닝 통과 종목을 합집합.
+   * 기본 false. 모달 토글로 사용자가 켤 수 있음.
+   */
+  includeAutoDiscovery?: boolean;
+  /** D 풀 스크리닝에 사용할 daily candles repo — includeAutoDiscovery=true 일 때만 필요. */
+  candlesRepo?: DailyCandlesRepo;
+  /** D 풀 cap — 자동 발굴된 종목 수 상한. 기본 50 (이후 cap 으로 또 잘림). */
+  autoCap?: number;
 }
 
 export interface CandidateEntry {
   pdno: string;
   name: string;
-  sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL'>;
+  sources: ReadonlyArray<CandidateSource>;
 }
 
 /**
@@ -34,7 +47,15 @@ export interface CandidateEntry {
  */
 export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] {
   const cap = Math.max(1, input.cap ?? 30);
-  const map = new Map<string, { name: string; sources: Set<'OWNED' | 'WATCH' | 'MANUAL'> }>();
+  const map = new Map<string, { name: string; sources: Set<CandidateSource> }>();
+
+  const addPdno = (pdno: string, source: CandidateSource): void => {
+    if (!map.has(pdno)) {
+      map.set(pdno, { name: pdno, sources: new Set([source]) });
+    } else {
+      map.get(pdno)?.sources.add(source);
+    }
+  };
 
   // 보유 종목 (OPEN/BUYING).
   const ownedRows = input.db
@@ -42,13 +63,7 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
     .from(lotsTable)
     .where(and(eq(lotsTable.accountId, input.accountId), ne(lotsTable.status, 'SOLD')))
     .all();
-  for (const row of ownedRows) {
-    if (!map.has(row.pdno)) {
-      map.set(row.pdno, { name: row.pdno, sources: new Set(['OWNED']) });
-    } else {
-      map.get(row.pdno)?.sources.add('OWNED');
-    }
-  }
+  for (const row of ownedRows) addPdno(row.pdno, 'OWNED');
 
   // 자동감시 종목 (활성 = status WATCHING/PAUSED).
   const watchRows = input.db
@@ -61,25 +76,28 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
       ),
     )
     .all();
-  for (const row of watchRows) {
-    if (!map.has(row.pdno)) {
-      map.set(row.pdno, { name: row.pdno, sources: new Set(['WATCH']) });
-    } else {
-      map.get(row.pdno)?.sources.add('WATCH');
-    }
-  }
+  for (const row of watchRows) addPdno(row.pdno, 'WATCH');
 
   // 사용자가 직접 추가한 pdno (stock-picker 등) — 6자리 검증 + dedupe.
   if (input.extraPdnos && input.extraPdnos.length > 0) {
     for (const raw of input.extraPdnos) {
       const pdno = raw.padStart(6, '0');
       if (!/^\d{6}$/.test(pdno)) continue;
-      if (!map.has(pdno)) {
-        map.set(pdno, { name: pdno, sources: new Set(['MANUAL']) });
-      } else {
-        map.get(pdno)?.sources.add('MANUAL');
-      }
+      addPdno(pdno, 'MANUAL');
     }
+  }
+
+  // D 풀 — 매직스플릿 사전 스크리닝 통과 종목 자동 발굴.
+  // A∪B∪C 와 중복은 자동 dedupe. 결정론 알고리즘이라 LLM 호출 0회.
+  if (input.includeAutoDiscovery && input.candlesRepo) {
+    const exclude = new Set(map.keys());
+    const screened = screenMagicSplitFit({
+      db: input.db,
+      candlesRepo: input.candlesRepo,
+      cap: input.autoCap ?? 50,
+      excludePdnos: exclude,
+    });
+    for (const s of screened) addPdno(s.pdno, 'AUTO');
   }
 
   if (map.size === 0) return [];

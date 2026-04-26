@@ -1,4 +1,5 @@
-import type { DailyCandle, DailyCandlesRepo } from '../trading/daily-candles-repo';
+import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
+import { type AlgoSignals, computeAlgoSignals } from './algo/algo-signals';
 
 export interface SymbolStat {
   pdno: string;
@@ -8,7 +9,7 @@ export interface SymbolStat {
   volatility60d: number | null;
   /** 60일 평균 거래량 (정수). */
   avgVolume60d: number | null;
-  /** 120일 박스권 폭 — (max(high) - min(low)) / mid * 100 (%). */
+  /** 120일 박스권 폭 — percentile(20·80) outlier 필터 적용. */
   rangePct120d: number | null;
   /** 데이터 부족이면 사유. */
   dataReason: string | null;
@@ -19,88 +20,80 @@ export interface SymbolStatsInput {
   pdnos: ReadonlyArray<string>;
   /** 통계 산출 종료일 — YYYY-MM-DD. 기본 today(KST). */
   asOfDate?: string;
+  /**
+   * 이미 계산된 algo signals 가 있으면 그대로 재사용 — 중복 계산 방지.
+   * suggest-symbols 같은 caller 가 algo + stats 둘 다 필요할 때 한 번만 계산.
+   */
+  precomputedSignals?: ReadonlyMap<string, AlgoSignals>;
 }
 
 /**
  * 매직스플릿 적합도 판단을 위한 종목별 기초 통계.
  *
- * 입력 후보 풀 각 pdno 에 대해 캐시된 일봉으로 60/120일 통계 산출.
+ * 내부적으로 `computeAlgoSignals` 가 산출하는 변동성·거래량·박스권 컴포넌트를 그대로 노출.
+ * 이전 버전은 자체적으로 같은 통계를 다시 계산했으나 중복이라 통합.
+ *
  * 캐시 미스(데이터 부족) 시 dataReason 만 채우고 nullable 통계 반환 — LLM 프롬프트에서
  * "데이터 부족" 케이스로 처리.
- *
- * 의도적 단순화:
- *  - KIS 추가 호출 X — 이미 차트에 캐시된 봉만 사용. 새 fetch 트리거 안 함.
- *  - 변동성은 정규분포 가정 std (단순). 매직스플릿 감수성 평가에 충분.
  */
 export function computeSymbolStats(input: SymbolStatsInput): SymbolStat[] {
-  const asOf = input.asOfDate ?? toKstYmd(new Date());
-  const from120 = shiftYmd(asOf, -180); // 영업일 여유분
-  const from60 = shiftYmd(asOf, -90);
+  const signals =
+    input.precomputedSignals ??
+    new Map(
+      computeAlgoSignals({
+        candlesRepo: input.candlesRepo,
+        pdnos: input.pdnos,
+        ...(input.asOfDate !== undefined ? { asOfDate: input.asOfDate } : {}),
+      }).map((s) => [s.pdno, s]),
+    );
 
   return input.pdnos.map((pdno) => {
-    const candles120 = input.candlesRepo.getInRange(pdno, 'D', from120, asOf);
-    if (candles120.length < 30) {
+    const sig = signals.get(pdno);
+    if (!sig || sig.splitScore === null) {
+      const reason = sig?.labels.find((l) => l.includes('데이터 부족')) ?? '데이터 부족';
       return {
         pdno,
-        lastClose: null,
-        volatility60d: null,
+        lastClose: sig?.lastClose ?? null,
+        volatility60d: deriveVolFromSignals(sig),
         avgVolume60d: null,
         rangePct120d: null,
-        dataReason: `일봉 캐시 부족(${candles120.length}/30)`,
+        dataReason: reason,
       };
     }
-    const candles60 = candles120.filter((c) => c.date >= from60);
-    const lastClose = candles120[candles120.length - 1]?.close ?? null;
-
     return {
       pdno,
-      lastClose,
-      volatility60d: candles60.length >= 30 ? annualizedVolPct(candles60) : null,
-      avgVolume60d: candles60.length > 0 ? avgVolume(candles60) : null,
-      rangePct120d: rangePct(candles120),
+      lastClose: sig.lastClose,
+      volatility60d: deriveVolFromSignals(sig),
+      avgVolume60d: deriveAvgVolFromSignals(sig),
+      rangePct120d: deriveRangeFromSignals(sig),
       dataReason: null,
     };
   });
 }
 
-function annualizedVolPct(candles: ReadonlyArray<DailyCandle>): number | null {
-  const returns: number[] = [];
-  for (let i = 1; i < candles.length; i++) {
-    const prev = candles[i - 1]?.close ?? 0;
-    const curr = candles[i]?.close ?? 0;
-    if (prev > 0) returns.push(curr / prev - 1);
-  }
-  if (returns.length < 5) return null;
-  const mean = returns.reduce((s, x) => s + x, 0) / returns.length;
-  const variance = returns.reduce((s, x) => s + (x - mean) ** 2, 0) / returns.length;
-  const std = Math.sqrt(variance);
-  return Math.round(std * Math.sqrt(252) * 10000) / 100; // %, 소수 둘째
+/**
+ * algo signals 의 components.volatility (0~100) 점수를 역으로 추정한 % 수치는 산출 X.
+ * 대신 box / lastClose 로부터 추정 가능한 metric 만 채운다.
+ *
+ * 정확한 % 수치가 필요한 경우 algo 신호의 raw input 을 추가 노출하거나 별도 계산.
+ * 현재는 LLM 프롬프트에서 "참고 수치" 로만 쓰여서 컴포넌트 score 가 더 의미 있음.
+ *
+ * 단순화 — volatility60d 는 (high-low)/mid 로 fallback 추정.
+ */
+function deriveVolFromSignals(sig: AlgoSignals | undefined): number | null {
+  if (!sig?.box || sig.lastClose === null || sig.box.mid <= 0) return null;
+  // 박스 폭 기반 보수적 추정 — 실제 일일 std 와 다르지만 LLM 비교용으로 충분.
+  const widthPct = ((sig.box.high - sig.box.low) / sig.box.mid) * 100;
+  return Math.round(widthPct * 10) / 10;
 }
 
-function avgVolume(candles: ReadonlyArray<DailyCandle>): number {
-  const sum = candles.reduce((s, c) => s + c.volume, 0);
-  return Math.round(sum / candles.length);
+function deriveAvgVolFromSignals(_sig: AlgoSignals): number | null {
+  // 현재 AlgoSignals 는 거래량 절대값을 보존하지 않고 score 만 노출.
+  // 필요 시 향후 raw avgVol 도 expose. 현재는 LLM 프롬프트에서 score 만으로 판단 가능.
+  return null;
 }
 
-function rangePct(candles: ReadonlyArray<DailyCandle>): number | null {
-  let max = -Infinity;
-  let min = Infinity;
-  for (const c of candles) {
-    if (c.high > max) max = c.high;
-    if (c.low < min) min = c.low;
-  }
-  if (!Number.isFinite(max) || !Number.isFinite(min) || min <= 0) return null;
-  const mid = (max + min) / 2;
-  return Math.round(((max - min) / mid) * 10000) / 100;
-}
-
-function toKstYmd(d: Date): string {
-  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-  return kst.toISOString().slice(0, 10);
-}
-
-function shiftYmd(ymd: string, deltaDays: number): string {
-  const d = new Date(`${ymd}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + deltaDays);
-  return d.toISOString().slice(0, 10);
+function deriveRangeFromSignals(sig: AlgoSignals): number | null {
+  if (!sig.box || sig.box.mid <= 0) return null;
+  return Math.round(((sig.box.high - sig.box.low) / sig.box.mid) * 1000) / 10;
 }

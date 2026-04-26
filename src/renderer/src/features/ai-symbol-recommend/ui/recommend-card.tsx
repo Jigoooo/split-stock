@@ -23,10 +23,11 @@ const LIQ_TONE: Record<RecommendedItem['liquidityFit'], string> = {
   ok: 'chip',
   poor: 'chip--down',
 };
-const SOURCE_LABEL: Record<'OWNED' | 'WATCH' | 'MANUAL', string> = {
+const SOURCE_LABEL: Record<'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO', string> = {
   OWNED: '보유',
   WATCH: '감시',
   MANUAL: '수동',
+  AUTO: '자동발굴',
 };
 
 export interface RecommendCardProps {
