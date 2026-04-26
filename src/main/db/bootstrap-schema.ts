@@ -12,16 +12,19 @@ const CREATE_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS credentials (
     account_id INTEGER PRIMARY KEY,
     env TEXT NOT NULL,
+    broker TEXT NOT NULL DEFAULT 'KIS',
     payload BLOB NOT NULL,
     updated_at INTEGER NOT NULL
   )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS credentials_env_uniq ON credentials(env)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS credentials_env_broker_uniq ON credentials(env, broker)`,
   `CREATE TABLE IF NOT EXISTS access_tokens (
-    env TEXT PRIMARY KEY,
+    broker TEXT NOT NULL DEFAULT 'KIS',
+    env TEXT NOT NULL,
     token TEXT NOT NULL,
     token_type TEXT NOT NULL DEFAULT 'Bearer',
     expires_at INTEGER NOT NULL,
-    issued_at INTEGER NOT NULL
+    issued_at INTEGER NOT NULL,
+    PRIMARY KEY (broker, env)
   )`,
   `CREATE TABLE IF NOT EXISTS accounts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

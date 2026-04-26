@@ -14,22 +14,31 @@ export const credentials = sqliteTable(
   {
     accountId: integer('account_id').primaryKey(),
     env: text('env').notNull(), // 'MOCK' | 'PROD'
+    /** 'KIS' | 'KIWOOM' — Stage 5a 추가. 기존 row 는 'KIS' default backfill. */
+    broker: text('broker').notNull().default('KIS'),
     payload: blob('payload', { mode: 'buffer' }).notNull(), // safeStorage.encryptString(JSON.stringify(Credentials))
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
-  (t) => [uniqueIndex('credentials_env_uniq').on(t.env)],
+  (t) => [uniqueIndex('credentials_env_broker_uniq').on(t.env, t.broker)],
 );
 
 /**
  * 액세스 토큰 캐시 — 만료 6h 이내면 재사용.
+ *
+ * Stage 5a: PK `env` → `(broker, env)` 변경 (broker 별 토큰 격리).
  */
-export const accessTokens = sqliteTable('access_tokens', {
-  env: text('env').primaryKey(),
-  token: text('token').notNull(),
-  tokenType: text('token_type').notNull().default('Bearer'),
-  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
-  issuedAt: integer('issued_at', { mode: 'timestamp_ms' }).notNull(),
-});
+export const accessTokens = sqliteTable(
+  'access_tokens',
+  {
+    broker: text('broker').notNull().default('KIS'),
+    env: text('env').notNull(),
+    token: text('token').notNull(),
+    tokenType: text('token_type').notNull().default('Bearer'),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    issuedAt: integer('issued_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.broker, t.env] })],
+);
 
 /**
  * 계좌 — 매직스플릿은 단일/다계좌 모두 지원.

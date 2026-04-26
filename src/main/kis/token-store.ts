@@ -1,8 +1,10 @@
 import type { AppEnv } from '@shared/contracts';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { err, ok, type Result } from 'neverthrow';
 import type { Db } from '../db/client';
 import { accessTokens } from '../db/schema';
+
+const BROKER = 'KIS' as const;
 
 export interface StoredToken {
   token: string;
@@ -22,8 +24,9 @@ export class TokenStore {
   constructor(private readonly db: Db) {}
 
   save(env: AppEnv, value: StoredToken): Result<void, TokenStoreError> {
+    const where = and(eq(accessTokens.broker, BROKER), eq(accessTokens.env, env));
     try {
-      const existing = this.db.select().from(accessTokens).where(eq(accessTokens.env, env)).all();
+      const existing = this.db.select().from(accessTokens).where(where).all();
       if (existing.length > 0) {
         this.db
           .update(accessTokens)
@@ -33,12 +36,13 @@ export class TokenStore {
             expiresAt: new Date(value.expiresAt),
             issuedAt: new Date(value.issuedAt),
           })
-          .where(eq(accessTokens.env, env))
+          .where(where)
           .run();
       } else {
         this.db
           .insert(accessTokens)
           .values({
+            broker: BROKER,
             env,
             token: value.token,
             tokenType: value.tokenType,
@@ -54,8 +58,9 @@ export class TokenStore {
   }
 
   load(env: AppEnv): Result<StoredToken | null, TokenStoreError> {
+    const where = and(eq(accessTokens.broker, BROKER), eq(accessTokens.env, env));
     try {
-      const rows = this.db.select().from(accessTokens).where(eq(accessTokens.env, env)).all();
+      const rows = this.db.select().from(accessTokens).where(where).all();
       if (rows.length === 0) return ok(null);
       const row = rows[0];
       if (!row) return ok(null);
@@ -71,8 +76,9 @@ export class TokenStore {
   }
 
   clear(env: AppEnv): Result<void, TokenStoreError> {
+    const where = and(eq(accessTokens.broker, BROKER), eq(accessTokens.env, env));
     try {
-      this.db.delete(accessTokens).where(eq(accessTokens.env, env)).run();
+      this.db.delete(accessTokens).where(where).run();
       return ok(undefined);
     } catch (cause) {
       return err({ kind: 'DB_ERROR', cause });
