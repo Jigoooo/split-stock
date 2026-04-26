@@ -763,7 +763,7 @@ function bbPosition(close: number, upper: number, lower: number): number | null 
 
 // ──────────── consensus / conflicts ────────────
 
-interface ConsensusContext {
+export interface ConsensusContext {
   rsi: number | null;
   bbPosition: number | null;
   mfi: number | null;
@@ -779,7 +779,7 @@ interface ConsensusContext {
   T: AlgoThresholds;
 }
 
-function computeConsensus(ctx: ConsensusContext): {
+export function computeConsensus(ctx: ConsensusContext): {
   count: number;
   level: 'strong' | 'moderate' | 'weak' | 'none';
   direction: 'bullish' | 'bearish' | 'mixed' | 'none';
@@ -826,7 +826,7 @@ function computeConsensus(ctx: ConsensusContext): {
   return { count, level, direction };
 }
 
-function detectConflicts(ctx: ConsensusContext): string[] {
+export function detectConflicts(ctx: ConsensusContext): string[] {
   const conflicts: string[] = [];
   // BB 상단 + RSI 과매도 — 불가능에 가까운 조합.
   if (

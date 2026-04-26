@@ -554,13 +554,17 @@ function enrichCons(
       const note = `알고리즘 점수(${algo.splitScore}) vs LLM 점수(${item.score}) 차이 ≥30 — 추가 검증 권장`;
       cons.unshift(note);
     }
+    // 정확 일치로만 dedupe — 부분 일치는 false positive 가 너무 많음.
+    const seen = new Set(cons);
     for (const conflict of algo.conflicts) {
-      if (!cons.some((c) => c.includes(conflict.split(' ')[0] ?? ''))) {
+      if (!seen.has(conflict)) {
         cons.unshift(conflict);
+        seen.add(conflict);
       }
     }
     if (item.citedTools.length === 0 && item.confidence !== 'high') {
-      cons.unshift('추가 도구 검증 미수행 — 단일 알고리즘 판단');
+      const tip = '추가 도구 검증 미수행 — 단일 알고리즘 판단';
+      if (!seen.has(tip)) cons.unshift(tip);
     }
   }
   return cons.slice(0, 5);

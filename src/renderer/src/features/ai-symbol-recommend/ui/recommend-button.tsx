@@ -37,7 +37,7 @@ export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps):
   const disabled = isAiListLoading;
   const title = !hasDefaultKey
     ? 'AI 키 미등록 — 알고리즘 전용 모드로 추천. 설정 → AI 탭에서 키를 등록하면 LLM 활용.'
-    : 'AI 또는 알고리즘으로 매직스플릿 적합 Top 5 추천';
+    : 'AI 또는 알고리즘으로 매직스플릿 적합 종목 추천 (top/strong/moderate/watch/avoid 분포)';
 
   return (
     <>

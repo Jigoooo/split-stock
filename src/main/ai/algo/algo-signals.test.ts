@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ChartPeriod, DailyCandle, DailyCandlesRepo } from '../../trading/daily-candles-repo';
-import { ALGO_THRESHOLDS, computeAlgoSignals } from './algo-signals';
+import {
+  ALGO_THRESHOLDS,
+  type AlgoThresholds,
+  type ConsensusContext,
+  computeAlgoSignals,
+  computeConsensus,
+  detectConflicts,
+} from './algo-signals';
 import { applyTierQuota, preRank, scoreToTier, summarizeTiers } from './composite-score';
 
 /** in-memory mock candles repo. */
@@ -325,6 +332,103 @@ describe('composite-score', () => {
     expect(dist.moderate).toBe(0);
     expect(dist.watch).toBe(0);
     expect(dist.avoid).toBe(1);
+  });
+});
+
+// ──────────── consensus / conflicts 단위 테스트 ────────────
+
+const T_DEFAULT: AlgoThresholds = { ...ALGO_THRESHOLDS };
+
+function makeCtx(overrides: Partial<ConsensusContext> = {}): ConsensusContext {
+  return {
+    rsi: null,
+    bbPosition: null,
+    mfi: null,
+    stoch: null,
+    cci: null,
+    aroon: null,
+    macd: null,
+    psar: null,
+    momentum: null,
+    divergence: 'none',
+    lastClose: 100,
+    prevClose: 100,
+    T: T_DEFAULT,
+    ...overrides,
+  };
+}
+
+describe('computeConsensus', () => {
+  it('지표 모두 null 일 때 count=0, level=none, direction=none', () => {
+    const r = computeConsensus(makeCtx());
+    expect(r).toEqual({ count: 0, level: 'none', direction: 'none' });
+  });
+
+  it('RSI 과매도 + BB 하단 + MFI 과매도 → strong + bullish (3+ 동의)', () => {
+    const r = computeConsensus(makeCtx({ rsi: 25, bbPosition: 0.05, mfi: 15 }));
+    expect(r.count).toBeGreaterThanOrEqual(3);
+    expect(r.level).toBe('strong');
+    expect(r.direction).toBe('bullish');
+  });
+
+  it('RSI 과매수 1개만 → weak + bearish', () => {
+    const r = computeConsensus(makeCtx({ rsi: 75 }));
+    expect(r.count).toBe(1);
+    expect(r.level).toBe('weak');
+    expect(r.direction).toBe('bearish');
+  });
+
+  it('RSI 과매수 + BB 하단 → mixed direction (count=1)', () => {
+    const r = computeConsensus(makeCtx({ rsi: 75, bbPosition: 0.05 }));
+    expect(r.direction).toBe('mixed');
+  });
+
+  it('OBV 다이버전스(bullish) + MACD 골든크로스 → 2개 동의 = moderate + bullish', () => {
+    const r = computeConsensus(
+      makeCtx({
+        divergence: 'bullish',
+        macd: { cross: 'golden', histogram: 0.5 },
+      }),
+    );
+    expect(r.count).toBe(2);
+    expect(r.level).toBe('moderate');
+    expect(r.direction).toBe('bullish');
+  });
+});
+
+describe('detectConflicts', () => {
+  it('지표 모두 null 일 때 빈 배열', () => {
+    expect(detectConflicts(makeCtx())).toEqual([]);
+  });
+
+  it('BB 상단(0.95) + RSI 과매도(25) → "BB 상단 + RSI 과매도 — 모순"', () => {
+    const r = detectConflicts(makeCtx({ bbPosition: 0.95, rsi: 25 }));
+    expect(r.some((c) => c.includes('BB 상단') && c.includes('과매도'))).toBe(true);
+  });
+
+  it('BB 하단(0.05) + RSI 과매수(75) → "BB 하단 + RSI 과매수 — 모순"', () => {
+    const r = detectConflicts(makeCtx({ bbPosition: 0.05, rsi: 75 }));
+    expect(r.some((c) => c.includes('BB 하단') && c.includes('과매수'))).toBe(true);
+  });
+
+  it('Aroon strong-trend → 매직스플릿 부적합 경고', () => {
+    const r = detectConflicts(makeCtx({ aroon: { up: 85, down: 15, isStrongUpTrend: true } }));
+    expect(r.some((c) => c.includes('Aroon') && c.includes('추세장'))).toBe(true);
+  });
+
+  it('PSAR 하락 추세 + RSI 과매도 → "추세 거스르기" 경고', () => {
+    const r = detectConflicts(makeCtx({ psar: { trend: -1 }, rsi: 25 }));
+    expect(r.some((c) => c.includes('PSAR') && c.includes('추세'))).toBe(true);
+  });
+
+  it('OBV 베어리시 다이버전스 + BB 하단 근접 → 추가 하락 경고', () => {
+    const r = detectConflicts(makeCtx({ divergence: 'bearish', bbPosition: 0.15 }));
+    expect(r.some((c) => c.includes('OBV') || c.includes('다이버전스'))).toBe(true);
+  });
+
+  it('정상 oversold (RSI 25 + BB 0.05) → 충돌 없음', () => {
+    const r = detectConflicts(makeCtx({ rsi: 25, bbPosition: 0.05 }));
+    expect(r).toEqual([]);
   });
 });
 

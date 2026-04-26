@@ -168,15 +168,15 @@ export class LlmClient {
     const maxIters = req.maxToolIterations ?? 4;
 
     for (let iter = 0; iter <= maxIters; iter++) {
-      // schema 는 마지막 단계(도구 더이상 안 부를 때)에 적용 — tool 루프 중간 응답은 자유 형식.
-      const enforceSchema = !openAiTools || iter === maxIters;
+      // response_format 는 항상 적용 — content 필드에만 영향, tool_calls 와 공존 가능.
+      // OpenAI 가 tool 을 부르면 content 가 비고 tool_calls 채움 / 더 이상 안 부르면 content 에 schema 따른 JSON.
       const response = await client.chat.completions.create({
         model: req.config.model,
         max_tokens: req.maxOutputTokens ?? 1024,
         temperature: req.temperature ?? 0.2,
         messages: conversation,
         ...(openAiTools ? { tools: openAiTools } : {}),
-        ...(responseFormat && enforceSchema ? { response_format: responseFormat } : {}),
+        ...(responseFormat ? { response_format: responseFormat } : {}),
       });
 
       const choice = response.choices[0]?.message;
