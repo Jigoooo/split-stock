@@ -18,7 +18,17 @@ export interface RecommendButtonProps {
  * - 클릭 시 modal 오픈, mutation 자동 트리거.
  */
 export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps): ReactElement => {
-  const { view, hasDefaultKey, isAiListLoading, open, close, refresh } = useSymbolRecommendations();
+  const {
+    view,
+    hasDefaultKey,
+    isAiListLoading,
+    extraPdnos,
+    open,
+    close,
+    refresh,
+    addExtraPdno,
+    removeExtraPdno,
+  } = useSymbolRecommendations();
 
   const disabled = isAiListLoading || !hasDefaultKey;
   const title = !hasDefaultKey
@@ -52,6 +62,9 @@ export const RecommendButton = ({ onPick, label, dense }: RecommendButtonProps):
           onPick?.(pdno, name);
           close();
         }}
+        extras={extraPdnos}
+        onAddExtra={addExtraPdno}
+        onRemoveExtra={removeExtraPdno}
       />
     </>
   );

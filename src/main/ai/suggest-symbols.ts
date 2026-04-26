@@ -18,6 +18,8 @@ export interface SuggestSymbolsInput {
   poolCap?: number;
   /** 응답 Top N. 기본 5. */
   topN?: number;
+  /** 사용자가 stock-picker 등으로 추가한 pdno 목록 — 보유/감시에 없어도 풀에 합쳐 추천. */
+  extraPdnos?: ReadonlyArray<string>;
   /**
    * 후보 pdno 목록의 일봉 캐시를 사전 보충. 호출자(ai-router)가 KIS env/auth 컨텍스트를
    * 들고 ensure 콜백을 주입. 미주입 시 캐시만 사용 (기존 동작).
@@ -81,6 +83,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
     db: input.db,
     accountId: input.accountId,
     cap: input.poolCap ?? 30,
+    ...(input.extraPdnos && input.extraPdnos.length > 0 ? { extraPdnos: input.extraPdnos } : {}),
   });
   if (pool.length === 0) {
     return {

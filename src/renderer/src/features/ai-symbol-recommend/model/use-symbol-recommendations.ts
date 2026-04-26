@@ -60,6 +60,9 @@ export function useSymbolRecommendations() {
     },
   });
 
+  // 모달 세션 동안 사용자가 stock-picker 로 추가한 pdno 목록 (max 10).
+  const [extraPdnos, setExtraPdnos] = useState<string[]>([]);
+
   const open = (): void => {
     setView({
       isOpen: true,
@@ -70,7 +73,7 @@ export function useSymbolRecommendations() {
       durationMs: 0,
       error: null,
     });
-    mut.mutate({ topN: 5 });
+    mut.mutate({ topN: 5, ...(extraPdnos.length > 0 ? { extraPdnos } : {}) });
   };
 
   const close = (): void => {
@@ -79,15 +82,32 @@ export function useSymbolRecommendations() {
 
   const refresh = (): void => {
     setView((prev) => ({ ...prev, isPending: true, error: null }));
-    mut.mutate({ topN: 5 });
+    mut.mutate({ topN: 5, ...(extraPdnos.length > 0 ? { extraPdnos } : {}) });
+  };
+
+  const addExtraPdno = (pdno: string): void => {
+    setExtraPdnos((prev) => {
+      if (prev.length >= 10) return prev;
+      const padded = pdno.padStart(6, '0');
+      if (!/^\d{6}$/.test(padded)) return prev;
+      if (prev.includes(padded)) return prev;
+      return [...prev, padded];
+    });
+  };
+
+  const removeExtraPdno = (pdno: string): void => {
+    setExtraPdnos((prev) => prev.filter((p) => p !== pdno));
   };
 
   return {
     view,
     hasDefaultKey,
     isAiListLoading: aiList.isLoading,
+    extraPdnos,
     open,
     close,
     refresh,
+    addExtraPdno,
+    removeExtraPdno,
   };
 }

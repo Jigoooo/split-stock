@@ -3,12 +3,16 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
 import type { ReactElement } from 'react';
 import type { RecommendationViewState, RecommendedItem } from '../model/use-symbol-recommendations';
+import { ExtraPdnoPicker } from './extra-pdno-picker';
 
 export interface RecommendModalProps {
   view: RecommendationViewState;
   onClose: () => void;
   onRefresh: () => void;
   onPick: (pdno: string, name: string) => void;
+  extras: ReadonlyArray<string>;
+  onAddExtra: (pdno: string) => void;
+  onRemoveExtra: (pdno: string) => void;
 }
 
 const VOL_LABEL: Record<RecommendedItem['volatilityFit'], string> = {
@@ -37,6 +41,9 @@ export const RecommendModal = ({
   onClose,
   onRefresh,
   onPick,
+  extras,
+  onAddExtra,
+  onRemoveExtra,
 }: RecommendModalProps): ReactElement => {
   return (
     <AnimatePresence>
@@ -122,6 +129,15 @@ export const RecommendModal = ({
                   title="닫기"
                 />
               </div>
+            </div>
+
+            <div style={{ marginBottom: '1.2rem' }}>
+              <ExtraPdnoPicker
+                extras={extras}
+                onAdd={onAddExtra}
+                onRemove={onRemoveExtra}
+                max={10}
+              />
             </div>
 
             {view.isPending ? (

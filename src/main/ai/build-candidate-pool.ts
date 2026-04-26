@@ -7,12 +7,17 @@ export interface CandidatePoolInput {
   accountId: number;
   /** 최종 후보 풀 max — LLM 토큰 비용 통제. 기본 30. */
   cap?: number;
+  /**
+   * 사용자가 stock-picker 등에서 직접 골라 추가한 pdno 목록 — 보유/감시에 없어도 풀에 포함.
+   * "관심은 있지만 아직 안 산 종목" 추천 가능하게 함.
+   */
+  extraPdnos?: ReadonlyArray<string>;
 }
 
 export interface CandidateEntry {
   pdno: string;
   name: string;
-  sources: ReadonlyArray<'OWNED' | 'WATCH'>;
+  sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL'>;
 }
 
 /**
@@ -29,7 +34,7 @@ export interface CandidateEntry {
  */
 export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] {
   const cap = Math.max(1, input.cap ?? 30);
-  const map = new Map<string, { name: string; sources: Set<'OWNED' | 'WATCH'> }>();
+  const map = new Map<string, { name: string; sources: Set<'OWNED' | 'WATCH' | 'MANUAL'> }>();
 
   // 보유 종목 (OPEN/BUYING).
   const ownedRows = input.db
@@ -61,6 +66,19 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
       map.set(row.pdno, { name: row.pdno, sources: new Set(['WATCH']) });
     } else {
       map.get(row.pdno)?.sources.add('WATCH');
+    }
+  }
+
+  // 사용자가 직접 추가한 pdno (stock-picker 등) — 6자리 검증 + dedupe.
+  if (input.extraPdnos && input.extraPdnos.length > 0) {
+    for (const raw of input.extraPdnos) {
+      const pdno = raw.padStart(6, '0');
+      if (!/^\d{6}$/.test(pdno)) continue;
+      if (!map.has(pdno)) {
+        map.set(pdno, { name: pdno, sources: new Set(['MANUAL']) });
+      } else {
+        map.get(pdno)?.sources.add('MANUAL');
+      }
     }
   }
 

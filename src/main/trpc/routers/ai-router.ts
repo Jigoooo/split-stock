@@ -229,7 +229,18 @@ export const aiRouter = router({
    * 활성 계좌 기준이며 계좌 미선택 시 BAD_REQUEST.
    */
   suggestSymbols: publicProcedure
-    .input(z.object({ topN: z.number().int().min(1).max(10).optional() }).optional())
+    .input(
+      z
+        .object({
+          topN: z.number().int().min(1).max(10).optional(),
+          /** 사용자가 추가한 pdno 목록 (보유/감시 외 관심 종목). max 10. */
+          extraPdnos: z
+            .array(z.string().regex(/^\d{6}$/))
+            .max(10)
+            .optional(),
+        })
+        .optional(),
+    )
     .mutation(async ({ ctx, input }) => {
       if (!ctx.aiCredentialsRepo || !ctx.llmClient) {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI 모듈 미초기화' });
@@ -250,6 +261,9 @@ export const aiRouter = router({
           logger: ctx.logger,
           ensureCandles: buildEnsureCandles(ctx),
           ...(input?.topN !== undefined ? { topN: input.topN } : {}),
+          ...(input?.extraPdnos && input.extraPdnos.length > 0
+            ? { extraPdnos: input.extraPdnos }
+            : {}),
         });
       } catch (cause) {
         throw new TRPCError({
