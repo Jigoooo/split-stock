@@ -77,7 +77,7 @@ const CSS_VAR_COLORS: SemanticColors = {
   feedback: {
     success: 'var(--status-connected)',
     error: 'var(--up)',
-    warning: '#f59e0b',
+    warning: 'var(--warning)',
     info: 'var(--accent)',
   },
   overlay: {
