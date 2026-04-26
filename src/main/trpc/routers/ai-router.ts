@@ -1,8 +1,29 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { ensureDailyCandles } from '../../ai/ensure-candles';
 import { suggestStrategy } from '../../ai/suggest-strategy';
 import { suggestSymbols } from '../../ai/suggest-symbols';
+import type { Context } from '../context';
 import { publicProcedure, router } from '../trpc-core';
+
+/**
+ * AI 추천 전 KIS 일봉 캐시 보충 콜백 빌더.
+ * env/credentials 미준비 시 silently skip — 추천 자체는 캐시만으로 진행.
+ */
+function buildEnsureCandles(ctx: Context): (pdnos: ReadonlyArray<string>) => Promise<void> {
+  return async (pdnos) => {
+    if (!ctx.currentEnv || pdnos.length === 0) return;
+    await ensureDailyCandles({
+      pdnos,
+      candlesRepo: ctx.candlesRepo,
+      httpByEnv: ctx.httpByEnv,
+      auth: ctx.auth,
+      credentialsRepo: ctx.credentialsRepo,
+      env: ctx.currentEnv,
+      logger: ctx.logger,
+    });
+  };
+}
 
 const ProviderSchema = z.enum(['openai', 'anthropic']);
 
@@ -144,6 +165,13 @@ export const aiRouter = router({
       if (!ctx.aiCredentialsRepo || !ctx.llmClient || !ctx.dartClient) {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI 모듈 미초기화' });
       }
+      // corpCode 자동 lookup — 사용자 입력이 우선, 없으면 dartCorpCodeRepo 매핑.
+      let resolvedCorpCode = input.corpCode;
+      if (!resolvedCorpCode && ctx.dartCorpCodeRepo?.isAvailable()) {
+        const mapped = ctx.dartCorpCodeRepo.findByStockCode(input.pdno);
+        if (mapped) resolvedCorpCode = mapped.corpCode;
+      }
+
       try {
         return await suggestStrategy({
           pdno: input.pdno,
@@ -153,8 +181,9 @@ export const aiRouter = router({
           llmClient: ctx.llmClient,
           dartClient: ctx.dartClient,
           logger: ctx.logger,
+          ensureCandles: buildEnsureCandles(ctx),
           ...(input.desiredStages !== undefined ? { desiredStages: input.desiredStages } : {}),
-          ...(input.corpCode !== undefined ? { corpCode: input.corpCode } : {}),
+          ...(resolvedCorpCode !== undefined ? { corpCode: resolvedCorpCode } : {}),
         });
       } catch (cause) {
         throw new TRPCError({
@@ -163,6 +192,35 @@ export const aiRouter = router({
         });
       }
     }),
+
+  /**
+   * DART corpCode 매핑 sync — OpenDART 의 corpCode.xml 을 다운받아 stock_code → corp_code 적재.
+   * 30일 캐시 후 재 sync. 한 번 받아두면 strategy 추천이 자동으로 공시 컨텍스트를 사용.
+   */
+  syncDartCorpCodes: publicProcedure.mutation(async ({ ctx }) => {
+    if (!ctx.dartCorpCodeRepo) {
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DART 모듈 미초기화' });
+    }
+    if (!ctx.dartCorpCodeRepo.isAvailable()) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'DART_API_KEY 미설정 (빌드 임베드 환경변수 확인)',
+      });
+    }
+    const result = await ctx.dartCorpCodeRepo.sync();
+    return result;
+  }),
+
+  /**
+   * DART corp_code 캐시 상태 확인 — UI 가 "갱신 필요" 표시할 때 사용.
+   */
+  getDartCorpCodeStatus: publicProcedure.query(({ ctx }) => {
+    if (!ctx.dartCorpCodeRepo) return { available: false, stale: true };
+    return {
+      available: ctx.dartCorpCodeRepo.isAvailable(),
+      stale: ctx.dartCorpCodeRepo.isStale(),
+    };
+  }),
 
   /**
    * Phase 1 — AI 매직스플릿 종목 추천.
@@ -190,6 +248,7 @@ export const aiRouter = router({
           aiCredentialsRepo: ctx.aiCredentialsRepo,
           llmClient: ctx.llmClient,
           logger: ctx.logger,
+          ensureCandles: buildEnsureCandles(ctx),
           ...(input?.topN !== undefined ? { topN: input.topN } : {}),
         });
       } catch (cause) {

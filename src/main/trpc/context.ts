@@ -2,6 +2,7 @@ import type { AppEnv } from '@shared/contracts';
 import type { ActiveAccountRepo } from '../account/active-account';
 import type { AiCredentialsRepo } from '../ai/ai-credentials-repo';
 import type { DartClient } from '../ai/dart-client';
+import type { DartCorpCodeRepo } from '../ai/dart-corp-code-repo';
 import type { LlmClient } from '../ai/llm-client';
 import type { BackupScheduler } from '../backup/scheduler';
 import type { Db } from '../db/client';
@@ -73,6 +74,8 @@ export interface Context {
   llmClient: LlmClient | null;
   /** OpenDART REST 클라이언트 — Phase 2 strategy 추천 시 공시 컨텍스트 보강. 키 미설정 시 isAvailable=false. */
   dartClient: DartClient | null;
+  /** DART corp_code 매핑 저장소 — stock_code(6) → corp_code(8). 30일 캐시. */
+  dartCorpCodeRepo: DartCorpCodeRepo | null;
   currentEnv: AppEnv | null;
   setCurrentEnv: (env: AppEnv | null) => void;
   setActiveAccountId: (id: number | null) => void;

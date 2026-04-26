@@ -18,6 +18,11 @@ export interface SuggestSymbolsInput {
   poolCap?: number;
   /** 응답 Top N. 기본 5. */
   topN?: number;
+  /**
+   * 후보 pdno 목록의 일봉 캐시를 사전 보충. 호출자(ai-router)가 KIS env/auth 컨텍스트를
+   * 들고 ensure 콜백을 주입. 미주입 시 캐시만 사용 (기존 동작).
+   */
+  ensureCandles?: (pdnos: ReadonlyArray<string>) => Promise<void>;
 }
 
 const RankedItemSchema = z.object({
@@ -85,6 +90,11 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       rejectedCount: 0,
       durationMs: 0,
     };
+  }
+
+  // 일봉 캐시가 부족한 pdno 만 KIS fetch — 차트를 미리 열어둘 필요 없이 추천이 동작하도록.
+  if (input.ensureCandles) {
+    await input.ensureCandles(pool.map((p) => p.pdno));
   }
 
   const stats = computeSymbolStats({

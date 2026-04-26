@@ -284,6 +284,22 @@ export const watchOrders = sqliteTable('watch_orders', {
  *
  * is_default 는 동시에 1개만 true 여야 함 (라우터에서 enforce).
  */
+/**
+ * DART (한국 금융감독원 공시) corp_code 매핑 테이블 — KIS 6자리 stock_code → DART 8자리 corp_code.
+ *
+ * OpenDART corpCode.xml 을 zip 다운로드해 1회 sync 하고 나면 strategy 추천 시 공시 컨텍스트
+ * 자동 lookup 가능. modify_date 는 회사 정보 변경일자 (YYYYMMDD).
+ *
+ * fetched_at 으로 30일 이상 stale 시 재 sync 트리거.
+ */
+export const dartCorpCodes = sqliteTable('dart_corp_codes', {
+  stockCode: text('stock_code').primaryKey(), // KIS 6자리. 비상장은 미포함.
+  corpCode: text('corp_code').notNull(), // DART 8자리.
+  corpName: text('corp_name').notNull(),
+  modifyDate: text('modify_date'), // YYYYMMDD
+  fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
 export const aiProviderConfigs = sqliteTable(
   'ai_provider_configs',
   {

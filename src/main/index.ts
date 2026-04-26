@@ -47,6 +47,7 @@ import WebSocket from 'ws';
 import { ActiveAccountRepo } from './account/active-account';
 import { AiCredentialsRepo } from './ai/ai-credentials-repo';
 import { DartClient } from './ai/dart-client';
+import { DartCorpCodeRepo } from './ai/dart-corp-code-repo';
 import { LlmClient } from './ai/llm-client';
 import { BackupScheduler } from './backup/scheduler';
 import { defaultDbPath, migrate, openDb } from './db/client';
@@ -187,6 +188,11 @@ function bootstrapDeps(userDataDir: string) {
   const llmClient = new LlmClient({ logger: eventLogger });
   // DART REST 클라이언트 — 빌드 임베드 키 사용 (사용자 BYO X). 키 누락 시 isAvailable=false → 호출자에서 graceful skip.
   const dartClient = new DartClient({
+    logger: eventLogger,
+    apiKey: process.env.DART_API_KEY ?? '',
+  });
+  const dartCorpCodeRepo = new DartCorpCodeRepo({
+    db,
     logger: eventLogger,
     apiKey: process.env.DART_API_KEY ?? '',
   });
@@ -764,6 +770,7 @@ function bootstrapDeps(userDataDir: string) {
     aiCredentialsRepo,
     llmClient,
     dartClient,
+    dartCorpCodeRepo,
     initialActiveAccountId,
     realtimeFactory: (env) => {
       if (lastRealtime) {

@@ -20,6 +20,11 @@ export interface SuggestStrategyInput {
   desiredStages?: number;
   /** DART corp_code 입력 — 외부에서 주입 가능 (corpCode lookup 미구현 시 fallback). */
   corpCode?: string;
+  /**
+   * 일봉 캐시 사전 보충 콜백. 호출자(ai-router)가 KIS env/auth 들고 주입.
+   * 미주입 시 캐시만 사용.
+   */
+  ensureCandles?: (pdnos: ReadonlyArray<string>) => Promise<void>;
 }
 
 const RawBuyRuleSchema = z.object({
@@ -71,6 +76,11 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
       emptyReason: 'AI 키가 등록되지 않았습니다. 설정 → AI 탭에서 등록 후 다시 시도하세요.',
       durationMs: 0,
     };
+  }
+
+  // 일봉 캐시 부족 시 자동 fetch — 차트 사전 오픈 없이도 strategy 추천 동작.
+  if (input.ensureCandles) {
+    await input.ensureCandles([input.pdno]);
   }
 
   const stat = computeSymbolStats({
