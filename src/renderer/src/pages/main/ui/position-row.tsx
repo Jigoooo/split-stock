@@ -1,5 +1,6 @@
 import type { BalanceStageCellMode } from '@renderer/entities/display-settings';
 import { STRATEGY_AUTO_MODE_OPTIONS } from '@renderer/features/edit-strategy';
+import { useSafetySwitch } from '@renderer/features/safety-switch';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Select, TableGrid } from '@renderer/shared/ui';
 import { deriveStrategyAutoMode, type StrategyAutoMode } from '@shared/contracts/strategy';
@@ -42,6 +43,15 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
     const [isPending, startTransition] = useTransition();
     const autoMode = strategyMeta ? deriveStrategyAutoMode(strategyMeta) : 'ALL_OFF';
     const autoModeMutation = usePositionAutoMode(position.code, autoMode);
+    const safety = useSafetySwitch();
+    const orderingBlocked =
+      safety.snapshot !== null &&
+      (safety.snapshot.master === false || safety.snapshot.errorLock.active);
+    const blockedReason = orderingBlocked
+      ? safety.snapshot?.errorLock.active
+        ? `에러 잠금: ${safety.snapshot.errorLock.reason ?? '원인 불명'}`
+        : '주문이 차단되어 있어 자동매매가 발동되지 않습니다'
+      : undefined;
     const isSelected = selectedPdno === position.code;
     const pnlColorClass = getPnlColorClass(position.pnlAmount);
     const buyAmount = position.qty * position.avgPrice;
@@ -105,12 +115,25 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
           <TableGrid.Cell width={POSITION_COLS.evalAmount} numeric>
             {thousandSeparator(Math.round(position.evalAmount))}
           </TableGrid.Cell>
-          <TableGrid.Cell width={POSITION_COLS.auto} className="positions-table__auto-cell">
+          <TableGrid.Cell
+            width={POSITION_COLS.auto}
+            className={
+              orderingBlocked
+                ? 'positions-table__auto-cell positions-table__auto-cell--blocked'
+                : 'positions-table__auto-cell'
+            }
+            {...(blockedReason ? { title: blockedReason } : {})}
+          >
             <Select
               value={autoModeMutation.displayMode}
-              aria-label={`${position.name} 자동매매 상태`}
+              aria-label={
+                orderingBlocked
+                  ? `${position.name} 자동매매 상태 — ${blockedReason}`
+                  : `${position.name} 자동매매 상태`
+              }
               className="positions-table__auto-select"
               dense
+              disabled={orderingBlocked}
               onClick={(event) => event.stopPropagation()}
               onKeyDown={(event) => event.stopPropagation()}
               onChange={(event) => {
