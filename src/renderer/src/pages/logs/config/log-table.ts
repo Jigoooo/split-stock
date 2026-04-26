@@ -1,9 +1,9 @@
 export const LOG_TABLE_COLUMN_WIDTHS = {
-  timestamp: 200,
+  timestamp: 168,
   level: 88,
   category: 104,
-  message: 360,
-  payload: 720,
+  message: 280,
+  payload: 420,
 } as const;
 
 export const LOG_TABLE_TOTAL_WIDTH = Object.values(LOG_TABLE_COLUMN_WIDTHS).reduce(
