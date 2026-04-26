@@ -2,6 +2,7 @@ import { Button } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
 import type { ReactElement } from 'react';
+import { createPortal } from 'react-dom';
 import type {
   RecommendationViewState,
   TierDistribution,
@@ -96,7 +97,7 @@ export const RecommendModal = ({
     view.distribution.moderate +
     view.distribution.watch +
     view.distribution.avoid;
-  return (
+  return createPortal(
     <AnimatePresence>
       {view.isOpen ? (
         <motion.div
@@ -428,6 +429,7 @@ export const RecommendModal = ({
           </motion.div>
         </motion.div>
       ) : null}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 };

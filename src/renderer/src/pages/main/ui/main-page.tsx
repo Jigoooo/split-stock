@@ -33,6 +33,8 @@ const VERTICAL_SEPARATOR: ReactElement = (
 
 const panelStyle = { overflow: 'hidden' } as const;
 
+const RESIZE_HIT_AREA = { coarse: 8, fine: 6 } as const;
+
 export interface MainPageProps {
   onOpenStrategySettings?: (() => void) | undefined;
 }
@@ -80,12 +82,14 @@ export const MainPage = ({ onOpenStrategySettings }: MainPageProps): ReactElemen
         orientation="vertical"
         defaultLayout={(verticalLayout.defaultLayout ?? [70, 30]) as Layout}
         onLayoutChanged={verticalLayout.onLayoutChanged}
+        resizeTargetMinimumSize={RESIZE_HIT_AREA}
       >
         <Panel id="main-top" defaultSize={70} minSize={35} style={panelStyle}>
           <Group
             orientation="horizontal"
             defaultLayout={layout.defaultLayout}
             onLayoutChanged={layout.onLayoutChanged}
+            resizeTargetMinimumSize={RESIZE_HIT_AREA}
           >
             <Panel id="main-left" defaultSize={60} minSize={35} style={panelStyle}>
               <MainPositionsPane

@@ -3,6 +3,7 @@ import type { StrategyProfile } from '@shared/contracts';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Sparkles, X } from 'lucide-react';
 import type { CSSProperties, ReactElement } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface StrategyPreviewModalProps {
   open: boolean;
@@ -23,7 +24,7 @@ export const StrategyPreviewModal = ({
   onApply,
   onDismiss,
 }: StrategyPreviewModalProps): ReactElement => {
-  return (
+  return createPortal(
     <AnimatePresence>
       {open && profile ? (
         <motion.div
@@ -194,6 +195,7 @@ export const StrategyPreviewModal = ({
           </motion.div>
         </motion.div>
       ) : null}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 };
