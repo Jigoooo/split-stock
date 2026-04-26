@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import type { FeeRates, ProfitRateState } from '../model/profit-calculator-types';
 import type { ProfitRateResult } from '../model/use-profit-calc';
 import { FeeInfo } from './fee-info';
-import { profitCalculatorStyles as styles } from './profit-calculator-styles';
+import { profitColor, profitCalculatorStyles as styles } from './profit-calculator-styles';
 
 interface ProfitRateFormProps extends FeeRates {
   input: ProfitRateState;
@@ -63,11 +63,15 @@ export const ProfitRateForm = ({
     <div style={styles.results}>
       <div style={styles.resultRow}>
         <span style={styles.resultLabel}>수익률:</span>
-        <span style={styles.resultValue}>{result.profitRate.toFixed(2)}%</span>
+        <span style={{ ...styles.resultValue, ...profitColor(result.profitRate) }}>
+          {result.profitRate.toFixed(2)}%
+        </span>
       </div>
       <div style={styles.resultRow}>
         <span style={styles.resultLabel}>수익:</span>
-        <span style={styles.resultValue}>{Math.round(result.profit).toLocaleString()} 원</span>
+        <span style={{ ...styles.resultValue, ...profitColor(result.profit) }}>
+          {Math.round(result.profit).toLocaleString()} 원
+        </span>
       </div>
       {input.includeFees ? (
         <>
@@ -85,7 +89,7 @@ export const ProfitRateForm = ({
           </div>
           <div style={styles.resultRow}>
             <span style={styles.resultLabel}>순수익:</span>
-            <span style={styles.resultValue}>
+            <span style={{ ...styles.resultValue, ...profitColor(result.netProfit) }}>
               {Math.round(result.netProfit).toLocaleString()} 원
             </span>
           </div>

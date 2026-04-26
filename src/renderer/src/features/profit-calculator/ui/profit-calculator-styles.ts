@@ -13,9 +13,8 @@ export const profitCalculatorStyles = {
     display: 'flex' as const,
     flexDirection: 'column' as const,
     height: '100vh',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: 'var(--bg-2)',
     padding: '12px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   content: {
     flex: 1,
@@ -23,7 +22,7 @@ export const profitCalculatorStyles = {
   },
   feeInfo: {
     padding: '8px 10px',
-    backgroundColor: '#fff8e1',
+    backgroundColor: 'var(--bg-3)',
     borderRadius: '4px',
     display: 'flex' as const,
     flexDirection: 'column' as const,
@@ -33,7 +32,7 @@ export const profitCalculatorStyles = {
     display: 'flex' as const,
     justifyContent: 'space-between' as const,
     fontSize: '12px',
-    color: '#666',
+    color: 'var(--fg-2)',
   },
   form: {
     display: 'flex' as const,
@@ -47,7 +46,7 @@ export const profitCalculatorStyles = {
   },
   input: {
     padding: '6px 8px',
-    border: '1px solid #d0d0d0',
+    border: '1px solid var(--border)',
     borderRadius: '4px',
     fontSize: '12px',
     fontFamily: 'inherit',
@@ -55,10 +54,10 @@ export const profitCalculatorStyles = {
   label: {
     fontSize: '12px',
     fontWeight: 500,
-    color: '#333',
+    color: 'var(--fg)',
   },
   resultLabel: {
-    color: '#333',
+    color: 'var(--fg)',
     fontWeight: 500,
   },
   resultRow: {
@@ -67,13 +66,13 @@ export const profitCalculatorStyles = {
     fontSize: '13px',
   },
   resultValue: {
-    color: '#1976d2',
+    color: 'var(--fg)',
     fontWeight: 600,
     textAlign: 'right' as const,
   },
   results: {
     padding: '12px 10px',
-    backgroundColor: '#e8f5e9',
+    backgroundColor: 'var(--bg-3)',
     borderRadius: '4px',
     display: 'flex' as const,
     flexDirection: 'column' as const,
@@ -86,21 +85,21 @@ export const profitCalculatorStyles = {
     cursor: 'pointer' as const,
     fontSize: '13px',
     fontWeight: 500,
-    transition: 'all 0.2s ease',
+    transition: 'color 0.2s ease',
   },
   tabButtonActive: {
-    color: '#1976d2',
-    borderBottom: '2px solid #1976d2',
+    color: 'var(--accent)',
+    borderBottom: '2px solid var(--accent)',
     marginBottom: '-1px',
   },
   tabButtonInactive: {
-    color: '#666',
+    color: 'var(--fg-2)',
   },
   tabNav: {
     display: 'flex' as const,
     gap: '4px',
     marginBottom: '12px',
-    borderBottom: '1px solid #e0e0e0',
+    borderBottom: '1px solid var(--border)',
   },
   toolbar: {
     display: 'flex' as const,
@@ -108,6 +107,18 @@ export const profitCalculatorStyles = {
     alignItems: 'center' as const,
     marginBottom: '12px',
     paddingBottom: '8px',
-    borderBottom: '1px solid #e0e0e0',
+    borderBottom: '1px solid var(--border)',
   },
 };
+
+/**
+ * 손익 값 부호에 따라 한국식 HTS 색상을 반환한다.
+ * - 양수(이익): `--up` (상승 빨강)
+ * - 음수(손실): `--down` (하락 파랑)
+ * - 0/중립: 기본 텍스트
+ */
+export function profitColor(value: number): { color: string } {
+  if (value > 0) return { color: 'var(--up)' };
+  if (value < 0) return { color: 'var(--down)' };
+  return { color: 'var(--fg)' };
+}
