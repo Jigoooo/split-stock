@@ -14,7 +14,7 @@ export const PositionsSummary = ({ summary }: PositionsSummaryProps): ReactEleme
       className="panel__body"
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(7, minmax(120px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
         gap: '0.5rem',
         flexShrink: 0,
       }}
