@@ -6,6 +6,8 @@ import type { DartCorpCodeRepo } from '../ai/dart-corp-code-repo';
 import type { LlmClient } from '../ai/llm-client';
 import type { NewsFetcher } from '../ai/news-fetcher';
 import type { BackupScheduler } from '../backup/scheduler';
+import { createBrokerPort } from '../brokers/factory';
+import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
 import type { SettingsRepo } from '../db/settings-repo';
 import { readWatchGlobalEnabled } from '../db/settings-repo';
@@ -88,6 +90,17 @@ export interface Context {
    * PROD URL 로 MOCK 자격증명을 보내는 등 AUTH_FAILED 가 발생하는 레이스를 방지.
    */
   setEnvAndAccount: (next: { env: AppEnv | null; accountId: number | null }) => void;
+  /**
+   * 활성/특정 계좌의 BrokerPort 인스턴스를 반환.
+   *
+   * - accountId 의 credentials 가 없거나 currentEnv 와 mismatch 면 null 반환
+   * - broker 인스턴스는 (brokerId, env, accountId) 단위로 캐시되어 동일 요청 묶음에서 재사용
+   * - env 전환 시 캐시 자동 무효화 (setEnvAndAccount/setCurrentEnv 가 clear)
+   *
+   * Stage 3 시점에서는 routers/trading 이 본 메서드를 점진 도입.
+   * Stage 4 까지 KIS 만 지원, Stage 6 부터 Kiwoom 분기.
+   */
+  brokerForAccount: (accountId: number) => BrokerPort | null;
 }
 
 export interface ContextFactoryOptions
@@ -103,6 +116,7 @@ export interface ContextFactoryOptions
     | 'backupScheduler'
     | 'balanceSync'
     | 'currentStateSync'
+    | 'brokerForAccount'
   > {
   /** env 전환 시 realtime 재생성을 호출측에 위임. 반환값이 현재 RealtimeService. */
   realtimeFactory?: (env: AppEnv | null) => RealtimeService | null;
@@ -137,6 +151,43 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   let balanceSync: BalanceSync | null = null;
   let currentStateSync: CurrentStateSync | null = null;
 
+  /**
+   * Broker adapter 캐시 — key = `${env}:${accountId}`.
+   * env 전환 또는 setEnvAndAccount 시 clear.
+   */
+  const brokerCache = new Map<string, BrokerPort>();
+  const clearBrokerCache = (): void => {
+    for (const port of brokerCache.values()) port.dispose();
+    brokerCache.clear();
+  };
+  const brokerForAccount = (accountId: number): BrokerPort | null => {
+    if (!currentEnv) return null;
+    const key = `${currentEnv}:${accountId}`;
+    const cached = brokerCache.get(key);
+    if (cached) return cached;
+    const credResult = deps.credentialsRepo.loadCredentials(accountId);
+    if (credResult.isErr() || !credResult.value) return null;
+    const cred = credResult.value;
+    if (cred.env !== currentEnv) return null;
+    const port = createBrokerPort({
+      brokerId: 'KIS',
+      deps: {
+        env: currentEnv,
+        httpByEnv: deps.httpByEnv,
+        authService: deps.auth,
+        credentials: {
+          appKey: cred.appKey,
+          appSecret: cred.appSecret,
+          accountNo8: cred.accountNo8,
+          accountProdCd: cred.accountProdCd,
+        },
+        logger: deps.logger,
+      },
+    });
+    brokerCache.set(key, port);
+    return port;
+  };
+
   const syncWatchEngine = (accountId: number | null): void => {
     deps.watchEngine?.setActiveAccountId(accountId);
     if (accountId !== null) {
@@ -149,6 +200,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
 
   const setCurrentEnv = (env: AppEnv | null): void => {
     currentEnv = env;
+    clearBrokerCache();
     if (realtimeFactory) {
       realtime = realtimeFactory(env);
     }
@@ -162,6 +214,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     // accountId 를 먼저 세팅해 "새 env + 이전 accountId" 조합 윈도우 자체를 없앤다.
     activeAccountId = next.accountId;
     currentEnv = next.env;
+    clearBrokerCache();
     syncWatchEngine(next.accountId);
     if (realtimeFactory) {
       realtime = realtimeFactory(next.env);
@@ -207,6 +260,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
       setCurrentEnv,
       setActiveAccountId,
       setEnvAndAccount,
+      brokerForAccount,
     }),
     setEnv: setCurrentEnv,
     setActiveAccountId,
