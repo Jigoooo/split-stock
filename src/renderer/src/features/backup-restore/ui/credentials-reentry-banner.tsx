@@ -1,3 +1,4 @@
+import { alertDialog } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useCredentialsReentry } from '../model/use-credentials-reentry';
 
@@ -26,9 +27,15 @@ export const CredentialsReentryBanner = (): ReactElement | null => {
           className="hts-btn"
           disabled={clearPending}
           onClick={() => {
-            if (window.confirm('재입력을 완료했다면 이 배너를 숨길 수 있습니다. 계속할까요?')) {
-              clear();
-            }
+            void (async () => {
+              const confirmed = await alertDialog.confirm({
+                title: '배너 숨김',
+                message: '재입력을 완료했다면 이 배너를 숨길 수 있습니다. 계속할까요?',
+                confirmText: '숨기기',
+                cancelText: '취소',
+              });
+              if (confirmed) clear();
+            })();
           }}
         >
           배너 숨김

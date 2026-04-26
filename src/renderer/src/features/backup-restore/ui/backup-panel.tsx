@@ -1,4 +1,4 @@
-import { Button, Checkbox, NumberInput } from '@renderer/shared/ui';
+import { alertDialog, Button, Checkbox, NumberInput } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useAutoBackupSettings, useBackupPanel } from '../model/use-backup-panel';
 import { DuplicatePathForm } from './duplicate-path-form';
@@ -33,15 +33,18 @@ export const BackupPanel = (): ReactElement => {
           </Button>
           <Button
             onClick={() => {
-              if (
-                !window.confirm(
-                  '복원 시 현재 DB는 .backup-before-restore 파일로 자동 대피됩니다. 계속할까요?',
-                )
-              ) {
-                return;
-              }
-              clearMessage();
-              importDatabase();
+              void (async () => {
+                const confirmed = await alertDialog.confirm({
+                  title: 'DB 복원',
+                  message:
+                    '복원 시 현재 DB는 .backup-before-restore 파일로 자동 대피됩니다. 계속할까요?',
+                  confirmText: '복원',
+                  cancelText: '취소',
+                });
+                if (!confirmed) return;
+                clearMessage();
+                importDatabase();
+              })();
             }}
             disabled={importPending}
             dense
