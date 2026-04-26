@@ -1,20 +1,17 @@
-import type { AppEnv } from '@shared/contracts';
-import type { AuthService } from '../kis/auth';
-import { inquireDailyChart } from '../kis/domestic-stock';
-import type { KisHttpClient } from '../kis/http-client';
+import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { EventLogger } from '../logging/event-logger';
-import type { CredentialsRepo } from '../security/credentials-repo';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 
 export interface EnsureCandlesInput {
   pdnos: ReadonlyArray<string>;
   candlesRepo: DailyCandlesRepo;
-  httpByEnv: Record<AppEnv, KisHttpClient>;
-  auth: AuthService;
-  credentialsRepo: CredentialsRepo;
-  env: AppEnv;
+  /**
+   * 활성 계좌의 BrokerPort. null 이면 자격증명 미등록 / env mismatch 등으로
+   * fetch 시도조차 못함 → skipped=true.
+   */
+  broker: BrokerPort | null;
   logger: EventLogger;
-  /** 최소 캐시 봉 수. 부족하면 KIS fetch 트리거. 기본 30. */
+  /** 최소 캐시 봉 수. 부족하면 broker fetch 트리거. 기본 30. */
   minCount?: number;
 }
 
@@ -23,7 +20,7 @@ export interface EnsureCandlesResult {
   fetched: number;
   /** fetch 실패한 pdno 수 (네트워크/권한/상장이전 등). */
   failed: number;
-  /** 자격증명/토큰 미준비로 fetch 시도조차 못한 경우. */
+  /** broker 미준비로 fetch 시도조차 못한 경우. */
   skipped: boolean;
 }
 
@@ -31,21 +28,17 @@ export interface EnsureCandlesResult {
  * AI 추천 직전 일봉 캐시 부족분을 자동 보충.
  *
  * - cached.length >= minCount 인 pdno 는 건너뜀 (no-op).
- * - 부족한 pdno 만 KIS inquireDailyChart 1회 호출 → 6개월(약 120영업일) chunk 적재.
- * - 자격증명/토큰 실패 시 skipped=true 로 silent fallback (사용자에게는 "데이터 부족" 안내가
- *   suggest-symbols / suggest-strategy 에서 표시됨).
+ * - 부족한 pdno 만 broker.getDailyOhlcv 1회 호출 → 6 개월(약 120 영업일) chunk 적재.
+ * - broker null (미인증/env mismatch) 시 skipped=true 로 silent fallback.
  *
  * Phase 2.5 — 사용자가 차트를 한 번 열어 봉을 받아오는 사전 작업 없이도 추천 동작.
+ *
+ * Stage 4 변경: KIS 직접 호출(inquireDailyChart) → BrokerPort.getDailyOhlcv 추상.
+ * Kiwoom 활성 시에도 동일 로직 재사용.
  */
 export async function ensureDailyCandles(input: EnsureCandlesInput): Promise<EnsureCandlesResult> {
   const minCount = input.minCount ?? 30;
-  const credResult = input.credentialsRepo.loadCredentialsByEnv(input.env);
-  if (credResult.isErr() || !credResult.value) {
-    return { fetched: 0, failed: 0, skipped: true };
-  }
-  const cred = credResult.value;
-  const tokenResult = await input.auth.getValidToken(input.env, cred.appKey, cred.appSecret);
-  if (tokenResult.isErr()) {
+  if (!input.broker) {
     return { fetched: 0, failed: 0, skipped: true };
   }
 
@@ -61,16 +54,7 @@ export async function ensureDailyCandles(input: EnsureCandlesInput): Promise<Ens
     const cached = input.candlesRepo.getInRange(pdno, 'D', fromStr, toStr);
     if (cached.length >= minCount) continue;
 
-    const r = await inquireDailyChart(
-      {
-        http: input.httpByEnv[input.env],
-        env: input.env,
-        token: tokenResult.value.token,
-        appKey: cred.appKey,
-        appSecret: cred.appSecret,
-      },
-      { code: pdno, from, to, period: 'D' },
-    );
+    const r = await input.broker.getDailyOhlcv({ symbol: pdno, from, to, period: 'D' });
     if (r.isOk()) {
       input.candlesRepo.upsertMany(pdno, 'D', r.value);
       fetched += r.value.length;
@@ -78,7 +62,7 @@ export async function ensureDailyCandles(input: EnsureCandlesInput): Promise<Ens
         level: 'INFO',
         category: 'SYS',
         message: 'ai.ensure-candles.fetched',
-        payload: { pdno, count: r.value.length, env: input.env },
+        payload: { pdno, count: r.value.length, brokerId: input.broker.brokerId },
       });
     } else {
       failed += 1;

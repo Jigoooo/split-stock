@@ -14,13 +14,12 @@ import { publicProcedure, router } from '../trpc-core';
 function buildEnsureCandles(ctx: Context): (pdnos: ReadonlyArray<string>) => Promise<void> {
   return async (pdnos) => {
     if (!ctx.currentEnv || pdnos.length === 0) return;
+    const accountId = ctx.activeAccountId;
+    const broker = accountId !== null ? ctx.brokerForAccount(accountId) : null;
     await ensureDailyCandles({
       pdnos,
       candlesRepo: ctx.candlesRepo,
-      httpByEnv: ctx.httpByEnv,
-      auth: ctx.auth,
-      credentialsRepo: ctx.credentialsRepo,
-      env: ctx.currentEnv,
+      broker,
       logger: ctx.logger,
     });
   };
