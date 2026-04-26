@@ -36,6 +36,8 @@ import {
 import { type KiwoomOrderbookWire, toKiwoomOrderbook } from './mappers/orderbook';
 import { type KiwoomQuoteWire, toKiwoomQuote } from './mappers/quote';
 import { KIWOOM_API_ID, KIWOOM_PATH } from './metadata/endpoints';
+import { KiwoomRealtimeAdapter } from './realtime-adapter';
+import type { KiwoomSocketClient } from './socket-client';
 import { KiwoomTokenStore } from './token-store';
 
 export interface KiwoomAdapterDeps {
@@ -52,6 +54,8 @@ export interface KiwoomAdapterDeps {
   };
   /** 주문 시 거래소 기본값 (KRX/NXT/SOR). 미지정 시 '1' (KRX). */
   defaultExchange?: '1' | '2' | '3';
+  /** RealtimePort 본문에 사용할 KiwoomSocketClient. 미주입 시 realtime() throw. */
+  socket?: KiwoomSocketClient;
 }
 
 /**
@@ -68,6 +72,8 @@ export class KiwoomAdapter implements BrokerPort {
   readonly env: AppEnv;
   /** 캐시된 토큰 — ensureSession 결과를 placeOrder 등이 재사용. */
   private cachedToken: string | null = null;
+  /** lazy 생성된 RealtimePort 어댑터 (singleton per KiwoomAdapter 인스턴스). */
+  private realtimeAdapter: KiwoomRealtimeAdapter | null = null;
 
   constructor(private readonly deps: KiwoomAdapterDeps) {
     this.env = deps.env;
@@ -262,9 +268,15 @@ export class KiwoomAdapter implements BrokerPort {
   }
 
   realtime(): RealtimePort {
-    throw new Error(
-      'KiwoomAdapter.realtime() — Stage 6e 에서 KiwoomSocketClient (JSON 프로토콜) 구현 예정',
-    );
+    if (!this.deps.socket) {
+      throw new Error(
+        'KiwoomAdapter.realtime() — KiwoomSocketClient 가 주입되지 않음 (부트스트랩 누락)',
+      );
+    }
+    if (!this.realtimeAdapter) {
+      this.realtimeAdapter = new KiwoomRealtimeAdapter(this.deps.socket);
+    }
+    return this.realtimeAdapter;
   }
 
   dispose(): void {
