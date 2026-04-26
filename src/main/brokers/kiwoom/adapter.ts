@@ -12,12 +12,20 @@ import type {
   StockSymbol,
 } from '@shared/contracts';
 import { makeBrokerError } from '@shared/contracts';
+import { isKrxTradingDay } from '@shared/market-rules';
 import { err, ok, type Result } from 'neverthrow';
 import type { CancelOrderInput, GetDailyOhlcvParams, ListDailyExecutionsParams } from '../ports';
 import type { BrokerPort } from '../ports/broker-port';
 import type { RealtimePort } from '../ports/realtime-port';
 import { type KiwoomAuth, parseKiwoomExpiry } from './auth';
 import type { KiwoomHttpClient } from './http-client';
+import { type KiwoomBalanceWire, toKiwoomBalance } from './mappers/balance';
+import { type KiwoomDailyChartWire, toKiwoomCandles } from './mappers/candle';
+import {
+  type KiwoomExecutedResponseWire,
+  type KiwoomUnexecutedResponseWire,
+  toKiwoomDailyExecution,
+} from './mappers/executions';
 import {
   type KiwoomOrderResponseWire,
   toKiwoomCancelOrderBody,
@@ -25,6 +33,8 @@ import {
   toKiwoomPlaceOrderBody,
   toOrderAck,
 } from './mappers/order';
+import { type KiwoomOrderbookWire, toKiwoomOrderbook } from './mappers/orderbook';
+import { type KiwoomQuoteWire, toKiwoomQuote } from './mappers/quote';
 import { KIWOOM_API_ID, KIWOOM_PATH } from './metadata/endpoints';
 import { KiwoomTokenStore } from './token-store';
 
@@ -136,34 +146,119 @@ export class KiwoomAdapter implements BrokerPort {
   }
 
   async listDailyExecutions(
-    _p: ListDailyExecutionsParams,
+    p: ListDailyExecutionsParams,
   ): Promise<Result<DailyExecution[], BrokerError>> {
-    return err(this.notImpl('listDailyExecutions'));
+    const tokenResult = await this.token();
+    if (tokenResult.isErr()) return err(tokenResult.error);
+    const apiId = p.filledOnly ? KIWOOM_API_ID.FILLED_ORDERS : KIWOOM_API_ID.UNFILLED_ORDERS;
+    const body: Record<string, string> = {
+      stex_tp: this.deps.defaultExchange ?? '1',
+      ...(p.symbol !== undefined && { stk_cd: p.symbol }),
+      ...(p.brokerOrderId !== undefined && { ord_no: p.brokerOrderId }),
+      // ka10075: all_stk_tp / trde_tp 필수, ka10076: qry_tp / sell_tp 필수.
+      // Stage 6.5 라이브 검증 시 정확한 필수 필드 보정.
+      all_stk_tp: '0',
+      trde_tp: '0',
+      qry_tp: '0',
+      sell_tp: '0',
+    };
+    const r = await this.deps.http.post<KiwoomUnexecutedResponseWire | KiwoomExecutedResponseWire>(
+      KIWOOM_PATH.ACCOUNT,
+      body,
+      tokenResult.value,
+      { apiId },
+    );
+    if (r.isErr()) return err(r.error);
+    const items = p.filledOnly
+      ? ((r.value.body as KiwoomExecutedResponseWire).cntr ?? [])
+      : ((r.value.body as KiwoomUnexecutedResponseWire).oso ?? []);
+    let executions = items.map(toKiwoomDailyExecution);
+    if (p.side && p.side !== 'ALL') {
+      executions = executions.filter((e) => e.side === p.side);
+    }
+    return ok(executions);
   }
 
   // ─── BalancePort ────────────────────────────────────────────────────────
 
   async inquireBalance(): Promise<Result<Balance, BrokerError>> {
-    return err(this.notImpl('inquireBalance'));
+    const tokenResult = await this.token();
+    if (tokenResult.isErr()) return err(tokenResult.error);
+    const body: Record<string, string> = {
+      qry_tp: '1',
+      dmst_stex_tp: this.deps.defaultExchange ?? '1',
+    };
+    const r = await this.deps.http.post<KiwoomBalanceWire>(
+      KIWOOM_PATH.ACCOUNT,
+      body,
+      tokenResult.value,
+      { apiId: KIWOOM_API_ID.BALANCE_EVALUATION },
+    );
+    if (r.isErr()) return err(r.error);
+    return ok(toKiwoomBalance(r.value.body));
   }
 
   // ─── MarketPort ─────────────────────────────────────────────────────────
 
-  async getQuote(_symbol: StockSymbol): Promise<Result<Quote, BrokerError>> {
-    return err(this.notImpl('getQuote'));
+  async getQuote(symbol: StockSymbol): Promise<Result<Quote, BrokerError>> {
+    const tokenResult = await this.token();
+    if (tokenResult.isErr()) return err(tokenResult.error);
+    const r = await this.deps.http.post<KiwoomQuoteWire>(
+      KIWOOM_PATH.MARKET_CONDITION,
+      { stk_cd: symbol },
+      tokenResult.value,
+      { apiId: KIWOOM_API_ID.STOCK_PRICE },
+    );
+    if (r.isErr()) return err(r.error);
+    return ok(toKiwoomQuote(symbol, r.value.body));
   }
 
-  async getOrderbook(_symbol: StockSymbol): Promise<Result<OrderbookSnapshot, BrokerError>> {
-    return err(this.notImpl('getOrderbook'));
+  async getOrderbook(symbol: StockSymbol): Promise<Result<OrderbookSnapshot, BrokerError>> {
+    const tokenResult = await this.token();
+    if (tokenResult.isErr()) return err(tokenResult.error);
+    const r = await this.deps.http.post<KiwoomOrderbookWire>(
+      KIWOOM_PATH.MARKET_CONDITION,
+      { stk_cd: symbol },
+      tokenResult.value,
+      { apiId: KIWOOM_API_ID.STOCK_QUOTE },
+    );
+    if (r.isErr()) return err(r.error);
+    return ok(toKiwoomOrderbook(symbol, r.value.body));
   }
 
-  async getDailyOhlcv(_p: GetDailyOhlcvParams): Promise<Result<Candle[], BrokerError>> {
-    return err(this.notImpl('getDailyOhlcv'));
+  async getDailyOhlcv(p: GetDailyOhlcvParams): Promise<Result<Candle[], BrokerError>> {
+    const tokenResult = await this.token();
+    if (tokenResult.isErr()) return err(tokenResult.error);
+    const period = p.period ?? 'D';
+    const apiId =
+      period === 'D'
+        ? KIWOOM_API_ID.CHART_DAILY
+        : period === 'W'
+          ? KIWOOM_API_ID.CHART_WEEKLY
+          : KIWOOM_API_ID.CHART_MONTHLY;
+    const baseDt = `${p.to.getFullYear()}${String(p.to.getMonth() + 1).padStart(2, '0')}${String(p.to.getDate()).padStart(2, '0')}`;
+    const body: Record<string, string> = {
+      stk_cd: p.symbol,
+      base_dt: baseDt,
+      upd_stkpc_tp: '1',
+    };
+    const r = await this.deps.http.post<KiwoomDailyChartWire>(
+      KIWOOM_PATH.CHART,
+      body,
+      tokenResult.value,
+      { apiId },
+    );
+    if (r.isErr()) return err(r.error);
+    const candles = toKiwoomCandles(r.value.body, period).filter((c) => {
+      const t = new Date(c.date).getTime();
+      return t >= p.from.getTime() && t <= p.to.getTime();
+    });
+    return ok(candles);
   }
 
-  async isTradingDay(_date: Date): Promise<Result<boolean, BrokerError>> {
-    // Stage 6e — shared/market-rules KRX 휴장일 폴백
-    return err(this.notImpl('isTradingDay'));
+  async isTradingDay(date: Date): Promise<Result<boolean, BrokerError>> {
+    // Kiwoom 은 휴장일 endpoint 미제공 → shared/market-rules KRX 휴장일 폴백.
+    return ok(isKrxTradingDay(date));
   }
 
   realtime(): RealtimePort {
@@ -202,13 +297,5 @@ export class KiwoomAdapter implements BrokerPort {
     });
     this.cachedToken = fresh.value.token;
     return ok(fresh.value.token);
-  }
-
-  private notImpl(method: string): BrokerError {
-    return makeBrokerError({
-      brokerId: 'KIWOOM',
-      kind: 'NOT_IMPLEMENTED',
-      msg: `KiwoomAdapter.${method}() — Stage 6d/6e 에서 구현 예정`,
-    });
   }
 }

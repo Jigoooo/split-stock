@@ -8,6 +8,7 @@
  * 향후 확장: 휴장일 캐시, 거래시간 규칙, 거래대금 규제 등.
  */
 
+export { isKrxTradingDay } from './krx-trading-day';
 export {
   type CorrectionSide,
   type CorrectionStrategy,
