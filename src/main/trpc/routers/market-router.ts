@@ -1,6 +1,7 @@
+import type { OrderbookSnapshot, Quote } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { inquireOrderbook, inquirePrice } from '../../kis/domestic-stock';
+import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 function toIsoDate(d: Date): string {
   const yyyy = d.getFullYear();
@@ -9,7 +10,41 @@ function toIsoDate(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-import { authedProcedure, publicProcedure, router } from '../trpc-core';
+/**
+ * 도메인 Quote → 기존 KIS QuoteResult shape (renderer wire compat).
+ * Stage 8 에서 renderer 를 도메인 모델로 전환 시 helper 제거.
+ */
+function toLegacyQuote(q: Quote) {
+  return {
+    code: q.symbol,
+    price: q.price,
+    dayChange: q.dayChange,
+    dayChangeRate: q.dayChangeRate,
+    accumVolume: q.accumVolume,
+    open: q.open,
+    high: q.high,
+    low: q.low,
+    upperLimit: q.upperLimit,
+    lowerLimit: q.lowerLimit,
+    prevClose: q.prevClose,
+  };
+}
+
+/**
+ * 도메인 OrderbookSnapshot → 기존 KIS shape ({pdno, asks/bids: [{price, quantity}]}).
+ */
+function toLegacyOrderbook(o: OrderbookSnapshot) {
+  return {
+    pdno: o.symbol,
+    time: o.time,
+    asks: o.asks.map((a) => ({ price: a.price, quantity: a.qty })),
+    bids: o.bids.map((b) => ({ price: b.price, quantity: b.qty })),
+    totalAskQty: o.totalAskQty,
+    totalBidQty: o.totalBidQty,
+    expectedPrice: o.expectedPrice,
+    expectedQty: o.expectedQty,
+  };
+}
 
 export const marketRouter = router({
   searchStock: publicProcedure
@@ -168,74 +203,42 @@ export const marketRouter = router({
   getOrderbook: authedProcedure
     .input(z.object({ code: z.string().regex(/^\d{6}$/) }))
     .query(async ({ ctx, input }) => {
-      const env = ctx.currentEnv;
-      if (!env) throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
-      const credResult = ctx.credentialsRepo.loadCredentialsByEnv(env);
-      if (credResult.isErr() || !credResult.value) {
-        throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
-      }
-      const cred = credResult.value;
-      const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
-      if (tokenResult.isErr()) {
+      const accountId = ctx.activeAccountId;
+      const broker = accountId !== null ? ctx.brokerForAccount(accountId) : null;
+      if (!broker) {
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `토큰 발급 실패: ${tokenResult.error.kind}`,
+          code: 'UNAUTHORIZED',
+          message: '활성 계좌의 broker 가 준비되지 않았습니다',
         });
       }
-      const r = await inquireOrderbook(
-        {
-          http: ctx.httpByEnv[env],
-          env,
-          token: tokenResult.value.token,
-          appKey: cred.appKey,
-          appSecret: cred.appSecret,
-        },
-        input.code,
-      );
+      const r = await broker.getOrderbook(input.code);
       if (r.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: `호가 조회 실패: ${r.error.kind} - ${r.error.msg}`,
         });
       }
-      return { orderbook: r.value };
+      return { orderbook: toLegacyOrderbook(r.value) };
     }),
 
   getPrice: authedProcedure
     .input(z.object({ code: z.string().regex(/^\d{6}$/) }))
     .query(async ({ ctx, input }) => {
-      const env = ctx.currentEnv;
-      if (!env) throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
-      const credResult = ctx.credentialsRepo.loadCredentialsByEnv(env);
-      if (credResult.isErr() || !credResult.value) {
-        throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
-      }
-      const cred = credResult.value;
-      const tokenResult = await ctx.auth.getValidToken(env, cred.appKey, cred.appSecret);
-      if (tokenResult.isErr()) {
+      const accountId = ctx.activeAccountId;
+      const broker = accountId !== null ? ctx.brokerForAccount(accountId) : null;
+      if (!broker) {
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `토큰 발급 실패: ${tokenResult.error.kind}`,
+          code: 'UNAUTHORIZED',
+          message: '활성 계좌의 broker 가 준비되지 않았습니다',
         });
       }
-      const r = await inquirePrice(
-        {
-          http: ctx.httpByEnv[env],
-          env,
-          token: tokenResult.value.token,
-          appKey: cred.appKey,
-          appSecret: cred.appSecret,
-          accountNo8: cred.accountNo8,
-          accountProdCd: cred.accountProdCd,
-        },
-        input.code,
-      );
+      const r = await broker.getQuote(input.code);
       if (r.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: `현재가 조회 실패: ${r.error.kind} - ${r.error.msg}`,
         });
       }
-      return r.value;
+      return toLegacyQuote(r.value);
     }),
 });
