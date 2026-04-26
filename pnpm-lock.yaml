@@ -71,6 +71,9 @@ importers:
       iconv-lite:
         specifier: ^0.7.2
         version: 0.7.2
+      indicatorts:
+        specifier: ^2.2.2
+        version: 2.2.2
       lightweight-charts:
         specifier: ^5.1.0
         version: 5.1.0
@@ -2962,6 +2965,9 @@ packages:
   indent-string@4.0.0:
     resolution: {integrity: sha512-EdDDZu4A2OyIK7Lr/2zG+w5jmbuk1DVBnEwREQvBzspBJkCEbRa8GxU1lghYcaGJCnRWibjDXlq779X1/y5xwg==}
     engines: {node: '>=8'}
+
+  indicatorts@2.2.2:
+    resolution: {integrity: sha512-oJRe83n2zj826Mlp2RKQVfurqbq5dEHzAWgZidiYkS0mrx3GCbXlNj59YtwZvekRmNwi/d4NdeHGHd8Nspl6Xg==}
 
   infer-owner@1.0.4:
     resolution: {integrity: sha512-IClj+Xz94+d7irH5qRyfJonOdfTzuDaifE6ZPWfx0N0+/ATZCbuTPq2prFl526urkQd90WyUKIh1DfBQ2hMz9A==}
@@ -7478,6 +7484,8 @@ snapshots:
   imurmurhash@0.1.4: {}
 
   indent-string@4.0.0: {}
+
+  indicatorts@2.2.2: {}
 
   infer-owner@1.0.4: {}
 
