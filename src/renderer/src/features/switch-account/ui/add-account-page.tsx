@@ -141,21 +141,29 @@ export const AddAccountPage = (): ReactElement => {
                 />
               </Row>
 
-              <Row label="상품 유형" inputId="add-account-prod-cd">
-                <Select
-                  id="add-account-prod-cd"
-                  value={accountProdCd}
-                  onChange={(e) => setAccountProdCd(e.target.value as AccountProdCode)}
-                  dense
-                  className="add-account-page__control"
-                >
-                  {ACCOUNT_PROD_CODE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </Select>
-              </Row>
+              {ACCOUNT_PROD_CODE_OPTIONS.length > 1 ? (
+                <Row label="상품 유형" inputId="add-account-prod-cd">
+                  <Select
+                    id="add-account-prod-cd"
+                    value={accountProdCd}
+                    onChange={(e) => setAccountProdCd(e.target.value as AccountProdCode)}
+                    dense
+                    className="add-account-page__control"
+                  >
+                    {ACCOUNT_PROD_CODE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Row>
+              ) : (
+                <Row label="상품 유형" inputId="add-account-prod-cd-readonly">
+                  <span id="add-account-prod-cd-readonly" className="chip">
+                    {ACCOUNT_PROD_CODE_OPTIONS[0]?.label}
+                  </span>
+                </Row>
+              )}
             </>
           ) : (
             <Row label="계좌번호 (10자리)" inputId="add-account-kiwoom-no">
@@ -217,9 +225,9 @@ const BrokerCard = ({
     style={{
       flex: 1,
       padding: '10px 12px',
-      border: selected ? '2px solid var(--accent, #4a90e2)' : '1px solid var(--border, #ddd)',
+      border: selected ? '2px solid var(--accent)' : '1px solid var(--border)',
       borderRadius: 8,
-      background: selected ? 'var(--accent-soft, #eef4fc)' : 'transparent',
+      background: selected ? 'var(--accent-tint-8)' : 'transparent',
       cursor: 'pointer',
       textAlign: 'left',
       display: 'flex',
