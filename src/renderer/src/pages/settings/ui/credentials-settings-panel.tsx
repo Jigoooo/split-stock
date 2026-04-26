@@ -101,34 +101,41 @@ function CredentialsListSection(): ReactElement {
   const entries = stored.data?.entries ?? [];
   const currentEnv = envQuery.data?.env ?? null;
 
-  const handleDeleteOne = async (env: 'MOCK' | 'PROD'): Promise<void> => {
+  const handleDeleteOne = async (
+    env: 'MOCK' | 'PROD',
+    broker: 'KIS' | 'KIWOOM' = 'KIS',
+  ): Promise<void> => {
     const envName = ENV_LABEL[env];
+    const brokerName = BROKER_LABEL[broker];
     const confirmed = await dialog.openAsync({
       type: 'WARNING',
-      title: `${envName} 자격증명 삭제`,
+      title: `${brokerName} ${envName} 자격증명 삭제`,
       confirmText: '삭제',
       cancelText: '취소',
       isCancelWith: true,
       message: (
         <div style={{ display: 'grid', gap: '0.5rem' }}>
           <div>
-            <strong>{envName}</strong> 환경의 저장된 App Key / Secret 을 삭제합니다.
+            <strong>
+              {brokerName} {envName}
+            </strong>{' '}
+            환경의 저장된 App Key / Secret 을 삭제합니다.
           </div>
           <div className="muted">
-            이후 <strong>{envName}</strong> 로그인 시 App Key / Secret 재입력이 필요합니다. KIS
-            개발자센터에서 다시 확인해야 할 수 있습니다.
+            이후 재로그인 시 App Key / Secret 재입력이 필요합니다. {brokerName} 개발자센터에서
+            다시 확인해야 할 수 있습니다.
           </div>
-          {currentEnv === env ? (
+          {currentEnv === env && broker === 'KIS' ? (
             <div className="muted">현재 활성 환경이므로 자동으로 로그아웃됩니다.</div>
           ) : null}
         </div>
       ),
     });
     if (!confirmed) return;
-    if (currentEnv === env) {
+    if (currentEnv === env && broker === 'KIS') {
       await logout.mutateAsync({ clearStored: true });
     } else {
-      await clearCredentials.mutateAsync({ env });
+      await clearCredentials.mutateAsync({ env, broker });
     }
   };
 
@@ -156,9 +163,9 @@ function CredentialsListSection(): ReactElement {
     if (currentEnv) {
       await logout.mutateAsync({ clearStored: true });
     }
-    const remaining = entries.filter((e) => e.env !== currentEnv);
+    const remaining = entries.filter((e) => !(e.env === currentEnv && e.broker === 'KIS'));
     for (const e of remaining) {
-      await clearCredentials.mutateAsync({ env: e.env });
+      await clearCredentials.mutateAsync({ env: e.env, broker: e.broker });
     }
   };
 
@@ -270,7 +277,7 @@ function CredentialsListSection(): ReactElement {
                         aria-label={`${ENV_LABEL[e.env]} 자격증명 삭제`}
                         title="삭제"
                         onClick={() => {
-                          void handleDeleteOne(e.env);
+                          void handleDeleteOne(e.env, e.broker);
                         }}
                       >
                         삭제

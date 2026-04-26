@@ -153,16 +153,20 @@ export const authRouter = router({
    * 특정 env의 자격증명 삭제. UNIQUE INDEX 로 해당 env 의 단일 계좌 자격증명만 제거.
    */
   clearCredentials: publicProcedure
-    .input(z.object({ env: AppEnvSchema }))
+    .input(z.object({ env: AppEnvSchema, broker: z.enum(['KIS', 'KIWOOM']).default('KIS') }))
     .mutation(({ ctx, input }) => {
-      const r = ctx.credentialsRepo.clearCredentialsByEnv(input.env);
+      const r = ctx.credentialsRepo.clearCredentialsByEnv(input.env, input.broker);
       if (r.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: '자격증명 삭제 실패',
         });
       }
-      if (ctx.currentEnv === input.env) ctx.setCurrentEnv(null);
+      // 활성 broker+env 와 동일하면 세션 종료. broker 다르면 활성 env 유지.
+      if (ctx.currentEnv === input.env && input.broker === 'KIS') {
+        // BC: 기존 호출자(KIS-only) 동작 보존. Kiwoom 삭제 시 활성 env 유지.
+        ctx.setCurrentEnv(null);
+      }
       return { ok: true as const };
     }),
 });
