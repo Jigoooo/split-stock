@@ -1,3 +1,4 @@
+import { Button } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
 export const MainAccountLoading = (): ReactElement => (
@@ -24,7 +25,7 @@ export const MainNoAccount = (): ReactElement => (
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: '0.6rem',
+      gap: '0.8rem',
       fontSize: '1.1rem',
       padding: '1rem',
       textAlign: 'center',
@@ -33,7 +34,16 @@ export const MainNoAccount = (): ReactElement => (
   >
     <div>활성 계좌가 없습니다.</div>
     <div style={{ fontSize: '0.95rem' }}>
-      상단 계좌 바에서 계좌를 추가하거나 선택하면 메인 화면이 표시됩니다.
+      계좌를 추가하거나 상단 계좌 바에서 선택하면 메인 화면이 표시됩니다.
     </div>
+    <Button
+      type="button"
+      variant="primary"
+      onClick={() => {
+        void window.appShell?.openPopout?.('add-account');
+      }}
+    >
+      + 계좌 추가
+    </Button>
   </div>
 );
