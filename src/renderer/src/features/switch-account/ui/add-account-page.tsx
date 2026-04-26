@@ -4,6 +4,7 @@ import {
   ACCOUNT_PROD_CODE_OPTIONS,
   type AccountProdCode,
   type AppEnv,
+  type BrokerId,
   type Credentials,
 } from '@shared/contracts';
 import { type FormEvent, type ReactElement, useState } from 'react';
@@ -16,6 +17,7 @@ import { type FormEvent, type ReactElement, useState } from 'react';
  * 창을 닫는다.
  */
 export const AddAccountPage = (): ReactElement => {
+  const [broker, setBroker] = useState<BrokerId>('KIS');
   const [env, setEnv] = useState<AppEnv>('MOCK');
   const [appKey, setAppKey] = useState('');
   const [appSecret, setAppSecret] = useState('');
@@ -23,6 +25,8 @@ export const AddAccountPage = (): ReactElement => {
   const [accountProdCd, setAccountProdCd] = useState<AccountProdCode>(
     ACCOUNT_PROD_CODE_OPTIONS[0]?.value ?? '01',
   );
+  /** Kiwoom 계좌번호 10자리 — accountNo8(앞 8) + accountProdCd(뒤 2) 로 합쳐 저장. */
+  const [kiwoomAccountNo, setKiwoomAccountNo] = useState('');
 
   const addMutation = trpc.account.add.useMutation({
     // 팝아웃의 query client 는 곧 close 되므로 자체 invalidate 는 의미 없음 — broadcast 만 하고
@@ -40,23 +44,48 @@ export const AddAccountPage = (): ReactElement => {
 
   const onSubmit = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
+    const acntNo8 = broker === 'KIS' ? accountNo8 : kiwoomAccountNo.slice(0, 8);
+    const acntProdCd: AccountProdCode = broker === 'KIS' ? accountProdCd : '01';
     const value: Credentials = {
       env,
-      broker: 'KIS',
+      broker,
       appKey,
       appSecret,
-      accountNo8,
-      accountProdCd,
+      accountNo8: acntNo8,
+      accountProdCd: acntProdCd,
     };
     addMutation.mutate(value);
   };
 
-  const canSubmit = appKey.length > 0 && appSecret.length > 0 && accountNo8.length === 8;
+  const canSubmit =
+    appKey.length > 0 &&
+    appSecret.length > 0 &&
+    (broker === 'KIS' ? accountNo8.length === 8 : kiwoomAccountNo.length === 10);
 
   return (
     <div className="add-account-page">
       <form className="add-account-page__form" onSubmit={onSubmit}>
         <div className="add-account-page__body">
+          <div className="add-account-page__field">
+            <span className="add-account-page__label">증권사</span>
+            <div role="radiogroup" aria-label="증권사 선택" style={{ display: 'flex', gap: 8 }}>
+              <BrokerCard
+                id="kis"
+                label="한국투자증권 (KIS)"
+                desc="국내 / 해외 / 모의 / 실전"
+                selected={broker === 'KIS'}
+                onClick={() => setBroker('KIS')}
+              />
+              <BrokerCard
+                id="kiwoom"
+                label="키움증권 (Kiwoom)"
+                desc="국내 / 모의 / 실전 (NXT/SOR PROD 전용)"
+                selected={broker === 'KIWOOM'}
+                onClick={() => setBroker('KIWOOM')}
+              />
+            </div>
+          </div>
+
           <div className="add-account-page__field">
             <span className="add-account-page__label">환경</span>
             <EnvironmentRadioGroup
@@ -82,7 +111,10 @@ export const AddAccountPage = (): ReactElement => {
             />
           </Row>
 
-          <Row label="App Secret" inputId="add-account-app-secret">
+          <Row
+            label={broker === 'KIS' ? 'App Secret' : 'Secret Key'}
+            inputId="add-account-app-secret"
+          >
             <TextInput
               id="add-account-app-secret"
               type="password"
@@ -95,33 +127,49 @@ export const AddAccountPage = (): ReactElement => {
             />
           </Row>
 
-          <Row label="계좌 (앞 8자리)" inputId="add-account-no8">
-            <TextInput
-              id="add-account-no8"
-              value={accountNo8}
-              onChange={(e) => setAccountNo8(e.target.value.replace(/\D/g, '').slice(0, 8))}
-              placeholder="12345678"
-              inputMode="numeric"
-              dense
-              className="add-account-page__control num"
-            />
-          </Row>
+          {broker === 'KIS' ? (
+            <>
+              <Row label="계좌 (앞 8자리)" inputId="add-account-no8">
+                <TextInput
+                  id="add-account-no8"
+                  value={accountNo8}
+                  onChange={(e) => setAccountNo8(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                  placeholder="12345678"
+                  inputMode="numeric"
+                  dense
+                  className="add-account-page__control num"
+                />
+              </Row>
 
-          <Row label="상품 유형" inputId="add-account-prod-cd">
-            <Select
-              id="add-account-prod-cd"
-              value={accountProdCd}
-              onChange={(e) => setAccountProdCd(e.target.value as AccountProdCode)}
-              dense
-              className="add-account-page__control"
-            >
-              {ACCOUNT_PROD_CODE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
-          </Row>
+              <Row label="상품 유형" inputId="add-account-prod-cd">
+                <Select
+                  id="add-account-prod-cd"
+                  value={accountProdCd}
+                  onChange={(e) => setAccountProdCd(e.target.value as AccountProdCode)}
+                  dense
+                  className="add-account-page__control"
+                >
+                  {ACCOUNT_PROD_CODE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </Select>
+              </Row>
+            </>
+          ) : (
+            <Row label="계좌번호 (10자리)" inputId="add-account-kiwoom-no">
+              <TextInput
+                id="add-account-kiwoom-no"
+                value={kiwoomAccountNo}
+                onChange={(e) => setKiwoomAccountNo(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="1234567890"
+                inputMode="numeric"
+                dense
+                className="add-account-page__control num"
+              />
+            </Row>
+          )}
 
           {addMutation.error ? (
             <div className="chip chip--down" role="alert">
@@ -147,6 +195,43 @@ export const AddAccountPage = (): ReactElement => {
     </div>
   );
 };
+
+const BrokerCard = ({
+  id,
+  label,
+  desc,
+  selected,
+  onClick,
+}: {
+  id: string;
+  label: string;
+  desc: string;
+  selected: boolean;
+  onClick: () => void;
+}): ReactElement => (
+  <button
+    type="button"
+    role="radio"
+    aria-checked={selected}
+    onClick={onClick}
+    style={{
+      flex: 1,
+      padding: '10px 12px',
+      border: selected ? '2px solid var(--accent, #4a90e2)' : '1px solid var(--border, #ddd)',
+      borderRadius: 8,
+      background: selected ? 'var(--accent-soft, #eef4fc)' : 'transparent',
+      cursor: 'pointer',
+      textAlign: 'left',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 4,
+    }}
+    data-broker={id}
+  >
+    <span style={{ fontWeight: 600 }}>{label}</span>
+    <span style={{ fontSize: '0.85em', opacity: 0.75 }}>{desc}</span>
+  </button>
+);
 
 const Row = ({
   label,

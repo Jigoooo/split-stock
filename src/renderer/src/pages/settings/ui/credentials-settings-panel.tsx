@@ -9,6 +9,7 @@ import type { CSSProperties, ReactElement } from 'react';
 import { toast } from 'sonner';
 
 const ENV_LABEL = { MOCK: '모의(MOCK)', PROD: '실전(PROD)' } as const;
+const BROKER_LABEL = { KIS: '한국투자증권', KIWOOM: '키움증권' } as const;
 
 /**
  * 설정 → 계좌/보안 탭의 통합 컨테이너.
@@ -192,6 +193,7 @@ function CredentialsListSection(): ReactElement {
             style={{ height: 'auto', '--hts-row-height': '3.4rem' } as CSSProperties}
           >
             <TableGrid.Header>
+              <TableGrid.Cell width={120}>증권사</TableGrid.Cell>
               <TableGrid.Cell width={120}>환경</TableGrid.Cell>
               <TableGrid.Cell flex={1}>계좌번호</TableGrid.Cell>
               <TableGrid.Cell width={140}>상태</TableGrid.Cell>
@@ -203,7 +205,19 @@ function CredentialsListSection(): ReactElement {
               {entries.map((e) => {
                 const isActive = currentEnv === e.env;
                 return (
-                  <TableGrid.Row key={e.env}>
+                  <TableGrid.Row key={`${e.broker}-${e.env}`}>
+                    <TableGrid.Cell width={120}>
+                      <span
+                        className="chip"
+                        style={{
+                          background: e.broker === 'KIWOOM' ? '#ffe6e8' : '#fff7d6',
+                          color: e.broker === 'KIWOOM' ? '#c41e2c' : '#7c5e00',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {BROKER_LABEL[e.broker]}
+                      </span>
+                    </TableGrid.Cell>
                     <TableGrid.Cell width={120}>
                       <span className={`chip ${e.env === 'PROD' ? 'chip--down' : 'chip--up'}`}>
                         {ENV_LABEL[e.env]}
