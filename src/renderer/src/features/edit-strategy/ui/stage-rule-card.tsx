@@ -2,6 +2,20 @@ import { NumberInput } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import type { StageRuleChangeFactory, StageRuleRowRaw } from '../model/strategy-form-types';
 
+/**
+ * 원 단위 금액을 한국식 보조 표기로. 1억 이상 "X.XX억", 1만 이상 "X,XXX만",
+ * 그 외엔 빈 문자열 (보조 표시 불필요).
+ */
+function formatKrwShort(raw: string): string {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 10_000) return '';
+  if (n >= 100_000_000) {
+    const v = n / 100_000_000;
+    return `≈ ${v >= 10 ? v.toFixed(0) : v.toFixed(2)}억`;
+  }
+  return `≈ ${Math.round(n / 10_000).toLocaleString()}만`;
+}
+
 interface StageRuleCardProps {
   disabled: boolean;
   inactive: boolean;
@@ -83,6 +97,11 @@ export const StageRuleCard = ({
           style={{ width: '11rem' }}
         />
         <span>원</span>
+        {formatKrwShort(row.amountKrw) ? (
+          <span className="muted" style={{ fontSize: '0.85em' }}>
+            {formatKrwShort(row.amountKrw)}
+          </span>
+        ) : null}
       </div>
     </div>
     <div
