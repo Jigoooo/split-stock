@@ -1,6 +1,6 @@
 import type { DisplaySettings, MaPeriod } from '@renderer/entities/display-settings';
 import { Button } from '@renderer/shared/ui';
-import type { IChartApi, ISeriesApi } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, SeriesMarker, Time } from 'lightweight-charts';
 import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
 import { type ReactElement, useRef, useState } from 'react';
 import {
@@ -17,15 +17,19 @@ import { useChartInstance } from '../model/use-chart-instance';
 import { useDrawingTools } from '../model/use-drawing-tools';
 import { useHistoryFetch } from '../model/use-history-fetch';
 import { useLiveCandleSeries } from '../model/use-live-candle-series';
+import { useOhlcTooltip } from '../model/use-ohlc-tooltip';
 import { useOverlayPriceLines } from '../model/use-overlay-price-lines';
 import type { Candle } from '../model/use-position-chart';
+import { useTradeMarkers } from '../model/use-trade-markers';
 import { DrawingToolbar } from './drawing-toolbar';
+import { OhlcTooltip } from './ohlc-tooltip';
 
 export interface CandlestickChartProps {
   candles: Candle[];
   enableDrawingTools?: boolean;
   liveCandle: Candle | null;
   lines: Array<{ kind: 'buy' | 'sell-target'; nth: number; label: string; price: number }>;
+  markers?: SeriesMarker<Time>[];
   onFetchMore: () => Promise<void>;
   pdno: string;
   reachedEnd: boolean;
@@ -37,6 +41,7 @@ export const CandlestickChart = ({
   enableDrawingTools = true,
   liveCandle,
   lines,
+  markers,
   onFetchMore,
   pdno,
   reachedEnd,
@@ -81,6 +86,14 @@ export const CandlestickChart = ({
     volumeSeriesRef,
   });
   useOverlayPriceLines({ candles, lines, priceLinesRef, seriesRef });
+  useTradeMarkers({ markers: markers ?? [], seriesRef });
+  const tooltipState = useOhlcTooltip({
+    candles,
+    chartRef,
+    liveCandle,
+    seriesRef,
+    volumeSeriesRef,
+  });
 
   const zoom = (factor: number): void => {
     const chart = chartRef.current;
@@ -110,6 +123,7 @@ export const CandlestickChart = ({
   return (
     <div style={{ position: 'relative', flex: 1, minHeight: 240, width: '100%', display: 'flex' }}>
       <div ref={ref} style={{ flex: 1, minHeight: 240, width: '100%' }} />
+      <OhlcTooltip axisRightInset={axisRightInset} state={tooltipState} />
       {enableDrawingTools ? (
         <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 2 }}>
           <DrawingToolbar

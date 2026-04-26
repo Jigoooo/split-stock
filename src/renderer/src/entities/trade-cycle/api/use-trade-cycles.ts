@@ -3,6 +3,7 @@ import type { CycleStatusFilter, TradeCycle } from '../model/types';
 
 interface UseTradeCyclesOptions {
   accountId: number;
+  enabled?: boolean;
   pdno?: string;
   status: CycleStatusFilter;
 }
@@ -26,6 +27,7 @@ export function useTradeCycles(options: UseTradeCyclesOptions): UseTradeCyclesRe
       status: options.status,
     },
     {
+      enabled: options.enabled ?? true,
       refetchInterval: 3000,
       staleTime: 0,
     },

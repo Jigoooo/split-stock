@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -9,6 +9,12 @@ const {
   createPriceLineMock,
   removePriceLineMock,
   detachPrimitiveMock,
+  createSeriesMarkersMock,
+  setMarkersMock,
+  detachMarkersMock,
+  useActiveAccountIdMock,
+  useTradeCyclesMock,
+  crosshairHandlerHolder,
   trpcUtilsMock,
 } = vi.hoisted(() => {
   const fetchChartMock = vi.fn();
@@ -41,6 +47,13 @@ const {
       priceScale: priceScaleMock,
     }),
   );
+  const crosshairHandlerHolder: { current: ((p: unknown) => void) | null } = { current: null };
+  const subscribeCrosshairMoveMock = vi.fn((handler: (p: unknown) => void) => {
+    crosshairHandlerHolder.current = handler;
+  });
+  const unsubscribeCrosshairMoveMock = vi.fn(() => {
+    crosshairHandlerHolder.current = null;
+  });
   const createChartMock = vi.fn(
     (
       _container: unknown,
@@ -52,6 +65,8 @@ const {
       removeSeries: vi.fn(),
       subscribeClick: vi.fn(),
       unsubscribeClick: vi.fn(),
+      subscribeCrosshairMove: subscribeCrosshairMoveMock,
+      unsubscribeCrosshairMove: unsubscribeCrosshairMoveMock,
       timeScale: () => ({
         subscribeVisibleLogicalRangeChange: vi.fn(),
         unsubscribeVisibleLogicalRangeChange: vi.fn(),
@@ -61,6 +76,30 @@ const {
       }),
     }),
   );
+  const setMarkersMock = vi.fn();
+  const detachMarkersMock = vi.fn();
+  type MarkerInput = Array<Record<string, unknown>>;
+  const createSeriesMarkersImpl = (
+    _series: unknown,
+    _markers: MarkerInput,
+  ): { setMarkers: typeof setMarkersMock; detach: typeof detachMarkersMock } => ({
+    setMarkers: setMarkersMock,
+    detach: detachMarkersMock,
+  });
+  const createSeriesMarkersMock = vi.fn<typeof createSeriesMarkersImpl>(createSeriesMarkersImpl);
+  const useActiveAccountIdImpl = (): { accountId: number | null; isPending: boolean } => ({
+    accountId: 1,
+    isPending: false,
+  });
+  const useActiveAccountIdMock = vi.fn<typeof useActiveAccountIdImpl>(useActiveAccountIdImpl);
+  const useTradeCyclesImpl = (
+    _options: Record<string, unknown>,
+  ): { cycles: Array<Record<string, unknown>>; isPending: boolean; error: null } => ({
+    cycles: [],
+    isPending: false,
+    error: null,
+  });
+  const useTradeCyclesMock = vi.fn<typeof useTradeCyclesImpl>(useTradeCyclesImpl);
   const trpcUtilsMock = {
     market: {
       getDailyChart: {
@@ -76,6 +115,12 @@ const {
     createPriceLineMock,
     removePriceLineMock,
     detachPrimitiveMock,
+    createSeriesMarkersMock,
+    setMarkersMock,
+    detachMarkersMock,
+    useActiveAccountIdMock,
+    useTradeCyclesMock,
+    crosshairHandlerHolder,
     trpcUtilsMock,
   };
 });
@@ -126,6 +171,15 @@ vi.mock('lightweight-charts', () => ({
     Dotted: 2,
   },
   createChart: createChartMock,
+  createSeriesMarkers: createSeriesMarkersMock,
+}));
+
+vi.mock('@renderer/entities/account', () => ({
+  useActiveAccountId: useActiveAccountIdMock,
+}));
+
+vi.mock('@renderer/entities/trade-cycle', () => ({
+  useTradeCycles: useTradeCyclesMock,
 }));
 
 import { PositionChart } from './ui/position-chart';
@@ -143,6 +197,14 @@ beforeEach(() => {
   fetchChartMock.mockReset();
   createChartMock.mockClear();
   addSeriesMock.mockClear();
+  createSeriesMarkersMock.mockClear();
+  setMarkersMock.mockClear();
+  detachMarkersMock.mockClear();
+  useTradeCyclesMock.mockReset();
+  useTradeCyclesMock.mockReturnValue({ cycles: [], isPending: false, error: null });
+  useActiveAccountIdMock.mockReset();
+  useActiveAccountIdMock.mockReturnValue({ accountId: 1, isPending: false });
+  crosshairHandlerHolder.current = null;
   window.localStorage.clear();
 });
 
@@ -293,6 +355,138 @@ describe('PositionChart', () => {
         title: '1차 매수 6,747',
       }),
     );
+  });
+
+  it('호버 전에는 OHLC 툴팁이 DOM 에 없다', async () => {
+    fetchChartMock.mockResolvedValueOnce({
+      candles: [
+        { date: '2026-04-18', open: 9100, high: 9500, low: 9050, close: 9300, volume: 2000 },
+      ],
+      toMs: Date.UTC(2026, 3, 19),
+    });
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+    await waitFor(() => expect(addSeriesMock).toHaveBeenCalled());
+    expect(screen.queryByTestId('ohlc-tooltip')).toBeNull();
+  });
+
+  it('crosshair 호버 시 OHLC + 등락률 + 거래량을 툴팁에 표시한다', async () => {
+    fetchChartMock.mockResolvedValueOnce({
+      candles: [
+        { date: '2026-04-17', open: 9000, high: 9200, low: 8900, close: 9100, volume: 1000 },
+        { date: '2026-04-18', open: 9100, high: 9500, low: 9050, close: 9300, volume: 2000 },
+      ],
+      toMs: Date.UTC(2026, 3, 19),
+    });
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+    await waitFor(() => expect(addSeriesMock).toHaveBeenCalled());
+    await waitFor(() => expect(crosshairHandlerHolder.current).not.toBeNull());
+
+    const candleSeries = addSeriesMock.mock.results[0]?.value as object;
+    const volumeSeries = addSeriesMock.mock.results[1]?.value as object;
+    const seriesData = new Map<object, unknown>();
+    seriesData.set(candleSeries, { open: 9100, high: 9500, low: 9050, close: 9300 });
+    seriesData.set(volumeSeries, { value: 2000 });
+
+    act(() => {
+      crosshairHandlerHolder.current?.({
+        time: '2026-04-18',
+        point: { x: 400, y: 200 },
+        seriesData,
+      });
+    });
+
+    expect(await screen.findByTestId('ohlc-tooltip')).toBeInTheDocument();
+    expect(screen.getByText('2026-04-18')).toBeInTheDocument();
+    expect(screen.getByText('9,100')).toBeInTheDocument(); // open
+    expect(screen.getByText('9,500')).toBeInTheDocument(); // high
+    expect(screen.getByText('9,050')).toBeInTheDocument(); // low
+    expect(screen.getByText('9,300')).toBeInTheDocument(); // close
+    // 등락: close 9300 - prevClose 9100 = +200, +2.20%
+    expect(screen.getByText(/\+200.*\+2\.20%/)).toBeInTheDocument();
+    expect(screen.getByText('2,000')).toBeInTheDocument(); // volume
+
+    // 차트 영역 밖으로 빠지면 툴팁이 사라진다.
+    act(() => {
+      crosshairHandlerHolder.current?.({
+        time: undefined,
+        point: undefined,
+        seriesData: new Map(),
+      });
+    });
+    expect(screen.queryByTestId('ohlc-tooltip')).toBeNull();
+  });
+
+  it('TradeCycle 이 있으면 createSeriesMarkers 에 B/S 마커가 시간순으로 전달된다', async () => {
+    fetchChartMock.mockResolvedValueOnce({
+      candles: [
+        { date: '2026-04-08', open: 100, high: 110, low: 90, close: 105, volume: 1 },
+        { date: '2026-04-10', open: 100, high: 110, low: 90, close: 105, volume: 1 },
+        { date: '2026-04-11', open: 100, high: 110, low: 90, close: 105, volume: 1 },
+      ],
+      toMs: Date.UTC(2026, 3, 12),
+    });
+    const localDay = (ymd: string): number => {
+      const [y, m, d] = ymd.split('-').map(Number) as [number, number, number];
+      return new Date(y, m - 1, d, 12, 0, 0).getTime();
+    };
+    useTradeCyclesMock.mockReturnValue({
+      cycles: [
+        {
+          id: 1,
+          nth: 1,
+          pdno: '005930',
+          name: '삼성전자',
+          buyPrice: 100,
+          qty: 10,
+          amountKrw: 1000,
+          status: 'SOLD',
+          boughtAt: localDay('2026-04-08'),
+          soldAt: localDay('2026-04-11'),
+          sellPrice: 110,
+        },
+        {
+          id: 2,
+          nth: 2,
+          pdno: '005930',
+          name: '삼성전자',
+          buyPrice: 95,
+          qty: 10,
+          amountKrw: 950,
+          status: 'OPEN',
+          boughtAt: localDay('2026-04-10'),
+        },
+      ],
+      isPending: false,
+      error: null,
+    });
+
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+
+    await waitFor(() => expect(createSeriesMarkersMock).toHaveBeenCalled());
+    const lastCall = createSeriesMarkersMock.mock.calls.at(-1);
+    expect(lastCall).toBeDefined();
+    const passedMarkers = lastCall?.[1] as Array<{ time: string; text: string; position: string }>;
+    expect(passedMarkers.map((m) => `${m.text}@${m.time}`)).toEqual([
+      'B1@2026-04-08',
+      'B2@2026-04-10',
+      'S1@2026-04-11',
+    ]);
+    expect(passedMarkers.find((m) => m.text === 'B1')?.position).toBe('belowBar');
+    expect(passedMarkers.find((m) => m.text === 'S1')?.position).toBe('aboveBar');
+  });
+
+  it('accountId 가 없으면 useTradeCycles 가 enabled=false 로 호출되고 마커는 비어있다', async () => {
+    useActiveAccountIdMock.mockReturnValue({ accountId: null, isPending: false });
+    fetchChartMock.mockResolvedValueOnce({
+      candles: [{ date: '2026-04-10', open: 100, high: 110, low: 90, close: 105, volume: 1 }],
+      toMs: Date.UTC(2026, 3, 12),
+    });
+
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+
+    await waitFor(() => expect(createChartMock).toHaveBeenCalled());
+    const lastCycleCall = useTradeCyclesMock.mock.calls.at(-1);
+    expect(lastCycleCall?.[0]).toMatchObject({ enabled: false });
   });
 
   it('전체 삭제 버튼은 차트 remount 없이 플러그인 removeAllLineTools 를 호출하고 저장본을 비운다', async () => {

@@ -1,8 +1,11 @@
+import { useActiveAccountId } from '@renderer/entities/account';
 import { useGetDisplaySettings } from '@renderer/entities/display-settings';
+import { useTradeCycles } from '@renderer/entities/trade-cycle';
 import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import type { LotOverlayLine } from '@shared/trading/lot-overlay';
 import { Settings } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { type ReactElement, useMemo } from 'react';
+import { toTradeMarkers } from '../lib/trade-markers';
 import { type ChartPeriod, usePositionChart } from '../model/use-position-chart';
 import { CandlestickChart } from './candlestick-chart';
 import { PriceChips } from './price-chips';
@@ -39,6 +42,14 @@ export const PositionChart = ({
 }: PositionChartProps): ReactElement => {
   const chart = usePositionChart(pdno);
   const { settings: displaySettings } = useGetDisplaySettings();
+  const { accountId } = useActiveAccountId();
+  const { cycles } = useTradeCycles({
+    accountId: accountId ?? 0,
+    enabled: accountId !== null,
+    pdno,
+    status: 'all',
+  });
+  const markers = useMemo(() => toTradeMarkers(cycles, chart.candles), [cycles, chart.candles]);
 
   return (
     <div
@@ -122,6 +133,7 @@ export const PositionChart = ({
           enableDrawingTools={enableDrawingTools}
           liveCandle={chart.liveCandle}
           lines={lines}
+          markers={markers}
           onFetchMore={chart.fetchMore}
           pdno={pdno}
           reachedEnd={chart.reachedEnd}
