@@ -150,10 +150,12 @@ export const SwitchEnvSection = (): ReactElement => {
             <Button
               variant={isProd ? 'danger' : 'primary'}
               onClick={onConfirm}
-              disabled={pending || !canConfirm}
+              disabled={!canConfirm}
+              loading={pending}
+              loadingText="전환 중…"
               dense
             >
-              {pending ? '전환 중…' : '전환 확정'}
+              전환 확정
             </Button>
           </div>
         </div>

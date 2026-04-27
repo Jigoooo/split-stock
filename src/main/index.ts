@@ -1267,12 +1267,21 @@ void app.whenReady().then(async () => {
   });
 
   // 팝아웃에서 계좌 추가/변경 완료 → 송신자 제외 모든 창에 브로드캐스트(렌더러 query invalidate + 토스트 트리거)
-  ipcMain.on('appShell:account-changed', (event, accountId: unknown) => {
+  // meta: { envSwitchedTo?: 'PROD' | 'MOCK' } — 첫 계좌 자동 활성화로 환경이 전환됐을 때 수신측에서 토스트 강조.
+  ipcMain.on('appShell:account-changed', (event, accountId: unknown, meta: unknown) => {
     if (typeof accountId !== 'number' || !Number.isInteger(accountId) || accountId <= 0) return;
+    const safeMeta =
+      meta && typeof meta === 'object' && 'envSwitchedTo' in meta
+        ? { envSwitchedTo: (meta as { envSwitchedTo?: unknown }).envSwitchedTo }
+        : null;
+    const cleanMeta =
+      safeMeta && (safeMeta.envSwitchedTo === 'PROD' || safeMeta.envSwitchedTo === 'MOCK')
+        ? safeMeta
+        : null;
     for (const target of BrowserWindow.getAllWindows()) {
       if (target.isDestroyed()) continue;
       if (target.webContents.id === event.sender.id) continue;
-      target.webContents.send('appShell:account-changed', accountId);
+      target.webContents.send('appShell:account-changed', accountId, cleanMeta);
     }
   });
 

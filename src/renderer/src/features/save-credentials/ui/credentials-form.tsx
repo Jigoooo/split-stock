@@ -71,8 +71,32 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
             value={env}
             onChange={setEnv}
             dense
+            mockDescription="모의투자 — 가상 자금으로 흐름 점검."
+            prodDescription="⚠ 실전 — 실제 계좌, 주문이 즉시 체결됩니다."
           />
         </div>
+
+        {env === 'PROD' ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className="hts-alert hts-alert--danger"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.6rem 0.8rem',
+              border: '1px solid var(--up)',
+              borderRadius: '0.4rem',
+              background: 'var(--up-soft, rgba(220, 38, 38, 0.08))',
+              color: 'var(--up)',
+              fontWeight: 600,
+            }}
+          >
+            <span aria-hidden>⚠</span>
+            <span>실전(PROD) 자격증명을 저장하려고 합니다 — 저장 후 즉시 활성화됩니다.</span>
+          </div>
+        ) : null}
 
         <Row label="App Key" inputId="credentials-app-key">
           <TextInput
@@ -151,8 +175,10 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
             type="submit"
             variant={env === 'PROD' ? 'danger' : 'primary'}
             disabled={!canSubmit}
+            loading={isPending}
+            loadingText="저장 중…"
           >
-            {isPending ? '저장 중…' : env === 'PROD' ? '실전 자격증명 저장' : '저장하고 접속'}
+            {env === 'PROD' ? '⚠ 실전(PROD) 자격증명 저장' : '저장하고 접속'}
           </Button>
         </div>
       </div>

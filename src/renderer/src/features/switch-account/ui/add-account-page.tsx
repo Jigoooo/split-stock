@@ -42,8 +42,12 @@ export const AddAccountPage = (): ReactElement => {
   const addMutation = trpc.account.add.useMutation({
     // 팝아웃의 query client 는 곧 close 되므로 자체 invalidate 는 의미 없음 — broadcast 만 하고
     // 메인 창의 onAccountChanged 리스너가 자기 query client 를 무효화한다.
+    // envSwitched true 면 메타에 envSwitchedTo 를 실어보내 메인 창이 PROD 전환을 toast 로 강조하게 한다.
     onSuccess: (data) => {
-      window.appShell?.broadcastAccountChanged?.(data.accountId);
+      window.appShell?.broadcastAccountChanged?.(
+        data.accountId,
+        data.envSwitched ? { envSwitchedTo: data.env } : undefined,
+      );
       window.close();
     },
   });
@@ -128,8 +132,32 @@ export const AddAccountPage = (): ReactElement => {
               onChange={setEnv}
               dense
               mockDescription="주문 없이 흐름과 시세 점검."
-              prodDescription="실제 계좌 - 주문이 체결됩니다."
+              prodDescription="⚠ 실전 — 실제 계좌, 주문이 즉시 체결됩니다."
             />
+            {env === 'PROD' ? (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  marginTop: '0.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.6rem 0.8rem',
+                  border: '1px solid var(--up)',
+                  borderRadius: '0.4rem',
+                  background: 'var(--up-soft, rgba(220, 38, 38, 0.08))',
+                  color: 'var(--up)',
+                  fontWeight: 600,
+                }}
+              >
+                <span aria-hidden>⚠</span>
+                <span>
+                  실전(PROD) 계좌입니다 — 첫 계좌라면 추가 즉시 활성화되고 메인 창의 환경도
+                  실전으로 전환됩니다.
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <Row label="App Key" inputId="add-account-app-key">
@@ -226,10 +254,12 @@ export const AddAccountPage = (): ReactElement => {
           <Button
             type="submit"
             variant={env === 'PROD' ? 'danger' : 'primary'}
-            disabled={!canSubmit || addMutation.isPending}
+            disabled={!canSubmit}
+            loading={addMutation.isPending}
+            loadingText="추가 중…"
             dense
           >
-            {addMutation.isPending ? '추가 중…' : env === 'PROD' ? '실전 계좌 추가' : '추가'}
+            {env === 'PROD' ? '⚠ 실전(PROD) 계좌 추가' : '추가'}
           </Button>
         </div>
       </form>

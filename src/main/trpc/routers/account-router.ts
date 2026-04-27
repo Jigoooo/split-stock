@@ -235,22 +235,26 @@ export const accountRouter = router({
         }
       }
       // 첫 계좌면 upsertFromCredentials 가 자동 활성화 — 컨텍스트에 반영.
+      // envSwitched: 메인 창 env 가 input.env 로 강제 전환된 경우 true → 호출측이 다른 창에 toast 로 알림.
+      let envSwitched = false;
       const activeNow = ctx.activeAccounts.getActiveAccountId();
       if (activeNow !== null && ctx.activeAccountId !== activeNow) {
         // 원자 교체 — env/accountId 레이스 방지.
+        const prevEnv = ctx.currentEnv;
         const nextEnv = ctx.currentEnv !== input.env ? input.env : ctx.currentEnv;
         ctx.setEnvAndAccount({ env: nextEnv, accountId: activeNow });
-        if (ctx.currentEnv !== input.env) {
+        if (prevEnv !== input.env) {
           ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, input.env);
+          envSwitched = true;
         }
       }
       ctx.logger.log({
         level: 'INFO',
         category: 'AUTH',
         message: 'account.added',
-        payload: { accountId, env: input.env },
+        payload: { accountId, env: input.env, envSwitched },
       });
-      return { ok: true as const, accountId };
+      return { ok: true as const, accountId, env: input.env, envSwitched };
     }),
 
   /**

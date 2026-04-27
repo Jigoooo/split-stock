@@ -30,12 +30,22 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:stock-assigned', handler);
     return () => ipcRenderer.off('appShell:stock-assigned', handler);
   },
-  /** 계좌 추가/변경을 다른 창에 통지 — 메인 창 등에서 query invalidate + 토스트 트리거. */
-  broadcastAccountChanged: (accountId: number): void => {
-    ipcRenderer.send('appShell:account-changed', accountId);
+  /** 계좌 추가/변경을 다른 창에 통지 — 메인 창 등에서 query invalidate + 토스트 트리거.
+   *  meta.envSwitchedTo 가 있으면 첫 계좌 자동 활성화로 메인 창 환경이 전환됐음을 알림. */
+  broadcastAccountChanged: (
+    accountId: number,
+    meta?: { envSwitchedTo?: 'PROD' | 'MOCK' },
+  ): void => {
+    ipcRenderer.send('appShell:account-changed', accountId, meta ?? null);
   },
-  onAccountChanged: (listener: (accountId: number) => void): (() => void) => {
-    const handler = (_: unknown, accountId: number): void => listener(accountId);
+  onAccountChanged: (
+    listener: (accountId: number, meta?: { envSwitchedTo?: 'PROD' | 'MOCK' } | null) => void,
+  ): (() => void) => {
+    const handler = (
+      _: unknown,
+      accountId: number,
+      meta?: { envSwitchedTo?: 'PROD' | 'MOCK' } | null,
+    ): void => listener(accountId, meta);
     ipcRenderer.on('appShell:account-changed', handler);
     return () => ipcRenderer.off('appShell:account-changed', handler);
   },
@@ -85,8 +95,13 @@ export type AppShellBridge = {
   onPopoutClosed: (listener: (route: string) => void) => () => void;
   assignStock: (pdno: string, name: string) => void;
   onStockAssigned: (listener: (pdno: string, name: string) => void) => () => void;
-  broadcastAccountChanged: (accountId: number) => void;
-  onAccountChanged: (listener: (accountId: number) => void) => () => void;
+  broadcastAccountChanged: (
+    accountId: number,
+    meta?: { envSwitchedTo?: 'PROD' | 'MOCK' },
+  ) => void;
+  onAccountChanged: (
+    listener: (accountId: number, meta?: { envSwitchedTo?: 'PROD' | 'MOCK' } | null) => void,
+  ) => () => void;
   broadcastSettingsChanged: (scope?: string) => void;
   onSettingsChanged: (listener: (scope: string) => void) => () => void;
   onWatchEvent?: (listener: (event: WatchOutcomeEvent) => void) => () => void;

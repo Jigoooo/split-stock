@@ -41,7 +41,7 @@ export const OrderTicketActions = ({
     </Button>
     <Button
       disabled={!canSell}
-      className="hts-btn--down"
+      variant="sell"
       dense
       onClick={() => {
         void submit('SELL');

@@ -90,12 +90,14 @@ export const ProdConfirmModal = (props: ProdConfirmModalProps): ReactElement | n
           </Button>
           <Button
             onClick={handleConfirm}
-            disabled={pending || !gate.canConfirm}
+            disabled={!gate.canConfirm}
+            loading={pending}
+            loadingText="진행 중…"
             variant="danger"
             aria-label={`${confirmText} (실전)`}
             dense
           >
-            {pending ? '진행 중…' : confirmText}
+            {confirmText}
           </Button>
         </div>
       </div>

@@ -1230,6 +1230,90 @@ body {
   color: var(--up);
 }
 
+/* ── loading: 좌측 스피너 + 자동 disabled. 텍스트 옆에 자연스럽게 정렬되며,
+       wait 커서로 진행 중임을 명확히 표시. 스피너 등장/소멸 + 라벨 전환 모두 트랜지션.
+       애니메이션 길이는 CSS 변수로 토큰화 — reduced-motion 미디어쿼리에서 변수만 줄여
+       자연스럽게 비활성. !important 불필요. ── */
+.hts-btn {
+  --btn-spin-duration: 0.7s;
+  --btn-spinner-in-duration: 200ms;
+  --btn-label-in-duration: 180ms;
+  --btn-color-transition-duration: 160ms;
+  /* loading 전환 시 width/색 변화가 자연스럽게 보이도록 — disabled 색 변화도 함께 페이드. */
+  transition:
+    background-color var(--btn-color-transition-duration) ease,
+    border-color var(--btn-color-transition-duration) ease,
+    color var(--btn-color-transition-duration) ease,
+    opacity var(--btn-color-transition-duration) ease,
+    box-shadow var(--btn-color-transition-duration) ease;
+}
+
+.hts-btn--loading {
+  cursor: wait;
+}
+
+.hts-btn__spinner {
+  display: inline-block;
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.45rem;
+  vertical-align: -0.18em;
+  border-radius: 50%;
+  border: 0.15em solid currentColor;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  /* spin 회전 + 첫 등장 시 fade-in/scale-in 동시 트리거. */
+  animation:
+    hts-btn-spin var(--btn-spin-duration) linear infinite,
+    hts-btn-spinner-in var(--btn-spinner-in-duration) ease both;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.hts-btn--icon-only .hts-btn__spinner {
+  margin-right: 0;
+}
+
+@keyframes hts-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hts-btn-spinner-in {
+  from {
+    opacity: 0;
+    transform: rotate(0deg) scale(0.55);
+  }
+  to {
+    opacity: 0.85;
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+/* 라벨 전환(loadingText ↔ children) 도 짧은 페이드로 자연스럽게. */
+.hts-btn > :not(.hts-btn__spinner):not(.sr-only) {
+  animation: hts-btn-label-in var(--btn-label-in-duration) ease both;
+}
+
+@keyframes hts-btn-label-in {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hts-btn {
+    --btn-spin-duration: 1.6s;
+    --btn-spinner-in-duration: 0.01ms;
+    --btn-label-in-duration: 0.01ms;
+    --btn-color-transition-duration: 0.01ms;
+  }
+}
+
 .hts-segmented {
   display: inline-flex;
   gap: 0.25rem;

@@ -40,6 +40,11 @@ export const AccountSelector = ({
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // 삭제 다이얼로그가 닫힐 때 포커스를 되돌릴 원래 트리거(휴지통 버튼) 보관 — 키보드 사용자 위치 복구.
+  const lastDeleteTriggerRef = useRef<HTMLElement | null>(null);
+  // 스크린리더용 aria-live 영역 메시지 — 삭제 결과/순서변경 등 비동기 결과 공지.
+  const [liveMessage, setLiveMessage] = useState<string>('');
 
   const deleteMutation = trpc.account.delete.useMutation({
     // fire-and-forget: await 하면 모든 query refetch 가 끝날 때까지 deleteMutation.isPending
@@ -47,10 +52,25 @@ export const AccountSelector = ({
     onSuccess: (data, variables) => {
       void qc.invalidateQueries();
       window.appShell?.broadcastAccountChanged?.(variables.accountId);
-      toast.success(data.loggedOut ? '계좌 삭제 — 로그아웃되었습니다' : '계좌가 삭제되었습니다');
+      const msg = data.loggedOut ? '계좌 삭제 — 로그아웃되었습니다' : '계좌가 삭제되었습니다';
+      toast.success(msg);
+      setLiveMessage(msg);
+      // 삭제된 행의 휴지통 버튼은 이미 사라졌으므로 셀렉터 트리거로 포커스 복구.
+      requestAnimationFrame(() => {
+        triggerRef.current?.focus();
+        lastDeleteTriggerRef.current = null;
+      });
     },
     onError: (err) => {
       toast.error(`삭제 실패: ${err.message}`);
+      setLiveMessage(`삭제 실패: ${err.message}`);
+      // 실패 시에는 원래 휴지통 버튼이 살아있으므로 그쪽으로 복구.
+      requestAnimationFrame(() => {
+        const target = lastDeleteTriggerRef.current;
+        if (target && document.contains(target)) target.focus();
+        else triggerRef.current?.focus();
+        lastDeleteTriggerRef.current = null;
+      });
     },
   });
 
@@ -83,12 +103,21 @@ export const AccountSelector = ({
 
   // 팝아웃의 tRPC client 와 메인 창 client 는 별도 인스턴스 → invalidate 전파 안 됨.
   // add-account 팝아웃이 `broadcastAccountChanged` 로 성공을 통지하면 메인이 갱신 + 토스트.
+  // meta.envSwitchedTo 가 PROD 면 첫 계좌 자동 활성화로 메인 환경이 실전으로 전환됐음을 강조 toast.
   useEffect(() => {
     const shell = window.appShell;
     if (!shell) return;
-    return shell.onAccountChanged(() => {
+    return shell.onAccountChanged((_accountId, meta) => {
       void qc.invalidateQueries();
-      toast.success('계좌가 추가되었습니다');
+      if (meta?.envSwitchedTo === 'PROD') {
+        toast.warning('⚠ 실전(PROD) 환경으로 전환되었습니다 — 모든 주문은 실제로 체결됩니다.', {
+          duration: 8000,
+        });
+      } else if (meta?.envSwitchedTo === 'MOCK') {
+        toast.info('모의투자(MOCK) 환경으로 전환되었습니다.');
+      } else {
+        toast.success('계좌가 추가되었습니다');
+      }
     });
   }, [qc]);
 
@@ -150,6 +179,12 @@ export const AccountSelector = ({
         ? `${formatAccountLabel(row)} — 유일한 계좌입니다. 삭제하면 자동 로그아웃되고 자격증명도 제거됩니다. 계속할까요?`
         : `${formatAccountLabel(row)} — 활성 계좌입니다. 삭제 시 다른 계좌로 자동 전환됩니다. 계속할까요?`
       : `${formatAccountLabel(row)} — 이 계좌와 자격증명을 삭제할까요?`;
+    // 다이얼로그 진입 시점의 활성 element 를 보관 → 취소/실패 시 그 위치로 포커스 복귀.
+    const activeAtOpen =
+      typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    lastDeleteTriggerRef.current = activeAtOpen;
     void (async () => {
       const confirmed = await alertDialog.confirm({
         title: '계좌 삭제',
@@ -157,7 +192,15 @@ export const AccountSelector = ({
         confirmText: '삭제',
         cancelText: '취소',
       });
-      if (!confirmed) return;
+      if (!confirmed) {
+        // 취소 시 원래 휴지통 버튼으로 포커스 복구 (키보드 사용자 흐름 보존).
+        requestAnimationFrame(() => {
+          const target = lastDeleteTriggerRef.current;
+          if (target && document.contains(target)) target.focus();
+          lastDeleteTriggerRef.current = null;
+        });
+        return;
+      }
       deleteMutation.mutate({ accountId: row.id });
     })();
   };
@@ -166,7 +209,26 @@ export const AccountSelector = ({
 
   return (
     <div ref={rootRef} style={{ position: 'relative', display: 'inline-flex', gap: '0.4rem' }}>
+      {/* 비동기 결과(삭제 등) 공지 — 시각 사용자에게는 보이지 않고 스크린리더에만 전달. */}
+      <span
+        aria-live="polite"
+        aria-atomic="true"
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0,0,0,0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      >
+        {liveMessage}
+      </span>
       <Button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         disabled={switching}
@@ -268,8 +330,14 @@ const RenameAccountModal = ({
           <Button onClick={onCancel} disabled={pending} dense>
             취소
           </Button>
-          <Button onClick={() => onConfirm(name.trim())} disabled={pending} variant="primary" dense>
-            {pending ? '저장 중…' : '저장'}
+          <Button
+            onClick={() => onConfirm(name.trim())}
+            loading={pending}
+            loadingText="저장 중…"
+            variant="primary"
+            dense
+          >
+            저장
           </Button>
         </div>
       </div>
