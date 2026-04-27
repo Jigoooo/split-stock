@@ -95,6 +95,31 @@ export const lotsRouter = router({
     }),
 
   /**
+   * (accountId, pdno) 의 현재 OPEN 차수 — working view 용.
+   *
+   * snapshot 과 달리 lotId 포함하여 EditLotsGrid 같은 행 단위 mutation UI 가
+   * 정확한 row 를 수정/이동/삭제할 수 있도록 보장.
+   */
+  listOpen: authedProcedure
+    .input(
+      z.object({
+        accountId: z.number().int().positive(),
+        pdno: z.string().regex(/^\d{6}$/, '종목코드는 6자리 숫자'),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const accountId = requireAccountId(input);
+      const result = ctx.lotsRepo.listOpenLots(accountId, input.pdno);
+      if (result.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `OPEN 차수 조회 실패: ${lotsRepoErrorMessage(result.error)}`,
+        });
+      }
+      return { lots: result.value };
+    }),
+
+  /**
    * 스냅샷이 존재하는 날짜 목록 조회 (최신순).
    */
   listSnapshotDates: publicProcedure

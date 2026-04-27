@@ -369,6 +369,33 @@ export class LotsRepo {
   }
 
   /**
+   * (accountId, pdno) 의 현재 OPEN 상태 차수 목록 — working view 용.
+   *
+   * snapshot 과 달리 실제 lots 테이블에서 직접 조회하므로 lotId 포함.
+   * EditLotsGrid 같은 행 단위 mutation UI 의 데이터 소스로 사용.
+   * lotId 정합성 보장 — 행 액션이 정확한 row 를 변경.
+   */
+  listOpenLots(accountId: number, pdno: string): Result<LotRow[], LotsRepoError> {
+    try {
+      const rows = this.db
+        .select()
+        .from(lotsTable)
+        .where(
+          and(
+            eq(lotsTable.accountId, accountId),
+            eq(lotsTable.pdno, pdno),
+            eq(lotsTable.status, 'OPEN'),
+          ),
+        )
+        .orderBy(asc(lotsTable.nth))
+        .all();
+      return ok(rows.map((r) => this.toLotRow(r)));
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
    * 스냅샷이 존재하는 날짜 목록 조회 (최신순).
    */
   listSnapshotDates(accountId: number): Result<string[], LotsRepoError> {
