@@ -7,13 +7,13 @@ import { usePhraseGate } from '../model/use-phrase-gate';
 
 export interface ProdConfirmModalProps {
   open: boolean;
-  pending?: boolean;
+  pending?: boolean | undefined;
   /** 모달 헤더 텍스트. 기본: '실전(PROD) 진행 확인'. */
-  title?: string;
+  title?: string | undefined;
   /** 추가 안내. 기본 안내문 위에 prepend. */
-  message?: ReactNode;
+  message?: ReactNode | undefined;
   /** confirm 버튼 라벨. 기본: '실전 진행'. */
-  confirmText?: string;
+  confirmText?: string | undefined;
   onConfirm: () => void;
   onCancel: () => void;
 }
