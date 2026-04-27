@@ -1781,11 +1781,17 @@ body {
 }
 
 .add-account-page {
-  --add-account-control-width: 36rem;
+  --add-account-control-width: 100%;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
   background: var(--bg);
+}
+
+/* 계좌 추가 팝아웃 내 모든 fieldset 라벨/입력 폰트 상향 — 기존 1rem → 1.15rem 으로 가독성 보강. */
+.add-account-page label > span:first-child,
+.add-account-page .form-section__title {
+  font-size: 1.15rem;
 }
 
 .add-account-page__form {
@@ -1818,37 +1824,19 @@ body {
 .add-account-page .hts-input,
 .add-account-page .hts-select,
 .add-account-page .hts-choice__label {
-  font-size: 1.4rem;
-}
-
-.add-account-page .hts-input,
-.add-account-page .hts-select,
-.add-account-page .hts-input.hts-input--dense,
-.add-account-page .hts-select.hts-select--dense {
-  min-height: 3.8rem;
-}
-
-.add-account-page .hts-input.hts-input--dense {
-  padding: 0.65rem 0.85rem;
-}
-
-.add-account-page .hts-select.hts-select--dense {
-  padding: 0.55rem 0.55rem 0.55rem 0.85rem;
-}
-
-.add-account-page .hts-select.hts-select--dense .hts-select__icon {
-  width: 2rem;
-  height: 2rem;
+  /* 기존 1.4rem 은 input min-height 1.4rem 강제와 합쳐 극단적으로 키가 컸음 — 1.05rem 로 정상화. */
+  font-size: 1.05rem;
 }
 
 .add-account-page .hts-choice__description {
-  font-size: 1.15rem;
+  font-size: 0.95rem;
 }
 
 .add-account-page .hts-choice-group {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  width: min(var(--add-account-control-width), 100%);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.5rem;
+  width: 100%;
 }
 
 .add-account-page .hts-choice {
@@ -2556,11 +2544,11 @@ body {
   border-top: 1px solid var(--border);
 }
 
-/* 자격증명 / 계좌정보 두 fieldset 을 좌우 배치. ≥720px 자동 2열, 그 미만 단일. */
+/* 자격증명 / 계좌정보 등 두 fieldset 을 좌우 배치. ≥640px 자동 2열, 그 미만 단일. */
 .form-grid-2col {
   display: grid;
   gap: 0.85rem;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 /* 폼 상단 sticky 에러 alert — 에러 발생 시 입력 위치 위에서 즉시 보임. */

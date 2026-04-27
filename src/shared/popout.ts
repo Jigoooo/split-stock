@@ -60,12 +60,12 @@ export const POPOUT_ROUTE_CONFIG = {
   'add-account': {
     label: '계좌 추가',
     title: 'Split Stock · 계좌 추가',
-    // Stage 5b: 증권사 선택 카드 row 가 추가되어 세로 100px+ 가량 확장.
-    // 카드 두 개를 가로 배치하기 위해 width 도 약간 넓힘.
-    defaultWidth: 460,
-    defaultHeight: 560,
-    minWidth: 420,
-    minHeight: 520,
+    // 단계형 흐름(증권사·환경·자격증명·계좌·별칭) + 자격증명/계좌정보 grid 2열 배치 위해
+    // 최소 폭을 700px+ 로 상향. 높이도 sticky header/footer + 5개 섹션 수용 위해 760 기본.
+    defaultWidth: 820,
+    defaultHeight: 760,
+    minWidth: 700,
+    minHeight: 620,
   },
   'add-watch-order': {
     label: '자동감시 추가',

@@ -191,40 +191,42 @@ export const AddAccountPage = (): ReactElement => {
             </div>
           ) : null}
 
-          {/* ① 증권사 */}
-          <FormSection number={1} title="증권사 선택">
-            <RadioGroup<BrokerId>
-              name="add-account-broker"
-              ariaLabel="증권사 선택"
-              value={broker}
-              onChange={setBroker}
-              items={[
-                {
-                  value: 'KIS',
-                  label: <BrokerLabel code="KIS" name="한국투자증권" bg="#003c7c" />,
-                  description: '국내 / 해외 / 모의 / 실전',
-                },
-                {
-                  value: 'KIWOOM',
-                  label: <BrokerLabel code="KW" name="키움증권" bg="#ff5e00" />,
-                  description: '국내 / 모의 / 실전 (NXT·SOR 전용)',
-                },
-              ]}
-            />
-          </FormSection>
+          {/* ① 증권사 + ② 환경 — 같은 위계의 결정 항목이므로 grid 2열 묶음 */}
+          <div className="form-grid-2col">
+            <FormSection number={1} title="증권사 선택">
+              <RadioGroup<BrokerId>
+                name="add-account-broker"
+                ariaLabel="증권사 선택"
+                value={broker}
+                onChange={setBroker}
+                items={[
+                  {
+                    value: 'KIS',
+                    label: <BrokerLabel code="KIS" name="한국투자증권" bg="#003c7c" />,
+                    description: '국내 / 해외 / 모의 / 실전',
+                  },
+                  {
+                    value: 'KIWOOM',
+                    label: <BrokerLabel code="KW" name="키움증권" bg="#ff5e00" />,
+                    description: '국내 / 모의 / 실전 (NXT·SOR 전용)',
+                  },
+                ]}
+              />
+            </FormSection>
 
-          {/* ② 환경 — PROD 면 fieldset 자체를 danger tone */}
-          <FormSection number={2} title="환경" tone={isProd ? 'danger' : 'default'}>
-            <EnvironmentRadioGroup
-              name="add-account-env"
-              ariaLabel="추가 계좌 환경"
-              value={env}
-              onChange={setEnv}
-              dense
-              mockDescription="주문 없이 흐름과 시세 점검."
-              prodDescription="⚠ 실전 — 실제 계좌, 주문이 즉시 체결됩니다."
-            />
-          </FormSection>
+            {/* ② 환경 — PROD 면 fieldset 자체를 danger tone */}
+            <FormSection number={2} title="환경" tone={isProd ? 'danger' : 'default'}>
+              <EnvironmentRadioGroup
+                name="add-account-env"
+                ariaLabel="추가 계좌 환경"
+                value={env}
+                onChange={setEnv}
+                dense
+                mockDescription="주문 없이 흐름과 시세 점검."
+                prodDescription="⚠ 실전 — 실제 계좌, 주문이 즉시 체결됩니다."
+              />
+            </FormSection>
+          </div>
 
           {/* ③/④ 자격증명 + 계좌정보 — 넓은 창 2열, 좁은 창 단일 */}
           <div className="form-grid-2col">
