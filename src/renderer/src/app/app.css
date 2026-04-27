@@ -109,6 +109,19 @@
   --status-connected: #10b981;
   --status-stale: #eab308;
   --status-disconnected: #dc2626;
+
+  /* Success / Info — Dialog/Toast 시각 계층 일관화 (warning/error 와 짝). */
+  --success: #16a34a;
+  --success-soft: rgba(22, 163, 74, 0.12);
+  --info: var(--accent);
+  --info-soft: var(--accent-tint-12);
+
+  /* 차수별 마커 색 — 1차=상승, 2~3차 보강, 4~5차 fade-out. lot-nth-bar-chart / 차트 마커가 공유. */
+  --lot-nth-1: #dc2626;
+  --lot-nth-2: #ea580c;
+  --lot-nth-3: #ca8a04;
+  --lot-nth-4: #0d9488;
+  --lot-nth-5: #2563eb;
 }
 
 html {
@@ -1312,6 +1325,27 @@ body {
 .hts-btn--danger:hover {
   background: var(--up-hover);
   border-color: var(--up-hover);
+}
+
+/* ── destructive: 자격증명 삭제·전체 초기화 등 되돌릴 수 없는 작업 전용.
+       danger 보다 한 단계 강한 위계 — 진한 빨강 + 외곽 ring 으로 즉각 인지. ── */
+.hts-btn--destructive {
+  background: var(--up-hover);
+  color: #fff;
+  border-color: var(--up-hover);
+  box-shadow: 0 0 0 0.15rem var(--up-soft);
+  font-weight: 700;
+}
+
+.hts-btn--destructive:hover:not(:disabled) {
+  background: #991b1b;
+  border-color: #991b1b;
+  box-shadow: 0 0 0 0.25rem var(--up-soft);
+}
+
+.hts-btn--destructive:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 0.25rem var(--up-soft);
 }
 
 .hts-btn--down {

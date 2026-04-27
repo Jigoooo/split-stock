@@ -93,7 +93,7 @@ export const ProdConfirmModal = (props: ProdConfirmModalProps): ReactElement | n
             disabled={!gate.canConfirm}
             loading={pending}
             loadingText="진행 중…"
-            variant="danger"
+            variant="destructive"
             aria-label={`${confirmText} (실전)`}
             dense
           >

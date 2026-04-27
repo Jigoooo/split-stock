@@ -18,7 +18,7 @@ import { PriceCorrectionForm } from '@renderer/features/price-correction-setting
 import { trpc } from '@renderer/shared/api/trpc';
 import { ErrorBoundary, type HtsTabItem, HtsTabs, OverlayScrollbar } from '@renderer/shared/ui';
 import type { ReactElement, ReactNode } from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { CredentialsSettingsPanel } from './credentials-settings-panel';
 
@@ -72,6 +72,38 @@ export const SettingsPage = (): ReactElement => {
   const [topTab, setTopTab] = useState<SettingsTopTab>(readInitialTab);
   const [strategyTab, setStrategyTab] = useState<ExtendedStrategyTab>('basic');
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // 탭별 스크롤 위치 보존 — 사용자가 긴 패널을 읽다가 다른 탭 갔다 돌아왔을 때
+  // 매번 최상단으로 리셋되는 문제(P2-Settings) 해결.
+  // strategy 안의 sub-tab(strategyTab) 도 키에 포함해 세분화.
+  const tabKey = topTab === 'strategy' ? `${topTab}:${strategyTab}` : topTab;
+  const scrollPositionsRef = useRef<Map<string, number>>(new Map());
+  const prevTabKeyRef = useRef<string>(tabKey);
+
+  // 탭 전환 직전(=현재 탭의 마지막 위치)을 보관, 새 탭 마운트 후 저장된 위치 복원.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const prev = prevTabKeyRef.current;
+    if (prev !== tabKey) {
+      scrollPositionsRef.current.set(prev, el.scrollTop);
+      const restored = scrollPositionsRef.current.get(tabKey) ?? 0;
+      el.scrollTop = restored;
+      prevTabKeyRef.current = tabKey;
+    }
+  }, [tabKey]);
+
+  // 사용자 스크롤 변경을 추적해 현재 탭 키에 즉시 기록 — 다음 탭 전환 시 정확한 복원 보장.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = (): void => {
+      scrollPositionsRef.current.set(tabKey, el.scrollTop);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+    };
+  }, [tabKey]);
 
   return (
     // 탭은 상단 고정, 컨텐츠만 스크롤. height:100% + minHeight:0 패턴으로 컨테이너의 가용 높이를 채운다.

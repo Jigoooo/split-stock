@@ -139,7 +139,7 @@ function PhraseDeleteModal({
             disabled={!matched}
             loading={pending}
             loadingText="삭제 중…"
-            variant="danger"
+            variant="destructive"
             dense
           >
             {confirmText}
