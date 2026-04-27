@@ -1,5 +1,5 @@
 import { Button } from '@renderer/shared/ui';
-import { Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 
 export interface AccountRow {
@@ -14,9 +14,11 @@ interface Props {
   accounts: AccountRow[];
   switching: boolean;
   deletePending: boolean;
+  renamePending: boolean;
   hideAddAccount: boolean;
   onPick: (id: number) => void;
   onDelete: (row: AccountRow) => void;
+  onRename: (row: AccountRow) => void;
   onAddAccount: () => void;
 }
 
@@ -29,9 +31,11 @@ export const AccountSelectorList = ({
   accounts,
   switching,
   deletePending,
+  renamePending,
   hideAddAccount,
   onPick,
   onDelete,
+  onRename,
   onAddAccount,
 }: Props): ReactElement => {
   return (
@@ -90,6 +94,26 @@ export const AccountSelectorList = ({
                 (현재)
               </span>
             ) : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => onRename(a)}
+            disabled={renamePending}
+            aria-label={`${formatAccountLabel(a)} 별칭 편집`}
+            title="별칭 편집"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0.3rem',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer',
+              color: 'var(--fg-2, #888)',
+            }}
+          >
+            <Pencil size={14} />
           </button>
           <button
             type="button"

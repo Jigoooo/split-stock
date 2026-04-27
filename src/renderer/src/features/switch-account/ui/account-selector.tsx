@@ -1,5 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button } from '@renderer/shared/ui';
+import { Button, TextInput } from '@renderer/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -53,6 +53,19 @@ export const AccountSelector = ({
       toast.error(`삭제 실패: ${err.message}`);
     },
   });
+
+  const renameMutation = trpc.account.rename.useMutation({
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries();
+      window.appShell?.broadcastAccountChanged?.(variables.accountId);
+      toast.success('별칭이 변경되었습니다');
+    },
+    onError: (err) => {
+      toast.error(`별칭 변경 실패: ${err.message}`);
+    },
+  });
+
+  const [renameTarget, setRenameTarget] = useState<AccountRow | null>(null);
 
   const onAddAccount = (): void => {
     setOpen(false);
@@ -156,11 +169,16 @@ export const AccountSelector = ({
           accounts={all}
           switching={switching}
           deletePending={deleteMutation.isPending}
+          renamePending={renameMutation.isPending}
           hideAddAccount={hideAddAccount}
           onPick={(id) => {
             void onPick(id);
           }}
           onDelete={onDelete}
+          onRename={(row) => {
+            setOpen(false);
+            setRenameTarget(row);
+          }}
           onAddAccount={onAddAccount}
         />
       ) : null}
@@ -170,6 +188,71 @@ export const AccountSelector = ({
           {switchError.message}
         </span>
       ) : null}
+
+      {renameTarget ? (
+        <RenameAccountModal
+          row={renameTarget}
+          pending={renameMutation.isPending}
+          onConfirm={(displayName) => {
+            renameMutation.mutate(
+              {
+                accountId: renameTarget.id,
+                displayName: displayName.length > 0 ? displayName : null,
+              },
+              { onSettled: () => setRenameTarget(null) },
+            );
+          }}
+          onCancel={() => setRenameTarget(null)}
+        />
+      ) : null}
+    </div>
+  );
+};
+
+const RenameAccountModal = ({
+  row,
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  row: AccountRow;
+  pending: boolean;
+  onConfirm: (displayName: string) => void;
+  onCancel: () => void;
+}): ReactElement => {
+  const [name, setName] = useState(row.displayName ?? '');
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="계좌 별칭 편집">
+      <div className="modal panel">
+        <div className="panel__title">계좌 별칭 편집</div>
+        <div className="panel__body" style={{ display: 'grid', gap: '0.6rem' }}>
+          <div className="muted">{formatAccountLabel(row)}</div>
+          <label htmlFor="rename-display-name" style={{ display: 'grid', gap: '0.3rem' }}>
+            <span className="muted">별칭 (비우면 자동 라벨)</span>
+            <TextInput
+              id="rename-display-name"
+              value={name}
+              onChange={(e) => setName(e.target.value.slice(0, 20))}
+              placeholder="예: 메인 KIS 실전"
+              maxLength={20}
+              autoComplete="off"
+              spellCheck={false}
+              dense
+            />
+          </label>
+        </div>
+        <div
+          className="panel__body"
+          style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}
+        >
+          <Button onClick={onCancel} disabled={pending} dense>
+            취소
+          </Button>
+          <Button onClick={() => onConfirm(name.trim())} disabled={pending} variant="primary" dense>
+            {pending ? '저장 중…' : '저장'}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 };

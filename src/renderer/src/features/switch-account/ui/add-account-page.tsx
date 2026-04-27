@@ -26,6 +26,7 @@ import { type ReactElement, useState } from 'react';
 export const AddAccountPage = (): ReactElement => {
   const [broker, setBroker] = useState<BrokerId>('KIS');
   const [env, setEnv] = useState<AppEnv>('MOCK');
+  const [displayName, setDisplayName] = useState('');
   const [appKey, setAppKey] = useState('');
   const [appSecret, setAppSecret] = useState('');
   const [accountNo8, setAccountNo8] = useState('');
@@ -34,7 +35,9 @@ export const AddAccountPage = (): ReactElement => {
   );
   /** Kiwoom 계좌번호 10자리 — accountNo8(앞 8) + accountProdCd(뒤 2) 로 합쳐 저장. */
   const [kiwoomAccountNo, setKiwoomAccountNo] = useState('');
-  const [pendingProdValue, setPendingProdValue] = useState<Credentials | null>(null);
+  const [pendingProdValue, setPendingProdValue] = useState<
+    (Credentials & { displayName?: string }) | null
+  >(null);
 
   const addMutation = trpc.account.add.useMutation({
     // 팝아웃의 query client 는 곧 close 되므로 자체 invalidate 는 의미 없음 — broadcast 만 하고
@@ -54,13 +57,15 @@ export const AddAccountPage = (): ReactElement => {
     e.preventDefault();
     const acntNo8 = broker === 'KIS' ? accountNo8 : kiwoomAccountNo.slice(0, 8);
     const acntProdCd: AccountProdCode = broker === 'KIS' ? accountProdCd : '01';
-    const value: Credentials = {
+    const trimmedName = displayName.trim();
+    const value: Credentials & { displayName?: string } = {
       env,
       broker,
       appKey,
       appSecret,
       accountNo8: acntNo8,
       accountProdCd: acntProdCd,
+      ...(trimmedName.length > 0 ? { displayName: trimmedName } : {}),
     };
     if (value.env === 'PROD') {
       setPendingProdValue(value);
@@ -99,6 +104,20 @@ export const AddAccountPage = (): ReactElement => {
               ]}
             />
           </div>
+
+          <Row label="별칭 (선택)" inputId="add-account-display-name">
+            <TextInput
+              id="add-account-display-name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value.slice(0, 20))}
+              placeholder="예: 메인 KIS 실전"
+              maxLength={20}
+              autoComplete="off"
+              spellCheck={false}
+              dense
+              className="add-account-page__control"
+            />
+          </Row>
 
           <div className="add-account-page__field">
             <span className="add-account-page__label">환경</span>

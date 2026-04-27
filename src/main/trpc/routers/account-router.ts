@@ -191,45 +191,66 @@ export const accountRouter = router({
   /**
    * 신규 계좌 추가 — 자격증명 저장 + accounts upsert 를 한 번에.
    * `auth.setCredentials` 와 동등한 흐름. 활성 계좌는 변경하지 않는다 (UX 일관성).
+   *
+   * displayName 은 선택. 비어 있으면 client 의 formatAccountLabel 이
+   * `[BROKER] ENV · last4` 자동 라벨 fallback 처리.
    */
-  add: publicProcedure.input(CredentialsSchema).mutation(({ ctx, input }) => {
-    const accountResult = ctx.activeAccounts.upsertFromCredentials({
-      env: input.env,
-      accountNo8: input.accountNo8,
-      accountProdCd: input.accountProdCd,
-    });
-    if (accountResult.isErr()) {
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: `계좌 등록 실패: ${accountResult.error.kind}`,
+  add: publicProcedure
+    .input(
+      CredentialsSchema.extend({
+        displayName: z.string().trim().min(1).max(20).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const accountResult = ctx.activeAccounts.upsertFromCredentials({
+        env: input.env,
+        accountNo8: input.accountNo8,
+        accountProdCd: input.accountProdCd,
       });
-    }
-    const accountId = accountResult.value;
-    const r = ctx.credentialsRepo.saveCredentials(accountId, input);
-    if (r.isErr()) {
-      throw new TRPCError({
-        code: r.error.kind === 'VALIDATION' ? 'BAD_REQUEST' : 'INTERNAL_SERVER_ERROR',
-        message: `자격증명 저장 실패: ${r.error.kind}`,
-      });
-    }
-    // 첫 계좌면 upsertFromCredentials 가 자동 활성화 — 컨텍스트에 반영.
-    const activeNow = ctx.activeAccounts.getActiveAccountId();
-    if (activeNow !== null && ctx.activeAccountId !== activeNow) {
-      // 원자 교체 — env/accountId 레이스 방지.
-      const nextEnv = ctx.currentEnv !== input.env ? input.env : ctx.currentEnv;
-      ctx.setEnvAndAccount({ env: nextEnv, accountId: activeNow });
-      if (ctx.currentEnv !== input.env) {
-        ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, input.env);
+      if (accountResult.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `계좌 등록 실패: ${accountResult.error.kind}`,
+        });
       }
-    }
-    ctx.logger.log({
-      level: 'INFO',
-      category: 'AUTH',
-      message: 'account.added',
-      payload: { accountId, env: input.env },
-    });
-    return { ok: true as const, accountId };
-  }),
+      const accountId = accountResult.value;
+      const r = ctx.credentialsRepo.saveCredentials(accountId, input);
+      if (r.isErr()) {
+        throw new TRPCError({
+          code: r.error.kind === 'VALIDATION' ? 'BAD_REQUEST' : 'INTERNAL_SERVER_ERROR',
+          message: `자격증명 저장 실패: ${r.error.kind}`,
+        });
+      }
+      if (input.displayName !== undefined && input.displayName.length > 0) {
+        const renameResult = ctx.activeAccounts.rename(accountId, input.displayName);
+        if (renameResult.isErr()) {
+          // rename 실패는 등록 자체를 막지 않음 — 사용자가 나중에 인라인 편집으로 재시도 가능.
+          ctx.logger.log({
+            level: 'WARN',
+            category: 'AUTH',
+            message: 'account.rename.failed',
+            payload: { accountId, displayName: input.displayName },
+          });
+        }
+      }
+      // 첫 계좌면 upsertFromCredentials 가 자동 활성화 — 컨텍스트에 반영.
+      const activeNow = ctx.activeAccounts.getActiveAccountId();
+      if (activeNow !== null && ctx.activeAccountId !== activeNow) {
+        // 원자 교체 — env/accountId 레이스 방지.
+        const nextEnv = ctx.currentEnv !== input.env ? input.env : ctx.currentEnv;
+        ctx.setEnvAndAccount({ env: nextEnv, accountId: activeNow });
+        if (ctx.currentEnv !== input.env) {
+          ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, input.env);
+        }
+      }
+      ctx.logger.log({
+        level: 'INFO',
+        category: 'AUTH',
+        message: 'account.added',
+        payload: { accountId, env: input.env },
+      });
+      return { ok: true as const, accountId };
+    }),
 
   /**
    * 표시 이름 변경 — UI 라벨용 displayName.
