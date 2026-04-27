@@ -45,6 +45,13 @@ export {
   pushOverlayHistoryState,
   useOverlayStackStore,
 } from './overlay-stack';
+export {
+  type PhraseGateState,
+  PROD_CONFIRM_PHRASE,
+  ProdConfirmModal,
+  type ProdConfirmModalProps,
+  usePhraseGate,
+} from './prod-confirm-modal';
 export type { RadioGroupItem, RadioGroupProps } from './radio-group';
 export { RadioGroup } from './radio-group';
 export type { SegmentedToggleProps } from './segmented-toggle';
