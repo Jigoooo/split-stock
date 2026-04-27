@@ -1,10 +1,29 @@
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@renderer/shared/ui';
-import { Pencil, Trash2 } from 'lucide-react';
-import type { ReactElement } from 'react';
+import type { BrokerId } from '@shared/contracts';
+import { GripVertical, Pencil, Trash2 } from 'lucide-react';
+import type { CSSProperties, ReactElement } from 'react';
 
 export interface AccountRow {
   id: number;
   env: 'MOCK' | 'PROD';
+  broker: BrokerId;
   accountNo8: string;
   displayName: string | null;
   isActive: boolean;
@@ -15,10 +34,12 @@ interface Props {
   switching: boolean;
   deletePending: boolean;
   renamePending: boolean;
+  reorderPending: boolean;
   hideAddAccount: boolean;
   onPick: (id: number) => void;
   onDelete: (row: AccountRow) => void;
   onRename: (row: AccountRow) => void;
+  onReorder: (orderedIds: number[]) => void;
   onAddAccount: () => void;
 }
 
@@ -32,12 +53,31 @@ export const AccountSelectorList = ({
   switching,
   deletePending,
   renamePending,
+  reorderPending,
   hideAddAccount,
   onPick,
   onDelete,
   onRename,
+  onReorder,
   onAddAccount,
 }: Props): ReactElement => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent): void => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = accounts.findIndex((a) => a.id === active.id);
+    const newIndex = accounts.findIndex((a) => a.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const reordered = arrayMove(accounts, oldIndex, newIndex);
+    onReorder(reordered.map((a) => a.id));
+  };
+
+  const ids = accounts.map((a) => a.id);
+
   return (
     <div
       role="listbox"
@@ -56,87 +96,23 @@ export const AccountSelectorList = ({
         boxShadow: '0 8px 28px rgba(0, 0, 0, 0.25)',
       }}
     >
-      {accounts.map((a) => (
-        <div
-          key={a.id}
-          className="account-selector__item"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.3rem 0.35rem 0.3rem 0.6rem',
-            borderRadius: 4,
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => onPick(a.id)}
-            disabled={switching || a.isActive}
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.15rem 0',
-              background: 'transparent',
-              border: 'none',
-              cursor: a.isActive ? 'default' : 'pointer',
-              textAlign: 'left',
-              font: 'inherit',
-              color: 'inherit',
-              fontWeight: a.isActive ? 600 : 400,
-            }}
-          >
-            <EnvDot env={a.env} />
-            <span>{formatAccountLabel(a)}</span>
-            {a.isActive ? (
-              <span className="muted" style={{ fontSize: '1rem' }}>
-                (현재)
-              </span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            onClick={() => onRename(a)}
-            disabled={renamePending}
-            aria-label={`${formatAccountLabel(a)} 별칭 편집`}
-            title="별칭 편집"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0.3rem',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              color: 'var(--fg-2, #888)',
-            }}
-          >
-            <Pencil size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(a)}
-            disabled={deletePending}
-            aria-label={`${formatAccountLabel(a)} 계좌 삭제`}
-            title="계좌 삭제"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0.3rem',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              color: 'var(--fg-2, #888)',
-            }}
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-      ))}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {accounts.map((a) => (
+            <SortableAccountItem
+              key={a.id}
+              account={a}
+              switching={switching}
+              deletePending={deletePending}
+              renamePending={renamePending}
+              reorderPending={reorderPending}
+              onPick={onPick}
+              onDelete={onDelete}
+              onRename={onRename}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
       {hideAddAccount ? null : (
         <>
           <div aria-hidden style={{ height: 1, background: 'var(--border)', margin: '0.3rem 0' }} />
@@ -149,10 +125,140 @@ export const AccountSelectorList = ({
   );
 };
 
+interface SortableAccountItemProps {
+  account: AccountRow;
+  switching: boolean;
+  deletePending: boolean;
+  renamePending: boolean;
+  reorderPending: boolean;
+  onPick: (id: number) => void;
+  onDelete: (row: AccountRow) => void;
+  onRename: (row: AccountRow) => void;
+}
+
+const SortableAccountItem = ({
+  account: a,
+  switching,
+  deletePending,
+  renamePending,
+  reorderPending,
+  onPick,
+  onDelete,
+  onRename,
+}: SortableAccountItemProps): ReactElement => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: a.id,
+  });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    padding: '0.3rem 0.35rem 0.3rem 0.2rem',
+    borderRadius: 4,
+  };
+  return (
+    <div ref={setNodeRef} className="account-selector__item" style={style}>
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        disabled={reorderPending}
+        aria-label={`${formatAccountLabel(a)} 순서 변경`}
+        title="드래그로 순서 변경"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0.3rem',
+          background: 'transparent',
+          border: 'none',
+          borderRadius: 4,
+          cursor: 'grab',
+          color: 'var(--fg-2, #888)',
+          touchAction: 'none',
+        }}
+      >
+        <GripVertical size={14} />
+      </button>
+      <button
+        type="button"
+        onClick={() => onPick(a.id)}
+        disabled={switching || a.isActive}
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          padding: '0.15rem 0',
+          background: 'transparent',
+          border: 'none',
+          cursor: a.isActive ? 'default' : 'pointer',
+          textAlign: 'left',
+          font: 'inherit',
+          color: 'inherit',
+          fontWeight: a.isActive ? 600 : 400,
+        }}
+      >
+        <EnvDot env={a.env} />
+        <span>{formatAccountLabel(a)}</span>
+        {a.isActive ? (
+          <span className="muted" style={{ fontSize: '1rem' }}>
+            (현재)
+          </span>
+        ) : null}
+      </button>
+      <button
+        type="button"
+        onClick={() => onRename(a)}
+        disabled={renamePending}
+        aria-label={`${formatAccountLabel(a)} 별칭 편집`}
+        title="별칭 편집"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0.3rem',
+          background: 'transparent',
+          border: 'none',
+          borderRadius: 4,
+          cursor: 'pointer',
+          color: 'var(--fg-2, #888)',
+        }}
+      >
+        <Pencil size={14} />
+      </button>
+      <button
+        type="button"
+        onClick={() => onDelete(a)}
+        disabled={deletePending}
+        aria-label={`${formatAccountLabel(a)} 계좌 삭제`}
+        title="계좌 삭제"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '0.3rem',
+          background: 'transparent',
+          border: 'none',
+          borderRadius: 4,
+          cursor: 'pointer',
+          color: 'var(--fg-2, #888)',
+        }}
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  );
+};
+
 export function formatAccountLabel(a: AccountRow): string {
   const tail = a.accountNo8.slice(-4);
   const name = a.displayName?.trim();
-  return name && name.length > 0 ? `${name} · ${a.env} ${tail}` : `${a.env} · ${tail}`;
+  if (name && name.length > 0) return `${name} · ${a.env} ${tail}`;
+  return `[${a.broker}] ${a.env} · ${tail}`;
 }
 
 export const EnvDot = ({ env }: { env: 'MOCK' | 'PROD' }): ReactElement => (

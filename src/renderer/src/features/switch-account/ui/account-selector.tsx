@@ -65,6 +65,15 @@ export const AccountSelector = ({
     },
   });
 
+  const reorderMutation = trpc.account.reorder.useMutation({
+    onSuccess: () => {
+      void qc.invalidateQueries();
+    },
+    onError: (err) => {
+      toast.error(`순서 변경 실패: ${err.message}`);
+    },
+  });
+
   const [renameTarget, setRenameTarget] = useState<AccountRow | null>(null);
 
   const onAddAccount = (): void => {
@@ -118,6 +127,7 @@ export const AccountSelector = ({
   const all: AccountRow[] = accountsQ.data.accounts.map((a) => ({
     id: a.id,
     env: a.env,
+    broker: a.broker,
     accountNo8: a.accountNo8,
     displayName: a.displayName,
     isActive: a.isActive,
@@ -170,6 +180,7 @@ export const AccountSelector = ({
           switching={switching}
           deletePending={deleteMutation.isPending}
           renamePending={renameMutation.isPending}
+          reorderPending={reorderMutation.isPending}
           hideAddAccount={hideAddAccount}
           onPick={(id) => {
             void onPick(id);
@@ -179,6 +190,7 @@ export const AccountSelector = ({
             setOpen(false);
             setRenameTarget(row);
           }}
+          onReorder={(orderedIds) => reorderMutation.mutate({ orderedIds })}
           onAddAccount={onAddAccount}
         />
       ) : null}
