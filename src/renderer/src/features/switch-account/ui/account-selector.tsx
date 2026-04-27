@@ -189,6 +189,7 @@ export const AccountSelector = ({
       env: a.env,
       broker: a.broker ?? 'KIS',
       accountNo8: a.accountNo8,
+      accountProdCd: a.accountProdCd ?? null,
       displayName: a.displayName,
       isActive: a.isActive,
     });
@@ -202,6 +203,7 @@ export const AccountSelector = ({
       env: entry.env,
       broker: entry.broker,
       accountNo8: entry.accountNo8,
+      accountProdCd: null,
       displayName: null,
       isActive: accountsQ.data.activeAccountId === entry.accountId,
     });
@@ -214,6 +216,7 @@ export const AccountSelector = ({
     env: a.env,
     broker: a.broker,
     accountNo8: a.accountNo8,
+    accountProdCd: a.accountProdCd ?? null,
     displayName: a.displayName,
     isActive: a.isActive || (!hasExplicitActive && activeAccountId === a.id),
   }));

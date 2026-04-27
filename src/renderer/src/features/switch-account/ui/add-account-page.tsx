@@ -14,6 +14,7 @@ import {
   type BrokerId,
   type Credentials,
 } from '@shared/contracts';
+import type React from 'react';
 import { type ReactElement, useState } from 'react';
 
 /**
@@ -204,85 +205,91 @@ export const AddAccountPage = (): ReactElement => {
             ) : null}
           </div>
 
-          <Row label="App Key" inputId="add-account-app-key">
-            <TextInput
-              id="add-account-app-key"
-              value={appKey}
-              onChange={(e) => setAppKey(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-              dense
-              className="add-account-page__control"
-            />
-          </Row>
+          <Section title="자격증명">
+            <Row label="App Key" inputId="add-account-app-key">
+              <TextInput
+                id="add-account-app-key"
+                value={appKey}
+                onChange={(e) => setAppKey(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                dense
+                className="add-account-page__control"
+              />
+            </Row>
 
-          <Row
-            label={broker === 'KIS' ? 'App Secret' : 'Secret Key'}
-            inputId="add-account-app-secret"
-          >
-            <TextInput
-              id="add-account-app-secret"
-              type="password"
-              value={appSecret}
-              onChange={(e) => setAppSecret(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-              dense
-              className="add-account-page__control"
-            />
-          </Row>
+            <Row
+              label={broker === 'KIS' ? 'App Secret' : 'Secret Key'}
+              inputId="add-account-app-secret"
+            >
+              <TextInput
+                id="add-account-app-secret"
+                type="password"
+                value={appSecret}
+                onChange={(e) => setAppSecret(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                dense
+                className="add-account-page__control"
+              />
+            </Row>
+          </Section>
 
-          {broker === 'KIS' ? (
-            <>
-              <Row label="계좌 (앞 8자리)" inputId="add-account-no8">
+          <Section title="계좌 정보">
+            {broker === 'KIS' ? (
+              <>
+                <Row label="계좌 (앞 8자리)" inputId="add-account-no8">
+                  <TextInput
+                    id="add-account-no8"
+                    value={accountNo8}
+                    onChange={(e) => setAccountNo8(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                    placeholder="12345678"
+                    inputMode="numeric"
+                    dense
+                    className="add-account-page__control num"
+                  />
+                </Row>
+
+                {ACCOUNT_PROD_CODE_OPTIONS.length > 1 ? (
+                  <Row label="상품 유형" inputId="add-account-prod-cd">
+                    <Select
+                      id="add-account-prod-cd"
+                      value={accountProdCd}
+                      onChange={(e) => setAccountProdCd(e.target.value as AccountProdCode)}
+                      dense
+                      className="add-account-page__control"
+                    >
+                      {ACCOUNT_PROD_CODE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </Row>
+                ) : (
+                  <Row label="상품 유형" inputId="add-account-prod-cd-readonly">
+                    <span id="add-account-prod-cd-readonly" className="chip">
+                      {ACCOUNT_PROD_CODE_OPTIONS[0]?.label}
+                    </span>
+                  </Row>
+                )}
+              </>
+            ) : (
+              <Row label="계좌번호 (10자리)" inputId="add-account-kiwoom-no">
                 <TextInput
-                  id="add-account-no8"
-                  value={accountNo8}
-                  onChange={(e) => setAccountNo8(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                  placeholder="12345678"
+                  id="add-account-kiwoom-no"
+                  value={kiwoomAccountNo}
+                  onChange={(e) =>
+                    setKiwoomAccountNo(e.target.value.replace(/\D/g, '').slice(0, 10))
+                  }
+                  placeholder="1234567890"
                   inputMode="numeric"
                   dense
                   className="add-account-page__control num"
                 />
               </Row>
-
-              {ACCOUNT_PROD_CODE_OPTIONS.length > 1 ? (
-                <Row label="상품 유형" inputId="add-account-prod-cd">
-                  <Select
-                    id="add-account-prod-cd"
-                    value={accountProdCd}
-                    onChange={(e) => setAccountProdCd(e.target.value as AccountProdCode)}
-                    dense
-                    className="add-account-page__control"
-                  >
-                    {ACCOUNT_PROD_CODE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Row>
-              ) : (
-                <Row label="상품 유형" inputId="add-account-prod-cd-readonly">
-                  <span id="add-account-prod-cd-readonly" className="chip">
-                    {ACCOUNT_PROD_CODE_OPTIONS[0]?.label}
-                  </span>
-                </Row>
-              )}
-            </>
-          ) : (
-            <Row label="계좌번호 (10자리)" inputId="add-account-kiwoom-no">
-              <TextInput
-                id="add-account-kiwoom-no"
-                value={kiwoomAccountNo}
-                onChange={(e) => setKiwoomAccountNo(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                placeholder="1234567890"
-                inputMode="numeric"
-                dense
-                className="add-account-page__control num"
-              />
-            </Row>
-          )}
+            )}
+          </Section>
 
           {addMutation.error ? (
             <div className="chip chip--down" role="alert">
@@ -344,4 +351,41 @@ const Row = ({
     </label>
     {children}
   </div>
+);
+
+/**
+ * 폼 영역 그룹 — 자격증명 / 계좌 정보를 시각적으로 분리해 사용자가 입력 단계를
+ * 인지하기 쉽게 한다. fieldset/legend 사용 → 스크린리더에도 그룹 의미 전달.
+ */
+const Section = ({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}): ReactElement => (
+  <fieldset
+    style={{
+      display: 'grid',
+      gap: '0.7rem',
+      padding: '0.85rem 1rem 1rem',
+      margin: 0,
+      border: '1px solid var(--border)',
+      borderRadius: '0.5rem',
+      background: 'var(--bg)',
+    }}
+  >
+    <legend
+      style={{
+        padding: '0 0.45rem',
+        fontSize: '0.95rem',
+        fontWeight: 700,
+        color: 'var(--fg)',
+        letterSpacing: '0.02em',
+      }}
+    >
+      {title}
+    </legend>
+    {children}
+  </fieldset>
 );

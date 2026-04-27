@@ -26,6 +26,8 @@ export interface AccountRow {
   env: 'MOCK' | 'PROD';
   broker: BrokerId;
   accountNo8: string;
+  /** 상품코드 — 라벨 충돌 방지(같은 broker/env/마지막4자리 조합)로 마지막2 표기 시 사용. */
+  accountProdCd?: string | null;
   displayName: string | null;
   isActive: boolean;
 }
@@ -298,9 +300,12 @@ const SortableAccountItem = ({
 
 export function formatAccountLabel(a: AccountRow): string {
   const tail = a.accountNo8.slice(-4);
+  // accountProdCd 가 있을 때만 뒤에 -CD 를 덧붙여 같은 broker/env 의 다중 계좌 구분(예: -01 vs -22).
+  // 미존재(레거시 데이터) 시 기존 라벨 그대로 — 회귀 위험 없음.
+  const prodSuffix = a.accountProdCd ? `-${a.accountProdCd}` : '';
   const name = a.displayName?.trim();
-  if (name && name.length > 0) return `${name} · ${a.env} ${tail}`;
-  return `[${a.broker}] ${a.env} · ${tail}`;
+  if (name && name.length > 0) return `${name} · ${a.env} ${tail}${prodSuffix}`;
+  return `[${a.broker}] ${a.env} · ${tail}${prodSuffix}`;
 }
 
 export const EnvDot = ({ env }: { env: 'MOCK' | 'PROD' }): ReactElement => (

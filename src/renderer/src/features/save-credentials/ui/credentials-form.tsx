@@ -23,6 +23,18 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
   useEffect(() => {
     document.getElementById('credentials-app-key')?.focus();
   }, []);
+  // 8자리 입력이 끝나면 자동으로 다음 필드(상품코드)로 포커스 이동 — KIS 계좌번호 길이 고정 활용.
+  useEffect(() => {
+    if (accountNo8.length !== 8) return;
+    const next = document.getElementById('credentials-account-prod-cd');
+    if (
+      next instanceof HTMLInputElement &&
+      document.activeElement?.id === 'credentials-account-no8'
+    ) {
+      next.focus();
+      next.select();
+    }
+  }, [accountNo8]);
 
   const performSave = async (value: Credentials): Promise<void> => {
     try {
@@ -176,13 +188,14 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: '0.6rem' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
           <Button
             type="submit"
             variant={env === 'PROD' ? 'danger' : 'primary'}
             disabled={!canSubmit}
             loading={isPending}
             loadingText="저장 중…"
+            style={{ whiteSpace: 'nowrap' }}
           >
             {env === 'PROD' ? '⚠ 실전(PROD) 자격증명 저장' : '저장하고 접속'}
           </Button>
