@@ -1,5 +1,6 @@
 import { alertDialog, Button, DialogType, OverlayScrollbar, Select } from '@renderer/shared/ui';
 import type { StrategyOrderType } from '@shared/contracts';
+import { AlertTriangle } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useRef } from 'react';
 import type {
@@ -54,14 +55,47 @@ export const StageRulesEditor = ({
   const requestApply = async (scope: ApplyScope): Promise<void> => {
     const sourceNth = parseInt(templateNth, 10) || 1;
     const targetCount = scope === 'active' ? activeMaxStages : 50;
-    const message =
-      scope === 'active'
-        ? `기준 차수 ${sourceNth}차의 규칙을 활성 ${targetCount}개 차수(1~${targetCount}차)에 일괄 적용합니다. 기존 규칙은 모두 덮어써집니다. 계속할까요?`
-        : `기준 차수 ${sourceNth}차의 규칙을 1~50차 모든 차수에 일괄 적용합니다. 비활성 차수까지 포함해 기존 규칙이 모두 덮어써집니다. 계속할까요?`;
     const confirmed = await alertDialog.confirm({
       type: DialogType.WARNING,
       title: scope === 'active' ? '활성 차수 전체 적용' : '1~50 전체 적용',
-      message,
+      message: (
+        <div
+          style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', paddingTop: '0.4rem' }}
+        >
+          <div style={{ fontSize: '1.15em', lineHeight: 1.4 }}>
+            기준 차수 <strong style={{ color: 'var(--color-text-primary)' }}>{sourceNth}차</strong>
+            의 규칙을{' '}
+            {scope === 'active' ? (
+              <>
+                활성{' '}
+                <strong style={{ color: 'var(--color-text-primary)' }}>
+                  {targetCount}개 차수(1~{targetCount}차)
+                </strong>
+              </>
+            ) : (
+              <>
+                <strong style={{ color: 'var(--color-text-primary)' }}>1~50차 모든 차수</strong>
+              </>
+            )}
+            에 일괄 적용합니다.
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              gap: '0.5rem',
+              color: 'var(--down, #d32f2f)',
+              fontSize: '0.95em',
+            }}
+          >
+            <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+            <div>
+              <strong>기존 규칙 덮어쓰기</strong>
+              <br />
+              기존에 설정된 규칙은 모두 지워지고 새로운 규칙으로 덮어써집니다. 계속할까요?
+            </div>
+          </div>
+        </div>
+      ),
       confirmText: '적용',
       cancelText: '취소',
     });

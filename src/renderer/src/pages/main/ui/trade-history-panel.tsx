@@ -1,7 +1,15 @@
 import { RecommendStrategyButton } from '@renderer/features/ai-strategy-recommend';
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
 import { SymbolMemoForm } from '@renderer/features/symbol-memo';
-import { Button, type HtsTabItem, HtsTabs, OverlayScrollbar, Select } from '@renderer/shared/ui';
+import {
+  alertDialog,
+  Button,
+  DialogType,
+  type HtsTabItem,
+  HtsTabs,
+  OverlayScrollbar,
+  Select,
+} from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import { type ReactElement, useMemo, useRef, useState } from 'react';
 import { type TradeHistoryTabKey, useTradeHistoryTabs } from '../model/use-trade-history-tabs';
@@ -160,8 +168,19 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
           {active.data?.hasOverride ? (
             <Button
               onClick={() => {
-                void clear();
-                setInitialOverride(null);
+                void (async () => {
+                  const confirmed = await alertDialog.confirm({
+                    type: DialogType.WARNING,
+                    title: '기본값 사용',
+                    message:
+                      '이 종목의 개별 자동매매 설정을 삭제하고 기본값으로 되돌립니다. 기존 개별 설정은 모두 사라집니다. 계속할까요?',
+                    confirmText: '기본값으로',
+                    cancelText: '취소',
+                  });
+                  if (!confirmed) return;
+                  await clear();
+                  setInitialOverride(null);
+                })();
               }}
               disabled={isPending}
               dense

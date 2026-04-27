@@ -121,6 +121,7 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
     const priceLabel = division === 'MARKET' ? '시장가' : `${thousandSeparator(String(price))}원`;
     const confirmed = await dialog.openAsync({
       type: isProd ? 'WARNING' : 'INFO',
+      accentColor: chosenSide === 'BUY' ? 'var(--up)' : 'var(--down)',
       title: isProd ? `⚠ 실전(PROD) ${sideLabel} 확인` : '주문 확인',
       confirmText: isProd ? `⚠ 실전 ${sideLabel} 확정` : `${sideLabel} 확정`,
       cancelText: '취소',

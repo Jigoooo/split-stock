@@ -1,5 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { alertDialog, Button, DialogType, NumberInput } from '@renderer/shared/ui';
+import { AlertTriangle } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { type LotRowDraft, LotRowFormModal } from './lot-row-form-modal';
 
@@ -102,7 +103,67 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
     const confirmed = await alertDialog.confirm({
       type: DialogType.WARNING,
       title: '차수 삭제',
-      message: `${row.nth}차 (${row.qty.toLocaleString()}주 / ${row.amountKrw.toLocaleString()}원)를 삭제합니다. 계속할까요?`,
+      message: (
+        <div
+          style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', paddingTop: '0.4rem' }}
+        >
+          <div style={{ fontSize: '1.15em' }}>
+            <strong style={{ color: 'var(--color-text-primary)' }}>{row.nth}차</strong> 매수 기록을
+            삭제합니다.
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderBottom: '1px solid var(--border)',
+                paddingBottom: '0.6rem',
+              }}
+            >
+              <span style={{ color: 'var(--color-text-secondary, #666)', fontSize: '0.95em' }}>
+                수량
+              </span>
+              <span className="num" style={{ fontSize: '1.1em', fontWeight: 600 }}>
+                {row.qty.toLocaleString()}주
+              </span>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderBottom: '1px solid var(--border)',
+                paddingBottom: '0.6rem',
+              }}
+            >
+              <span style={{ color: 'var(--color-text-secondary, #666)', fontSize: '0.95em' }}>
+                금액
+              </span>
+              <span className="num" style={{ fontSize: '1.1em', fontWeight: 600 }}>
+                {row.amountKrw.toLocaleString()}원
+              </span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              gap: '0.5rem',
+              color: 'var(--down, #d32f2f)',
+              fontSize: '0.95em',
+              marginTop: '0.4rem',
+            }}
+          >
+            <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+            <div>
+              <strong>삭제 확인</strong>
+              <br />이 작업은 되돌릴 수 없습니다. 계속할까요?
+            </div>
+          </div>
+        </div>
+      ),
       confirmText: '삭제',
       cancelText: '취소',
     });
