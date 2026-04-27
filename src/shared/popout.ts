@@ -63,9 +63,9 @@ export const POPOUT_ROUTE_CONFIG = {
     // 단계형 흐름(증권사·환경·자격증명·계좌·별칭) + 자격증명/계좌정보 grid 2열 배치.
     // 컴팩트 padding/gap 적용 후 5개 섹션이 640px 안쪽에 자연스럽게 들어감.
     defaultWidth: 820,
-    defaultHeight: 640,
+    defaultHeight: 500,
     minWidth: 700,
-    minHeight: 560,
+    minHeight: 500,
   },
   'add-watch-order': {
     label: '자동감시 추가',

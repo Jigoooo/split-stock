@@ -284,7 +284,12 @@ export const AddAccountPage = (): ReactElement => {
                       <span
                         id="add-account-prod-cd-readonly"
                         className="chip"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                        style={{
+                          height: '2.1rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                        }}
                       >
                         <Lock size={12} aria-hidden />
                         <span>{ACCOUNT_PROD_CODE_OPTIONS[0]?.label}</span>
