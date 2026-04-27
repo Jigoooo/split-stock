@@ -126,7 +126,8 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
 
   if (!isOpen) return null;
 
-  const accentColor = getTypeAccent(type, colors);
+  const defaultAccentColor = getTypeAccent(config.type, colors);
+  const accentColor = config.accentColor ?? defaultAccentColor;
   const isDestructive = DESTRUCTIVE_TYPES.has(type);
 
   return createPortal(
@@ -153,49 +154,74 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
             role="dialog"
             aria-modal="true"
             aria-labelledby={title ? 'app-dialog-title' : undefined}
-            initial={{ opacity: 0, scale: 1.08, x: '-50%', y: '-50%' }}
+            initial={{ opacity: 0, scale: 1.05, x: '-50%', y: '-50%' }}
             animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%', pointerEvents: 'auto' }}
-            exit={{ opacity: 0, scale: 0.96, x: '-50%', y: '-50%', pointerEvents: 'none' }}
-            transition={{ type: 'spring', damping: 20, stiffness: 380, mass: 0.8 }}
+            exit={{ opacity: 0, scale: 0.98, x: '-50%', y: '-50%', pointerEvents: 'none' }}
+            transition={{ type: 'spring', damping: 22, stiffness: 400, mass: 0.8 }}
             style={{
               position: 'fixed',
               top: '50%',
               left: '50%',
               zIndex: Z_INDEX.ALERT,
-              width: '27rem',
-              maxWidth: 'calc(100vw - 4rem)',
-              backgroundColor: `color-mix(in srgb, ${colors.bg.elevated} 92%, ${accentColor} 8%)`,
+              width: 'fit-content',
+              minWidth: '28rem',
+              maxWidth: 'calc(100vw - 3rem)',
+              backgroundColor: colors.bg.elevated,
               border: `1px solid ${colors.border.default}`,
-              borderRadius: '1.4rem',
+              borderRadius: '1rem',
               overflow: 'hidden',
-              boxShadow: `0 24px 64px ${colors.shadow.modal}`,
+              boxShadow: `0 16px 40px ${colors.shadow.modal}`,
             }}
             onClick={(event) => event.stopPropagation()}
           >
-            <div
-              style={{
-                padding: '2rem 2rem 0.8rem',
-                textAlign: 'center',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '0.4rem',
-              }}
-            >
-              {title ? (
+            {title ? (
+              <div
+                style={{
+                  padding: '1.2rem 1.6rem',
+                  backgroundColor: `color-mix(in srgb, ${accentColor} 8%, transparent)`,
+                  borderBottom: `1px solid color-mix(in srgb, ${accentColor} 12%, ${colors.border.default})`,
+                }}
+              >
                 <h2
                   id="app-dialog-title"
                   style={{
-                    fontSize: '1.7rem',
+                    fontSize: '1.4rem',
                     fontWeight: 600,
                     color: colors.text.primary,
-                    lineHeight: 1.25,
+                    lineHeight: 1.3,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.6rem',
+                    margin: 0,
                   }}
                 >
+                  <span
+                    style={{
+                      display: 'block',
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      backgroundColor: accentColor,
+                    }}
+                  />
                   {title}
                 </h2>
-              ) : null}
+              </div>
+            ) : null}
+            <div
+              style={{
+                padding: '1.6rem',
+              }}
+            >
               {message ? (
-                <div style={{ fontSize: '1.3rem', color: colors.text.secondary, lineHeight: 1.45 }}>
+                <div
+                  style={{
+                    fontSize: '1.3rem',
+                    color: colors.text.secondary,
+                    lineHeight: 1.5,
+                    wordBreak: 'keep-all',
+                  }}
+                >
                   {message}
                 </div>
               ) : null}
@@ -203,44 +229,27 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
             <div
               style={{
                 display: 'flex',
-                flexDirection: mode === DialogMode.CONFIRM ? 'row-reverse' : 'column',
-                gap: '0.8rem',
-                padding: '1.2rem 1.6rem 1.6rem',
+                justifyContent: 'flex-end',
+                gap: '0.6rem',
+                padding: '0 1.6rem 1.4rem',
               }}
             >
               {renderActions ? (
                 renderActions(() => closeWithHistory(false))
               ) : (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => closeWithHistory(true)}
-                    style={{
-                      flex: mode === DialogMode.CONFIRM ? 1 : undefined,
-                      height: '4rem',
-                      border: 'none',
-                      borderRadius: '1rem',
-                      background: isDestructive ? accentColor : colors.interactive.primary,
-                      fontSize: '1.5rem',
-                      fontWeight: 600,
-                      color: colors.text.onBrand,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {confirmText}
-                  </button>
                   {mode === DialogMode.CONFIRM ? (
                     <button
                       type="button"
                       onClick={() => closeWithHistory(false)}
                       style={{
-                        flex: 1,
-                        height: '4rem',
+                        padding: '0 1.4rem',
+                        height: '3.4rem',
                         border: `1px solid ${colors.border.default}`,
-                        borderRadius: '1rem',
+                        borderRadius: '0.6rem',
                         background: colors.bg.elevated,
-                        fontSize: '1.5rem',
-                        fontWeight: 600,
+                        fontSize: '1.3rem',
+                        fontWeight: 500,
                         color: colors.text.primary,
                         cursor: 'pointer',
                       }}
@@ -248,6 +257,27 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
                       {cancelText}
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => closeWithHistory(true)}
+                    style={{
+                      padding: '0 1.4rem',
+                      height: '3.4rem',
+                      border: 'none',
+                      borderRadius: '0.6rem',
+                      background: config.accentColor
+                        ? accentColor
+                        : isDestructive
+                          ? accentColor
+                          : colors.interactive.primary,
+                      fontSize: '1.3rem',
+                      fontWeight: 600,
+                      color: colors.text.onBrand,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {confirmText}
+                  </button>
                 </>
               )}
             </div>

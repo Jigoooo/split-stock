@@ -35,6 +35,7 @@ export interface DialogConfig {
   onConfirm: () => void;
   onCancel: () => void;
   renderActions: DialogActionsRenderer | undefined;
+  accentColor?: string;
 }
 
 export interface DialogOpenPayload {
@@ -48,6 +49,7 @@ export interface DialogOpenPayload {
   onConfirm?: () => void;
   onCancel?: () => void;
   renderActions?: DialogActionsRenderer;
+  accentColor?: string;
 }
 
 /** type별 헬퍼는 type 필드를 강제하지 않음 (helper가 주입). */

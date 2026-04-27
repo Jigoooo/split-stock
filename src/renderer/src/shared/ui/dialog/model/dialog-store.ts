@@ -67,10 +67,11 @@ export const useDialogStore = create<DialogStore>()((setState, getState) => {
       confirmText,
       cancelText,
       renderActions,
+      accentColor,
     } = payload;
     const shouldShowCancel = cancelText !== undefined ? true : isCancelWith;
 
-    return {
+    const config: DialogConfig = {
       isOpen: true,
       mode: shouldShowCancel ? DialogMode.CONFIRM : DialogMode.ALERT,
       type,
@@ -84,6 +85,12 @@ export const useDialogStore = create<DialogStore>()((setState, getState) => {
       onCancel: handlers?.onCancel ?? noop,
       renderActions,
     };
+
+    if (accentColor !== undefined) {
+      config.accentColor = accentColor;
+    }
+
+    return config;
   };
 
   const openDialog = (payload: DialogOpenPayload): void => {
