@@ -171,10 +171,13 @@ export class KiwoomRealtimeAdapter implements RealtimePort {
       this.socket.subscribe(symbol, wsType);
     }
     handlers.add(handler);
+    // closure 캡처: TypeScript 가 closure 안에서 narrow 못 하므로
+    // const 로 명시 — non-null assertion 회피.
+    const handlersRef = handlers;
     return ok({
       unsubscribe: () => {
-        handlers!.delete(handler);
-        if (handlers!.size === 0) {
+        handlersRef.delete(handler);
+        if (handlersRef.size === 0) {
           this.perKindHandlers.delete(key);
           this.socket.unsubscribe(symbol, wsType);
         }
