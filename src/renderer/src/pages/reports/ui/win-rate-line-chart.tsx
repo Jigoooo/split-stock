@@ -1,11 +1,13 @@
 import {
   createChart,
   type IChartApi,
+  type IPriceLine,
   type ISeriesApi,
   LineSeries,
+  LineStyle,
   type Time,
 } from 'lightweight-charts';
-import { type ReactElement, useEffect, useRef } from 'react';
+import { type ReactElement, useEffect, useMemo, useRef } from 'react';
 import type { WinRatePoint } from '../model/use-reports';
 
 export interface WinRateLineChartProps {
@@ -21,6 +23,18 @@ export const WinRateLineChart = ({ points, height = 220 }: WinRateLineChartProps
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const baselineRef = useRef<IPriceLine | null>(null);
+
+  // 평균 승률 → 라인 색상 결정. 55%↑ 빨강(승률 높음), 45%↓ 파랑(저조), 그 외 회색.
+  // HTS 기본 컬러 토큰과 의미 일치 — 사용자가 한눈에 추세 판단 가능.
+  const lineColor = useMemo(() => {
+    if (points.length === 0) return '#94a3b8';
+    const sum = points.reduce((acc, p) => acc + p.winRate, 0);
+    const avg = sum / points.length;
+    if (avg > 0.55) return '#dc2626';
+    if (avg < 0.45) return '#2563eb';
+    return '#94a3b8';
+  }, [points]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -45,11 +59,20 @@ export const WinRateLineChart = ({ points, height = 220 }: WinRateLineChartProps
       },
     });
     const series = chart.addSeries(LineSeries, {
-      color: 'var(--accent)',
+      color: lineColor,
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: true,
       baseLineVisible: false,
+    });
+    // 50% 손익분기 점선 — 사용자가 라인이 위/아래 어느 쪽에 있는지 즉시 판단 가능.
+    baselineRef.current = series.createPriceLine({
+      price: 0.5,
+      color: '#94a3b8',
+      lineWidth: 1,
+      lineStyle: LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: '50%',
     });
     chartRef.current = chart;
     seriesRef.current = series;
@@ -62,8 +85,9 @@ export const WinRateLineChart = ({ points, height = 220 }: WinRateLineChartProps
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      baselineRef.current = null;
     };
-  }, [height]);
+  }, [height, lineColor]);
 
   useEffect(() => {
     const series = seriesRef.current;

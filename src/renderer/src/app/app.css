@@ -1885,6 +1885,50 @@ body {
   box-shadow: none;
 }
 
+/* ── hover/active 강조 + 중앙 그리퍼 도트로 "끌 수 있다" 시각 어포던스 부여.
+       기본 색은 inline style 의 --hts-line(매우 흐림) 으로 두되, 호버 시
+       --border-strong 으로 명확화. ::after 그리퍼는 가로/세로 분기. ── */
+.resize-separator {
+  position: relative;
+  transition: background-color 120ms ease;
+}
+
+/* inline style 의 background 를 덮기 위해 box-shadow inset 으로 강조 — specificity 충돌 회피. */
+.resize-separator:hover,
+.resize-separator[data-resize-handle-active] {
+  box-shadow: inset 0 0 0 999px var(--border-strong);
+}
+
+.resize-separator::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-image: radial-gradient(circle, var(--fg-2) 1px, transparent 1.6px);
+  background-repeat: repeat;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.resize-separator[style*="col-resize"]::after {
+  width: 2px;
+  height: 22px;
+  background-size: 2px 4px;
+}
+
+.resize-separator[style*="row-resize"]::after {
+  width: 22px;
+  height: 2px;
+  background-size: 4px 2px;
+}
+
+.resize-separator:hover::after,
+.resize-separator[data-resize-handle-active]::after {
+  opacity: 0.85;
+}
+
 /* ===== 즉시주문 폼 — 세로 공간이 부족하면 내부 스크롤 ===== */
 .order-ticket-form {
   display: flex;

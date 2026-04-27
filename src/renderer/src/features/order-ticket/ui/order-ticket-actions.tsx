@@ -24,6 +24,7 @@ export const OrderTicketActions = ({
   <div className="panel__body order-ticket-form__actions">
     <Button
       disabled={!canBuy}
+      aria-disabled={!canBuy}
       variant="danger"
       dense
       onClick={() => {
@@ -37,10 +38,14 @@ export const OrderTicketActions = ({
       }
     >
       매수
-      <kbd className="kbd">F3</kbd>
+      {/* 단축키 칩 — 버튼이 disabled 일 때 키 입력도 무시되므로 시각적으로도 약화시켜 인지 일관성 유지. */}
+      <kbd className="kbd" aria-hidden style={{ opacity: canBuy ? 1 : 0.4 }}>
+        F3
+      </kbd>
     </Button>
     <Button
       disabled={!canSell}
+      aria-disabled={!canSell}
       variant="sell"
       dense
       onClick={() => {
@@ -56,7 +61,9 @@ export const OrderTicketActions = ({
       }
     >
       매도
-      <kbd className="kbd">F4</kbd>
+      <kbd className="kbd" aria-hidden style={{ opacity: canSell ? 1 : 0.4 }}>
+        F4
+      </kbd>
     </Button>
   </div>
 );

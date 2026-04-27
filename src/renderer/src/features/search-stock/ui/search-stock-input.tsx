@@ -1,5 +1,5 @@
-import type { KeyboardEvent, ReactElement } from 'react';
-import { useState } from 'react';
+import type { CompositionEvent, KeyboardEvent, ReactElement } from 'react';
+import { useRef, useState } from 'react';
 import type { StockHit } from '../model/use-stock-search';
 import { useStockSearch } from '../model/use-stock-search';
 
@@ -19,17 +19,38 @@ export interface SearchStockInputProps {
 export const SearchStockInput = (props: SearchStockInputProps): ReactElement => {
   const { placeholder = '종목명 또는 코드 검색', limit = 20, onSelect } = props;
   const [term, setTerm] = useState('');
+  // 검색에 실제 사용되는 query — IME 조합 중에는 직전 commit 값을 유지해
+  // 자모 한 글자마다 backend 쿼리가 발생하지 않도록 한다.
+  const [committedTerm, setCommittedTerm] = useState('');
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const search = useStockSearch(term, { limit });
+  const composingRef = useRef(false);
+  const search = useStockSearch(committedTerm, { limit });
 
-  const open = focused && term.trim().length > 0;
+  const open = focused && committedTerm.trim().length > 0;
   const list = search.results;
 
   const commit = (hit: StockHit): void => {
     onSelect(hit);
     setTerm('');
+    setCommittedTerm('');
     setActiveIndex(0);
+  };
+
+  const handleChange = (value: string): void => {
+    setTerm(value);
+    setActiveIndex(0);
+    // 조합 중이면 committed 갱신을 미룬다. 조합 종료 시 onCompositionEnd 가 마지막 값으로 동기화.
+    if (!composingRef.current) setCommittedTerm(value);
+  };
+
+  const handleCompositionStart = (): void => {
+    composingRef.current = true;
+  };
+
+  const handleCompositionEnd = (e: CompositionEvent<HTMLInputElement>): void => {
+    composingRef.current = false;
+    setCommittedTerm(e.currentTarget.value);
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>): void => {
@@ -54,10 +75,9 @@ export const SearchStockInput = (props: SearchStockInputProps): ReactElement => 
       <input
         type="text"
         value={term}
-        onChange={(e) => {
-          setTerm(e.target.value);
-          setActiveIndex(0);
-        }}
+        onChange={(e) => handleChange(e.target.value)}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
         onFocus={() => setFocused(true)}
         onBlur={() => setTimeout(() => setFocused(false), 150)}
         onKeyDown={onKey}
@@ -82,7 +102,18 @@ export const SearchStockInput = (props: SearchStockInputProps): ReactElement => 
           }}
         >
           {search.isLoading ? (
-            <div className="panel__body muted">검색 중…</div>
+            <div
+              className="panel__body muted"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              {/* Button 과 동일한 스피너 토큰 재사용 — 일관된 진행 표시. */}
+              <span
+                className="hts-btn__spinner"
+                aria-hidden
+                style={{ color: 'var(--accent)', margin: 0 }}
+              />
+              <span>검색 중…</span>
+            </div>
           ) : search.error ? (
             <div className="panel__body">
               <span className="chip chip--down">{search.error.message}</span>

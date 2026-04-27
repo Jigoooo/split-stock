@@ -5,6 +5,22 @@ import type { Candle } from '../model/candle-types';
 const BUY_COLOR = '#d73333';
 const SELL_COLOR = '#2d4fca';
 
+/**
+ * 차수가 깊어질수록 채도/투명도를 낮춰 시각적 무게를 차등.
+ * 1차=1.0, 2차=0.92, ... clamp 0.55. 줌아웃으로 마커가 뭉쳐도
+ * 색 농도만으로 1차/막차를 구분 가능.
+ */
+function tintByNth(hex: string, nth: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const raw = m[1] ?? '';
+  const r = Number.parseInt(raw.slice(0, 2), 16);
+  const g = Number.parseInt(raw.slice(2, 4), 16);
+  const b = Number.parseInt(raw.slice(4, 6), 16);
+  const alpha = Math.max(0.55, 1 - (nth - 1) * 0.08);
+  return `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(2)})`;
+}
+
 function msToYmdKst(ms: number): string {
   const date = new Date(ms);
   const yyyy = date.getFullYear();
@@ -37,7 +53,7 @@ export function toTradeMarkers(
         markers.push({
           time: candleDate as Time,
           position: 'belowBar',
-          color: BUY_COLOR,
+          color: tintByNth(BUY_COLOR, cycle.nth),
           shape: 'arrowUp',
           text: `B${cycle.nth}`,
         });
@@ -50,7 +66,7 @@ export function toTradeMarkers(
         markers.push({
           time: candleDate as Time,
           position: 'aboveBar',
-          color: SELL_COLOR,
+          color: tintByNth(SELL_COLOR, cycle.nth),
           shape: 'arrowDown',
           text: `S${cycle.nth}`,
         });
