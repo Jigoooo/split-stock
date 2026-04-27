@@ -56,6 +56,7 @@ import { KiwoomHttpClient } from './brokers/kiwoom/http-client';
 import { KIWOOM_BASE_URL } from './brokers/kiwoom/metadata/endpoints';
 import { KiwoomTokenStore } from './brokers/kiwoom/token-store';
 import { defaultDbPath, migrate, openDb } from './db/client';
+import { repairAccountsRuntimeSchema } from './db/runtime-schema-repair';
 import { orders } from './db/schema';
 import {
   readPendingCancelConfig,
@@ -121,6 +122,7 @@ function resolveMigrationsDir(): string {
 function bootstrapDeps(userDataDir: string) {
   const db = openDb(defaultDbPath(userDataDir));
   migrate(db, resolveMigrationsDir());
+  repairAccountsRuntimeSchema(db);
 
   const credentialsRepo = new CredentialsRepo(db, {
     isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),

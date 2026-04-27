@@ -195,6 +195,7 @@ const SortableAccountItem = ({
         disabled={switching || a.isActive}
         style={{
           flex: 1,
+          minWidth: 0,
           display: 'flex',
           alignItems: 'center',
           gap: '0.5rem',
@@ -209,7 +210,16 @@ const SortableAccountItem = ({
         }}
       >
         <EnvDot env={a.env} />
-        <span>{formatAccountLabel(a)}</span>
+        <span
+          style={{
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {formatAccountLabel(a)}
+        </span>
         {a.isActive ? (
           <span
             title="현재 활성 계좌"
@@ -223,6 +233,8 @@ const SortableAccountItem = ({
               background: activeAccentColor,
               borderRadius: '0.25rem',
               letterSpacing: '0.02em',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}
           >
             현재

@@ -208,14 +208,7 @@ export const PopoutRoutePage = ({ route }: { route: string }): ReactElement => {
   }
 
   return (
-    <Suspense
-      fallback={
-        <ShellLoading
-          message={LOADING_MESSAGES.ROUTE_LOADING}
-          detail="팝아웃 화면을 준비하고 있습니다."
-        />
-      }
-    >
+    <Suspense fallback={null}>
       <PopoutPage route={route as PopoutRoute} popout={popout} />
     </Suspense>
   );
