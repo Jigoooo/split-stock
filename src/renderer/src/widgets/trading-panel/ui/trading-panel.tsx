@@ -41,6 +41,23 @@ export interface TradingPanelProps {
  */
 const RECONNECT_REVEAL_DELAY_MS = 3000;
 
+function formatFeedTimestamp(label: string, value: string | null): string {
+  return value ? `${label} ${formatTime(value)}` : `${label} 대기`;
+}
+
+function getRealtimeSubscriptionLabel(params: {
+  started: boolean;
+  subscribed: boolean;
+  tickTime: string | null;
+  orderbookTime: string | null;
+}): string {
+  const { started, subscribed, tickTime, orderbookTime } = params;
+  if (!started) return '구독 중지';
+  if (!subscribed) return '구독 준비 중';
+  if (tickTime || orderbookTime) return '체결/호가 수신 중';
+  return '체결/호가 대기 중';
+}
+
 const RealtimeStatusBar = ({
   pdno,
   tickTime,
@@ -52,6 +69,18 @@ const RealtimeStatusBar = ({
 }): ReactElement => {
   const { reconnect, reconnectError, reconnectPending, started, watched } = useRealtimeStatus();
   const mine = watched.find((w) => w.pdno === pdno);
+  const subscriptionLabel = getRealtimeSubscriptionLabel({
+    started,
+    subscribed: mine !== undefined,
+    tickTime,
+    orderbookTime,
+  });
+  const subscriptionTitle = mine
+    ? `체결 구독 ${mine.tick} · 호가 구독 ${mine.orderbook} · ${formatFeedTimestamp(
+        '체결',
+        tickTime,
+      )} · ${formatFeedTimestamp('호가', orderbookTime)}`
+    : subscriptionLabel;
   const [showReconnect, setShowReconnect] = useState(false);
   useEffect(() => {
     if (started) {
@@ -78,18 +107,12 @@ const RealtimeStatusBar = ({
       <span className={started ? 'chip chip--live' : 'chip chip--down'} style={{ flexShrink: 0 }}>
         {started ? '실시간' : '미연결'}
       </span>
-      <span className="muted" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-        {mine
-          ? `체결 ${mine.tick > 0 ? 'ON' : 'off'} · 호가 ${mine.orderbook > 0 ? 'ON' : 'off'}`
-          : started
-            ? '구독 대기 중…'
-            : '\u00A0'}
-      </span>
-      <span className="muted" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-        {tickTime ? `체결 ${formatTime(tickTime)}` : '\u00A0'}
-      </span>
-      <span className="muted" style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-        {orderbookTime ? `호가 ${formatTime(orderbookTime)}` : '\u00A0'}
+      <span
+        className="muted"
+        title={subscriptionTitle}
+        style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: '10rem' }}
+      >
+        {subscriptionLabel}
       </span>
       <span style={{ flex: 1 }} />
       {showReconnect ? (

@@ -87,7 +87,7 @@ export const AccountSelectorList = ({
         position: 'absolute',
         top: 'calc(100% + 0.4rem)',
         left: 0,
-        zIndex: 50,
+        zIndex: 200,
         minWidth: '20rem',
         padding: '0.4rem',
         display: 'flex',
@@ -149,6 +149,10 @@ const SortableAccountItem = ({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: a.id,
   });
+  // 활성 계좌 행 — 좌측 강조 바 + tint 배경으로 한눈에 식별. 색상은 환경(PROD=빨강/MOCK=accent)
+  // 으로 구분해 사고 위험까지 함께 전달.
+  const activeAccentColor = a.env === 'PROD' ? 'var(--up)' : 'var(--accent)';
+  const activeBg = a.env === 'PROD' ? 'var(--up-soft)' : 'var(--accent-tint-12)';
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -158,6 +162,8 @@ const SortableAccountItem = ({
     gap: '0.5rem',
     padding: '0.3rem 0.35rem 0.3rem 0.2rem',
     borderRadius: 4,
+    background: a.isActive ? activeBg : undefined,
+    boxShadow: a.isActive ? `inset 0.2rem 0 0 0 ${activeAccentColor}` : undefined,
   };
   return (
     <div ref={setNodeRef} className="account-selector__item" style={style}>
@@ -205,8 +211,21 @@ const SortableAccountItem = ({
         <EnvDot env={a.env} />
         <span>{formatAccountLabel(a)}</span>
         {a.isActive ? (
-          <span className="muted" style={{ fontSize: '1rem' }}>
-            (현재)
+          <span
+            title="현재 활성 계좌"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '0.1rem 0.45rem',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              color: '#fff',
+              background: activeAccentColor,
+              borderRadius: '0.25rem',
+              letterSpacing: '0.02em',
+            }}
+          >
+            현재
           </span>
         ) : null}
       </button>

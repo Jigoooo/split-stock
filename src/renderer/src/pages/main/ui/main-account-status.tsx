@@ -1,3 +1,4 @@
+import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
 import { Button } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
@@ -12,7 +13,7 @@ export const MainAccountLoading = (): ReactElement => (
       fontSize: '1.1rem',
     }}
   >
-    계좌 확인 중…
+    {LOADING_MESSAGES.ACCOUNT_CHECKING}
   </div>
 );
 

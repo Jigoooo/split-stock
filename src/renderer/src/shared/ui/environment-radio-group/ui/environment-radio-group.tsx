@@ -29,7 +29,7 @@ export const EnvironmentRadioGroup = ({
     dense={dense}
     items={[
       { value: 'MOCK', label: '모의투자', description: mockDescription },
-      { value: 'PROD', label: '실전', description: prodDescription },
+      { value: 'PROD', label: '⚠ 실전', description: prodDescription, tone: 'danger' },
     ]}
   />
 );

@@ -29,12 +29,14 @@ const CREATE_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS accounts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     env TEXT NOT NULL,
+    broker TEXT NOT NULL DEFAULT 'KIS',
     account_no_8 TEXT NOT NULL,
     account_prod_cd TEXT NOT NULL,
     nickname TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,
     is_active INTEGER NOT NULL DEFAULT 0,
-    display_name TEXT
+    display_name TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE TABLE IF NOT EXISTS lots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -7,6 +7,7 @@ import {
   usePhraseGate,
 } from '@renderer/shared/ui';
 import { type ReactElement, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 type Env = 'MOCK' | 'PROD';
 
@@ -24,9 +25,20 @@ export const SwitchEnvSection = (): ReactElement => {
   const setEnv = trpc.auth.setEnv.useMutation({
     // await 하면 모든 query refetch 가 끝날 때까지 setEnv.isPending=true 가 유지되어
     // 전환 버튼이 길게 disable 됨 → fire-and-forget. 각 useQuery 가 자체 refetch.
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       void utils.invalidate();
+      // PROD 전환은 사고 위험이 크므로 warning 토스트로 강조 + 긴 표시.
+      if (variables === 'PROD') {
+        toast.warning('⚠ 실전(PROD) 환경으로 전환되었습니다 — 모든 주문은 실제로 체결됩니다.', {
+          duration: 8000,
+        });
+      } else {
+        toast.success('모의(MOCK) 환경으로 전환되었습니다.');
+      }
       reset();
+    },
+    onError: (err) => {
+      toast.error(`환경 전환 실패: ${err.message}`);
     },
   });
 

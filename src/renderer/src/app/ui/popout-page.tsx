@@ -10,6 +10,7 @@ import { LogsPage } from '@renderer/pages/logs';
 import { ReportsPage } from '@renderer/pages/reports';
 import { SettingsPage } from '@renderer/pages/settings';
 import { TradePage } from '@renderer/pages/trade';
+import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
 import { getPopoutWindowTitle } from '@shared/popout';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
 import type { PopoutRoute } from '../model/popout-route';
@@ -77,7 +78,7 @@ const AddWatchOrderPage = (): ReactElement => {
   };
 
   if (!ready) {
-    return <div style={{ padding: '1rem' }}>로드 중…</div>;
+    return <div style={{ padding: '1rem' }}>{LOADING_MESSAGES.GENERAL}</div>;
   }
 
   return (

@@ -1,5 +1,6 @@
 import { useTradeCycles } from '@renderer/entities/trade-cycle';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
 import { TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
@@ -38,7 +39,7 @@ export const PastTradesPane = ({ accountId, onSelect }: PastTradesPaneProps): Re
     return (
       <div className="panel">
         <div className="panel__body muted" style={{ fontSize: '1.05rem' }}>
-          조회 중…
+          {LOADING_MESSAGES.FETCHING}
         </div>
       </div>
     );

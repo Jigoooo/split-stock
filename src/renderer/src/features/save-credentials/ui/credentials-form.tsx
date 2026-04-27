@@ -62,9 +62,7 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
       <div className="panel__title">한국투자증권 자격증명</div>
       <div className="panel__body" style={{ display: 'grid', gap: '1rem' }}>
         <div style={{ display: 'grid', gap: '0.35rem' }}>
-          <span className="muted" style={{ fontSize: '1.1rem' }}>
-            환경
-          </span>
+          <span style={{ fontSize: '1.1rem', color: 'var(--fg)', fontWeight: 600 }}>환경</span>
           <EnvironmentRadioGroup
             name="credentials-env"
             ariaLabel="접속 환경"
@@ -134,7 +132,11 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
           </div>
         </Row>
 
-        <Row label="계좌 (앞 8자리)" inputId="credentials-account-no8">
+        <Row
+          label="계좌번호 앞 8자리"
+          inputId="credentials-account-no8"
+          hint="계좌번호 10자리 중 앞쪽 8자리"
+        >
           <TextInput
             id="credentials-account-no8"
             value={accountNo8}
@@ -147,7 +149,11 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
           />
         </Row>
 
-        <Row label="상품코드 (뒤 2자리)" inputId="credentials-account-prod-cd">
+        <Row
+          label="상품코드 (계좌번호 끝 2자리)"
+          inputId="credentials-account-prod-cd"
+          hint="대부분 01 — 종합매매계좌 기준"
+        >
           <TextInput
             id="credentials-account-prod-cd"
             value={accountProdCd}
@@ -206,15 +212,21 @@ const Row = ({
   label,
   inputId,
   children,
+  hint,
 }: {
   label: string;
   inputId: string;
   children: ReactElement;
+  hint?: string;
 }): ReactElement => (
   <label htmlFor={inputId} style={{ display: 'grid', gap: '0.35rem' }}>
-    <span className="muted" style={{ fontSize: '1.1rem' }}>
-      {label}
-    </span>
+    {/* WCAG AA 보장 위해 muted(--fg-2 ≈ 4.3:1) 대신 --fg + weight 600. */}
+    <span style={{ fontSize: '1.1rem', color: 'var(--fg)', fontWeight: 600 }}>{label}</span>
     {children}
+    {hint ? (
+      <span className="muted" style={{ fontSize: '0.9rem' }}>
+        {hint}
+      </span>
+    ) : null}
   </label>
 );

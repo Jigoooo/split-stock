@@ -1,4 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
 import { alertDialog, Button, TextInput } from '@renderer/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
@@ -33,6 +34,10 @@ export const AccountSelector = ({
   hideAddAccount = false,
 }: AccountSelectorProps = {}): ReactElement | null => {
   const accountsQ = trpc.account.listAccounts.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+  const storedQ = trpc.auth.listStored.useQuery(undefined, {
     refetchOnWindowFocus: false,
     staleTime: 30_000,
   });
@@ -88,9 +93,13 @@ export const AccountSelector = ({
   const reorderMutation = trpc.account.reorder.useMutation({
     onSuccess: () => {
       void qc.invalidateQueries();
+      toast.success('계좌 순서가 변경되었습니다');
+      // 키보드/스크린리더 사용자에게 명시적 공지 — DnD 결과는 시각적 변화만으로는 인지하기 어렵다.
+      setLiveMessage('계좌 순서가 변경되었습니다');
     },
     onError: (err) => {
       toast.error(`순서 변경 실패: ${err.message}`);
+      setLiveMessage(`순서 변경 실패: ${err.message}`);
     },
   });
 
@@ -147,21 +156,48 @@ export const AccountSelector = ({
   }, [open]);
 
   if (accountsQ.isPending) {
-    return <span className="muted">계좌 로드 중…</span>;
+    return <span className="muted">{LOADING_MESSAGES.ACCOUNTS_LOADING}</span>;
   }
   if (accountsQ.error || !accountsQ.data) {
     return <span className="chip chip--down">계좌 조회 실패</span>;
   }
 
-  const all: AccountRow[] = accountsQ.data.accounts.map((a) => ({
+  const allById = new Map<number, AccountRow>();
+  for (const a of accountsQ.data.accounts) {
+    allById.set(a.id, {
+      id: a.id,
+      env: a.env,
+      broker: a.broker ?? 'KIS',
+      accountNo8: a.accountNo8,
+      displayName: a.displayName,
+      isActive: a.isActive,
+    });
+  }
+  // 복원/마이그레이션 직후 accounts 조회가 비어도 settings 의 저장된 자격증명은 보일 수 있다.
+  // 이때 헤더 셀렉터에서도 동일한 항목을 fallback 으로 보여줘 "설정에는 있는데 헤더에는 없음"을 막는다.
+  for (const entry of storedQ.data?.entries ?? []) {
+    if (allById.has(entry.accountId)) continue;
+    allById.set(entry.accountId, {
+      id: entry.accountId,
+      env: entry.env,
+      broker: entry.broker,
+      accountNo8: entry.accountNo8,
+      displayName: null,
+      isActive: accountsQ.data.activeAccountId === entry.accountId,
+    });
+  }
+  const all = [...allById.values()];
+  const activeAccountId = accountsQ.data.activeAccountId;
+  const hasExplicitActive = all.some((a) => a.isActive);
+  const normalizedAll: AccountRow[] = all.map((a) => ({
     id: a.id,
     env: a.env,
     broker: a.broker,
     accountNo8: a.accountNo8,
     displayName: a.displayName,
-    isActive: a.isActive,
+    isActive: a.isActive || (!hasExplicitActive && activeAccountId === a.id),
   }));
-  const active = all.find((a) => a.isActive) ?? null;
+  const active = normalizedAll.find((a) => a.isActive) ?? null;
 
   const onPick = async (id: number): Promise<void> => {
     setOpen(false);
@@ -246,7 +282,7 @@ export const AccountSelector = ({
 
       {open ? (
         <AccountSelectorList
-          accounts={all}
+          accounts={normalizedAll}
           switching={switching}
           deletePending={deleteMutation.isPending}
           renamePending={renameMutation.isPending}

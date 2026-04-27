@@ -760,6 +760,22 @@ body {
   border-color: var(--up);
 }
 
+/* ── invalid: aria-invalid="true" 인 모든 폼 컨트롤에 빨강 테두리 + 살짝 음영.
+       시각 사용자가 hint 텍스트 색만으로 못 알아채던 문제(O-P1-1) 해소. ── */
+.hts-input[aria-invalid="true"],
+.hts-select[aria-invalid="true"],
+.hts-input-shell[aria-invalid="true"] {
+  border-color: var(--up);
+  background: var(--up-soft);
+}
+
+.hts-input[aria-invalid="true"]:focus-visible,
+.hts-select[aria-invalid="true"]:focus-visible,
+.hts-input-shell[aria-invalid="true"]:focus-within {
+  border-color: var(--up);
+  box-shadow: 0 0 0 0.2rem var(--up-soft);
+}
+
 .hts-input--dense,
 .hts-select--dense,
 .hts-date-input--dense {
@@ -1537,6 +1553,25 @@ body {
 .hts-choice--dense .hts-choice__description {
   font-size: 0.95rem;
   line-height: 1.2;
+}
+
+/* ── danger tone: PROD 같은 위험 옵션을 활성화할 때 파랑(accent) 대신 빨강(--up).
+       라디오 dot/체크 표식, 외곽선, 상시 라벨 색까지 모두 빨강 계열로 통일해 사고 방지.
+       모든 기본 .hts-choice 규칙 이후에 와야 specificity 역전 경고가 없다. ── */
+.hts-choice--danger .hts-choice__label {
+  color: var(--up);
+}
+
+.hts-choice--danger.hts-choice--active {
+  border-color: var(--up);
+  box-shadow: 0 0 0 0.1rem var(--up-soft);
+  background: var(--up-soft);
+}
+
+.hts-choice--danger .hts-choice__native:checked + .hts-choice__control {
+  border-color: var(--up);
+  background: var(--up);
+  box-shadow: 0 0 0 0.25rem var(--up-soft);
 }
 
 /* ===== 레이아웃 컨테이너 ===== */

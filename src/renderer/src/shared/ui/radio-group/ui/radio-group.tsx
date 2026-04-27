@@ -5,6 +5,8 @@ export interface RadioGroupItem<T extends string> {
   label: ReactNode;
   description?: ReactNode;
   disabled?: boolean;
+  /** 위험 옵션(예: 실전 PROD) — 활성 시 빨강(`--up`) 색상으로 강조. */
+  tone?: 'default' | 'danger';
 }
 
 export interface RadioGroupProps<T extends string> {
@@ -40,6 +42,7 @@ export const RadioGroup = <T extends string>({
             item.value === value ? 'hts-choice--active' : '',
             item.disabled ? 'hts-choice--disabled' : '',
             dense ? 'hts-choice--dense' : '',
+            item.tone === 'danger' ? 'hts-choice--danger' : '',
           ]
             .filter(Boolean)
             .join(' ')}

@@ -5,6 +5,7 @@ import {
   useWatchEventNotifications,
 } from '@renderer/features/trade-notifications';
 import { LoginPage } from '@renderer/pages/login';
+import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
 import { Navigate, Outlet } from '@tanstack/react-router';
 import { lazy, type ReactElement, type ReactNode, Suspense } from 'react';
 import { isPopoutRoute, type PopoutRoute } from './model/popout-route';
@@ -33,7 +34,9 @@ const AppNotifications = (): null => {
   return null;
 };
 
-const ShellLoading = (): ReactElement => <div className="muted">초기화 중…</div>;
+const ShellLoading = (): ReactElement => (
+  <div className="muted">{LOADING_MESSAGES.INITIALIZING}</div>
+);
 
 const AppShellFrame = ({ children, popout, shell }: AppShellFrameProps): ReactElement => {
   return (
@@ -76,7 +79,7 @@ const AppShellFrame = ({ children, popout, shell }: AppShellFrameProps): ReactEl
         >
           <div className="env-switch-overlay__panel">
             <div className="env-switch-overlay__spinner" aria-hidden />
-            <div className="env-switch-overlay__label">환경 전환 중…</div>
+            <div className="env-switch-overlay__label">{LOADING_MESSAGES.SWITCHING_ENV}</div>
             <div className="env-switch-overlay__hint muted">잠시만 기다려주세요.</div>
           </div>
         </div>
@@ -164,7 +167,7 @@ export const PopoutRoutePage = ({ route }: { route: string }): ReactElement => {
   }
 
   return (
-    <Suspense fallback={<div className="muted">로드 중…</div>}>
+    <Suspense fallback={<div className="muted">{LOADING_MESSAGES.ROUTE_LOADING}</div>}>
       <PopoutPage route={route as PopoutRoute} popout={popout} />
     </Suspense>
   );

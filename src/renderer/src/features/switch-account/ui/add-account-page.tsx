@@ -97,13 +97,57 @@ export const AddAccountPage = (): ReactElement => {
               items={[
                 {
                   value: 'KIS',
-                  label: '한국투자증권 (KIS)',
+                  label: (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span
+                        aria-hidden
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '2rem',
+                          height: '2rem',
+                          borderRadius: '0.3rem',
+                          background: '#003c7c',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '0.95rem',
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        KIS
+                      </span>
+                      <span>한국투자증권</span>
+                    </span>
+                  ),
                   description: '국내 / 해외 / 모의 / 실전',
                 },
                 {
                   value: 'KIWOOM',
-                  label: '키움증권 (Kiwoom)',
-                  description: '국내 / 모의 / 실전 (NXT/SOR PROD 전용)',
+                  label: (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span
+                        aria-hidden
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '2rem',
+                          height: '2rem',
+                          borderRadius: '0.3rem',
+                          background: '#ff5e00',
+                          color: '#fff',
+                          fontWeight: 700,
+                          fontSize: '0.95rem',
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        KW
+                      </span>
+                      <span>키움증권</span>
+                    </span>
+                  ),
+                  description: '국내 / 모의 / 실전 (NXT·SOR 전용)',
                 },
               ]}
             />
@@ -153,8 +197,8 @@ export const AddAccountPage = (): ReactElement => {
               >
                 <span aria-hidden>⚠</span>
                 <span>
-                  실전(PROD) 계좌입니다 — 첫 계좌라면 추가 즉시 활성화되고 메인 창의 환경도
-                  실전으로 전환됩니다.
+                  실전(PROD) 계좌입니다 — 첫 계좌라면 추가 즉시 활성화되고 메인 창의 환경도 실전으로
+                  전환됩니다.
                 </span>
               </div>
             ) : null}

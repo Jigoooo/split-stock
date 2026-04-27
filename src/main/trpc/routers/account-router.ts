@@ -1,9 +1,10 @@
-import type { Balance, BrokerError, KisError } from '@shared/contracts';
+import type { AppEnv, Balance, BrokerError, KisError } from '@shared/contracts';
 import { CredentialsSchema } from '@shared/contracts';
 import { buildLotOverlay, type LotOverlaySnapshot } from '@shared/trading/lot-overlay';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
+import type { ActiveAccountRepo } from '../../account/active-account';
 import { lots as lotsTable } from '../../db/schema';
 import { SETTING_KEYS } from '../../db/settings-repo';
 import { buildLotSyncMismatches } from '../../trading/current-state-sync';
@@ -11,6 +12,31 @@ import type { LotStatus } from '../../trading/fsm';
 import type { LotSnapshotEntry } from '../../trading/lots-repo';
 import { resolveAccountId } from '../router-helpers';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
+
+function listAccountsWithActiveRepair(ctx: {
+  activeAccounts: ActiveAccountRepo;
+  activeAccountId: number | null;
+  currentEnv: AppEnv | null;
+  setEnvAndAccount: (next: { env: AppEnv | null; accountId: number | null }) => void;
+}) {
+  let accounts = ctx.activeAccounts.list();
+  let activeAccountId = ctx.activeAccountId;
+  const hasActiveRow = accounts.some((account) => account.isActive);
+  if (accounts.length > 0 && (!hasActiveRow || activeAccountId === null)) {
+    const repaired = ctx.activeAccounts.ensureActive();
+    if (repaired.isOk()) {
+      activeAccountId = repaired.value;
+      const active = ctx.activeAccounts.getById(activeAccountId);
+      ctx.setEnvAndAccount({
+        env: active?.env ?? ctx.currentEnv,
+        accountId: activeAccountId,
+      });
+      accounts = ctx.activeAccounts.list();
+    }
+  }
+
+  return { accounts, activeAccountId };
+}
 
 /**
  * 도메인 Balance → 기존 KIS BalanceResult shape (renderer wire compat).
@@ -115,15 +141,15 @@ function balanceErrorMessage(e: KisError): string {
  * - getPositionOverlay: 차트 위에 표시할 차수 오버레이 라인 반환
  */
 export const accountRouter = router({
-  listAccounts: publicProcedure.query(({ ctx }) => ({
-    accounts: ctx.activeAccounts.list(),
-    activeAccountId: ctx.activeAccountId,
-  })),
+  listAccounts: publicProcedure.query(({ ctx }) => listAccountsWithActiveRepair(ctx)),
 
-  getActive: publicProcedure.query(({ ctx }) => ({
-    accountId: ctx.activeAccountId,
-    account: ctx.activeAccountId !== null ? ctx.activeAccounts.getById(ctx.activeAccountId) : null,
-  })),
+  getActive: publicProcedure.query(({ ctx }) => {
+    const { activeAccountId } = listAccountsWithActiveRepair(ctx);
+    return {
+      accountId: activeAccountId,
+      account: activeAccountId !== null ? ctx.activeAccounts.getById(activeAccountId) : null,
+    };
+  }),
 
   syncCurrentState: authedProcedure
     .input(z.object({ accountId: z.number().int().positive().optional() }).optional())
