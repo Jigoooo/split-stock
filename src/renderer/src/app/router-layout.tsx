@@ -25,8 +25,8 @@ const PopoutPage = lazy(() => import('./ui/popout-page').then((m) => ({ default:
 
 interface AppShellFrameProps {
   children: ReactNode;
-  loading?: boolean;
-  popout?: PopoutApi;
+  loading?: boolean | undefined;
+  popout?: PopoutApi | undefined;
   shell: ReturnType<typeof useAppShell>;
 }
 
@@ -37,8 +37,8 @@ const AppNotifications = (): null => {
 };
 
 interface ShellLoadingProps {
-  detail?: string;
-  message?: string;
+  detail?: string | undefined;
+  message?: string | undefined;
 }
 
 const ShellLoading = ({
@@ -59,6 +59,20 @@ const ShellLoading = ({
       </div>
     </div>
   </section>
+);
+
+const FullScreenShellLoading = ({
+  detail,
+  message,
+  popout,
+  shell,
+}: ShellLoadingProps & {
+  popout?: PopoutApi;
+  shell: ReturnType<typeof useAppShell>;
+}): ReactElement => (
+  <AppShellFrame shell={shell} popout={popout} loading>
+    <ShellLoading message={message} detail={detail} />
+  </AppShellFrame>
 );
 
 const AppShellFrame = ({
@@ -131,11 +145,7 @@ export const IndexRoutePage = (): ReactElement => {
   const shell = useAppShell();
 
   if (shell.isInitializing) {
-    return (
-      <AppShellFrame shell={shell} loading>
-        <ShellLoading />
-      </AppShellFrame>
-    );
+    return <FullScreenShellLoading shell={shell} />;
   }
 
   return <Navigate to={shell.env ? '/main' : '/login'} replace />;
@@ -145,11 +155,7 @@ export const LoginRoutePage = (): ReactElement => {
   const shell = useAppShell();
 
   if (shell.isInitializing) {
-    return (
-      <AppShellFrame shell={shell} loading>
-        <ShellLoading />
-      </AppShellFrame>
-    );
+    return <FullScreenShellLoading shell={shell} />;
   }
 
   if (shell.env) {
@@ -168,11 +174,7 @@ export const MainRoutePage = (): ReactElement => {
   const popout = usePopoutState();
 
   if (shell.isInitializing) {
-    return (
-      <AppShellFrame shell={shell} popout={popout} loading>
-        <ShellLoading />
-      </AppShellFrame>
-    );
+    return <FullScreenShellLoading shell={shell} popout={popout} />;
   }
 
   if (!shell.env) {
@@ -180,19 +182,21 @@ export const MainRoutePage = (): ReactElement => {
   }
 
   return (
-    <AppShellFrame shell={shell} popout={popout}>
-      <CredentialsReentryBanner />
-      <Suspense
-        fallback={
-          <ShellLoading
-            message={LOADING_MESSAGES.ROUTE_LOADING}
-            detail="화면 구성을 불러오고 있습니다."
-          />
-        }
-      >
+    <Suspense
+      fallback={
+        <FullScreenShellLoading
+          shell={shell}
+          popout={popout}
+          message={LOADING_MESSAGES.ROUTE_LOADING}
+          detail="화면 구성을 불러오고 있습니다."
+        />
+      }
+    >
+      <AppShellFrame shell={shell} popout={popout}>
+        <CredentialsReentryBanner />
         <PanelWorkspace popout={popout} />
-      </Suspense>
-    </AppShellFrame>
+      </AppShellFrame>
+    </Suspense>
   );
 };
 

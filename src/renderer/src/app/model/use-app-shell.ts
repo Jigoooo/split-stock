@@ -20,7 +20,14 @@ export function useAppShell(): UseAppShellReturn {
   const utils = trpc.useUtils();
   const queryClient = useQueryClient();
   const envQuery = trpc.auth.getEnv.useQuery();
-  const storedQuery = trpc.auth.listStored.useQuery();
+  const storedQuery = trpc.auth.listStored.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+  const accountsQuery = trpc.account.listAccounts.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
   const env = envQuery.data?.env ?? null;
   const [pendingEnv, setPendingEnv] = useState<EnvValue | null>(null);
 
@@ -68,7 +75,7 @@ export function useAppShell(): UseAppShellReturn {
     env,
     stored,
     pendingEnv,
-    isInitializing: envQuery.isPending,
+    isInitializing: envQuery.isPending || storedQuery.isPending || accountsQuery.isPending,
     isSwitchingEnv: setEnv.isPending,
     requestEnvSwitch,
     confirmEnvSwitch,
