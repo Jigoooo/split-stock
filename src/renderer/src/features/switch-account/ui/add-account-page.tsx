@@ -3,6 +3,7 @@ import {
   Button,
   EnvironmentRadioGroup,
   ProdConfirmModal,
+  RadioGroup,
   Select,
   TextInput,
 } from '@renderer/shared/ui';
@@ -13,7 +14,7 @@ import {
   type BrokerId,
   type Credentials,
 } from '@shared/contracts';
-import { type FormEvent, type ReactElement, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 
 /**
  * 계좌 추가 페이지 — 별도 팝아웃 창(`#popout=add-account`)에서 렌더링된다.
@@ -49,7 +50,7 @@ export const AddAccountPage = (): ReactElement => {
     window.close();
   };
 
-  const onSubmit = (e: FormEvent<HTMLFormElement>): void => {
+  const onSubmit = (e: { preventDefault: () => void }): void => {
     e.preventDefault();
     const acntNo8 = broker === 'KIS' ? accountNo8 : kiwoomAccountNo.slice(0, 8);
     const acntProdCd: AccountProdCode = broker === 'KIS' ? accountProdCd : '01';
@@ -79,22 +80,24 @@ export const AddAccountPage = (): ReactElement => {
         <div className="add-account-page__body">
           <div className="add-account-page__field">
             <span className="add-account-page__label">증권사</span>
-            <div role="radiogroup" aria-label="증권사 선택" style={{ display: 'flex', gap: 8 }}>
-              <BrokerCard
-                id="kis"
-                label="한국투자증권 (KIS)"
-                desc="국내 / 해외 / 모의 / 실전"
-                selected={broker === 'KIS'}
-                onClick={() => setBroker('KIS')}
-              />
-              <BrokerCard
-                id="kiwoom"
-                label="키움증권 (Kiwoom)"
-                desc="국내 / 모의 / 실전 (NXT/SOR PROD 전용)"
-                selected={broker === 'KIWOOM'}
-                onClick={() => setBroker('KIWOOM')}
-              />
-            </div>
+            <RadioGroup<BrokerId>
+              name="add-account-broker"
+              ariaLabel="증권사 선택"
+              value={broker}
+              onChange={setBroker}
+              items={[
+                {
+                  value: 'KIS',
+                  label: '한국투자증권 (KIS)',
+                  description: '국내 / 해외 / 모의 / 실전',
+                },
+                {
+                  value: 'KIWOOM',
+                  label: '키움증권 (Kiwoom)',
+                  description: '국내 / 모의 / 실전 (NXT/SOR PROD 전용)',
+                },
+              ]}
+            />
           </div>
 
           <div className="add-account-page__field">
@@ -232,43 +235,6 @@ export const AddAccountPage = (): ReactElement => {
     </div>
   );
 };
-
-const BrokerCard = ({
-  id,
-  label,
-  desc,
-  selected,
-  onClick,
-}: {
-  id: string;
-  label: string;
-  desc: string;
-  selected: boolean;
-  onClick: () => void;
-}): ReactElement => (
-  <button
-    type="button"
-    role="radio"
-    aria-checked={selected}
-    onClick={onClick}
-    style={{
-      flex: 1,
-      padding: '10px 12px',
-      border: selected ? '2px solid var(--accent)' : '1px solid var(--border)',
-      borderRadius: 8,
-      background: selected ? 'var(--accent-tint-8)' : 'transparent',
-      cursor: 'pointer',
-      textAlign: 'left',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 4,
-    }}
-    data-broker={id}
-  >
-    <span style={{ fontWeight: 600 }}>{label}</span>
-    <span style={{ fontSize: '0.85em', opacity: 0.75 }}>{desc}</span>
-  </button>
-);
 
 const Row = ({
   label,

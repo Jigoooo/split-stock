@@ -122,8 +122,8 @@ function CredentialsListSection(): ReactElement {
             환경의 저장된 App Key / Secret 을 삭제합니다.
           </div>
           <div className="muted">
-            이후 재로그인 시 App Key / Secret 재입력이 필요합니다. {brokerName} 개발자센터에서
-            다시 확인해야 할 수 있습니다.
+            이후 재로그인 시 App Key / Secret 재입력이 필요합니다. {brokerName} 개발자센터에서 다시
+            확인해야 할 수 있습니다.
           </div>
           {currentEnv === env && broker === 'KIS' ? (
             <div className="muted">현재 활성 환경이므로 자동으로 로그아웃됩니다.</div>

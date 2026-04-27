@@ -1,28 +1,22 @@
 import type { PriceCorrectionStrategy } from '@renderer/entities/price-correction-settings';
-import { Button } from '@renderer/shared/ui';
+import { Button, RadioGroup, type RadioGroupItem } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { usePriceCorrectionForm } from '../model/use-price-correction-form';
 
 type CorrectionSide = 'BUY' | 'SELL';
 
-interface StrategyOption {
-  value: PriceCorrectionStrategy;
-  label: string;
-  desc: string;
-}
-
-function buildStrategyOptions(side: CorrectionSide): StrategyOption[] {
+function buildStrategyItems(side: CorrectionSide): RadioGroupItem<PriceCorrectionStrategy>[] {
   if (side === 'BUY') {
     return [
       {
         value: 'AGGRESSIVE',
         label: '즉시 체결 우선',
-        desc: '매도 1호가로 보정 (올림, 살짝 비싸게)',
+        description: '매도 1호가로 보정 (올림, 살짝 비싸게)',
       },
       {
         value: 'CONSERVATIVE',
         label: '유리한 가격 우선',
-        desc: '매수 1호가로 보정 (내림, 미체결 위험)',
+        description: '매수 1호가로 보정 (내림, 미체결 위험)',
       },
     ];
   }
@@ -30,12 +24,12 @@ function buildStrategyOptions(side: CorrectionSide): StrategyOption[] {
     {
       value: 'AGGRESSIVE',
       label: '즉시 체결 우선',
-      desc: '매수 1호가로 보정 (내림, 살짝 싸게)',
+      description: '매수 1호가로 보정 (내림, 살짝 싸게)',
     },
     {
       value: 'CONSERVATIVE',
       label: '유리한 가격 우선',
-      desc: '매도 1호가로 보정 (올림, 미체결 위험)',
+      description: '매도 1호가로 보정 (올림, 미체결 위험)',
     },
   ];
 }
@@ -57,42 +51,19 @@ const StrategyRadioGroup = ({
   disabled,
   onChange,
 }: StrategyRadioGroupProps): ReactElement => {
-  const options = buildStrategyOptions(side);
+  const items = buildStrategyItems(side).map((item) => ({ ...item, disabled }));
   return (
     <div style={{ display: 'grid', gap: '0.3rem' }}>
       <span className="muted" style={{ fontSize: '1.1rem' }}>
         {label}
       </span>
-      <div style={{ display: 'flex', gap: '1.2rem' }}>
-        {options.map((opt) => (
-          <label
-            key={opt.value}
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '0.4rem',
-              cursor: disabled ? 'not-allowed' : 'pointer',
-            }}
-          >
-            <input
-              type="radio"
-              name={id}
-              value={opt.value}
-              checked={value === opt.value}
-              disabled={disabled}
-              onChange={() => onChange(opt.value)}
-              style={{ marginTop: '0.2rem' }}
-            />
-            <span>
-              <span style={{ fontWeight: 500 }}>{opt.label}</span>
-              <br />
-              <span className="muted" style={{ fontSize: '1rem' }}>
-                {opt.desc}
-              </span>
-            </span>
-          </label>
-        ))}
-      </div>
+      <RadioGroup<PriceCorrectionStrategy>
+        name={id}
+        ariaLabel={label}
+        value={value}
+        items={items}
+        onChange={onChange}
+      />
     </div>
   );
 };

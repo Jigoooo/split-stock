@@ -1,6 +1,6 @@
 import { Button, EnvironmentRadioGroup, ProdConfirmModal, TextInput } from '@renderer/shared/ui';
 import type { AccountProdCode, AppEnv, Credentials } from '@shared/contracts';
-import { type FormEvent, type ReactElement, useEffect, useState } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useSaveCredentials } from '../model/use-save-credentials';
 
@@ -34,7 +34,7 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
     }
   };
 
-  const onSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
+  const onSubmit = async (e: { preventDefault: () => void }): Promise<void> => {
     e.preventDefault();
     const value: Credentials = {
       env,
