@@ -187,6 +187,13 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
           <Button
             onClick={() => {
               if (presetItems.length === 0) {
+                // "템플릿 관리" — 설정 팝아웃을 매매설정관리 + 템플릿 관리 sub-tab 으로 이동.
+                try {
+                  window.localStorage.setItem('popout:settings:initialTab', 'strategy');
+                  window.localStorage.setItem('popout:settings:strategyTab', 'templates');
+                } catch {
+                  // localStorage 차단 시 — 기본 탭 fallback.
+                }
                 onOpenStrategySettings?.();
                 return;
               }

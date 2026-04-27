@@ -68,9 +68,25 @@ function readInitialTab(): SettingsTopTab {
   return 'strategy';
 }
 
+function readInitialStrategyTab(): ExtendedStrategyTab {
+  // 매매설정관리 sub-tab 초기값을 호출자 localStorage 에서 1회 소비.
+  // (예: 메인 폼의 "템플릿 관리" 버튼 → 템플릿 sub-tab 자동 선택)
+  try {
+    const v = window.localStorage.getItem('popout:settings:strategyTab');
+    if (v) {
+      window.localStorage.removeItem('popout:settings:strategyTab');
+      const matched = STRATEGY_TABS_WITH_FEE.find((t) => t.id === v);
+      if (matched) return matched.id;
+    }
+  } catch {
+    // localStorage 차단 환경 — 기본값 fallback
+  }
+  return 'basic';
+}
+
 export const SettingsPage = (): ReactElement => {
   const [topTab, setTopTab] = useState<SettingsTopTab>(readInitialTab);
-  const [strategyTab, setStrategyTab] = useState<ExtendedStrategyTab>('basic');
+  const [strategyTab, setStrategyTab] = useState<ExtendedStrategyTab>(readInitialStrategyTab);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // 탭별 스크롤 위치 보존 — 사용자가 긴 패널을 읽다가 다른 탭 갔다 돌아왔을 때
   // 매번 최상단으로 리셋되는 문제(P2-Settings) 해결.
