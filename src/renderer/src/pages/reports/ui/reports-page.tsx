@@ -4,6 +4,9 @@ import { Button, DateInput } from '@renderer/shared/ui';
 import { type ReactElement, useMemo } from 'react';
 import { useReports } from '../model/use-reports';
 import { DailyPnlChart } from './daily-pnl-chart';
+import { LotNthBarChart } from './lot-nth-bar-chart';
+import { RangePresetButtons } from './range-preset-buttons';
+import { WinRateLineChart } from './win-rate-line-chart';
 
 function downloadCsv(csv: string, filename: string): void {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -29,7 +32,16 @@ export const ReportsPage = (): ReactElement => {
     setToStr,
     dailyPnlPending,
     dailyPnlPoints,
+    pnlByLotNthPending,
+    pnlByLotNth,
+    winRateTimelinePending,
+    winRateTimeline,
   } = useReports();
+
+  const applyPreset = (from: string, to: string): void => {
+    setFromStr(from);
+    setToStr(to);
+  };
 
   const today = useMemo(() => {
     const d = new Date();
@@ -63,30 +75,30 @@ export const ReportsPage = (): ReactElement => {
 
       <div className="panel">
         <div className="panel__title">기간</div>
-        <div
-          className="panel__body"
-          style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}
-        >
-          <label htmlFor="reports-from" style={{ display: 'grid', gap: '0.25rem' }}>
-            <span className="muted">시작</span>
-            <DateInput
-              id="reports-from"
-              value={fromStr}
-              onChange={(e) => setFromStr(e.target.value)}
-              aria-label="리포트 시작일"
-              dense
-            />
-          </label>
-          <label htmlFor="reports-to" style={{ display: 'grid', gap: '0.25rem' }}>
-            <span className="muted">종료</span>
-            <DateInput
-              id="reports-to"
-              value={toStr}
-              onChange={(e) => setToStr(e.target.value)}
-              aria-label="리포트 종료일"
-              dense
-            />
-          </label>
+        <div className="panel__body" style={{ display: 'grid', gap: '0.8rem' }}>
+          <RangePresetButtons fromStr={fromStr} toStr={toStr} onChange={applyPreset} />
+          <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label htmlFor="reports-from" style={{ display: 'grid', gap: '0.25rem' }}>
+              <span className="muted">시작</span>
+              <DateInput
+                id="reports-from"
+                value={fromStr}
+                onChange={(e) => setFromStr(e.target.value)}
+                aria-label="리포트 시작일"
+                dense
+              />
+            </label>
+            <label htmlFor="reports-to" style={{ display: 'grid', gap: '0.25rem' }}>
+              <span className="muted">종료</span>
+              <DateInput
+                id="reports-to"
+                value={toStr}
+                onChange={(e) => setToStr(e.target.value)}
+                aria-label="리포트 종료일"
+                dense
+              />
+            </label>
+          </div>
         </div>
       </div>
 
@@ -137,6 +149,48 @@ export const ReportsPage = (): ReactElement => {
             </div>
           ) : (
             <DailyPnlChart points={dailyPnlPoints} height={240} />
+          )}
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel__title">차수별 손익 분포</div>
+        <div className="panel__body">
+          {pnlByLotNthPending ? (
+            <div
+              className="muted"
+              style={{
+                height: 200,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              집계 중…
+            </div>
+          ) : (
+            <LotNthBarChart bars={pnlByLotNth} height={200} />
+          )}
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel__title">일별 승률 추이</div>
+        <div className="panel__body">
+          {winRateTimelinePending ? (
+            <div
+              className="muted"
+              style={{
+                height: 220,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              집계 중…
+            </div>
+          ) : (
+            <WinRateLineChart points={winRateTimeline} height={220} />
           )}
         </div>
       </div>

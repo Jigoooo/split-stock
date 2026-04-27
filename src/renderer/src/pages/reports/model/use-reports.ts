@@ -17,6 +17,18 @@ export interface DailyPnlPoint {
   cumulativePnlKrw: number;
 }
 
+export interface LotNthBar {
+  nth: number;
+  pnlKrw: number;
+  tradeCount: number;
+}
+
+export interface WinRatePoint {
+  date: string;
+  winRate: number;
+  soldLots: number;
+}
+
 export interface UseReportsResult {
   fromStr: string;
   setFromStr: (value: string) => void;
@@ -27,6 +39,10 @@ export interface UseReportsResult {
   summary: ReportSummary | null;
   dailyPnlPending: boolean;
   dailyPnlPoints: DailyPnlPoint[];
+  pnlByLotNthPending: boolean;
+  pnlByLotNth: LotNthBar[];
+  winRateTimelinePending: boolean;
+  winRateTimeline: WinRatePoint[];
   exportCsv: (kind: CsvKind) => Promise<{ csv: string; filename: string }>;
 }
 
@@ -52,6 +68,8 @@ export function useReports(): UseReportsResult {
 
   const summaryQuery = trpc.reports.getSummary.useQuery(range);
   const dailyPnlQuery = trpc.reports.getDailyPnl.useQuery(range);
+  const pnlByLotNthQuery = trpc.reports.getPnlByLotNth.useQuery(range);
+  const winRateTimelineQuery = trpc.reports.getWinRateTimeline.useQuery(range);
   const utils = trpc.useUtils();
 
   const exportCsv = async (kind: CsvKind): Promise<{ csv: string; filename: string }> => {
@@ -72,6 +90,10 @@ export function useReports(): UseReportsResult {
     summary: summaryQuery.data ?? null,
     dailyPnlPending: dailyPnlQuery.isPending,
     dailyPnlPoints: dailyPnlQuery.data?.points ?? [],
+    pnlByLotNthPending: pnlByLotNthQuery.isPending,
+    pnlByLotNth: pnlByLotNthQuery.data?.items ?? [],
+    winRateTimelinePending: winRateTimelineQuery.isPending,
+    winRateTimeline: winRateTimelineQuery.data?.points ?? [],
     exportCsv,
   };
 }
