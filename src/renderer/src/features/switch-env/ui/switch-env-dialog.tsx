@@ -1,7 +1,8 @@
 import { Button, ProdConfirmModal } from '@renderer/shared/ui';
+import type { AppEnv } from '@shared/contracts';
 import type { ReactElement } from 'react';
 
-type Env = 'MOCK' | 'PROD';
+type Env = AppEnv;
 
 export interface SwitchEnvDialogProps {
   open: boolean;

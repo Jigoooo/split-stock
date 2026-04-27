@@ -17,13 +17,13 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@renderer/shared/ui';
-import type { BrokerId } from '@shared/contracts';
+import type { AppEnv, BrokerId } from '@shared/contracts';
 import { GripVertical, Pencil, Trash2 } from 'lucide-react';
 import type { CSSProperties, ReactElement } from 'react';
 
 export interface AccountRow {
   id: number;
-  env: 'MOCK' | 'PROD';
+  env: AppEnv;
   broker: BrokerId;
   accountNo8: string;
   /** 상품코드 — 라벨 충돌 방지(같은 broker/env/마지막4자리 조합)로 마지막2 표기 시 사용. */
@@ -308,7 +308,7 @@ export function formatAccountLabel(a: AccountRow): string {
   return `[${a.broker}] ${a.env} · ${tail}${prodSuffix}`;
 }
 
-export const EnvDot = ({ env }: { env: 'MOCK' | 'PROD' }): ReactElement => (
+export const EnvDot = ({ env }: { env: AppEnv }): ReactElement => (
   <span
     aria-hidden
     style={{

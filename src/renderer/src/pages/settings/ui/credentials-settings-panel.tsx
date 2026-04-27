@@ -2,14 +2,15 @@ import { SafetySwitchHeader } from '@renderer/features/safety-switch';
 import { useSwitchAccount } from '@renderer/features/switch-account';
 import { WatchGlobalToggle } from '@renderer/features/watch-global-toggle';
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, TableGrid } from '@renderer/shared/ui';
+import { Button, TableGrid, TextInput } from '@renderer/shared/ui';
 import { dialog } from '@renderer/shared/ui/dialog';
+import type { AppEnv, BrokerId } from '@shared/contracts';
 import { Check, LogIn, Trash2 } from 'lucide-react';
-import type { CSSProperties, ReactElement } from 'react';
+import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-const ENV_LABEL = { MOCK: '모의(MOCK)', PROD: '실전(PROD)' } as const;
-const BROKER_LABEL = { KIS: '한국투자증권', KIWOOM: '키움증권' } as const;
+const ENV_LABEL: Record<AppEnv, string> = { MOCK: '모의(MOCK)', PROD: '실전(PROD)' };
+const BROKER_LABEL: Record<BrokerId, string> = { KIS: '한국투자증권', KIWOOM: '키움증권' };
 
 /**
  * 설정 → 계좌/보안 탭의 통합 컨테이너.
@@ -70,6 +71,86 @@ function CredentialsAddSection(): ReactElement {
 }
 
 /**
+ * 위험한 삭제 작업의 phrase-typed 확인 모달.
+ *
+ * 표준 dialog 의 단순 confirm 보다 한 단계 강한 게이트:
+ *   - 사용자가 정확한 문구("삭제")를 타이핑해야 confirm 활성화.
+ *   - 우발적 클릭/Enter 연타로 인한 자격증명 손실 방지.
+ *
+ * ProdConfirmModal 과 동일한 골격을 사용하되, 본 케이스는 settings-page
+ * 단일 진입점 전용 → 공용 컴포넌트로 끌어올리지 않고 inline 유지.
+ */
+const PHRASE = '삭제';
+function PhraseDeleteModal({
+  open,
+  pending,
+  title,
+  message,
+  confirmText,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  pending: boolean;
+  title: string;
+  message: ReactNode;
+  confirmText: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}): ReactElement | null {
+  const [value, setValue] = useState('');
+  // 모달이 열릴 때마다 입력 초기화 — 이전 phrase 가 잔존해 자동 confirm 되는 것 방지.
+  useEffect(() => {
+    if (!open) setValue('');
+  }, [open]);
+  if (!open) return null;
+  const matched = value.trim() === PHRASE;
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={title}>
+      <div className="modal panel">
+        <div className="panel__title">{title}</div>
+        <div className="panel__body" style={{ display: 'grid', gap: '1rem' }}>
+          {message}
+          <label htmlFor="phrase-delete-input" style={{ display: 'grid', gap: '0.4rem' }}>
+            <span>
+              계속 진행하려면 <code>{PHRASE}</code> 라고 정확히 입력하세요:
+            </span>
+            <TextInput
+              id="phrase-delete-input"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={PHRASE}
+              autoComplete="off"
+              spellCheck={false}
+              dense
+              autoFocus
+            />
+          </label>
+        </div>
+        <div
+          className="panel__body"
+          style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
+        >
+          <Button onClick={onCancel} disabled={pending} dense>
+            취소
+          </Button>
+          <Button
+            onClick={onConfirm}
+            disabled={!matched}
+            loading={pending}
+            loadingText="삭제 중…"
+            variant="danger"
+            dense
+          >
+            {confirmText}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * 저장된 자격증명 목록 + 환경별 / 전체 삭제.
  */
 function CredentialsListSection(): ReactElement {
@@ -101,10 +182,26 @@ function CredentialsListSection(): ReactElement {
   const entries = stored.data?.entries ?? [];
   const currentEnv = envQuery.data?.env ?? null;
 
-  const handleDeleteOne = async (
-    env: 'MOCK' | 'PROD',
-    broker: 'KIS' | 'KIWOOM' = 'KIS',
-  ): Promise<void> => {
+  // PROD/전체 삭제 등 위험 작업은 phrase 모달 게이트로 보호.
+  // MOCK 단건 삭제는 표준 confirm 만으로 충분.
+  const [phraseGate, setPhraseGate] = useState<
+    { kind: 'one'; env: AppEnv; broker: BrokerId } | { kind: 'all' } | null
+  >(null);
+
+  const performDeleteOne = async (env: AppEnv, broker: BrokerId): Promise<void> => {
+    if (currentEnv === env && broker === 'KIS') {
+      await logout.mutateAsync({ clearStored: true });
+    } else {
+      await clearCredentials.mutateAsync({ env, broker });
+    }
+  };
+
+  const handleDeleteOne = async (env: AppEnv, broker: BrokerId = 'KIS'): Promise<void> => {
+    // PROD 또는 활성 KIS 자격증명 삭제는 phrase 게이트 강제 — 우발적 손실 방지.
+    if (env === 'PROD' || (currentEnv === env && broker === 'KIS')) {
+      setPhraseGate({ kind: 'one', env, broker });
+      return;
+    }
     const envName = ENV_LABEL[env];
     const brokerName = BROKER_LABEL[broker];
     const confirmed = await dialog.openAsync({
@@ -125,41 +222,14 @@ function CredentialsListSection(): ReactElement {
             이후 재로그인 시 App Key / Secret 재입력이 필요합니다. {brokerName} 개발자센터에서 다시
             확인해야 할 수 있습니다.
           </div>
-          {currentEnv === env && broker === 'KIS' ? (
-            <div className="muted">현재 활성 환경이므로 자동으로 로그아웃됩니다.</div>
-          ) : null}
         </div>
       ),
     });
     if (!confirmed) return;
-    if (currentEnv === env && broker === 'KIS') {
-      await logout.mutateAsync({ clearStored: true });
-    } else {
-      await clearCredentials.mutateAsync({ env, broker });
-    }
+    await performDeleteOne(env, broker);
   };
 
-  const handleDeleteAll = async (): Promise<void> => {
-    const confirmed = await dialog.openAsync({
-      type: 'ERROR',
-      title: '모든 자격증명 삭제 + 로그아웃',
-      confirmText: '전체 삭제',
-      cancelText: '취소',
-      isCancelWith: true,
-      message: (
-        <div style={{ display: 'grid', gap: '0.5rem' }}>
-          <div>
-            <strong>모든 환경(MOCK + PROD)</strong> 의 저장된 App Key / Secret 을 삭제하고
-            로그아웃합니다.
-          </div>
-          <div className="muted">
-            이 작업은 되돌릴 수 없습니다. 이후 재로그인 시 각 환경의 App Key / Secret 재입력이
-            필요합니다.
-          </div>
-        </div>
-      ),
-    });
-    if (!confirmed) return;
+  const performDeleteAll = async (): Promise<void> => {
     if (currentEnv) {
       await logout.mutateAsync({ clearStored: true });
     }
@@ -167,6 +237,10 @@ function CredentialsListSection(): ReactElement {
     for (const e of remaining) {
       await clearCredentials.mutateAsync({ env: e.env, broker: e.broker });
     }
+  };
+
+  const handleDeleteAll = (): void => {
+    setPhraseGate({ kind: 'all' });
   };
 
   const pending = clearCredentials.isPending || logout.isPending || switching;
@@ -291,19 +365,60 @@ function CredentialsListSection(): ReactElement {
         )}
         {entries.length > 0 ? (
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              variant="danger"
-              dense
-              disabled={pending}
-              onClick={() => {
-                void handleDeleteAll();
-              }}
-            >
+            <Button variant="danger" dense disabled={pending} onClick={handleDeleteAll}>
               모든 자격증명 삭제 + 로그아웃
             </Button>
           </div>
         ) : null}
       </div>
+
+      <PhraseDeleteModal
+        open={phraseGate !== null}
+        pending={pending}
+        title={
+          phraseGate?.kind === 'all'
+            ? '⚠ 모든 자격증명 삭제 + 로그아웃'
+            : phraseGate?.kind === 'one'
+              ? `⚠ ${BROKER_LABEL[phraseGate.broker]} ${ENV_LABEL[phraseGate.env]} 자격증명 삭제`
+              : ''
+        }
+        confirmText={phraseGate?.kind === 'all' ? '전체 삭제' : '삭제'}
+        message={
+          phraseGate?.kind === 'all' ? (
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              <strong>모든 환경(MOCK + PROD)</strong> 의 저장된 App Key / Secret 을 삭제하고
+              로그아웃합니다.
+              <span className="muted">
+                되돌릴 수 없습니다. 이후 재로그인 시 각 환경의 App Key / Secret 재입력이 필요합니다.
+              </span>
+            </div>
+          ) : phraseGate?.kind === 'one' ? (
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              <strong>
+                {BROKER_LABEL[phraseGate.broker]} {ENV_LABEL[phraseGate.env]}
+              </strong>{' '}
+              환경의 저장된 App Key / Secret 을 삭제합니다.
+              <span className="muted">
+                이후 재로그인 시 App Key / Secret 재입력이 필요합니다.
+                {currentEnv === phraseGate.env && phraseGate.broker === 'KIS'
+                  ? ' 현재 활성 환경이므로 자동으로 로그아웃됩니다.'
+                  : ''}
+              </span>
+            </div>
+          ) : null
+        }
+        onCancel={() => setPhraseGate(null)}
+        onConfirm={() => {
+          if (!phraseGate) return;
+          const target = phraseGate;
+          setPhraseGate(null);
+          if (target.kind === 'all') {
+            void performDeleteAll();
+          } else {
+            void performDeleteOne(target.env, target.broker);
+          }
+        }}
+      />
     </div>
   );
 }

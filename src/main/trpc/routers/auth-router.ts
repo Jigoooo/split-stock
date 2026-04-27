@@ -1,4 +1,4 @@
-import { AppEnvSchema, CredentialsSchema } from '@shared/contracts';
+import { type AppEnv, AppEnvSchema, type BrokerId, CredentialsSchema } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { repairAccountFromStoredCredentials } from '../../account/repair-stored-accounts';
@@ -133,8 +133,8 @@ export const authRouter = router({
     // Stage 5b-1: broker 단위로 격리된 entries 반환. KIS/KIWOOM 모두 노출.
     const entries = ctx.credentialsRepo.listEntries();
     const result: Array<{
-      env: 'MOCK' | 'PROD';
-      broker: 'KIS' | 'KIWOOM';
+      env: AppEnv;
+      broker: BrokerId;
       accountNo8: string;
       accountId: number;
     }> = [];

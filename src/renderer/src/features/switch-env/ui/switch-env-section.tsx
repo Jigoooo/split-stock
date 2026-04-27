@@ -6,10 +6,11 @@ import {
   TextInput,
   usePhraseGate,
 } from '@renderer/shared/ui';
+import type { AppEnv } from '@shared/contracts';
 import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-type Env = 'MOCK' | 'PROD';
+type Env = AppEnv;
 
 /**
  * 설정 패널용 환경 전환 섹션.

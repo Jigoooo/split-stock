@@ -1,9 +1,10 @@
 import { useKillSwitchHotkey } from '@renderer/features/safety-switch';
 import { trpc } from '@renderer/shared/api/trpc';
+import type { AppEnv } from '@shared/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-type EnvValue = 'MOCK' | 'PROD';
+type EnvValue = AppEnv;
 
 interface UseAppShellReturn {
   env: EnvValue | null;
