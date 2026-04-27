@@ -13,6 +13,22 @@ import {
   formatAccountLabel,
 } from './account-selector-list';
 
+function applyOptimisticOrder(accounts: AccountRow[], orderedIds: number[] | null): AccountRow[] {
+  if (!orderedIds) return accounts;
+
+  const accountsById = new Map(accounts.map((account) => [account.id, account]));
+  const ordered: AccountRow[] = [];
+  for (const id of orderedIds) {
+    const account = accountsById.get(id);
+    if (account) ordered.push(account);
+  }
+  if (ordered.length === 0) return accounts;
+
+  const orderedIdSet = new Set(orderedIds);
+  const remaining = accounts.filter((account) => !orderedIdSet.has(account.id));
+  return [...ordered, ...remaining];
+}
+
 export interface AccountSelectorProps {
   /**
    * 드롭다운 하단의 "+ 계좌 추가" 버튼 숨김 옵션.
@@ -50,6 +66,7 @@ export const AccountSelector = ({
   const lastDeleteTriggerRef = useRef<HTMLElement | null>(null);
   // 스크린리더용 aria-live 영역 메시지 — 삭제 결과/순서변경 등 비동기 결과 공지.
   const [liveMessage, setLiveMessage] = useState<string>('');
+  const [optimisticOrderedIds, setOptimisticOrderedIds] = useState<number[] | null>(null);
 
   const deleteMutation = trpc.account.delete.useMutation({
     // fire-and-forget: await 하면 모든 query refetch 가 끝날 때까지 deleteMutation.isPending
@@ -92,12 +109,15 @@ export const AccountSelector = ({
 
   const reorderMutation = trpc.account.reorder.useMutation({
     onSuccess: () => {
-      void qc.invalidateQueries();
-      toast.success('계좌 순서가 변경되었습니다');
-      // 키보드/스크린리더 사용자에게 명시적 공지 — DnD 결과는 시각적 변화만으로는 인지하기 어렵다.
+      void qc
+        .invalidateQueries()
+        .catch(() => undefined)
+        .finally(() => setOptimisticOrderedIds(null));
+      // 시각 피드백은 목록 순서 변화로 충분하므로, 성공 toast 는 띄우지 않고 스크린리더 공지만 유지.
       setLiveMessage('계좌 순서가 변경되었습니다');
     },
     onError: (err) => {
+      setOptimisticOrderedIds(null);
       toast.error(`순서 변경 실패: ${err.message}`);
       setLiveMessage(`순서 변경 실패: ${err.message}`);
     },
@@ -197,7 +217,8 @@ export const AccountSelector = ({
     displayName: a.displayName,
     isActive: a.isActive || (!hasExplicitActive && activeAccountId === a.id),
   }));
-  const active = normalizedAll.find((a) => a.isActive) ?? null;
+  const visibleAccounts = applyOptimisticOrder(normalizedAll, optimisticOrderedIds);
+  const active = visibleAccounts.find((a) => a.isActive) ?? null;
 
   const onPick = async (id: number): Promise<void> => {
     setOpen(false);
@@ -241,6 +262,11 @@ export const AccountSelector = ({
     })();
   };
 
+  const onReorder = (orderedIds: number[]): void => {
+    setOptimisticOrderedIds(orderedIds);
+    reorderMutation.mutate({ orderedIds });
+  };
+
   const label = active ? formatAccountLabel(active) : '계좌 미선택';
 
   return (
@@ -282,7 +308,7 @@ export const AccountSelector = ({
 
       {open ? (
         <AccountSelectorList
-          accounts={normalizedAll}
+          accounts={visibleAccounts}
           switching={switching}
           deletePending={deleteMutation.isPending}
           renamePending={renameMutation.isPending}
@@ -296,7 +322,7 @@ export const AccountSelector = ({
             setOpen(false);
             setRenameTarget(row);
           }}
-          onReorder={(orderedIds) => reorderMutation.mutate({ orderedIds })}
+          onReorder={onReorder}
           onAddAccount={onAddAccount}
         />
       ) : null}

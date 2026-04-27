@@ -3,6 +3,7 @@ import {
   DndContext,
   type DragEndEvent,
   KeyboardSensor,
+  type Modifier,
   PointerSensor,
   useSensor,
   useSensors,
@@ -42,6 +43,12 @@ interface Props {
   onReorder: (orderedIds: number[]) => void;
   onAddAccount: () => void;
 }
+
+const restrictToVerticalAxis: Modifier = ({ transform }) => ({
+  ...transform,
+  x: 0,
+});
+const verticalAxisModifiers = [restrictToVerticalAxis];
 
 /**
  * 계좌 셀렉터 드롭다운 listbox.
@@ -96,7 +103,12 @@ export const AccountSelectorList = ({
         boxShadow: '0 8px 28px rgba(0, 0, 0, 0.25)',
       }}
     >
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        modifiers={verticalAxisModifiers}
+        onDragEnd={handleDragEnd}
+      >
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {accounts.map((a) => (
             <SortableAccountItem
@@ -149,7 +161,7 @@ const SortableAccountItem = ({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: a.id,
   });
-  // 활성 계좌 행 — 좌측 강조 바 + tint 배경으로 한눈에 식별. 색상은 환경(PROD=빨강/MOCK=accent)
+  // 활성 계좌 행 — tint 배경과 현재 배지로 한눈에 식별. 색상은 환경(PROD=빨강/MOCK=accent)
   // 으로 구분해 사고 위험까지 함께 전달.
   const activeAccentColor = a.env === 'PROD' ? 'var(--up)' : 'var(--accent)';
   const activeBg = a.env === 'PROD' ? 'var(--up-soft)' : 'var(--accent-tint-12)';
@@ -163,7 +175,6 @@ const SortableAccountItem = ({
     padding: '0.3rem 0.35rem 0.3rem 0.2rem',
     borderRadius: 4,
     background: a.isActive ? activeBg : undefined,
-    boxShadow: a.isActive ? `inset 0.2rem 0 0 0 ${activeAccentColor}` : undefined,
   };
   return (
     <div ref={setNodeRef} className="account-selector__item" style={style}>
