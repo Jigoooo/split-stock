@@ -1,5 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, TextInput } from '@renderer/shared/ui';
+import { alertDialog, Button, TextInput } from '@renderer/shared/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -145,13 +145,21 @@ export const AccountSelector = ({
   };
 
   const onDelete = (row: AccountRow): void => {
-    const msg = row.isActive
+    const message = row.isActive
       ? all.length === 1
-        ? `${formatAccountLabel(row)}\n\n유일한 계좌입니다. 삭제하면 자동 로그아웃되고 자격증명도 제거됩니다. 계속할까요?`
-        : `${formatAccountLabel(row)}\n\n활성 계좌입니다. 삭제 시 다른 계좌로 자동 전환됩니다. 계속할까요?`
-      : `${formatAccountLabel(row)}\n\n이 계좌와 자격증명을 삭제할까요?`;
-    if (!window.confirm(msg)) return;
-    deleteMutation.mutate({ accountId: row.id });
+        ? `${formatAccountLabel(row)} — 유일한 계좌입니다. 삭제하면 자동 로그아웃되고 자격증명도 제거됩니다. 계속할까요?`
+        : `${formatAccountLabel(row)} — 활성 계좌입니다. 삭제 시 다른 계좌로 자동 전환됩니다. 계속할까요?`
+      : `${formatAccountLabel(row)} — 이 계좌와 자격증명을 삭제할까요?`;
+    void (async () => {
+      const confirmed = await alertDialog.confirm({
+        title: '계좌 삭제',
+        message,
+        confirmText: '삭제',
+        cancelText: '취소',
+      });
+      if (!confirmed) return;
+      deleteMutation.mutate({ accountId: row.id });
+    })();
   };
 
   const label = active ? formatAccountLabel(active) : '계좌 미선택';

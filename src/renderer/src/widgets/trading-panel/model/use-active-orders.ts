@@ -1,6 +1,7 @@
 import { useActiveAccountId } from '@renderer/entities/account';
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { alertDialog } from '@renderer/shared/ui';
 import { useState } from 'react';
 
 export function useActiveOrders(pdnoFilter?: string | null) {
@@ -30,13 +31,13 @@ export function useActiveOrders(pdnoFilter?: string | null) {
     const odnos = Array.from(selected);
     if (odnos.length === 0) return;
     if (accountId === null) return;
-    if (
-      !window.confirm(
-        `${odnos.length}건 일괄 취소하시겠습니까?\n남은 수량 합계: ${thousandSeparator(selectedRemainingQty)}주`,
-      )
-    ) {
-      return;
-    }
+    const confirmed = await alertDialog.confirm({
+      title: '미체결 주문 일괄 취소',
+      message: `${odnos.length}건 일괄 취소하시겠습니까? 남은 수량 합계: ${thousandSeparator(selectedRemainingQty)}주`,
+      confirmText: '취소 진행',
+      cancelText: '닫기',
+    });
+    if (!confirmed) return;
     await cancelMany.mutateAsync({ odnos, accountId });
     setSelected(new Set());
   };
