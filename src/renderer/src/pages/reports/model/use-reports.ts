@@ -12,6 +12,11 @@ export interface ReportSummary {
   avgHoldingDays: number;
 }
 
+export interface DailyPnlPoint {
+  date: string;
+  cumulativePnlKrw: number;
+}
+
 export interface UseReportsResult {
   fromStr: string;
   setFromStr: (value: string) => void;
@@ -20,6 +25,8 @@ export interface UseReportsResult {
   summaryPending: boolean;
   summaryError: { message: string } | null;
   summary: ReportSummary | null;
+  dailyPnlPending: boolean;
+  dailyPnlPoints: DailyPnlPoint[];
   exportCsv: (kind: CsvKind) => Promise<{ csv: string; filename: string }>;
 }
 
@@ -44,6 +51,7 @@ export function useReports(): UseReportsResult {
   };
 
   const summaryQuery = trpc.reports.getSummary.useQuery(range);
+  const dailyPnlQuery = trpc.reports.getDailyPnl.useQuery(range);
   const utils = trpc.useUtils();
 
   const exportCsv = async (kind: CsvKind): Promise<{ csv: string; filename: string }> => {
@@ -62,6 +70,8 @@ export function useReports(): UseReportsResult {
     summaryPending: summaryQuery.isPending,
     summaryError: summaryQuery.error ? { message: summaryQuery.error.message } : null,
     summary: summaryQuery.data ?? null,
+    dailyPnlPending: dailyPnlQuery.isPending,
+    dailyPnlPoints: dailyPnlQuery.data?.points ?? [],
     exportCsv,
   };
 }

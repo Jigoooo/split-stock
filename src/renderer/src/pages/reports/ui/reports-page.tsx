@@ -3,6 +3,7 @@ import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, DateInput } from '@renderer/shared/ui';
 import { type ReactElement, useMemo } from 'react';
 import { useReports } from '../model/use-reports';
+import { DailyPnlChart } from './daily-pnl-chart';
 
 function downloadCsv(csv: string, filename: string): void {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -17,8 +18,18 @@ function downloadCsv(csv: string, filename: string): void {
 }
 
 export const ReportsPage = (): ReactElement => {
-  const { exportCsv, fromStr, setFromStr, summary, summaryError, summaryPending, toStr, setToStr } =
-    useReports();
+  const {
+    exportCsv,
+    fromStr,
+    setFromStr,
+    summary,
+    summaryError,
+    summaryPending,
+    toStr,
+    setToStr,
+    dailyPnlPending,
+    dailyPnlPoints,
+  } = useReports();
 
   const today = useMemo(() => {
     const d = new Date();
@@ -106,6 +117,27 @@ export const ReportsPage = (): ReactElement => {
               <Kpi label="평균 보유일" value={`${summary.avgHoldingDays.toFixed(1)}일`} />
             </>
           ) : null}
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel__title">일별 누적 손익</div>
+        <div className="panel__body">
+          {dailyPnlPending ? (
+            <div
+              className="muted"
+              style={{
+                height: 240,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              집계 중…
+            </div>
+          ) : (
+            <DailyPnlChart points={dailyPnlPoints} height={240} />
+          )}
         </div>
       </div>
 

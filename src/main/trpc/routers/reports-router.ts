@@ -3,6 +3,7 @@ import { and, gte, lt } from 'drizzle-orm';
 import { z } from 'zod';
 import { eventLogs } from '../../db/schema';
 import {
+  computeDailyPnlPointsFromDb,
   computeDailyReport,
   exportEventsCsv,
   exportLotsCsv,
@@ -35,6 +36,16 @@ export const reportsRouter = router({
   getSummary: publicProcedure.input(RangeSchema).query(({ ctx, input }) => {
     assertRange(input);
     return computeDailyReport(ctx.db, input);
+  }),
+
+  /**
+   * 일자별 누적 실현손익 포인트 — Reports 차트(라인) 데이터.
+   * SOLD 차수만 대상, soldAt 기준 일자 버킷팅 + 누적 합.
+   * 거래 없는 날은 포인트 없음 (sparse).
+   */
+  getDailyPnl: publicProcedure.input(RangeSchema).query(({ ctx, input }) => {
+    assertRange(input);
+    return { points: computeDailyPnlPointsFromDb(ctx.db, input) };
   }),
 
   exportCsv: publicProcedure

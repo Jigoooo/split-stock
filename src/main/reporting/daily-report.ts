@@ -81,6 +81,62 @@ export function computeDailyReportFromLots(
   };
 }
 
+/**
+ * 일자별 누적 실현손익 포인트 — Reports 차트용.
+ * SOLD 차수만 대상, soldAt 기준 일자(YYYY-MM-DD) 버킷팅 후 누적.
+ */
+export interface DailyPnlPoint {
+  date: string;
+  cumulativePnlKrw: number;
+}
+
+export function computeDailyPnlPoints(soldLots: SoldLot[]): DailyPnlPoint[] {
+  const sorted = [...soldLots]
+    .filter(
+      (l): l is SoldLot & { sellPrice: number; soldAt: Date } =>
+        l.sellPrice !== null && l.soldAt !== null,
+    )
+    .sort((a, b) => a.soldAt.getTime() - b.soldAt.getTime());
+  const dailyMap = new Map<string, number>();
+  for (const l of sorted) {
+    const date = l.soldAt.toISOString().slice(0, 10);
+    const pnl = (l.sellPrice - l.buyPrice) * l.qty;
+    dailyMap.set(date, (dailyMap.get(date) ?? 0) + pnl);
+  }
+  let cumulative = 0;
+  const points: DailyPnlPoint[] = [];
+  for (const [date, dailyPnl] of [...dailyMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    cumulative += dailyPnl;
+    points.push({ date, cumulativePnlKrw: cumulative });
+  }
+  return points;
+}
+
+export function computeDailyPnlPointsFromDb(db: Db, range: DailyReportInput): DailyPnlPoint[] {
+  const soldRows = db
+    .select({
+      nth: lots.nth,
+      buyPrice: lots.buyPrice,
+      sellPrice: lots.sellPrice,
+      qty: lots.qty,
+      boughtAt: lots.boughtAt,
+      soldAt: lots.soldAt,
+    })
+    .from(lots)
+    .where(and(eq(lots.status, 'SOLD'), between(lots.soldAt, range.from, range.to)))
+    .all();
+  return computeDailyPnlPoints(
+    soldRows.map((r) => ({
+      nth: r.nth,
+      buyPrice: r.buyPrice,
+      sellPrice: r.sellPrice,
+      qty: r.qty,
+      boughtAt: r.boughtAt,
+      soldAt: r.soldAt,
+    })),
+  );
+}
+
 export function computeDailyReport(db: Db, range: DailyReportInput): DailyReportSummary {
   const soldRows = db
     .select({
