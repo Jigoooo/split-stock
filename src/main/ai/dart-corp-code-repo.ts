@@ -185,6 +185,6 @@ export function parseDartCorpXml(xml: string): DartCorpCodeEntry[] {
 function matchTag(block: string, tag: string): string {
   const re = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`);
   const m = re.exec(block);
-  if (!m || !m[1]) return '';
+  if (!m?.[1]) return '';
   return m[1].trim();
 }

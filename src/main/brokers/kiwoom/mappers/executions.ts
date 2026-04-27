@@ -55,7 +55,7 @@ function inferSide(io_tp_nm: string | undefined): OrderSide {
 }
 
 function inferCancelled(ord_stt: string | undefined, io_tp_nm: string | undefined): boolean {
-  return (ord_stt && /취소/.test(ord_stt)) || (io_tp_nm && /취소/.test(io_tp_nm)) ? true : false;
+  return !!((ord_stt && /취소/.test(ord_stt)) || (io_tp_nm && /취소/.test(io_tp_nm)));
 }
 
 export function toKiwoomDailyExecution(
