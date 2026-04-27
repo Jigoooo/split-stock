@@ -1,13 +1,14 @@
 import { Button, OverlayScrollbar, Select } from '@renderer/shared/ui';
 import type { StrategyOrderType } from '@shared/contracts';
 import type { ReactElement } from 'react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import type {
   ApplyScope,
   StageRuleChangeFactory,
   StageRuleRowRaw,
 } from '../model/strategy-form-types';
 import type { StrategyFormErrors } from '../model/validate';
+import { ApplyTemplateConfirmModal } from './apply-template-confirm-modal';
 import { ErrorChip } from './error-chip';
 import {
   STAGE_RULE_CARD_COLUMNS,
@@ -50,6 +51,7 @@ export const StageRulesEditor = ({
   templateNth,
 }: StageRulesEditorProps): ReactElement => {
   const rulesScrollRef = useRef<HTMLDivElement | null>(null);
+  const [pendingScope, setPendingScope] = useState<ApplyScope | null>(null);
 
   return (
     <section aria-label="차수별 자동매매 규칙" style={{ display: 'grid', gap: '0.8rem' }}>
@@ -85,10 +87,10 @@ export const StageRulesEditor = ({
               ))}
             </Select>
           </div>
-          <Button onClick={() => onApplyTemplate('active')} disabled={disabled} dense>
+          <Button onClick={() => setPendingScope('active')} disabled={disabled} dense>
             활성 차수 전체 적용
           </Button>
-          <Button onClick={() => onApplyTemplate('all')} disabled={disabled} dense>
+          <Button onClick={() => setPendingScope('all')} disabled={disabled} dense>
             1~50 전체 적용
           </Button>
         </div>
@@ -182,6 +184,20 @@ export const StageRulesEditor = ({
       </div>
       {errors.buyRules ? <ErrorChip message={errors.buyRules} /> : null}
       {errors.sellRules ? <ErrorChip message={errors.sellRules} /> : null}
+
+      {pendingScope !== null ? (
+        <ApplyTemplateConfirmModal
+          scope={pendingScope}
+          sourceNth={parseInt(templateNth, 10) || 1}
+          targetCount={pendingScope === 'active' ? activeMaxStages : 50}
+          onCancel={() => setPendingScope(null)}
+          onConfirm={() => {
+            const scope = pendingScope;
+            setPendingScope(null);
+            onApplyTemplate(scope);
+          }}
+        />
+      ) : null}
     </section>
   );
 };
