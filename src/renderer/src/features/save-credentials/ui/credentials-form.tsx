@@ -1,4 +1,4 @@
-import { Button, EnvironmentRadioGroup, TextInput } from '@renderer/shared/ui';
+import { Button, EnvironmentRadioGroup, ProdConfirmModal, TextInput } from '@renderer/shared/ui';
 import type { AccountProdCode, AppEnv, Credentials } from '@shared/contracts';
 import { type FormEvent, type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -17,11 +17,22 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
   const [showSecret, setShowSecret] = useState(false);
   const [accountNo8, setAccountNo8] = useState('');
   const [accountProdCd, setAccountProdCd] = useState<AccountProdCode>('01');
+  const [pendingProdValue, setPendingProdValue] = useState<Credentials | null>(null);
   const canSubmit =
     appKey.length > 0 && appSecret.length > 0 && accountNo8.length === 8 && !isPending;
   useEffect(() => {
     document.getElementById('credentials-app-key')?.focus();
   }, []);
+
+  const performSave = async (value: Credentials): Promise<void> => {
+    try {
+      await save(value);
+      toast.success(`${value.env} 자격증명이 저장되었습니다`);
+      onSaved?.();
+    } catch (err) {
+      toast.error(`저장 실패: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -33,13 +44,11 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
       accountNo8,
       accountProdCd,
     };
-    try {
-      await save(value);
-      toast.success(`${env} 자격증명이 저장되었습니다`);
-      onSaved?.();
-    } catch (err) {
-      toast.error(`저장 실패: ${err instanceof Error ? err.message : String(err)}`);
+    if (value.env === 'PROD') {
+      setPendingProdValue(value);
+      return;
     }
+    await performSave(value);
   };
 
   return (
@@ -138,11 +147,31 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
         )}
 
         <div style={{ display: 'flex', gap: '0.6rem' }}>
-          <Button type="submit" variant="primary" disabled={!canSubmit}>
-            {isPending ? '저장 중…' : '저장하고 접속'}
+          <Button
+            type="submit"
+            variant={env === 'PROD' ? 'danger' : 'primary'}
+            disabled={!canSubmit}
+          >
+            {isPending ? '저장 중…' : env === 'PROD' ? '실전 자격증명 저장' : '저장하고 접속'}
           </Button>
         </div>
       </div>
+      <ProdConfirmModal
+        open={pendingProdValue !== null}
+        pending={isPending}
+        title="실전(PROD) 자격증명 저장"
+        message={
+          <strong>실전(PROD) 환경의 App Key/Secret 을 OS 키체인에 저장하고 활성화합니다.</strong>
+        }
+        confirmText="실전 자격증명 저장"
+        onConfirm={() => {
+          if (!pendingProdValue) return;
+          const value = pendingProdValue;
+          setPendingProdValue(null);
+          void performSave(value);
+        }}
+        onCancel={() => setPendingProdValue(null)}
+      />
     </form>
   );
 };
