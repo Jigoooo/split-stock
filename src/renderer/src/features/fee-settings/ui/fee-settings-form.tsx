@@ -1,109 +1,163 @@
-import type { FeeEnv } from '@renderer/entities/fee-settings';
-import { NumberInput } from '@renderer/shared/ui';
-import { useState } from 'react';
-import { useFeeSettingsForm } from '../model/use-fee-settings-form';
+import type { FeeEnv, FeeSettings } from '@renderer/entities/fee-settings';
+import { useGetFeeSettings, useUpdateFeeSettings } from '@renderer/entities/fee-settings';
+import { Button, NumberInput } from '@renderer/shared/ui';
+import { type ReactElement, useEffect, useState } from 'react';
 
-export function FeeSettingsForm() {
-  const { formData, isLoading, error, isSaving, handleFieldChange, handleSave } =
-    useFeeSettingsForm();
-  const [savingEnv, setSavingEnv] = useState<FeeEnv | null>(null);
+const DEFAULT_FEES: Record<FeeEnv, FeeSettings> = {
+  real: { buy: 0.015, sell: 0.015, tax: 0.2 },
+  mock: { buy: 0.35, sell: 0.35, tax: 0.2 },
+};
 
-  const handleSubmit = (env: FeeEnv) => {
-    setSavingEnv(env);
-    handleSave(env);
+export interface FeeSettingsFormProps {
+  /** 현재 활성 환경. 자동매매 영향이 있는 환경의 수수료만 표시/수정. */
+  env: FeeEnv;
+}
+
+/**
+ * 단일 환경(real | mock)의 매입/매도 수수료 + 제세금 입력 폼.
+ * 환경별 분리 저장 — env 가 바뀌면 이 컴포넌트가 자동으로 새 환경 데이터를 로드.
+ */
+export const FeeSettingsForm = ({ env }: FeeSettingsFormProps): ReactElement => {
+  const { data, isPending, error } = useGetFeeSettings(env);
+  const updateMutation = useUpdateFeeSettings();
+
+  const [form, setForm] = useState<FeeSettings>(DEFAULT_FEES[env]);
+  const [isDirty, setIsDirty] = useState(false);
+
+  useEffect(() => {
+    if (data) {
+      setForm(data);
+      setIsDirty(false);
+    } else {
+      setForm(DEFAULT_FEES[env]);
+      setIsDirty(false);
+    }
+  }, [data, env]);
+
+  const handleChange = (field: keyof FeeSettings, value: number): void => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setIsDirty(true);
   };
 
-  if (isLoading) {
-    return <div className="p-4 text-gray-500">수수료 설정 로드 중...</div>;
-  }
+  const handleSave = (): void => {
+    void updateMutation.mutateAsync({ env, ...form }).then(() => {
+      setIsDirty(false);
+    });
+  };
 
-  if (error) {
+  const handleReset = (): void => {
+    if (data) setForm(data);
+    setIsDirty(false);
+  };
+
+  if (isPending) {
     return (
-      <div className="p-4 text-red-600">
-        오류: {error instanceof Error ? error.message : '알 수 없는 오류'}
+      <div className="panel">
+        <div className="panel__body muted">수수료 설정 로드 중…</div>
       </div>
     );
   }
 
-  const renderFeeSection = (env: FeeEnv, label: string) => (
-    <div key={env} className="border rounded-lg p-4 mb-4">
-      <h3 className="text-lg font-semibold mb-4">{label}</h3>
-
-      <div className="space-y-4">
-        <div>
-          <label htmlFor={`${env}-buy`} className="block text-sm font-medium text-gray-700 mb-1">
-            매입 수수료 (%)
-          </label>
-          <NumberInput
-            id={`${env}-buy`}
-            showSpinner
-            allowDecimal
-            step={0.001}
-            min={0}
-            value={String(formData[env].buy)}
-            onValueChange={(raw) => handleFieldChange(env, 'buy', parseFloat(raw || '0') || 0)}
-            disabled={isSaving}
-          />
-          <p className="text-xs text-gray-500 mt-1">예: 0.015 (= 0.015%), 0.35 (= 0.35%)</p>
-        </div>
-
-        <div>
-          <label htmlFor={`${env}-sell`} className="block text-sm font-medium text-gray-700 mb-1">
-            매도 수수료 (%)
-          </label>
-          <NumberInput
-            id={`${env}-sell`}
-            showSpinner
-            allowDecimal
-            step={0.001}
-            min={0}
-            value={String(formData[env].sell)}
-            onValueChange={(raw) => handleFieldChange(env, 'sell', parseFloat(raw || '0') || 0)}
-            disabled={isSaving}
-          />
-          <p className="text-xs text-gray-500 mt-1">예: 0.015 (= 0.015%), 0.35 (= 0.35%)</p>
-        </div>
-
-        <div>
-          <label htmlFor={`${env}-tax`} className="block text-sm font-medium text-gray-700 mb-1">
-            제세금 (%)
-          </label>
-          <NumberInput
-            id={`${env}-tax`}
-            showSpinner
-            allowDecimal
-            step={0.001}
-            min={0}
-            value={String(formData[env].tax)}
-            onValueChange={(raw) => handleFieldChange(env, 'tax', parseFloat(raw || '0') || 0)}
-            disabled={isSaving}
-          />
-          <p className="text-xs text-gray-500 mt-1">예: 0.20 (= 0.20%)</p>
+  if (error) {
+    return (
+      <div className="panel">
+        <div className="panel__body">
+          <span className="chip chip--down" role="alert">
+            오류: {error instanceof Error ? error.message : '알 수 없는 오류'}
+          </span>
         </div>
       </div>
+    );
+  }
 
-      <button
-        type="button"
-        onClick={() => handleSubmit(env)}
-        disabled={isSaving || savingEnv === env}
-        className="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-      >
-        {savingEnv === env ? '저장 중...' : '저장'}
-      </button>
-    </div>
-  );
+  const envLabel = env === 'real' ? 'PROD 환경' : 'MOCK 환경';
+  const isSaving = updateMutation.isPending;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold mb-6">수수료 설정</h2>
-        <p className="text-gray-600 mb-4">
-          실 계좌와 모의 계좌의 수수료 및 제세금 설정을 관리합니다.
-        </p>
+    <div className="panel">
+      <div className="panel__title">
+        <span>수수료 / 제세금</span>
+        <span
+          className="chip"
+          style={{ marginLeft: '0.5rem', fontSize: '0.85em' }}
+          title={`현재 환경: ${envLabel}`}
+        >
+          {envLabel}
+        </span>
       </div>
+      <div className="panel__body" style={{ display: 'grid', gap: '0.8rem' }}>
+        <div className="muted" style={{ fontSize: '0.95rem' }}>
+          자동매매 손익 계산에 직접 영향을 주는 설정입니다. 변경 후 저장하면 즉시 반영됩니다.
+        </div>
 
-      {renderFeeSection('real', '실 계좌')}
-      {renderFeeSection('mock', '모의 계좌')}
+        <FeeRow
+          id={`fee-${env}-buy`}
+          label="매입 수수료 (%)"
+          hint="예: 0.015 (= 0.015%), 0.35 (= 0.35%)"
+          value={form.buy}
+          disabled={isSaving}
+          onChange={(v) => handleChange('buy', v)}
+        />
+        <FeeRow
+          id={`fee-${env}-sell`}
+          label="매도 수수료 (%)"
+          hint="예: 0.015 (= 0.015%), 0.35 (= 0.35%)"
+          value={form.sell}
+          disabled={isSaving}
+          onChange={(v) => handleChange('sell', v)}
+        />
+        <FeeRow
+          id={`fee-${env}-tax`}
+          label="제세금 (%)"
+          hint="예: 0.20 (= 0.20%)"
+          value={form.tax}
+          disabled={isSaving}
+          onChange={(v) => handleChange('tax', v)}
+        />
+
+        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+          <Button onClick={handleReset} disabled={isSaving || !isDirty} dense>
+            초기화
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving || !isDirty} variant="primary" dense>
+            {isSaving ? '저장 중…' : '저장'}
+          </Button>
+        </div>
+      </div>
     </div>
   );
+};
+
+interface FeeRowProps {
+  id: string;
+  label: string;
+  hint: string;
+  value: number;
+  disabled: boolean;
+  onChange: (value: number) => void;
 }
+
+const FeeRow = ({ id, label, hint, value, disabled, onChange }: FeeRowProps): ReactElement => (
+  <div style={{ display: 'grid', gap: '0.3rem' }}>
+    <label htmlFor={id} className="muted">
+      {label}
+    </label>
+    <NumberInput
+      id={id}
+      showSpinner
+      allowDecimal
+      step={0.001}
+      min={0}
+      value={String(value)}
+      onValueChange={(raw) => {
+        const v = Number.parseFloat(raw || '0');
+        onChange(Number.isFinite(v) ? v : 0);
+      }}
+      disabled={disabled}
+      dense
+    />
+    <span className="muted" style={{ fontSize: '0.85em' }}>
+      {hint}
+    </span>
+  </div>
+);

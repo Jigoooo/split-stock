@@ -12,13 +12,26 @@ import {
 } from '@renderer/features/edit-strategy';
 // Sentry 관측 탭은 일시 숨김 — features/error-reporting 의 SentrySettingsForm 은 흔적으로 유지.
 // import { SentrySettingsForm } from '@renderer/features/error-reporting';
+import { FeeSettingsForm } from '@renderer/features/fee-settings';
 import { ActivePendingList, PendingCancelForm } from '@renderer/features/pending-cancel-settings';
 import { PriceCorrectionForm } from '@renderer/features/price-correction-settings';
+import { trpc } from '@renderer/shared/api/trpc';
 import { ErrorBoundary, type HtsTabItem, HtsTabs, OverlayScrollbar } from '@renderer/shared/ui';
 import type { ReactElement, ReactNode } from 'react';
 import { useRef, useState } from 'react';
 
 import { CredentialsSettingsPanel } from './credentials-settings-panel';
+
+/**
+ * 매매설정관리 서브탭 — features/edit-strategy 의 STRATEGY_SETTINGS_TABS 에
+ * '수수료' 탭을 추가한 확장 배열. settings-page 자체에서 조립하여
+ * features/edit-strategy 가 features/fee-settings 에 의존하지 않도록 한다.
+ */
+const STRATEGY_TABS_WITH_FEE = [
+  ...STRATEGY_SETTINGS_TABS,
+  { id: 'fee' as const, label: '수수료' },
+] as const satisfies ReadonlyArray<HtsTabItem<string>>;
+type ExtendedStrategyTab = StrategySettingsTab | 'fee';
 
 // 라벨 정의와 id 유니온을 한 곳에서 동기화 (single source of truth).
 // 'monitoring'(Sentry DSN) 탭은 사용자 facing 가치가 낮아 일시 숨김 — 향후 빌드 환경변수
@@ -57,7 +70,7 @@ function readInitialTab(): SettingsTopTab {
 
 export const SettingsPage = (): ReactElement => {
   const [topTab, setTopTab] = useState<SettingsTopTab>(readInitialTab);
-  const [strategyTab, setStrategyTab] = useState<StrategySettingsTab>('basic');
+  const [strategyTab, setStrategyTab] = useState<ExtendedStrategyTab>('basic');
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   return (
@@ -84,8 +97,8 @@ export const SettingsPage = (): ReactElement => {
       >
         <HtsTabs tabs={TOP_TABS} active={topTab} onChange={setTopTab} ariaLabel="설정 상위 탭" />
         {topTab === 'strategy' ? (
-          <HtsTabs
-            tabs={STRATEGY_SETTINGS_TABS}
+          <HtsTabs<ExtendedStrategyTab>
+            tabs={STRATEGY_TABS_WITH_FEE}
             active={strategyTab}
             onChange={setStrategyTab}
             ariaLabel="기본 자동매매설정 탭"
@@ -107,9 +120,14 @@ export const SettingsPage = (): ReactElement => {
       >
         <OverlayScrollbar containerRef={scrollRef} orientation="vertical" alwaysVisible={true} />
         <div style={{ display: 'grid', gap: '1rem', minWidth: 0 }}>
-          {topTab === 'strategy' ? (
+          {topTab === 'strategy' && strategyTab === 'fee' ? (
+            <Section name="수수료">
+              <FeeSection />
+            </Section>
+          ) : null}
+          {topTab === 'strategy' && strategyTab !== 'fee' ? (
             <Section name="매매설정관리">
-              <StrategySection activeTab={strategyTab} onTabChange={setStrategyTab} />
+              <StrategySection activeTab={strategyTab} onTabChange={(t) => setStrategyTab(t)} />
             </Section>
           ) : null}
           {topTab === 'display' ? (
@@ -184,6 +202,32 @@ function StrategySection({
       </div>
     </div>
   );
+}
+
+/**
+ * 수수료 / 제세금 설정 섹션. 현재 활성 환경의 수수료만 표시/수정.
+ * 환경 전환 시 자동으로 새 환경 데이터 로드.
+ */
+function FeeSection(): ReactElement {
+  const envQuery = trpc.auth.getEnv.useQuery();
+  const env = envQuery.data?.env ?? null;
+  if (envQuery.isPending) {
+    return (
+      <div className="panel">
+        <div className="panel__body muted">환경 확인 중…</div>
+      </div>
+    );
+  }
+  if (env === null) {
+    return (
+      <div className="panel">
+        <div className="panel__body muted">활성 환경이 없습니다. 먼저 계좌를 활성화하세요.</div>
+      </div>
+    );
+  }
+  // FeeEnv: 'real' | 'mock'. AppEnv: 'PROD' | 'MOCK'. mapping.
+  const feeEnv = env === 'PROD' ? 'real' : 'mock';
+  return <FeeSettingsForm env={feeEnv} />;
 }
 
 function DisplaySettingsSection(): ReactElement {
