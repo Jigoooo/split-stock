@@ -36,9 +36,8 @@
 }
 
 :root {
-  /* HTS 감성 + 가독성 하한 보장 — 좁은 화면 11px, 큰 화면 13px (이전 8.5–10.5px 너무 작아 가독성 열악).
-     모든 rem 기반 사이즈가 viewport 폭에 따라 부드럽게 스케일된다. */
-  font-size: clamp(68.75%, 0.4vw + 56%, 81.25%);
+  /* HTS 감성: 좁은 화면 8.5px, 큰 화면 10.5px */
+  font-size: clamp(53.125%, 0.25vw + 52%, 65.625%);
   /* 시스템 다크모드 무시하고 라이트 테마 고정 — 폼 컨트롤/스크롤바 포함 */
   color-scheme: light;
 
@@ -135,8 +134,7 @@ body {
   font-family:
     "Pretendard Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
     "Noto Sans KR", "Malgun Gothic", sans-serif;
-  /* :root 의 clamp 기반 base(11–13px) 의 1.2배 = 본문 ~13–16px. 추가 floor 로 안전장치. */
-  font-size: max(13px, 1.2rem);
+  font-size: 1.2rem; /* 기본 12px 상당 — HTS 밀도 */
   line-height: 1.35;
   margin: 0;
   -webkit-font-smoothing: antialiased;
@@ -961,6 +959,35 @@ body {
   display: inline-flex;
   align-items: center;
   color: var(--fg-2);
+}
+
+/* 우측 슬롯 — 시크릿 토글, 단위 라벨, clear 버튼 등에 사용. */
+.hts-input-shell__suffix {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.4rem;
+  color: var(--fg-2);
+}
+
+.hts-input-shell__suffix > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.35rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--fg-2);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.hts-input-shell__suffix > button:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--surface-hover);
 }
 
 .hts-input-shell > .hts-input {
@@ -2413,4 +2440,147 @@ body {
   .env-switch-overlay__spinner {
     animation: none;
   }
+}
+
+/* ===== 폼 디자인 시스템 — FormSection / 신뢰 푸터 / Sticky 액션 / 2열 그리드 ===== */
+
+/* fieldset 기본을 깨끗하게 — Swiss-style minimalism. */
+.form-section {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 1rem 1.1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.form-section--danger {
+  border-color: var(--up);
+  background: var(--up-soft);
+}
+
+.form-section__legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.45rem;
+  margin-left: -0.45rem;
+}
+
+.form-section__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: 0.01em;
+}
+
+.form-section__icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--fg-2);
+}
+
+.form-section__help {
+  margin-left: 0.4rem;
+  color: var(--fg-2);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.form-section__body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+/* Step 카운터 — 1·2·3 진행 단계. 원형 배지로 시각 위계 강화. */
+.form-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.form-section--danger .form-step-number {
+  background: var(--up);
+}
+
+/* 인증 폼 신뢰 푸터 — "🔒 OS 키체인 암호화 저장" 류 보안 신호. */
+.form-trust-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  border-top: 1px solid var(--border);
+  color: var(--fg-2);
+  font-size: 0.9rem;
+}
+
+.form-trust-footer__icon {
+  display: inline-flex;
+  color: var(--success, #16a34a);
+}
+
+/* 팝아웃 sticky 헤더(상단 요약 + PROD 배너)와 액션 바(하단 버튼). */
+.form-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: saturate(180%) blur(6px);
+}
+
+.form-sticky-action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
+/* 자격증명 / 계좌정보 두 fieldset 을 좌우 배치. ≥720px 자동 2열, 그 미만 단일. */
+.form-grid-2col {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+/* 폼 상단 sticky 에러 alert — 에러 발생 시 입력 위치 위에서 즉시 보임. */
+.form-error-alert {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--up);
+  border-radius: 0.4rem;
+  background: var(--up-soft);
+  color: var(--up);
+  font-weight: 600;
+}
+
+.form-error-alert__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
 }

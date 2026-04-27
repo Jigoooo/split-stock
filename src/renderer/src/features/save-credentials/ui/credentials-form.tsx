@@ -1,5 +1,12 @@
-import { Button, EnvironmentRadioGroup, ProdConfirmModal, TextInput } from '@renderer/shared/ui';
+import {
+  Button,
+  EnvironmentRadioGroup,
+  FormSection,
+  ProdConfirmModal,
+  TextInput,
+} from '@renderer/shared/ui';
 import type { AccountProdCode, AppEnv, Credentials } from '@shared/contracts';
+import { AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useSaveCredentials } from '../model/use-save-credentials';
@@ -20,10 +27,11 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
   const [pendingProdValue, setPendingProdValue] = useState<Credentials | null>(null);
   const canSubmit =
     appKey.length > 0 && appSecret.length > 0 && accountNo8.length === 8 && !isPending;
+
   useEffect(() => {
     document.getElementById('credentials-app-key')?.focus();
   }, []);
-  // 8자리 입력이 끝나면 자동으로 다음 필드(상품코드)로 포커스 이동 — KIS 계좌번호 길이 고정 활용.
+  // 8자리 입력이 끝나면 자동으로 다음 필드(상품코드)로 포커스 이동.
   useEffect(() => {
     if (accountNo8.length !== 8) return;
     const next = document.getElementById('credentials-account-prod-cd');
@@ -63,51 +71,45 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
     await performSave(value);
   };
 
+  const isProd = env === 'PROD';
+
   return (
     <form
       onSubmit={(e) => {
         void onSubmit(e);
       }}
-      className="panel"
-      style={{ maxWidth: '44rem' }}
+      style={{ display: 'grid', gap: '0.85rem' }}
     >
-      <div className="panel__title">한국투자증권 자격증명</div>
-      <div className="panel__body" style={{ display: 'grid', gap: '1rem' }}>
-        <div style={{ display: 'grid', gap: '0.35rem' }}>
-          <span style={{ fontSize: '1.1rem', color: 'var(--fg)', fontWeight: 600 }}>환경</span>
-          <EnvironmentRadioGroup
-            name="credentials-env"
-            ariaLabel="접속 환경"
-            value={env}
-            onChange={setEnv}
-            dense
-            mockDescription="모의투자 — 가상 자금으로 흐름 점검."
-            prodDescription="⚠ 실전 — 실제 계좌, 주문이 즉시 체결됩니다."
-          />
+      {/* 에러는 폼 상단 sticky 로 띄움 — 입력 위치에서 즉시 보임. */}
+      {error ? (
+        <div className="form-error-alert" role="alert">
+          <span className="form-error-alert__icon" aria-hidden>
+            <AlertCircle size={16} />
+          </span>
+          <span>{error.message}</span>
         </div>
+      ) : null}
 
-        {env === 'PROD' ? (
-          <div
-            role="status"
-            aria-live="polite"
-            className="hts-alert hts-alert--danger"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.6rem 0.8rem',
-              border: '1px solid var(--up)',
-              borderRadius: '0.4rem',
-              background: 'var(--up-soft, rgba(220, 38, 38, 0.08))',
-              color: 'var(--up)',
-              fontWeight: 600,
-            }}
-          >
-            <span aria-hidden>⚠</span>
-            <span>실전(PROD) 자격증명을 저장하려고 합니다 — 저장 후 즉시 활성화됩니다.</span>
+      {/* ① 환경 — PROD 선택 시 fieldset 자체를 danger tone 으로 강조. */}
+      <FormSection number={1} title="환경 선택" tone={isProd ? 'danger' : 'default'}>
+        <EnvironmentRadioGroup
+          name="credentials-env"
+          ariaLabel="접속 환경"
+          value={env}
+          onChange={setEnv}
+          dense
+          mockDescription="모의투자 — 가상 자금으로 흐름 점검."
+          prodDescription="⚠ 실전 — 실제 계좌, 주문이 즉시 체결됩니다."
+        />
+        {isProd ? (
+          <div role="status" aria-live="polite" style={{ color: 'var(--up)', fontWeight: 600 }}>
+            저장 후 즉시 활성화되어 실전 거래가 가능해집니다.
           </div>
         ) : null}
+      </FormSection>
 
+      {/* ② API 자격증명 */}
+      <FormSection number={2} title="API 자격증명">
         <Row label="App Key" inputId="credentials-app-key">
           <TextInput
             id="credentials-app-key"
@@ -121,29 +123,32 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
         </Row>
 
         <Row label="App Secret" inputId="credentials-app-secret">
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'stretch' }}>
-            <TextInput
-              id="credentials-app-secret"
-              type={showSecret ? 'text' : 'password'}
-              value={appSecret}
-              onChange={(e) => setAppSecret(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-              dense
-              style={{ width: '100%' }}
-            />
-            <Button
-              type="button"
-              dense
-              onClick={() => setShowSecret((prev) => !prev)}
-              aria-pressed={showSecret}
-              aria-label={showSecret ? 'App Secret 숨기기' : 'App Secret 보이기'}
-            >
-              {showSecret ? '숨김' : '표시'}
-            </Button>
-          </div>
+          <TextInput
+            id="credentials-app-secret"
+            type={showSecret ? 'text' : 'password'}
+            value={appSecret}
+            onChange={(e) => setAppSecret(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            dense
+            style={{ width: '100%' }}
+            suffix={
+              <button
+                type="button"
+                onClick={() => setShowSecret((prev) => !prev)}
+                aria-pressed={showSecret}
+                aria-label={showSecret ? 'App Secret 숨기기' : 'App Secret 보이기'}
+                title={showSecret ? '숨기기' : '보이기'}
+              >
+                {showSecret ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+            }
+          />
         </Row>
+      </FormSection>
 
+      {/* ③ 계좌 정보 */}
+      <FormSection number={3} title="계좌 정보">
         <Row
           label="계좌번호 앞 8자리"
           inputId="credentials-account-no8"
@@ -181,26 +186,22 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
             style={{ width: '8rem' }}
           />
         </Row>
+      </FormSection>
 
-        {error && (
-          <div className="chip chip--down" role="alert">
-            {error.message}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-          <Button
-            type="submit"
-            variant={env === 'PROD' ? 'danger' : 'primary'}
-            disabled={!canSubmit}
-            loading={isPending}
-            loadingText="저장 중…"
-            style={{ whiteSpace: 'nowrap' }}
-          >
-            {env === 'PROD' ? '⚠ 실전(PROD) 자격증명 저장' : '저장하고 접속'}
-          </Button>
-        </div>
+      {/* 액션 — submit 버튼은 PROD 면 destructive(진한 빨강) 위계로 차등. */}
+      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <Button
+          type="submit"
+          variant={isProd ? 'destructive' : 'primary'}
+          disabled={!canSubmit}
+          loading={isPending}
+          loadingText="저장 중…"
+          style={{ whiteSpace: 'nowrap' }}
+        >
+          {isProd ? '⚠ 실전(PROD) 자격증명 저장' : '저장하고 접속'}
+        </Button>
       </div>
+
       <ProdConfirmModal
         open={pendingProdValue !== null}
         pending={isPending}
@@ -233,8 +234,7 @@ const Row = ({
   hint?: string;
 }): ReactElement => (
   <label htmlFor={inputId} style={{ display: 'grid', gap: '0.35rem' }}>
-    {/* WCAG AA 보장 위해 muted(--fg-2 ≈ 4.3:1) 대신 --fg + weight 600. */}
-    <span style={{ fontSize: '1.1rem', color: 'var(--fg)', fontWeight: 600 }}>{label}</span>
+    <span style={{ fontSize: '1rem', color: 'var(--fg)', fontWeight: 600 }}>{label}</span>
     {children}
     {hint ? (
       <span className="muted" style={{ fontSize: '0.9rem' }}>

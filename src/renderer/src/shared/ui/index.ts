@@ -31,6 +31,8 @@ export type { EnvironmentRadioGroupProps } from './environment-radio-group';
 export { EnvironmentRadioGroup } from './environment-radio-group';
 export type { ErrorBoundaryProps } from './error-boundary';
 export { ErrorBoundary, withSectionBoundary } from './error-boundary';
+export type { FormSectionProps } from './form-section';
+export { FormSection } from './form-section';
 export type { HtsTabItem, HtsTabsProps } from './hts-tabs';
 export { HtsTabs } from './hts-tabs';
 export type { NumberInputProps } from './number-input';
