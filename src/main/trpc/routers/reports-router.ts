@@ -5,6 +5,8 @@ import { eventLogs } from '../../db/schema';
 import {
   computeDailyPnlPointsFromDb,
   computeDailyReport,
+  computePnlByLotNthFromDb,
+  computeWinRateTimelineFromDb,
   exportEventsCsv,
   exportLotsCsv,
   exportTradesCsv,
@@ -46,6 +48,24 @@ export const reportsRouter = router({
   getDailyPnl: publicProcedure.input(RangeSchema).query(({ ctx, input }) => {
     assertRange(input);
     return { points: computeDailyPnlPointsFromDb(ctx.db, input) };
+  }),
+
+  /**
+   * 차수(nth)별 손익 분포 — Reports 막대 차트.
+   * SOLD 차수만 대상, nth 그룹 후 합산.
+   */
+  getPnlByLotNth: publicProcedure.input(RangeSchema).query(({ ctx, input }) => {
+    assertRange(input);
+    return { items: computePnlByLotNthFromDb(ctx.db, input) };
+  }),
+
+  /**
+   * 일자별 승률 추이 — Reports 라인 차트.
+   * 일자 버킷 (winners/total). 거래 없는 날은 포인트 없음.
+   */
+  getWinRateTimeline: publicProcedure.input(RangeSchema).query(({ ctx, input }) => {
+    assertRange(input);
+    return { points: computeWinRateTimelineFromDb(ctx.db, input) };
   }),
 
   exportCsv: publicProcedure

@@ -112,6 +112,107 @@ export function computeDailyPnlPoints(soldLots: SoldLot[]): DailyPnlPoint[] {
   return points;
 }
 
+/**
+ * 차수(nth)별 손익 분포 — Reports 막대 차트용.
+ * SOLD 차수만 대상, nth 별 그룹 후 (sellPrice - buyPrice) * qty 합산.
+ */
+export interface BarChartItem {
+  nth: number;
+  pnlKrw: number;
+  tradeCount: number;
+}
+
+export function computePnlByLotNth(soldLots: SoldLot[]): BarChartItem[] {
+  const grouped = new Map<number, { pnl: number; count: number }>();
+  for (const l of soldLots) {
+    if (l.sellPrice === null) continue;
+    const pnl = (l.sellPrice - l.buyPrice) * l.qty;
+    const cur = grouped.get(l.nth) ?? { pnl: 0, count: 0 };
+    grouped.set(l.nth, { pnl: cur.pnl + pnl, count: cur.count + 1 });
+  }
+  return [...grouped.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([nth, v]) => ({ nth, pnlKrw: v.pnl, tradeCount: v.count }));
+}
+
+export function computePnlByLotNthFromDb(db: Db, range: DailyReportInput): BarChartItem[] {
+  const soldRows = db
+    .select({
+      nth: lots.nth,
+      buyPrice: lots.buyPrice,
+      sellPrice: lots.sellPrice,
+      qty: lots.qty,
+      boughtAt: lots.boughtAt,
+      soldAt: lots.soldAt,
+    })
+    .from(lots)
+    .where(and(eq(lots.status, 'SOLD'), between(lots.soldAt, range.from, range.to)))
+    .all();
+  return computePnlByLotNth(
+    soldRows.map((r) => ({
+      nth: r.nth,
+      buyPrice: r.buyPrice,
+      sellPrice: r.sellPrice,
+      qty: r.qty,
+      boughtAt: r.boughtAt,
+      soldAt: r.soldAt,
+    })),
+  );
+}
+
+/**
+ * 일자별 승률 추이 — Reports 라인 차트용.
+ * 일자 버킷팅 후 (winners / total) 계산. 거래 없는 날은 포인트 미생성.
+ */
+export interface WinRatePoint {
+  date: string;
+  winRate: number; // 0~1
+  soldLots: number;
+}
+
+export function computeWinRateTimeline(soldLots: SoldLot[]): WinRatePoint[] {
+  const grouped = new Map<string, { winners: number; total: number }>();
+  for (const l of soldLots) {
+    if (l.sellPrice === null || l.soldAt === null) continue;
+    const date = l.soldAt.toISOString().slice(0, 10);
+    const cur = grouped.get(date) ?? { winners: 0, total: 0 };
+    const isWin = l.sellPrice > l.buyPrice;
+    grouped.set(date, { winners: cur.winners + (isWin ? 1 : 0), total: cur.total + 1 });
+  }
+  return [...grouped.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, v]) => ({
+      date,
+      winRate: v.total === 0 ? 0 : v.winners / v.total,
+      soldLots: v.total,
+    }));
+}
+
+export function computeWinRateTimelineFromDb(db: Db, range: DailyReportInput): WinRatePoint[] {
+  const soldRows = db
+    .select({
+      nth: lots.nth,
+      buyPrice: lots.buyPrice,
+      sellPrice: lots.sellPrice,
+      qty: lots.qty,
+      boughtAt: lots.boughtAt,
+      soldAt: lots.soldAt,
+    })
+    .from(lots)
+    .where(and(eq(lots.status, 'SOLD'), between(lots.soldAt, range.from, range.to)))
+    .all();
+  return computeWinRateTimeline(
+    soldRows.map((r) => ({
+      nth: r.nth,
+      buyPrice: r.buyPrice,
+      sellPrice: r.sellPrice,
+      qty: r.qty,
+      boughtAt: r.boughtAt,
+      soldAt: r.soldAt,
+    })),
+  );
+}
+
 export function computeDailyPnlPointsFromDb(db: Db, range: DailyReportInput): DailyPnlPoint[] {
   const soldRows = db
     .select({
