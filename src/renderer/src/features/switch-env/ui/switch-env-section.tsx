@@ -1,8 +1,12 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, Checkbox, TextInput } from '@renderer/shared/ui';
-import type { ReactElement } from 'react';
-import { useState } from 'react';
-import { PROD_CONFIRM_PHRASE } from '../model/constants';
+import {
+  Button,
+  Checkbox,
+  PROD_CONFIRM_PHRASE,
+  TextInput,
+  usePhraseGate,
+} from '@renderer/shared/ui';
+import { type ReactElement, useEffect, useState } from 'react';
 
 type Env = 'MOCK' | 'PROD';
 
@@ -27,27 +31,29 @@ export const SwitchEnvSection = (): ReactElement => {
   });
 
   const [target, setTarget] = useState<Env | null>(null);
-  const [ack, setAck] = useState(false);
-  const [phrase, setPhrase] = useState('');
+  const gate = usePhraseGate();
+  const { reset: resetGate } = gate;
 
   const currentEnv = envQuery.data?.env ?? null;
 
   const reset = (): void => {
     setTarget(null);
-    setAck(false);
-    setPhrase('');
+    resetGate();
   };
 
   const startSwitch = (next: Env): void => {
     if (next === currentEnv) return;
     setTarget(next);
-    setAck(false);
-    setPhrase('');
+    resetGate();
   };
 
+  // target 이 PROD 가 아닐 때 gate state 가 잔존하면 다음 PROD 진입 시 자동 통과 위험.
+  useEffect(() => {
+    if (target !== 'PROD') resetGate();
+  }, [target, resetGate]);
+
   const isProd = target === 'PROD';
-  const phraseOk = phrase === PROD_CONFIRM_PHRASE;
-  const canConfirm = target !== null && (isProd ? ack && phraseOk : true);
+  const canConfirm = target !== null && (isProd ? gate.canConfirm : true);
   const pending = setEnv.isPending;
 
   const onConfirm = (): void => {
@@ -111,8 +117,8 @@ export const SwitchEnvSection = (): ReactElement => {
               </div>
               <Checkbox
                 aria-label="실전 모드 동의"
-                checked={ack}
-                onChange={(e) => setAck(e.target.checked)}
+                checked={gate.ack}
+                onChange={(e) => gate.setAck(e.target.checked)}
                 label="실전 모드임을 이해했고 계속 진행하는 데 동의합니다."
                 dense
               />
@@ -123,10 +129,12 @@ export const SwitchEnvSection = (): ReactElement => {
                 <TextInput
                   id="switch-env-section-phrase"
                   type="text"
-                  value={phrase}
-                  onChange={(e) => setPhrase(e.target.value)}
+                  value={gate.phrase}
+                  onChange={(e) => gate.setPhrase(e.target.value)}
                   placeholder={PROD_CONFIRM_PHRASE}
                   aria-label="실전전환 확인 문구"
+                  autoComplete="off"
+                  spellCheck={false}
                   dense
                 />
               </label>
