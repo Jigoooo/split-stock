@@ -26,20 +26,26 @@ export const RecommendStrategyButton = ({
   const aiList = trpc.ai.listConfigs.useQuery();
   const hasDefault = (aiList.data?.configs ?? []).some((c) => c.isDefault);
   const [suggested, setSuggested] = useState<SuggestedView | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const mut = trpc.ai.suggestStrategy.useMutation({
     onSuccess: (res) => {
       if (!res.suggestion) {
-        toast.error(res.emptyReason ?? 'AI 추천 결과가 없습니다');
+        setSuggested(null);
+        setError(res.emptyReason ?? 'AI 추천 결과가 없습니다.');
+        setPreviewOpen(true);
         return;
       }
       const profile = mergeIntoProfile(res.suggestion);
+      setError(null);
       setSuggested({ profile, reasoning: res.suggestion.reasoning });
       setPreviewOpen(true);
     },
     onError: (err) => {
-      toast.error(`AI strategy 추천 실패: ${err.message}`);
+      setSuggested(null);
+      setError(`AI strategy 추천 실패: ${err.message}`);
+      setPreviewOpen(true);
     },
   });
 
@@ -50,6 +56,8 @@ export const RecommendStrategyButton = ({
 
   const handleClick = (): void => {
     setSuggested(null);
+    setError(null);
+    setPreviewOpen(true);
     mut.mutate({ pdno });
   };
 
@@ -58,6 +66,7 @@ export const RecommendStrategyButton = ({
     onApply(suggested.profile, suggested.reasoning);
     toast.success('AI 추천 strategy 가 폼에 적용되었습니다. 저장 버튼으로 확정하세요.');
     setSuggested(null);
+    setError(null);
     setPreviewOpen(false);
   };
 
@@ -109,8 +118,11 @@ export const RecommendStrategyButton = ({
         open={previewOpen}
         profile={suggested?.profile ?? null}
         reasoning={suggested?.reasoning ?? ''}
+        error={error}
+        isPending={mut.isPending}
         onApply={handleApply}
         onDismiss={handleDismiss}
+        onRetry={handleClick}
       />
     </div>
   );

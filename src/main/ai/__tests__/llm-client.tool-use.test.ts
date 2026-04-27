@@ -250,6 +250,24 @@ describe('LlmClient — Anthropic tool 루프', () => {
     expect(result.parsed).toEqual({ answer: 'direct' });
     expect(result.toolCalls).toEqual([]);
   });
+
+  it('Anthropic 이 JSON 앞뒤에 설명을 붙여도 첫 JSON 객체를 파싱한다', async () => {
+    const { LlmClient } = await import('../llm-client');
+    const client = new LlmClient({ logger: stubLogger });
+
+    anthropicCreateMock.mockResolvedValueOnce({
+      stop_reason: 'end_turn',
+      content: [{ type: 'text', text: '분석 결과입니다.\n{"answer":"wrapped"}\n완료' }],
+    });
+
+    const result = await client.chat({
+      config: anthropicConfig,
+      messages: [{ role: 'user', content: 'go' }],
+      schema: z.object({ answer: z.string() }),
+    });
+
+    expect(result.parsed).toEqual({ answer: 'wrapped' });
+  });
 });
 
 describe('LlmClient — provider 동등성', () => {

@@ -1,7 +1,7 @@
 import { Button, TableGrid } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Sparkles, X } from 'lucide-react';
+import { RefreshCw, Sparkles, X } from 'lucide-react';
 import type { CSSProperties, ReactElement } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -9,8 +9,11 @@ export interface StrategyPreviewModalProps {
   open: boolean;
   profile: StrategyProfile | null;
   reasoning: string;
+  error?: string | null;
+  isPending?: boolean;
   onApply: () => void;
   onDismiss: () => void;
+  onRetry?: () => void;
 }
 
 /**
@@ -21,12 +24,22 @@ export const StrategyPreviewModal = ({
   open,
   profile,
   reasoning,
+  error = null,
+  isPending = false,
   onApply,
   onDismiss,
+  onRetry,
 }: StrategyPreviewModalProps): ReactElement => {
+  const shouldRender = open && (profile !== null || error !== null || isPending);
+  const title = isPending
+    ? 'AI 추천 strategy 분석 중'
+    : error
+      ? 'AI 추천 strategy 실패'
+      : `AI 추천 strategy 상세 (${profile?.maxStages ?? 0}차)`;
+
   return createPortal(
     <AnimatePresence>
-      {open && profile ? (
+      {shouldRender ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -76,7 +89,7 @@ export const StrategyPreviewModal = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                 <Sparkles size={18} color="#D97757" />
                 <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700, color: 'var(--fg)' }}>
-                  AI 추천 strategy 상세 ({profile.maxStages}차)
+                  {title}
                 </h2>
               </div>
               <Button
@@ -90,83 +103,120 @@ export const StrategyPreviewModal = ({
               />
             </div>
 
-            <div
-              style={{
-                padding: '0.9rem 1.1rem',
-                marginBottom: '1.2rem',
-                borderRadius: '0.5rem',
-                border: '0.1rem solid #D97757',
-                backgroundColor: 'rgba(217, 119, 87, 0.08)',
-                fontSize: '1.15rem',
-                color: 'var(--fg)',
-                lineHeight: 1.6,
-              }}
-            >
-              <span style={{ color: '#D97757', fontWeight: 700 }}>추천 근거</span> · {reasoning}
-            </div>
+            {isPending ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  padding: '4rem 1rem',
+                }}
+              >
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1.4, repeat: Infinity, ease: 'linear' }}
+                  style={{ display: 'inline-flex' }}
+                >
+                  <Sparkles size={32} color="#D97757" />
+                </motion.div>
+                <div className="muted" style={{ fontSize: '1.2rem' }}>
+                  종목 통계와 공시 컨텍스트를 분석 중...
+                </div>
+              </div>
+            ) : error ? (
+              <div
+                style={{
+                  padding: '2rem',
+                  textAlign: 'center',
+                  color: 'var(--down, #d4453a)',
+                  fontSize: '1.2rem',
+                  lineHeight: 1.6,
+                }}
+              >
+                {error}
+              </div>
+            ) : profile ? (
+              <>
+                <div
+                  style={{
+                    padding: '0.9rem 1.1rem',
+                    marginBottom: '1.2rem',
+                    borderRadius: '0.5rem',
+                    border: '0.1rem solid #D97757',
+                    backgroundColor: 'rgba(217, 119, 87, 0.08)',
+                    fontSize: '1.15rem',
+                    color: 'var(--fg)',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  <span style={{ color: '#D97757', fontWeight: 700 }}>추천 근거</span> · {reasoning}
+                </div>
 
-            <TableGrid.Root
-              variant="hts"
-              stickyHeader={false}
-              overlayScrollbar={false}
-              aria-label="차수별 매매 계획"
-              style={{ height: 'auto', '--hts-row-height': '3rem' } as CSSProperties}
-            >
-              <TableGrid.Header>
-                <TableGrid.Cell width={70} style={{ justifyContent: 'center' }}>
-                  차수
-                </TableGrid.Cell>
-                <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
-                  매수 트리거 (직전 대비)
-                </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric>
-                  매수 금액
-                </TableGrid.Cell>
-                <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
-                  익절률
-                </TableGrid.Cell>
-              </TableGrid.Header>
-              <TableGrid.Body>
-                {Array.from({ length: profile.maxStages }, (_, i) => {
-                  const nth = i + 1;
-                  const buy = profile.buyRules[i];
-                  const sell = profile.sellRules[i];
-                  return (
-                    <TableGrid.Row key={nth}>
-                      <TableGrid.Cell
-                        width={70}
-                        style={{ justifyContent: 'center', fontWeight: 700 }}
-                      >
-                        {nth}차
-                      </TableGrid.Cell>
-                      <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
-                        {nth === 1 ? (
-                          <span className="muted">수동 진입</span>
-                        ) : buy && buy.triggerDropPct !== null ? (
-                          <span style={{ color: 'var(--down)' }}>
-                            -{(buy.triggerDropPct * 100).toFixed(2)}%
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </TableGrid.Cell>
-                      <TableGrid.Cell flex={1} numeric>
-                        {buy ? `${buy.amountKrw.toLocaleString()}원` : '—'}
-                      </TableGrid.Cell>
-                      <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
-                        {sell ? (
-                          <span style={{ color: 'var(--up)' }}>
-                            +{(sell.targetProfitPct * 100).toFixed(2)}%
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </TableGrid.Cell>
-                    </TableGrid.Row>
-                  );
-                })}
-              </TableGrid.Body>
-            </TableGrid.Root>
+                <TableGrid.Root
+                  variant="hts"
+                  stickyHeader={false}
+                  overlayScrollbar={false}
+                  aria-label="차수별 매매 계획"
+                  style={{ height: 'auto', '--hts-row-height': '3rem' } as CSSProperties}
+                >
+                  <TableGrid.Header>
+                    <TableGrid.Cell width={70} style={{ justifyContent: 'center' }}>
+                      차수
+                    </TableGrid.Cell>
+                    <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
+                      매수 트리거 (직전 대비)
+                    </TableGrid.Cell>
+                    <TableGrid.Cell flex={1} numeric>
+                      매수 금액
+                    </TableGrid.Cell>
+                    <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
+                      익절률
+                    </TableGrid.Cell>
+                  </TableGrid.Header>
+                  <TableGrid.Body>
+                    {Array.from({ length: profile.maxStages }, (_, i) => {
+                      const nth = i + 1;
+                      const buy = profile.buyRules[i];
+                      const sell = profile.sellRules[i];
+                      return (
+                        <TableGrid.Row key={nth}>
+                          <TableGrid.Cell
+                            width={70}
+                            style={{ justifyContent: 'center', fontWeight: 700 }}
+                          >
+                            {nth}차
+                          </TableGrid.Cell>
+                          <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
+                            {nth === 1 ? (
+                              <span className="muted">수동 진입</span>
+                            ) : buy && buy.triggerDropPct !== null ? (
+                              <span style={{ color: 'var(--down)' }}>
+                                -{(buy.triggerDropPct * 100).toFixed(2)}%
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </TableGrid.Cell>
+                          <TableGrid.Cell flex={1} numeric>
+                            {buy ? `${buy.amountKrw.toLocaleString()}원` : '—'}
+                          </TableGrid.Cell>
+                          <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
+                            {sell ? (
+                              <span style={{ color: 'var(--up)' }}>
+                                +{(sell.targetProfitPct * 100).toFixed(2)}%
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </TableGrid.Cell>
+                        </TableGrid.Row>
+                      );
+                    })}
+                  </TableGrid.Body>
+                </TableGrid.Root>
+              </>
+            ) : null}
 
             <div
               style={{
@@ -176,21 +226,48 @@ export const StrategyPreviewModal = ({
                 marginTop: '1.6rem',
               }}
             >
-              <Button variant="ghost" dense onClick={onDismiss}>
-                취소
-              </Button>
-              <Button
-                variant="primary"
-                dense
-                onClick={onApply}
-                style={{
-                  backgroundColor: '#D97757',
-                  borderColor: '#D97757',
-                  minWidth: '7rem',
-                }}
-              >
-                폼에 적용
-              </Button>
+              {error ? (
+                <>
+                  <Button variant="ghost" dense onClick={onDismiss}>
+                    닫기
+                  </Button>
+                  <Button
+                    variant="primary"
+                    dense
+                    iconLeading={<RefreshCw size={14} />}
+                    onClick={onRetry}
+                    style={{
+                      backgroundColor: '#D97757',
+                      borderColor: '#D97757',
+                      minWidth: '7rem',
+                    }}
+                  >
+                    재시도
+                  </Button>
+                </>
+              ) : isPending ? (
+                <Button variant="ghost" dense onClick={onDismiss}>
+                  닫기
+                </Button>
+              ) : (
+                <>
+                  <Button variant="ghost" dense onClick={onDismiss}>
+                    취소
+                  </Button>
+                  <Button
+                    variant="primary"
+                    dense
+                    onClick={onApply}
+                    style={{
+                      backgroundColor: '#D97757',
+                      borderColor: '#D97757',
+                      minWidth: '7rem',
+                    }}
+                  >
+                    폼에 적용
+                  </Button>
+                </>
+              )}
             </div>
           </motion.div>
         </motion.div>

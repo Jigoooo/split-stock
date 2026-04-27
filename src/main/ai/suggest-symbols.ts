@@ -270,7 +270,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
     config,
     schema: SuggestionResponseSchema,
     schemaName: 'AiSymbolSuggestion',
-    maxOutputTokens: 1500,
+    maxOutputTokens: 3500,
     temperature: 0.2,
     ...(tools.length > 0 ? { tools, maxToolIterations: 3 } : {}),
     messages: [

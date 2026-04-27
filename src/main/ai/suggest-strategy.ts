@@ -134,7 +134,7 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
     config,
     schema: StrategySuggestionSchema,
     schemaName: 'AiStrategySuggestion',
-    maxOutputTokens: 1500,
+    maxOutputTokens: 2200,
     messages: [
       {
         role: 'system',

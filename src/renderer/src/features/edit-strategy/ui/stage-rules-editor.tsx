@@ -9,7 +9,11 @@ import type {
 } from '../model/strategy-form-types';
 import type { StrategyFormErrors } from '../model/validate';
 import { ErrorChip } from './error-chip';
-import { STAGE_RULE_CARD_COLUMNS, StageRuleCard } from './stage-rule-card';
+import {
+  STAGE_RULE_CARD_COLUMNS,
+  STAGE_RULE_SCROLLBAR_GUTTER,
+  StageRuleCard,
+} from './stage-rule-card';
 import { TradingOrderTypeField } from './trading-order-type-field';
 
 interface StageRulesEditorProps {
@@ -124,6 +128,7 @@ export const StageRulesEditor = ({
           background: 'var(--bg-2)',
           fontSize: '1rem',
           fontWeight: 600,
+          marginRight: STAGE_RULE_SCROLLBAR_GUTTER,
           overflow: 'hidden',
         }}
       >
@@ -151,7 +156,7 @@ export const StageRulesEditor = ({
         style={{
           maxHeight: '32rem',
           overflow: 'auto',
-          paddingRight: '0.85rem',
+          paddingRight: STAGE_RULE_SCROLLBAR_GUTTER,
           position: 'relative',
           scrollbarWidth: 'none',
         }}

@@ -277,24 +277,54 @@ export const RecommendModal = ({
             ) : view.error ? (
               <div
                 style={{
+                  display: 'grid',
+                  justifyItems: 'center',
+                  gap: '1rem',
                   padding: '2rem',
                   textAlign: 'center',
                   color: 'var(--down, #d4453a)',
                   fontSize: '1.2rem',
                 }}
               >
-                {view.error}
+                <div>{view.error}</div>
+                <Button
+                  variant="primary"
+                  iconLeading={<RefreshCw size={14} />}
+                  onClick={onAnalyze}
+                  style={{
+                    backgroundColor: '#D97757',
+                    borderColor: '#D97757',
+                    minWidth: '12rem',
+                  }}
+                >
+                  재시도
+                </Button>
               </div>
             ) : view.emptyReason && view.ranked.length === 0 ? (
               <div
                 style={{
+                  display: 'grid',
+                  justifyItems: 'center',
+                  gap: '1rem',
                   padding: '2rem',
                   textAlign: 'center',
                   color: 'var(--fg-2)',
                   fontSize: '1.2rem',
                 }}
               >
-                {view.emptyReason}
+                <div>{view.emptyReason}</div>
+                <Button
+                  variant="primary"
+                  iconLeading={<RefreshCw size={14} />}
+                  onClick={onAnalyze}
+                  style={{
+                    backgroundColor: '#D97757',
+                    borderColor: '#D97757',
+                    minWidth: '12rem',
+                  }}
+                >
+                  재시도
+                </Button>
               </div>
             ) : view.ranked.length === 0 ? (
               <div

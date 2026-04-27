@@ -328,13 +328,19 @@ export class LlmClient {
   private tryParseJson<T>(text: string, schema: z.ZodType<T>): T | null {
     const stripped = stripCodeFence(text).trim();
     if (!stripped) return null;
-    try {
-      const json = JSON.parse(stripped);
-      const parsed = schema.safeParse(json);
-      return parsed.success ? parsed.data : null;
-    } catch {
-      return null;
+    const jsonCandidate = extractFirstJsonValue(stripped);
+    const candidates =
+      jsonCandidate && jsonCandidate !== stripped ? [stripped, jsonCandidate] : [stripped];
+    for (const candidate of candidates) {
+      try {
+        const json = JSON.parse(candidate);
+        const parsed = schema.safeParse(json);
+        if (parsed.success) return parsed.data;
+      } catch {
+        // Try the next candidate. Claude can prepend/append prose despite JSON-only instructions.
+      }
     }
+    return null;
   }
 }
 
@@ -357,6 +363,51 @@ function stripCodeFence(text: string): string {
     }
   }
   return trimmed;
+}
+
+function extractFirstJsonValue(text: string): string | null {
+  const objectStart = text.indexOf('{');
+  const arrayStart = text.indexOf('[');
+  const start = objectStart !== -1 ? objectStart : arrayStart;
+  if (start === -1) return null;
+
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') {
+      stack.push('}');
+      continue;
+    }
+    if (ch === '[') {
+      stack.push(']');
+      continue;
+    }
+    if ((ch === '}' || ch === ']') && stack[stack.length - 1] === ch) {
+      stack.pop();
+      if (stack.length === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
 }
 
 /**

@@ -23,7 +23,8 @@ interface StageRuleCardProps {
   row: StageRuleRowRaw;
 }
 
-export const STAGE_RULE_CARD_COLUMNS = '4rem minmax(380px, 0.9fr) 1fr';
+export const STAGE_RULE_CARD_COLUMNS = '4rem minmax(0, 1.2fr) minmax(13rem, 0.8fr)';
+export const STAGE_RULE_SCROLLBAR_GUTTER = '0.85rem';
 
 export const StageRuleCard = ({
   disabled,
@@ -60,7 +61,7 @@ export const StageRuleCard = ({
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(190px, 1fr) minmax(160px, auto)',
+        gridTemplateColumns: 'minmax(0, 1fr) auto',
         alignItems: 'center',
         gap: '0.6rem',
         padding: '0.55rem 0.75rem',
@@ -80,13 +81,22 @@ export const StageRuleCard = ({
               inputMode="decimal"
               disabled={disabled}
               aria-label={`${row.nth}차 자동매수 하락률`}
-              style={{ width: '6.5rem' }}
+              style={{ width: '4.8rem' }}
             />
-            <span>% 하락시 {row.nth}차 매수</span>
+            <span style={{ whiteSpace: 'nowrap' }}>% 하락시 {row.nth}차 매수</span>
           </>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+      <div
+        title={formatKrwShort(row.amountKrw) || undefined}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.35rem',
+          flex: '0 0 auto',
+          whiteSpace: 'nowrap',
+        }}
+      >
         <NumberInput
           value={row.amountKrw}
           onValueChange={onChange(row.nth, 'amountKrw')}
@@ -94,14 +104,9 @@ export const StageRuleCard = ({
           inputMode="numeric"
           disabled={disabled}
           aria-label={`${row.nth}차 매수금액`}
-          style={{ width: '11rem' }}
+          style={{ width: '9.5rem' }}
         />
         <span>원</span>
-        {formatKrwShort(row.amountKrw) ? (
-          <span className="muted" style={{ fontSize: '0.85em' }}>
-            {formatKrwShort(row.amountKrw)}
-          </span>
-        ) : null}
       </div>
     </div>
     <div
@@ -111,6 +116,7 @@ export const StageRuleCard = ({
         gap: '0.35rem',
         padding: '0.55rem 0.75rem',
         minWidth: 0,
+        whiteSpace: 'nowrap',
       }}
     >
       <NumberInput
@@ -121,7 +127,7 @@ export const StageRuleCard = ({
         inputMode="decimal"
         disabled={disabled}
         aria-label={`${row.nth}차 자동매도 익절률`}
-        style={{ width: '6.5rem' }}
+        style={{ width: '4.8rem' }}
       />
       <span>% 수익시 {row.nth}차 매도</span>
     </div>
