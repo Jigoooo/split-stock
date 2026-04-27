@@ -133,42 +133,18 @@ export const AddAccountPage = (): ReactElement => {
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                width: '2rem',
-                height: '2rem',
+                width: '2.6rem',
+                height: '2.6rem',
                 background: 'transparent',
                 border: 'none',
                 borderRadius: '0.3rem',
                 cursor: addMutation.isPending ? 'not-allowed' : 'pointer',
-                color: 'var(--fg-2)',
+                color: 'var(--fg)',
               }}
             >
-              <X size={16} />
+              <X size={20} />
             </button>
           </div>
-          {isProd ? (
-            <div
-              role="status"
-              aria-live="polite"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '0.5rem 0.7rem',
-                border: '1px solid var(--up)',
-                borderRadius: '0.4rem',
-                background: 'var(--up-soft)',
-                color: 'var(--up)',
-                fontWeight: 600,
-                fontSize: '0.95rem',
-              }}
-            >
-              <AlertCircle size={14} aria-hidden />
-              <span>
-                실전(PROD) 계좌입니다 — 첫 계좌라면 추가 즉시 활성화되고 메인 창의 환경도 실전으로
-                전환됩니다.
-              </span>
-            </div>
-          ) : null}
         </div>
 
         {/* 본문 — 스크롤 영역. */}
@@ -214,8 +190,8 @@ export const AddAccountPage = (): ReactElement => {
               />
             </FormSection>
 
-            {/* ② 환경 — PROD 면 fieldset 자체를 danger tone */}
-            <FormSection number={2} title="환경" tone={isProd ? 'danger' : 'default'}>
+            {/* ② 환경 — 라디오 자체 색 위계 외 추가 강조는 두지 않음 (사용자 피드백). */}
+            <FormSection number={2} title="환경">
               <EnvironmentRadioGroup
                 name="add-account-env"
                 ariaLabel="추가 계좌 환경"
@@ -223,7 +199,7 @@ export const AddAccountPage = (): ReactElement => {
                 onChange={setEnv}
                 dense
                 mockDescription="주문 없이 흐름과 시세 점검."
-                prodDescription="⚠ 실전 — 실제 계좌, 주문이 즉시 체결됩니다."
+                prodDescription="실전 — 실제 계좌, 주문이 즉시 체결됩니다."
               />
             </FormSection>
           </div>
@@ -373,7 +349,7 @@ export const AddAccountPage = (): ReactElement => {
             loadingText="추가 중…"
             dense
           >
-            {isProd ? '⚠ 실전(PROD) 계좌 추가' : '추가'}
+            {isProd ? '실전 계좌 추가' : '추가'}
           </Button>
         </div>
       </form>

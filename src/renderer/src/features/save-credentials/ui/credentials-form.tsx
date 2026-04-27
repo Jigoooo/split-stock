@@ -90,8 +90,8 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
         </div>
       ) : null}
 
-      {/* ① 환경 — PROD 선택 시 fieldset 자체를 danger tone 으로 강조. */}
-      <FormSection number={1} title="환경 선택" tone={isProd ? 'danger' : 'default'}>
+      {/* ① 환경 — 라디오 자체 색 위계 외 추가 강조는 두지 않음 (사용자 피드백). */}
+      <FormSection number={1} title="환경 선택">
         <EnvironmentRadioGroup
           name="credentials-env"
           ariaLabel="접속 환경"
@@ -99,13 +99,8 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
           onChange={setEnv}
           dense
           mockDescription="모의투자 — 가상 자금으로 흐름 점검."
-          prodDescription="⚠ 실전 — 실제 계좌, 주문이 즉시 체결됩니다."
+          prodDescription="실전 — 실제 계좌, 주문이 즉시 체결됩니다."
         />
-        {isProd ? (
-          <div role="status" aria-live="polite" style={{ color: 'var(--up)', fontWeight: 600 }}>
-            저장 후 즉시 활성화되어 실전 거래가 가능해집니다.
-          </div>
-        ) : null}
       </FormSection>
 
       {/* ② API 자격증명 */}
@@ -198,7 +193,7 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
           loadingText="저장 중…"
           style={{ whiteSpace: 'nowrap' }}
         >
-          {isProd ? '⚠ 실전(PROD) 자격증명 저장' : '저장하고 접속'}
+          {isProd ? '실전 자격증명 저장' : '저장하고 접속'}
         </Button>
       </div>
 
