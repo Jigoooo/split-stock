@@ -225,6 +225,67 @@ export class ActiveAccountRepo {
   }
 
   /**
+   * 복원/마이그레이션 복구 — credentials.account_id 는 남아 있는데 accounts 행이
+   * 누락된 경우, 같은 ID 로 accounts 행을 재생성한다.
+   *
+   * 신규 저장 플로우는 `upsertFromCredentials` 를 사용한다. 이 메서드는 기존 데이터의
+   * accountId 참조(lots/settings/credentials)를 유지해야 하는 repair 전용이다.
+   */
+  ensureFromStoredCredentials(input: {
+    accountId: number;
+    env: AppEnv;
+    broker?: BrokerId;
+    accountNo8: string;
+    accountProdCd: string;
+    nickname?: string;
+    displayName?: string | null;
+  }): Result<number, ActiveAccountError> {
+    try {
+      const id = this.db.transaction<number>((tx) => {
+        const existingById = tx
+          .select({ id: accountsTable.id })
+          .from(accountsTable)
+          .where(eq(accountsTable.id, input.accountId))
+          .all()[0];
+        if (existingById) return existingById.id;
+
+        const maxOrder =
+          tx
+            .select({ max: sql<number | null>`max(${accountsTable.sortOrder})` })
+            .from(accountsTable)
+            .all()[0]?.max ?? null;
+        const nextOrder = maxOrder === null ? 0 : maxOrder + 1;
+        tx.insert(accountsTable)
+          .values({
+            id: input.accountId,
+            env: input.env,
+            broker: input.broker ?? 'KIS',
+            accountNo8: input.accountNo8,
+            accountProdCd: input.accountProdCd,
+            nickname: input.nickname ?? '',
+            displayName: input.displayName ?? null,
+            createdAt: new Date(),
+            isActive: 0,
+            sortOrder: nextOrder,
+          })
+          .run();
+
+        const cnt = tx.select({ c: sql<number>`count(*)` }).from(accountsTable).all()[0]?.c;
+        if (cnt === 1) {
+          tx.update(accountsTable)
+            .set({ isActive: 1 })
+            .where(eq(accountsTable.id, input.accountId))
+            .run();
+        }
+        return input.accountId;
+      });
+      return ok(id);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
+  /**
    * 사용자 수동 정렬 — orderedIds 순서대로 sort_order 일괄 갱신.
    * 누락된 계좌는 영향 없음 (전송된 id 만 갱신). 단일 트랜잭션.
    */

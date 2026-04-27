@@ -9,7 +9,7 @@ export const LOADING_MESSAGES = {
   /** 일반 데이터 fetch 중 — 가장 흔한 표현. */
   GENERAL: '로드 중…',
   /** 앱 부트스트랩 / 셸 초기화 중. */
-  INITIALIZING: '초기화 중…',
+  INITIALIZING: '앱을 준비 중입니다',
   /** 비동기 환경 전환 진행 중. */
   SWITCHING_ENV: '환경 전환 중…',
   /** Suspense fallback 등 lazy 모듈 로드 중. */

@@ -5,8 +5,14 @@ import { TRPCError } from '@trpc/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ActiveAccountRepo } from '../../account/active-account';
+import {
+  repairAccountFromStoredCredentials,
+  repairStoredCredentialAccounts,
+} from '../../account/repair-stored-accounts';
 import { lots as lotsTable } from '../../db/schema';
 import { SETTING_KEYS } from '../../db/settings-repo';
+import type { EventLogger } from '../../logging/event-logger';
+import type { CredentialsRepo } from '../../security/credentials-repo';
 import { buildLotSyncMismatches } from '../../trading/current-state-sync';
 import type { LotStatus } from '../../trading/fsm';
 import type { LotSnapshotEntry } from '../../trading/lots-repo';
@@ -15,10 +21,13 @@ import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 function listAccountsWithActiveRepair(ctx: {
   activeAccounts: ActiveAccountRepo;
+  credentialsRepo: CredentialsRepo;
   activeAccountId: number | null;
   currentEnv: AppEnv | null;
+  logger: EventLogger;
   setEnvAndAccount: (next: { env: AppEnv | null; accountId: number | null }) => void;
 }) {
+  repairStoredCredentialAccounts(ctx);
   let accounts = ctx.activeAccounts.list();
   let activeAccountId = ctx.activeAccountId;
   const hasActiveRow = accounts.some((account) => account.isActive);
@@ -180,7 +189,11 @@ export const accountRouter = router({
     .input(z.object({ accountId: z.number().int().positive() }))
     .mutation(({ ctx, input }) => {
       // 1) 대상 계좌 존재 확인 + env 추출.
-      const target = ctx.activeAccounts.getById(input.accountId);
+      let target = ctx.activeAccounts.getById(input.accountId);
+      if (!target) {
+        repairAccountFromStoredCredentials(ctx, input.accountId);
+        target = ctx.activeAccounts.getById(input.accountId);
+      }
       if (!target) {
         throw new TRPCError({ code: 'NOT_FOUND', message: '대상 계좌를 찾을 수 없습니다' });
       }

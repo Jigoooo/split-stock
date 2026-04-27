@@ -1,6 +1,7 @@
 import { AppEnvSchema, CredentialsSchema } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { repairAccountFromStoredCredentials } from '../../account/repair-stored-accounts';
 import { clearImportedFlag, needsCredentialsReentry } from '../../backup/backup';
 import { SETTING_KEYS } from '../../db/settings-repo';
 import { publicProcedure, router } from '../trpc-core';
@@ -37,6 +38,7 @@ export const authRouter = router({
     // 조건(계좌 해석 + DB 단일성 트랜잭션)을 먼저 끝낸 뒤 factory 상태를 원자 교체.
     const accId = ctx.credentialsRepo.resolveAccountIdByEnv(input);
     if (accId !== null) {
+      repairAccountFromStoredCredentials(ctx, accId);
       const r = ctx.activeAccounts.setActiveAccountId(accId);
       if (r.isErr()) {
         throw new TRPCError({

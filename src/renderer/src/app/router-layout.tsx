@@ -7,6 +7,7 @@ import {
 import { LoginPage } from '@renderer/pages/login';
 import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
 import { Navigate, Outlet } from '@tanstack/react-router';
+import { LoaderCircle } from 'lucide-react';
 import { lazy, type ReactElement, type ReactNode, Suspense } from 'react';
 import { isPopoutRoute, type PopoutRoute } from './model/popout-route';
 import { useAppShell } from './model/use-app-shell';
@@ -24,6 +25,7 @@ const PopoutPage = lazy(() => import('./ui/popout-page').then((m) => ({ default:
 
 interface AppShellFrameProps {
   children: ReactNode;
+  loading?: boolean;
   popout?: PopoutApi;
   shell: ReturnType<typeof useAppShell>;
 }
@@ -34,31 +36,59 @@ const AppNotifications = (): null => {
   return null;
 };
 
-const ShellLoading = (): ReactElement => (
-  <div className="muted">{LOADING_MESSAGES.INITIALIZING}</div>
+interface ShellLoadingProps {
+  detail?: string;
+  message?: string;
+}
+
+const ShellLoading = ({
+  detail = '계좌와 설정을 불러오고 있습니다.',
+  message = LOADING_MESSAGES.INITIALIZING,
+}: ShellLoadingProps): ReactElement => (
+  <section className="shell-loading" role="status" aria-live="polite" aria-label={message}>
+    <div className="shell-loading__surface">
+      <div className="shell-loading__icon-ring" aria-hidden>
+        <LoaderCircle className="shell-loading__icon" size={28} strokeWidth={2.2} />
+      </div>
+      <div className="shell-loading__copy">
+        <div className="shell-loading__title">{message}</div>
+        <div className="shell-loading__detail">{detail}</div>
+      </div>
+      <div className="shell-loading__progress" aria-hidden>
+        <span />
+      </div>
+    </div>
+  </section>
 );
 
-const AppShellFrame = ({ children, popout, shell }: AppShellFrameProps): ReactElement => {
+const AppShellFrame = ({
+  children,
+  loading = false,
+  popout,
+  shell,
+}: AppShellFrameProps): ReactElement => {
   return (
     <div className="app-root" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <header className="app-header">
-        <AccountBar env={shell.env} />
-        {shell.env && popout ? (
-          <div className="app-header__section app-header__section--tools">
-            <span className="app-header__section-label">메뉴</span>
-            <HeaderPopoutButtons popout={popout} />
-          </div>
-        ) : null}
-      </header>
+      {loading ? null : (
+        <header className="app-header">
+          <AccountBar env={shell.env} />
+          {shell.env && popout ? (
+            <div className="app-header__section app-header__section--tools">
+              <span className="app-header__section-label">메뉴</span>
+              <HeaderPopoutButtons popout={popout} />
+            </div>
+          ) : null}
+        </header>
+      )}
       <main
-        className="app-main"
+        className={loading ? 'app-main app-main--loading' : 'app-main'}
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: '0.8rem',
+          gap: loading ? 0 : '0.8rem',
           flex: 1,
           minHeight: 0,
-          padding: '0.8rem',
+          padding: loading ? 0 : '0.8rem',
         }}
       >
         {children}
@@ -102,7 +132,7 @@ export const IndexRoutePage = (): ReactElement => {
 
   if (shell.isInitializing) {
     return (
-      <AppShellFrame shell={shell}>
+      <AppShellFrame shell={shell} loading>
         <ShellLoading />
       </AppShellFrame>
     );
@@ -116,7 +146,7 @@ export const LoginRoutePage = (): ReactElement => {
 
   if (shell.isInitializing) {
     return (
-      <AppShellFrame shell={shell}>
+      <AppShellFrame shell={shell} loading>
         <ShellLoading />
       </AppShellFrame>
     );
@@ -139,7 +169,7 @@ export const MainRoutePage = (): ReactElement => {
 
   if (shell.isInitializing) {
     return (
-      <AppShellFrame shell={shell} popout={popout}>
+      <AppShellFrame shell={shell} popout={popout} loading>
         <ShellLoading />
       </AppShellFrame>
     );
@@ -152,7 +182,14 @@ export const MainRoutePage = (): ReactElement => {
   return (
     <AppShellFrame shell={shell} popout={popout}>
       <CredentialsReentryBanner />
-      <Suspense fallback={<ShellLoading />}>
+      <Suspense
+        fallback={
+          <ShellLoading
+            message={LOADING_MESSAGES.ROUTE_LOADING}
+            detail="화면 구성을 불러오고 있습니다."
+          />
+        }
+      >
         <PanelWorkspace popout={popout} />
       </Suspense>
     </AppShellFrame>
@@ -167,7 +204,14 @@ export const PopoutRoutePage = ({ route }: { route: string }): ReactElement => {
   }
 
   return (
-    <Suspense fallback={<div className="muted">{LOADING_MESSAGES.ROUTE_LOADING}</div>}>
+    <Suspense
+      fallback={
+        <ShellLoading
+          message={LOADING_MESSAGES.ROUTE_LOADING}
+          detail="팝아웃 화면을 준비하고 있습니다."
+        />
+      }
+    >
       <PopoutPage route={route as PopoutRoute} popout={popout} />
     </Suspense>
   );

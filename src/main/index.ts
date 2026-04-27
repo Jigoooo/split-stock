@@ -45,6 +45,7 @@ import { isRegularMarketOpenKst } from '@shared/trading/market-session';
 import { and, eq } from 'drizzle-orm';
 import WebSocket from 'ws';
 import { ActiveAccountRepo } from './account/active-account';
+import { repairAccountFromStoredCredentials } from './account/repair-stored-accounts';
 import { AiCredentialsRepo } from './ai/ai-credentials-repo';
 import { DartClient } from './ai/dart-client';
 import { DartCorpCodeRepo } from './ai/dart-corp-code-repo';
@@ -832,6 +833,10 @@ function bootstrapDeps(userDataDir: string) {
       // 해당 env 의 계좌를 활성으로 전환.
       const accId = credentialsRepo.resolveAccountIdByEnv(savedEnv as AppEnv);
       if (accId !== null) {
+        repairAccountFromStoredCredentials(
+          { activeAccounts, credentialsRepo, logger: eventLogger },
+          accId,
+        );
         activeAccounts.setActiveAccountId(accId);
         factory.setActiveAccountId(accId);
       }
