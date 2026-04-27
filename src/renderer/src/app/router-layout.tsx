@@ -6,14 +6,20 @@ import {
 } from '@renderer/features/trade-notifications';
 import { LoginPage } from '@renderer/pages/login';
 import { Navigate, Outlet } from '@tanstack/react-router';
-import type { ReactElement, ReactNode } from 'react';
+import { lazy, type ReactElement, type ReactNode, Suspense } from 'react';
 import { isPopoutRoute, type PopoutRoute } from './model/popout-route';
 import { useAppShell } from './model/use-app-shell';
 import { type PopoutApi, usePopoutState } from './model/use-popout-state';
 import { AccountBar } from './ui/account-bar';
 import { HeaderPopoutButtons } from './ui/header-popout-buttons';
-import { PanelWorkspace } from './ui/panel-workspace';
-import { PopoutPage } from './ui/popout-page';
+
+// PanelWorkspace + PopoutPage 는 main / popout 라우트 전용. 정적 import 하면
+// LoginRoutePage 진입 시점에도 함께 번들에 들어가므로 React.lazy 로 분리
+// → router-layout 초기 chunk 크기 감소 (login 흐름 진입까지의 체감 로딩 단축).
+const PanelWorkspace = lazy(() =>
+  import('./ui/panel-workspace').then((m) => ({ default: m.PanelWorkspace })),
+);
+const PopoutPage = lazy(() => import('./ui/popout-page').then((m) => ({ default: m.PopoutPage })));
 
 interface AppShellFrameProps {
   children: ReactNode;
@@ -143,7 +149,9 @@ export const MainRoutePage = (): ReactElement => {
   return (
     <AppShellFrame shell={shell} popout={popout}>
       <CredentialsReentryBanner />
-      <PanelWorkspace popout={popout} />
+      <Suspense fallback={<ShellLoading />}>
+        <PanelWorkspace popout={popout} />
+      </Suspense>
     </AppShellFrame>
   );
 };
@@ -155,5 +163,9 @@ export const PopoutRoutePage = ({ route }: { route: string }): ReactElement => {
     return <Navigate to="/" replace />;
   }
 
-  return <PopoutPage route={route as PopoutRoute} popout={popout} />;
+  return (
+    <Suspense fallback={<div className="muted">로드 중…</div>}>
+      <PopoutPage route={route as PopoutRoute} popout={popout} />
+    </Suspense>
+  );
 };
