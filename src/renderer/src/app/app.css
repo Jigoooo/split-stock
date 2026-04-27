@@ -2578,7 +2578,6 @@ body {
   align-items: start;
 }
 
-
 /* 폼 상단 sticky 에러 alert — 에러 발생 시 입력 위치 위에서 즉시 보임. */
 .form-error-alert {
   position: sticky;

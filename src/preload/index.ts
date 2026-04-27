@@ -95,10 +95,7 @@ export type AppShellBridge = {
   onPopoutClosed: (listener: (route: string) => void) => () => void;
   assignStock: (pdno: string, name: string) => void;
   onStockAssigned: (listener: (pdno: string, name: string) => void) => () => void;
-  broadcastAccountChanged: (
-    accountId: number,
-    meta?: { envSwitchedTo?: 'PROD' | 'MOCK' },
-  ) => void;
+  broadcastAccountChanged: (accountId: number, meta?: { envSwitchedTo?: 'PROD' | 'MOCK' }) => void;
   onAccountChanged: (
     listener: (accountId: number, meta?: { envSwitchedTo?: 'PROD' | 'MOCK' } | null) => void,
   ) => () => void;

@@ -1,7 +1,7 @@
 import { Button } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { type MouseEvent, type PointerEvent, type ReactElement, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type {
   RecommendationViewState,
@@ -77,6 +77,8 @@ const TIER_COLORS: Record<'top' | 'strong' | 'moderate' | 'watch' | 'avoid', str
   avoid: '#d4453a',
 };
 
+const OVERLAY_CLICK_DRAG_TOLERANCE_PX = 4;
+
 export const RecommendModal = ({
   view,
   onClose,
@@ -91,12 +93,40 @@ export const RecommendModal = ({
   onToggleAutoDiscovery,
   hasDefaultKey,
 }: RecommendModalProps): ReactElement => {
+  const overlayPointerStartRef = useRef<{
+    startedOnOverlay: boolean;
+    x: number;
+    y: number;
+  } | null>(null);
   const distributionTotal =
     view.distribution.top +
     view.distribution.strong +
     view.distribution.moderate +
     view.distribution.watch +
     view.distribution.avoid;
+
+  const handleOverlayPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
+    overlayPointerStartRef.current = {
+      startedOnOverlay: event.target === event.currentTarget,
+      x: event.clientX,
+      y: event.clientY,
+    };
+  };
+
+  const handleOverlayClick = (event: MouseEvent<HTMLDivElement>): void => {
+    if (event.target !== event.currentTarget) return;
+    const start = overlayPointerStartRef.current;
+    overlayPointerStartRef.current = null;
+    if (!start?.startedOnOverlay) return;
+
+    const moved =
+      Math.abs(event.clientX - start.x) > OVERLAY_CLICK_DRAG_TOLERANCE_PX ||
+      Math.abs(event.clientY - start.y) > OVERLAY_CLICK_DRAG_TOLERANCE_PX;
+    if (moved) return;
+
+    onClose();
+  };
+
   return createPortal(
     <AnimatePresence>
       {view.isOpen ? (
@@ -117,7 +147,8 @@ export const RecommendModal = ({
             justifyContent: 'center',
             padding: '1.6rem',
           }}
-          onClick={onClose}
+          onPointerDown={handleOverlayPointerDown}
+          onClick={handleOverlayClick}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
