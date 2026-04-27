@@ -92,6 +92,7 @@ export const authRouter = router({
   setCredentials: publicProcedure.input(CredentialsSchema).mutation(({ ctx, input }) => {
     const accountResult = ctx.activeAccounts.upsertFromCredentials({
       env: input.env,
+      broker: input.broker,
       accountNo8: input.accountNo8,
       accountProdCd: input.accountProdCd,
     });

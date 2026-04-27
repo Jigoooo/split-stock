@@ -204,6 +204,7 @@ export const accountRouter = router({
     .mutation(({ ctx, input }) => {
       const accountResult = ctx.activeAccounts.upsertFromCredentials({
         env: input.env,
+        broker: input.broker,
         accountNo8: input.accountNo8,
         accountProdCd: input.accountProdCd,
       });
@@ -268,6 +269,27 @@ export const accountRouter = router({
         throw new TRPCError({
           code: r.error.kind === 'NOT_FOUND' ? 'NOT_FOUND' : 'INTERNAL_SERVER_ERROR',
           message: `이름 변경 실패: ${r.error.kind}`,
+        });
+      }
+      return { ok: true as const };
+    }),
+
+  /**
+   * 계좌 사용자 정렬 순서 변경 — orderedIds 순서대로 sort_order 일괄 갱신.
+   * 누락된 id 는 무시 (조용히 skip), 중복 id 는 마지막 index 가 우선.
+   */
+  reorder: publicProcedure
+    .input(
+      z.object({
+        orderedIds: z.array(z.number().int().positive()).min(1),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const r = ctx.activeAccounts.reorder(input.orderedIds);
+      if (r.isErr()) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `정렬 변경 실패: ${r.error.kind}`,
         });
       }
       return { ok: true as const };
