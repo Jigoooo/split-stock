@@ -46,12 +46,14 @@ export const accessTokens = sqliteTable(
 export const accounts = sqliteTable('accounts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   env: text('env').notNull(), // 'MOCK' | 'PROD'
+  broker: text('broker').notNull().default('KIS'), // 'KIS' | 'KIWOOM' — 라벨 prefix + 다계좌 식별
   accountNo8: text('account_no_8').notNull(),
   accountProdCd: text('account_prod_cd').notNull(),
   nickname: text('nickname').notNull().default(''),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   isActive: integer('is_active').notNull().default(0), // boolean — 현재 활성 계좌 여부. 한 시점에 1개만 true 보장은 앱 레벨에서.
   displayName: text('display_name'), // UI 표시용 (선택)
+  sortOrder: integer('sort_order').notNull().default(0), // 사용자 수동 정렬 순서 (asc). 마이그레이션은 createdAt asc 순으로 backfill.
 });
 
 /**

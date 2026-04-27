@@ -1,5 +1,5 @@
-import type { AppEnv } from '@shared/contracts';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import type { AppEnv, BrokerId } from '@shared/contracts';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { err, ok, type Result } from 'neverthrow';
 import type { Db } from '../db/client';
 import { accounts as accountsTable } from '../db/schema';
@@ -12,24 +12,28 @@ export type ActiveAccountError =
 export interface AccountRow {
   id: number;
   env: AppEnv;
+  broker: BrokerId;
   accountNo8: string;
   accountProdCd: string;
   nickname: string;
   displayName: string | null;
   isActive: boolean;
   createdAt: Date;
+  sortOrder: number;
 }
 
 function rowToAccount(r: typeof accountsTable.$inferSelect): AccountRow {
   return {
     id: r.id,
     env: r.env as AppEnv,
+    broker: r.broker as BrokerId,
     accountNo8: r.accountNo8,
     accountProdCd: r.accountProdCd,
     nickname: r.nickname,
     displayName: r.displayName ?? null,
     isActive: r.isActive === 1,
     createdAt: r.createdAt,
+    sortOrder: r.sortOrder,
   };
 }
 
@@ -161,6 +165,7 @@ export class ActiveAccountRepo {
    */
   upsertFromCredentials(input: {
     env: AppEnv;
+    broker?: BrokerId;
     accountNo8: string;
     accountProdCd: string;
     nickname?: string;
@@ -182,16 +187,25 @@ export class ActiveAccountRepo {
         if (existing) {
           return existing.id;
         }
+        // 신규 row 의 sortOrder = 현재 max + 1 (없으면 0)
+        const maxOrder =
+          tx
+            .select({ max: sql<number | null>`max(${accountsTable.sortOrder})` })
+            .from(accountsTable)
+            .all()[0]?.max ?? null;
+        const nextOrder = maxOrder === null ? 0 : maxOrder + 1;
         const inserted = tx
           .insert(accountsTable)
           .values({
             env: input.env,
+            broker: input.broker ?? 'KIS',
             accountNo8: input.accountNo8,
             accountProdCd: input.accountProdCd,
             nickname: input.nickname ?? '',
             displayName: input.displayName ?? null,
             createdAt: new Date(),
             isActive: 0,
+            sortOrder: nextOrder,
           })
           .returning({ id: accountsTable.id })
           .all();
@@ -210,9 +224,40 @@ export class ActiveAccountRepo {
     }
   }
 
+  /**
+   * 사용자 수동 정렬 — orderedIds 순서대로 sort_order 일괄 갱신.
+   * 누락된 계좌는 영향 없음 (전송된 id 만 갱신). 단일 트랜잭션.
+   */
+  reorder(orderedIds: number[]): Result<void, ActiveAccountError> {
+    try {
+      this.db.transaction((tx) => {
+        const existing = tx
+          .select({ id: accountsTable.id })
+          .from(accountsTable)
+          .where(inArray(accountsTable.id, orderedIds))
+          .all();
+        const existingSet = new Set(existing.map((r) => r.id));
+        for (const [index, accountId] of orderedIds.entries()) {
+          if (!existingSet.has(accountId)) continue;
+          tx.update(accountsTable)
+            .set({ sortOrder: index })
+            .where(eq(accountsTable.id, accountId))
+            .run();
+        }
+      });
+      return ok(undefined);
+    } catch (cause) {
+      return err({ kind: 'DB_ERROR', cause });
+    }
+  }
+
   list(): AccountRow[] {
     try {
-      const rows = this.db.select().from(accountsTable).orderBy(asc(accountsTable.id)).all();
+      const rows = this.db
+        .select()
+        .from(accountsTable)
+        .orderBy(asc(accountsTable.sortOrder), asc(accountsTable.id))
+        .all();
       return rows.map(rowToAccount);
     } catch {
       return [];
