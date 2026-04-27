@@ -154,8 +154,8 @@ export const AddAccountPage = (): ReactElement => {
             minHeight: 0,
             overflowY: 'auto',
             display: 'grid',
-            gap: '0.85rem',
-            padding: '1rem',
+            gap: '0.5rem',
+            padding: '0.6rem 0.75rem',
           }}
         >
           {addMutation.error ? (
