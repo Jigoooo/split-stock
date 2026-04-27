@@ -1,5 +1,11 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, EnvironmentRadioGroup, Select, TextInput } from '@renderer/shared/ui';
+import {
+  Button,
+  EnvironmentRadioGroup,
+  ProdConfirmModal,
+  Select,
+  TextInput,
+} from '@renderer/shared/ui';
 import {
   ACCOUNT_PROD_CODE_OPTIONS,
   type AccountProdCode,
@@ -27,6 +33,7 @@ export const AddAccountPage = (): ReactElement => {
   );
   /** Kiwoom 계좌번호 10자리 — accountNo8(앞 8) + accountProdCd(뒤 2) 로 합쳐 저장. */
   const [kiwoomAccountNo, setKiwoomAccountNo] = useState('');
+  const [pendingProdValue, setPendingProdValue] = useState<Credentials | null>(null);
 
   const addMutation = trpc.account.add.useMutation({
     // 팝아웃의 query client 는 곧 close 되므로 자체 invalidate 는 의미 없음 — broadcast 만 하고
@@ -54,6 +61,10 @@ export const AddAccountPage = (): ReactElement => {
       accountNo8: acntNo8,
       accountProdCd: acntProdCd,
     };
+    if (value.env === 'PROD') {
+      setPendingProdValue(value);
+      return;
+    }
     addMutation.mutate(value);
   };
 
@@ -192,14 +203,32 @@ export const AddAccountPage = (): ReactElement => {
           </Button>
           <Button
             type="submit"
-            variant="primary"
+            variant={env === 'PROD' ? 'danger' : 'primary'}
             disabled={!canSubmit || addMutation.isPending}
             dense
           >
-            {addMutation.isPending ? '추가 중…' : '추가'}
+            {addMutation.isPending ? '추가 중…' : env === 'PROD' ? '실전 계좌 추가' : '추가'}
           </Button>
         </div>
       </form>
+      <ProdConfirmModal
+        open={pendingProdValue !== null}
+        pending={addMutation.isPending}
+        title="실전(PROD) 계좌 추가"
+        message={
+          <strong>
+            실전(PROD) 계좌의 자격증명을 OS 키체인에 저장합니다. 첫 계좌라면 자동 활성화됩니다.
+          </strong>
+        }
+        confirmText="실전 계좌 추가"
+        onConfirm={() => {
+          if (!pendingProdValue) return;
+          const value = pendingProdValue;
+          setPendingProdValue(null);
+          addMutation.mutate(value);
+        }}
+        onCancel={() => setPendingProdValue(null)}
+      />
     </div>
   );
 };
