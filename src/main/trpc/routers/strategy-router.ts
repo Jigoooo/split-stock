@@ -53,6 +53,39 @@ export const strategyRouter = router({
     };
   }),
 
+  getEffectiveMetas: publicProcedure
+    .input(
+      z.object({
+        accountId: AccountIdField,
+        pdnos: z.array(z.string().regex(/^\d{6}$/)).max(200),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const accountId = resolveAccountId(ctx, input);
+      const uniquePdnos = Array.from(new Set(input.pdnos)).sort((a, b) => a.localeCompare(b));
+      const strategiesByPdno: Record<
+        string,
+        { maxStages: number; autoBuyEnabled: boolean; autoSellEnabled: boolean }
+      > = {};
+
+      for (const pdno of uniquePdnos) {
+        const effective = ctx.strategyRepo.getEffectiveForEdit(accountId, pdno);
+        if (effective.isErr()) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: `전략 메타 로드 실패: ${effective.error.kind}`,
+          });
+        }
+        strategiesByPdno[pdno] = {
+          maxStages: effective.value.profile.maxStages,
+          autoBuyEnabled: effective.value.profile.autoBuyEnabled,
+          autoSellEnabled: effective.value.profile.autoSellEnabled,
+        };
+      }
+
+      return { strategiesByPdno };
+    }),
+
   setActive: publicProcedure
     .input(ActiveSelectorSchema.extend({ profile: StrategyProfileSchema }))
     .mutation(({ ctx, input }) => {

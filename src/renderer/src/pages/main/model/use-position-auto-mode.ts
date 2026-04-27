@@ -29,6 +29,7 @@ export function usePositionAutoMode(pdno: string, serverMode: StrategyAutoMode) 
       void utils.account.getBalanceWithLots.invalidate();
       void utils.strategy.getActive.invalidate({ pdno });
       void utils.strategy.getEffectiveForEdit.invalidate({ pdno });
+      void utils.strategy.getEffectiveMetas.invalidate();
     },
     onError: () => {
       // 서버 거절 → optimistic 값을 버리고 serverMode 로 복귀.

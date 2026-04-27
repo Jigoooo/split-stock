@@ -41,6 +41,7 @@ export function useEditStrategy(pdno: string | null): UseEditStrategyReturn {
     void utils.strategy.getActive.invalidate({ pdno });
     void utils.strategy.getEffectiveForEdit.invalidate({ pdno });
     void utils.strategy.getEffectiveForEdit.invalidate();
+    void utils.strategy.getEffectiveMetas.invalidate();
     void utils.strategy.listPresets.invalidate();
     void utils.account.getBalanceWithLots.invalidate();
     if (pdno !== null) void utils.account.getPositionOverlay.invalidate({ pdno });

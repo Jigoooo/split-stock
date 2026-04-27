@@ -1,4 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { skipToken } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useActiveAccountId } from './use-active-account-id';
 
@@ -138,6 +139,24 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
     },
   );
   const data = (query.data as BalanceWithLotsSnapshot | undefined) ?? cachedSnapshot;
+  const strategyPdnos = useMemo(() => {
+    if (!data) return [];
+    return Array.from(
+      new Set([
+        ...data.positions.map((position) => position.code),
+        ...Object.keys(data.lotsByPdno),
+      ]),
+    ).sort((a, b) => a.localeCompare(b));
+  }, [data]);
+  const strategyMetaQuery = trpc.strategy.getEffectiveMetas.useQuery(
+    accountId !== null && strategyPdnos.length > 0
+      ? { accountId, pdnos: strategyPdnos }
+      : skipToken,
+    {
+      enabled: accountId !== null && strategyPdnos.length > 0,
+      staleTime: 0,
+    },
+  );
 
   useEffect(() => {
     if (!query.data) return;
@@ -174,7 +193,9 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
     lotsByPdno: (data?.lotsByPdno ?? {}) as Record<string, LotEntry[]>,
     mismatches: data?.mismatches ?? [],
     syncStatus: (data?.syncStatus ?? 'IN_SYNC') as 'IN_SYNC' | 'MISMATCH',
-    strategiesByPdno: data?.strategiesByPdno ?? {},
+    strategiesByPdno:
+      strategyMetaQuery.data?.strategiesByPdno ??
+      (strategyPdnos.length > 0 ? {} : (data?.strategiesByPdno ?? {})),
     isPending:
       (query.isPending && cachedSnapshot === null) || (hideTransientError && data === null),
     error: query.error && !hideTransientError ? { message: query.error.message } : null,
