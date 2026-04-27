@@ -41,24 +41,66 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return this.props.fallback(error, this.reset);
     }
 
+    const sectionLabel = this.props.name ? `${this.props.name} 영역` : '이 섹션';
     return (
       <div className="panel" role="alert">
         <div className="panel__title">
           {this.props.name ? `${this.props.name} 오류` : '섹션 오류'}
         </div>
-        <div className="panel__body" style={{ display: 'grid', gap: '0.4rem' }}>
-          <span className="chip chip--down">{error.message}</span>
+        <div className="panel__body" style={{ display: 'grid', gap: '0.6rem', lineHeight: 1.55 }}>
+          <p style={{ margin: 0 }}>
+            {sectionLabel}을 표시하는 중 문제가 발생했습니다. <strong>다시 시도</strong> 를 누르면
+            영역만 다시 그립니다.
+          </p>
+          <details
+            style={{
+              padding: '0.5rem 0.7rem',
+              border: '1px solid var(--border)',
+              borderRadius: '0.3rem',
+              background: 'var(--bg-3, var(--surface-hover))',
+            }}
+          >
+            <summary
+              style={{
+                cursor: 'pointer',
+                fontSize: '0.95rem',
+                color: 'var(--fg-2)',
+                fontWeight: 600,
+              }}
+            >
+              기술 정보
+            </summary>
+            <pre
+              style={{
+                margin: '0.5rem 0 0',
+                padding: '0.5rem',
+                overflowX: 'auto',
+                fontSize: '0.9rem',
+                lineHeight: 1.4,
+                background: 'var(--bg)',
+                border: '1px solid var(--border)',
+                borderRadius: '0.25rem',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                color: 'var(--up)',
+              }}
+            >
+              {error.name}: {error.message}
+              {error.stack ? `\n\n${error.stack}` : ''}
+            </pre>
+          </details>
           <button
             type="button"
             onClick={this.reset}
             style={{
               alignSelf: 'flex-start',
-              padding: '0.25rem 0.6rem',
+              padding: '0.3rem 0.8rem',
               fontSize: '1rem',
               cursor: 'pointer',
-              border: '1px solid var(--hts-line, rgba(0,0,0,0.2))',
+              border: '1px solid var(--border-strong, var(--border))',
               borderRadius: 3,
               background: 'transparent',
+              fontWeight: 600,
             }}
           >
             다시 시도

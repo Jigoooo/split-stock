@@ -1,6 +1,7 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, DateInput } from '@renderer/shared/ui';
+import { Download } from 'lucide-react';
 import { type ReactElement, useMemo } from 'react';
 import { useReports } from '../model/use-reports';
 import { DailyPnlChart } from './daily-pnl-chart';
@@ -196,19 +197,40 @@ export const ReportsPage = (): ReactElement => {
       </div>
 
       <div className="panel">
-        <div className="panel__title">CSV Export</div>
+        <div
+          className="panel__title"
+          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+        >
+          <Download size={14} aria-hidden />
+          <span>리포트 내보내기 (CSV)</span>
+        </div>
         <div className="panel__body" style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-          <Button onClick={() => onExport('trades')} dense>
-            체결 CSV
+          <Button
+            onClick={() => onExport('trades')}
+            iconLeading={<Download size={13} />}
+            dense
+            title="기간 내 모든 체결 내역을 CSV 로 내보냅니다"
+          >
+            체결 내역
           </Button>
-          <Button onClick={() => onExport('lots')} dense>
-            차수 CSV
+          <Button
+            onClick={() => onExport('lots')}
+            iconLeading={<Download size={13} />}
+            dense
+            title="차수별 매매 사이클을 CSV 로 내보냅니다"
+          >
+            차수 사이클
           </Button>
-          <Button onClick={() => onExport('events')} dense>
-            이벤트 로그 CSV
+          <Button
+            onClick={() => onExport('events')}
+            iconLeading={<Download size={13} />}
+            dense
+            title="시스템 이벤트 로그를 CSV 로 내보냅니다"
+          >
+            이벤트 로그
           </Button>
-          <span className="muted" style={{ marginLeft: 'auto' }}>
-            BOM 포함 UTF-8 — Excel에서 한글 정상 표시
+          <span className="muted" style={{ marginLeft: 'auto', alignSelf: 'center' }}>
+            BOM 포함 UTF-8 — Excel 에서 한글이 정상 표시됩니다
           </span>
         </div>
       </div>

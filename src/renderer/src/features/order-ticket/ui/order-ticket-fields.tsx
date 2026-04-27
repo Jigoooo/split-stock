@@ -66,17 +66,53 @@ export const OrderTicketFields = ({
           {maxBuyQty !== null ? (
             <>
               {' / '}
-              <span className={overBuyCap ? 'num-down' : 'num'}>
-                최대 {thousandSeparator(maxBuyQty)}주
-              </span>
+              {overBuyCap ? (
+                <button
+                  type="button"
+                  onClick={() => setQtyStr(String(maxBuyQty))}
+                  title="수량을 매수가능 최대치로 자동 조정"
+                  style={{
+                    padding: '0.05rem 0.4rem',
+                    border: '1px solid var(--up)',
+                    borderRadius: '0.2rem',
+                    background: 'var(--up-soft)',
+                    color: 'var(--up)',
+                    cursor: 'pointer',
+                    font: 'inherit',
+                    fontWeight: 600,
+                  }}
+                >
+                  최대 {thousandSeparator(maxBuyQty)}주로 조정
+                </button>
+              ) : (
+                <span className="num">최대 {thousandSeparator(maxBuyQty)}주</span>
+              )}
             </>
           ) : null}
         </span>
         <span>
           보유{' '}
-          <span className={overSellCap ? 'num-down' : 'num'}>
-            {thousandSeparator(holdingQty)}주
-          </span>
+          {overSellCap ? (
+            <button
+              type="button"
+              onClick={() => setQtyStr(String(holdingQty))}
+              title="수량을 보유 수량으로 자동 조정"
+              style={{
+                padding: '0.05rem 0.4rem',
+                border: '1px solid var(--up)',
+                borderRadius: '0.2rem',
+                background: 'var(--up-soft)',
+                color: 'var(--up)',
+                cursor: 'pointer',
+                font: 'inherit',
+                fontWeight: 600,
+              }}
+            >
+              {thousandSeparator(holdingQty)}주로 조정
+            </button>
+          ) : (
+            <span className="num">{thousandSeparator(holdingQty)}주</span>
+          )}
         </span>
       </span>
     </label>
