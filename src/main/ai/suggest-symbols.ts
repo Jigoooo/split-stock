@@ -76,13 +76,13 @@ const RankedItemSchema = z.object({
   volatilityFit: z.enum(['low', 'mid', 'high']),
   liquidityFit: z.enum(['good', 'ok', 'poor']),
   /** 한 줄 평 — 카드 기본 노출. */
-  summary: z.string().min(1).max(120),
+  summary: z.string().min(1).max(200),
   /** 매직스플릿 적용 시 강점. 0~3개. */
-  pros: z.array(z.string().max(80)).max(3).default([]),
+  pros: z.array(z.string().max(200)).max(3).default([]),
   /** 주의점/리스크. 0~3개. */
-  cons: z.array(z.string().max(80)).max(3).default([]),
+  cons: z.array(z.string().max(200)).max(3).default([]),
   /** 진입 시 참고할 한 줄 (예: "박스권 하단 근처 1차 매수 추천"). 없으면 null. */
-  entryNote: z.string().max(160).nullable().default(null),
+  entryNote: z.string().max(300).nullable().default(null),
   /** 몇 개 지표가 동의했는지 (LLM 판단). */
   consensusCount: z.number().int().min(0).max(10).default(0),
   /** 호출한 도구 이름 — 빈 배열이면 추가 검증 미수행 표시. */
@@ -289,6 +289,20 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       message: 'ai.suggest-symbols.parse-failed',
       payload: { rawChars: result.text.length, toolCalls: result.toolCalls.length },
     });
+    // 디버그용 — 실제 응답 텍스트와 도구 호출 이력 출력.
+    console.error(
+      '[suggestSymbols] parse failed. rawText:',
+      JSON.stringify(result.text.slice(0, 500)),
+    );
+    console.error('[suggestSymbols] toolCalls count:', result.toolCalls.length);
+    if (result.toolCalls.length > 0) {
+      console.error(
+        '[suggestSymbols] toolCalls:',
+        JSON.stringify(
+          result.toolCalls.map((tc) => ({ name: tc.name, resultLen: String(tc.result).length })),
+        ),
+      );
+    }
     return emptyResult('AI 응답을 해석할 수 없습니다. 잠시 후 다시 시도하세요.', startedAt);
   }
 
@@ -378,6 +392,12 @@ const SYSTEM_PROMPT = [
   '   - userInputResults: 사용자가 입력한 종목(extras) 의 평가. recommended 와 별도. tier 분배 X.',
   '9. summary 는 사실 기반 한 줄. pros/cons 는 행동 가이드. entryNote 는 진입 시점/주의사항 1줄.',
   '10. 알고리즘 점수(algoScore) 와 LLM 점수(score) 차이가 30점 이상이면 그 이유를 cons 에 짧게 적기.',
+  '',
+  '매직스플릿 차수 구조 (중요):',
+  '- 2차 이후 매수 트리거는 1차 가격 기준이 아니라 직전 차수 매수가 기준이다.',
+  '  예) 1차 10,000원 매수 → 2차 트리거: 1차가 × (1-3%) = 9,700원 / 3차 트리거: 2차가 × (1-3%) = 9,409원.',
+  '  "1차 기준으로 -9% 하락 시 3차"가 아니라 "직전 차수에서 매번 -3% 추가 하락" 구조.',
+  '- entryNote 에서 차수 트리거를 언급할 때는 반드시 직전 차수 기준 하락률로 표현할 것.',
 ].join('\n');
 
 function buildPrompt(args: {
@@ -411,7 +431,7 @@ function buildPrompt(args: {
   lines.push('');
   lines.push('응답 JSON schema:');
   lines.push(
-    '{"recommended":[{"pdno":"<풀의 pdno>","score":0~100,"tier":"top|strong|moderate|watch|avoid","confidence":"high|med|low","volatilityFit":"low|mid|high","liquidityFit":"good|ok|poor","summary":"한 줄(120자)","pros":[max 3, 각 80자],"cons":[max 3, 각 80자],"entryNote":"한 줄(160자) or null","consensusCount":0~10,"citedTools":["search_news","get_dart_disclosures",...]}],"userInputResults":[...동일 schema...]}',
+    '{"recommended":[{"pdno":"<풀의 pdno>","score":0~100,"tier":"top|strong|moderate|watch|avoid","confidence":"high|med|low","volatilityFit":"low|mid|high","liquidityFit":"good|ok|poor","summary":"한 줄(200자)","pros":[max 3, 각 200자],"cons":[max 3, 각 200자],"entryNote":"한 줄(300자) or null","consensusCount":0~10,"citedTools":["search_news","get_dart_disclosures",...]}],"userInputResults":[...동일 schema...]}',
   );
   lines.push('');
   lines.push('=== recommended 풀 ===');

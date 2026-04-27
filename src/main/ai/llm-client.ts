@@ -322,6 +322,41 @@ export class LlmClient {
       conversation.push({ role: 'user', content: toolResults });
     }
 
+    // 루프 소진 후 도구 결과가 있으면, tools 없이 최종 synthesis 호출하여 JSON 응답 강제.
+    if (toolCallLog.length > 0) {
+      console.error(
+        '[callAnthropic] tool-use loop exhausted, triggering synthesis call. toolCalls:',
+        toolCallLog.length,
+      );
+      const synthMessages: Anthropic.Messages.MessageParam[] = [
+        ...conversation,
+        {
+          role: 'user',
+          content:
+            '위 도구 결과를 바탕으로 요청된 JSON 형식으로만 최종 답변을 작성하세요. 코드 블록이나 설명 텍스트 없이 순수 JSON만 반환하세요.',
+        },
+      ];
+      const synthResponse = await client.messages.create({
+        model: req.config.model,
+        max_tokens: req.maxOutputTokens ?? 1024,
+        temperature: req.temperature ?? 0.2,
+        ...(systemPrompt ? { system: systemPrompt } : {}),
+        messages: synthMessages,
+      });
+      const finalTexts = synthResponse.content
+        .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
+        .map((b) => b.text);
+      const synthText = finalTexts.join('\n');
+      console.error(
+        '[callAnthropic] synthesis result chars:',
+        synthText.length,
+        'preview:',
+        synthText.slice(0, 200),
+      );
+      return { text: synthText, toolCalls: toolCallLog };
+    }
+
+    console.error('[callAnthropic] loop exhausted with no tool calls — returning empty text');
     return { text: '', toolCalls: toolCallLog };
   }
 
@@ -329,15 +364,29 @@ export class LlmClient {
     const stripped = stripCodeFence(text).trim();
     if (!stripped) return null;
     const jsonCandidate = extractFirstJsonValue(stripped);
-    const candidates =
-      jsonCandidate && jsonCandidate !== stripped ? [stripped, jsonCandidate] : [stripped];
-    for (const candidate of candidates) {
+    // prose 앞에 붙은 코드펜스 처리 — stripCodeFence 는 text 전체가 ``` 로 시작해야만 동작.
+    const fenceMatch = text.match(/```(?:json|JSON)?\s*\n([\s\S]*?)\n?```/);
+    const fencedJson = fenceMatch?.[1]?.trim() ?? null;
+    const seen = new Set<string>();
+    const raw: string[] = [];
+    for (const c of [stripped, jsonCandidate, fencedJson]) {
+      if (c && !seen.has(c)) {
+        seen.add(c);
+        raw.push(c);
+      }
+    }
+    for (const candidate of raw) {
       try {
         const json = JSON.parse(candidate);
         const parsed = schema.safeParse(json);
         if (parsed.success) return parsed.data;
-      } catch {
-        // Try the next candidate. Claude can prepend/append prose despite JSON-only instructions.
+        console.error('[tryParseJson] safeParse failed:', parsed.error.issues.slice(0, 3));
+      } catch (e) {
+        console.error(
+          '[tryParseJson] JSON.parse failed, candidate len:',
+          candidate.length,
+          String(e).slice(0, 80),
+        );
       }
     }
     return null;
