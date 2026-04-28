@@ -1,7 +1,8 @@
+import { useDialogFocus } from '@renderer/shared/lib/interaction';
 import { Button } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Key, Plus } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { type ReactElement, useRef } from 'react';
 import { useAiKeysSection } from '../model/use-ai-keys-section';
 import { AiKeyCard } from './ai-key-card';
 import { AiKeyRegisterModal } from './ai-key-register-modal';
@@ -17,6 +18,7 @@ export const AiKeysSection = (): ReactElement | null => {
   const {
     configs,
     isPending,
+    listError,
     isCreating,
     isUpdating,
     isConfigLocked,
@@ -32,9 +34,15 @@ export const AiKeysSection = (): ReactElement | null => {
     handleSetDefault,
     handleTest,
     handleSubmit,
+    refetchConfigs,
   } = useAiKeysSection();
+  const modalRef = useRef<HTMLDivElement | null>(null);
 
-  if (isPending) return null;
+  useDialogFocus({
+    enabled: isModalOpen,
+    rootRef: modalRef,
+    onEscape: handleCloseModal,
+  });
 
   return (
     <>
@@ -87,7 +95,19 @@ export const AiKeysSection = (): ReactElement | null => {
               </div>
             ) : null}
 
-            {configs.length > 0 ? (
+            {isPending ? (
+              <AiKeysStatus message="AI 키 목록을 불러오는 중입니다." />
+            ) : listError ? (
+              <AiKeysStatus
+                message={`AI 키 목록을 불러오지 못했습니다: ${listError.message}`}
+                action={
+                  <Button onClick={refetchConfigs} dense>
+                    다시 시도
+                  </Button>
+                }
+                tone="error"
+              />
+            ) : configs.length > 0 ? (
               <div
                 style={{
                   display: 'grid',
@@ -145,6 +165,11 @@ export const AiKeysSection = (): ReactElement | null => {
             onClick={handleCloseModal}
           >
             <motion.div
+              ref={modalRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label={editingConfig ? 'AI API 키 수정' : 'AI API 키 등록'}
+              tabIndex={-1}
               initial={{ opacity: 0, scale: 0.96, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 6 }}
@@ -215,6 +240,33 @@ function EmptyKeysPlaceholder({
       >
         키 등록
       </Button>
+    </div>
+  );
+}
+
+function AiKeysStatus({
+  action,
+  message,
+  tone = 'muted',
+}: {
+  action?: ReactElement;
+  message: string;
+  tone?: 'muted' | 'error';
+}): ReactElement {
+  return (
+    <div
+      className={tone === 'error' ? 'chip chip--down' : 'muted'}
+      role={tone === 'error' ? 'alert' : 'status'}
+      style={{
+        alignItems: 'center',
+        display: 'flex',
+        gap: '0.8rem',
+        justifyContent: 'space-between',
+        padding: tone === 'error' ? '0.8rem 1rem' : '1.2rem 0',
+      }}
+    >
+      <span>{message}</span>
+      {action ?? null}
     </div>
   );
 }

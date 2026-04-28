@@ -2,7 +2,7 @@ import { trpc } from '@renderer/shared/api/trpc';
 import { useEffectEvent } from 'react';
 
 export interface UseEditMemoResult {
-  save: (content: string) => void;
+  save: (content: string) => Promise<boolean>;
   isSaving: boolean;
   lastError: string | null;
 }
@@ -15,15 +15,14 @@ export const useEditMemo = (pdno: string): UseEditMemoResult => {
   const utils = trpc.useUtils();
   const mutation = trpc.symbolMemo.set.useMutation();
 
-  const onSave = useEffectEvent((content: string) => {
-    mutation.mutate(
-      { pdno, content },
-      {
-        onSuccess: () => {
-          void utils.symbolMemo.get.invalidate({ pdno });
-        },
-      },
-    );
+  const onSave = useEffectEvent(async (content: string): Promise<boolean> => {
+    try {
+      await mutation.mutateAsync({ pdno, content });
+      await utils.symbolMemo.get.invalidate({ pdno });
+      return true;
+    } catch {
+      return false;
+    }
   });
 
   return {

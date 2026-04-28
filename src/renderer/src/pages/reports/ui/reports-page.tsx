@@ -32,10 +32,13 @@ export const ReportsPage = (): ReactElement => {
     toStr,
     setToStr,
     dailyPnlPending,
+    dailyPnlError,
     dailyPnlPoints,
     pnlByLotNthPending,
+    pnlByLotNthError,
     pnlByLotNth,
     winRateTimelinePending,
+    winRateTimelineError,
     winRateTimeline,
   } = useReports();
 
@@ -137,17 +140,13 @@ export const ReportsPage = (): ReactElement => {
         <div className="panel__title">일별 누적 손익</div>
         <div className="panel__body">
           {dailyPnlPending ? (
-            <div
-              className="muted"
-              style={{
-                height: 240,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              집계 중…
-            </div>
+            <ChartStatus height={240} message="집계 중…" />
+          ) : dailyPnlError ? (
+            <ChartStatus
+              height={240}
+              message={`일별 손익 조회 실패: ${dailyPnlError.message}`}
+              tone="error"
+            />
           ) : (
             <DailyPnlChart points={dailyPnlPoints} height={240} />
           )}
@@ -158,17 +157,13 @@ export const ReportsPage = (): ReactElement => {
         <div className="panel__title">차수별 손익 분포</div>
         <div className="panel__body">
           {pnlByLotNthPending ? (
-            <div
-              className="muted"
-              style={{
-                height: 200,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              집계 중…
-            </div>
+            <ChartStatus height={200} message="집계 중…" />
+          ) : pnlByLotNthError ? (
+            <ChartStatus
+              height={200}
+              message={`차수별 손익 조회 실패: ${pnlByLotNthError.message}`}
+              tone="error"
+            />
           ) : (
             <LotNthBarChart bars={pnlByLotNth} height={200} />
           )}
@@ -179,17 +174,13 @@ export const ReportsPage = (): ReactElement => {
         <div className="panel__title">일별 승률 추이</div>
         <div className="panel__body">
           {winRateTimelinePending ? (
-            <div
-              className="muted"
-              style={{
-                height: 220,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              집계 중…
-            </div>
+            <ChartStatus height={220} message="집계 중…" />
+          ) : winRateTimelineError ? (
+            <ChartStatus
+              height={220}
+              message={`승률 추이 조회 실패: ${winRateTimelineError.message}`}
+              tone="error"
+            />
           ) : (
             <WinRateLineChart points={winRateTimeline} height={220} />
           )}
@@ -237,6 +228,30 @@ export const ReportsPage = (): ReactElement => {
     </div>
   );
 };
+
+const ChartStatus = ({
+  height,
+  message,
+  tone = 'muted',
+}: {
+  height: number;
+  message: string;
+  tone?: 'muted' | 'error';
+}): ReactElement => (
+  <div
+    className={tone === 'error' ? 'chip chip--down' : 'muted'}
+    role={tone === 'error' ? 'alert' : 'status'}
+    style={{
+      alignItems: 'center',
+      display: 'flex',
+      height,
+      justifyContent: 'center',
+      textAlign: 'center',
+    }}
+  >
+    {message}
+  </div>
+);
 
 const Kpi = ({
   label,

@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { ReactElement } from 'react';
+import type { KeyboardEvent, ReactElement } from 'react';
 import { memo, useMemo } from 'react';
 import {
   buildCalendarDays,
@@ -138,6 +138,68 @@ export const DateInputCalendar = memo(({ className }: DateInputCalendarProps): R
     context.shiftVisibleMonth(1);
   };
 
+  const focusGridCell = (
+    currentTarget: HTMLButtonElement,
+    nextIndex: number,
+    fallbackDirection: -1 | 1,
+  ): void => {
+    const grid = currentTarget.closest('[data-calendar-grid]');
+    if (!grid) return;
+
+    const cells = Array.from(grid.querySelectorAll<HTMLButtonElement>('[data-calendar-cell]'));
+    if (cells.length === 0) return;
+
+    let cursor = Math.min(Math.max(nextIndex, 0), cells.length - 1);
+    while (cells[cursor]?.disabled) {
+      cursor += fallbackDirection;
+      if (cursor < 0 || cursor >= cells.length) return;
+    }
+    cells[cursor]?.focus();
+  };
+
+  const handleGridKeyDown =
+    (columns: number) =>
+    (event: KeyboardEvent<HTMLButtonElement>): void => {
+      const currentIndex = Number(event.currentTarget.dataset.calendarIndex);
+      if (!Number.isFinite(currentIndex)) return;
+
+      const moveFocus = (nextIndex: number, direction: -1 | 1): void => {
+        event.preventDefault();
+        focusGridCell(event.currentTarget, nextIndex, direction);
+      };
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          moveFocus(currentIndex - 1, -1);
+          return;
+        case 'ArrowRight':
+          moveFocus(currentIndex + 1, 1);
+          return;
+        case 'ArrowUp':
+          moveFocus(currentIndex - columns, -1);
+          return;
+        case 'ArrowDown':
+          moveFocus(currentIndex + columns, 1);
+          return;
+        case 'Home':
+          moveFocus(currentIndex - (currentIndex % columns), 1);
+          return;
+        case 'End':
+          moveFocus(currentIndex - (currentIndex % columns) + columns - 1, -1);
+          return;
+        case 'PageUp':
+          event.preventDefault();
+          handlePrev();
+          return;
+        case 'PageDown':
+          event.preventDefault();
+          handleNext();
+          return;
+        default:
+          return;
+      }
+    };
+
   return (
     <div className={joinClasses('hts-date-popup', className)}>
       <div className="hts-date-popup__header">
@@ -204,8 +266,8 @@ export const DateInputCalendar = memo(({ className }: DateInputCalendarProps): R
       </div>
 
       {context.viewMode === 'year' ? (
-        <div className="hts-date-popup__year-grid">
-          {yearCells.map((yearCell) => (
+        <div className="hts-date-popup__year-grid" data-calendar-grid>
+          {yearCells.map((yearCell, index) => (
             <button
               key={yearCell.gridYear}
               aria-label={`${yearCell.gridYear}년 선택`}
@@ -215,7 +277,10 @@ export const DateInputCalendar = memo(({ className }: DateInputCalendarProps): R
                 yearCell.isDisabled && 'hts-date-popup__day--disabled',
               )}
               disabled={yearCell.isDisabled}
+              data-calendar-cell
+              data-calendar-index={index}
               type="button"
+              onKeyDown={handleGridKeyDown(4)}
               onClick={() => {
                 context.setVisibleMonth(new Date(yearCell.gridYear, month, 1));
                 context.setViewMode('month');
@@ -228,8 +293,8 @@ export const DateInputCalendar = memo(({ className }: DateInputCalendarProps): R
       ) : null}
 
       {context.viewMode === 'month' ? (
-        <div className="hts-date-popup__month-grid">
-          {monthCells.map((monthCell) => (
+        <div className="hts-date-popup__month-grid" data-calendar-grid>
+          {monthCells.map((monthCell, index) => (
             <button
               key={monthCell.monthIndex}
               aria-label={`${monthCell.monthIndex + 1}월 선택`}
@@ -239,7 +304,10 @@ export const DateInputCalendar = memo(({ className }: DateInputCalendarProps): R
                 monthCell.isDisabled && 'hts-date-popup__day--disabled',
               )}
               disabled={monthCell.isDisabled}
+              data-calendar-cell
+              data-calendar-index={index}
               type="button"
+              onKeyDown={handleGridKeyDown(3)}
               onClick={() => {
                 context.setVisibleMonth(new Date(year, monthCell.monthIndex, 1));
                 context.setViewMode('day');
@@ -260,8 +328,8 @@ export const DateInputCalendar = memo(({ className }: DateInputCalendarProps): R
               </span>
             ))}
           </div>
-          <div className="hts-date-popup__days">
-            {calendarDays.map((dayItem) => {
+          <div className="hts-date-popup__days" data-calendar-grid>
+            {calendarDays.map((dayItem, index) => {
               return (
                 <button
                   key={dayItem.iso}
@@ -274,7 +342,10 @@ export const DateInputCalendar = memo(({ className }: DateInputCalendarProps): R
                     dayItem.isDisabled && 'hts-date-popup__day--disabled',
                   )}
                   disabled={dayItem.isDisabled}
+                  data-calendar-cell
+                  data-calendar-index={index}
                   type="button"
+                  onKeyDown={handleGridKeyDown(7)}
                   onClick={() => {
                     context.commitValue(dayItem.iso, {
                       restoreFocus: true,

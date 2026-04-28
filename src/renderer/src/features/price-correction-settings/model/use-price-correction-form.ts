@@ -17,6 +17,8 @@ export function usePriceCorrectionForm() {
       void utils.priceCorrection.getSettings.invalidate();
       window.appShell?.broadcastSettingsChanged?.('priceCorrection');
       toast.success('호가 자동 보정 설정이 저장되었습니다');
+      setLocalBuy(null);
+      setLocalSell(null);
     },
     onError: (err) => {
       toast.error(`호가 자동 보정 저장 실패: ${err.message}`);
@@ -41,8 +43,6 @@ export function usePriceCorrectionForm() {
   const handleSave = (): void => {
     startTransition(() => {
       updateMutation.mutate({ buy: resolvedBuy, sell: resolvedSell });
-      setLocalBuy(null);
-      setLocalSell(null);
     });
   };
 

@@ -2,9 +2,11 @@ import { type StockListEntry, StockPickerList } from '@renderer/entities/stock';
 import { Button, DateInput, NumberInput } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { EXPIRY_QUICK, sectionCardStyle } from '../config/add-watch-order-section-options';
+import type { AddWatchOrderFormErrors } from '../model/add-watch-order-form';
 import { AddWatchOrderFormRow } from './add-watch-order-form-row';
 
 interface WatchConditionsSectionProps {
+  errors: AddWatchOrderFormErrors;
   expiresAtIso: string;
   isDense: boolean;
   isPageLayout: boolean;
@@ -32,6 +34,7 @@ export const WatchConditionsSection = ({
   setTargetPriceRaw,
   targetPriceRaw,
   todayIso,
+  errors,
 }: WatchConditionsSectionProps): ReactElement => (
   <section aria-label="감시조건" style={sectionCardStyle(isPageLayout)}>
     <div
@@ -47,7 +50,7 @@ export const WatchConditionsSection = ({
       어떤 종목을 언제 감시해서 주문으로 연결할지 정합니다.
     </div>
 
-    <AddWatchOrderFormRow label="종목">
+    <AddWatchOrderFormRow label="종목" error={errors.pdno}>
       <div style={{ display: 'grid', gap: isPageLayout ? '0.6rem' : '0.4rem' }}>
         <StockPickerList
           onSelect={onPickStock}
@@ -101,7 +104,7 @@ export const WatchConditionsSection = ({
       </div>
     </AddWatchOrderFormRow>
 
-    <AddWatchOrderFormRow label="감시가격">
+    <AddWatchOrderFormRow label="감시가격" error={errors.targetPriceRaw}>
       <div
         style={{ display: 'flex', gap: isPageLayout ? '0.55rem' : '0.4rem', alignItems: 'center' }}
       >
@@ -110,6 +113,7 @@ export const WatchConditionsSection = ({
           onValueChange={setTargetPriceRaw}
           placeholder="0"
           aria-label="감시가격"
+          aria-invalid={Boolean(errors.targetPriceRaw)}
           dense={isDense}
           disabled={isPending}
         />
@@ -117,13 +121,14 @@ export const WatchConditionsSection = ({
       </div>
     </AddWatchOrderFormRow>
 
-    <AddWatchOrderFormRow label="유효일">
+    <AddWatchOrderFormRow label="유효일" error={errors.expiresAtIso}>
       <div style={{ display: 'grid', gap: isPageLayout ? '0.5rem' : '0.3rem' }}>
         <DateInput
           value={expiresAtIso}
           onChange={(event) => setExpiresAtIso(event.target.value)}
           min={todayIso}
           aria-label="유효일"
+          aria-invalid={Boolean(errors.expiresAtIso)}
           dense={isDense}
           disabled={isPending}
         />

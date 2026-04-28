@@ -1,4 +1,5 @@
-import { type ReactElement, type ReactNode, useEffect } from 'react';
+import { useDialogFocus } from '@renderer/shared/lib/interaction';
+import { type ReactElement, type ReactNode, useEffect, useRef } from 'react';
 import { Button } from '../../button';
 import { Checkbox } from '../../checkbox';
 import { TextInput } from '../../text-input';
@@ -36,10 +37,19 @@ export const ProdConfirmModal = (props: ProdConfirmModalProps): ReactElement | n
   } = props;
   const gate = usePhraseGate();
   const { reset } = gate;
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!open) reset();
   }, [open, reset]);
+
+  useDialogFocus({
+    enabled: open,
+    rootRef: dialogRef,
+    initialFocusRef: cancelButtonRef,
+    onEscape: pending ? undefined : onCancel,
+  });
 
   if (!open) return null;
 
@@ -50,7 +60,7 @@ export const ProdConfirmModal = (props: ProdConfirmModalProps): ReactElement | n
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal panel">
+      <div ref={dialogRef} className="modal panel" tabIndex={-1}>
         <div className="panel__title">
           {title} <span className="env-badge env-badge--prod">PROD</span>
         </div>
@@ -85,7 +95,7 @@ export const ProdConfirmModal = (props: ProdConfirmModalProps): ReactElement | n
           className="panel__body"
           style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}
         >
-          <Button onClick={onCancel} disabled={pending} dense>
+          <Button ref={cancelButtonRef} onClick={onCancel} disabled={pending} dense>
             취소
           </Button>
           <Button

@@ -180,6 +180,7 @@ export function useAiKeysSection() {
   return {
     configs: (list.data?.configs ?? []) as AiProviderConfigView[],
     isPending: list.isLoading,
+    listError: list.error ? { message: list.error.message } : null,
     isCreating: create.isPending,
     isUpdating: update.isPending,
     isConfigLocked,
@@ -195,5 +196,8 @@ export function useAiKeysSection() {
     handleDelete,
     handleSetDefault,
     handleTest,
+    refetchConfigs: () => {
+      void list.refetch();
+    },
   };
 }

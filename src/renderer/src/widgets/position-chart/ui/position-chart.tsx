@@ -50,6 +50,7 @@ export const PositionChart = ({
     status: 'all',
   });
   const markers = useMemo(() => toTradeMarkers(cycles, chart.candles), [cycles, chart.candles]);
+  const hasNoCandles = !chart.isLoading && !chart.error && chart.candles.length === 0;
 
   return (
     <div
@@ -128,17 +129,37 @@ export const PositionChart = ({
             </Button>
           </div>
         ) : null}
-        <CandlestickChart
-          candles={chart.candles}
-          enableDrawingTools={enableDrawingTools}
-          liveCandle={chart.liveCandle}
-          lines={lines}
-          markers={markers}
-          onFetchMore={chart.fetchMore}
-          pdno={pdno}
-          reachedEnd={chart.reachedEnd}
-          displaySettings={displaySettings}
-        />
+        {hasNoCandles ? (
+          <div
+            role="status"
+            style={{
+              alignItems: 'center',
+              color: 'var(--fg-2)',
+              display: 'grid',
+              flex: 1,
+              gap: '0.35rem',
+              justifyItems: 'center',
+              minHeight: '16rem',
+              padding: '1.2rem',
+              textAlign: 'center',
+            }}
+          >
+            <strong style={{ color: 'var(--fg)' }}>표시할 봉 데이터가 없습니다</strong>
+            <span>다른 봉 단위를 선택하거나 잠시 후 다시 시도하세요.</span>
+          </div>
+        ) : (
+          <CandlestickChart
+            candles={chart.candles}
+            enableDrawingTools={enableDrawingTools}
+            liveCandle={chart.liveCandle}
+            lines={lines}
+            markers={markers}
+            onFetchMore={chart.fetchMore}
+            pdno={pdno}
+            reachedEnd={chart.reachedEnd}
+            displaySettings={displaySettings}
+          />
+        )}
       </div>
     </div>
   );

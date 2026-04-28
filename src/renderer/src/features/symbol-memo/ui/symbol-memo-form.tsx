@@ -17,6 +17,7 @@ export const SymbolMemoForm = ({ pdno }: SymbolMemoFormProps): ReactElement => {
   const { save, isSaving, lastError } = useEditMemo(pdno);
 
   const [draft, setDraft] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const serverContent = memoQuery.memo?.content ?? '';
   const value = draft ?? serverContent;
   const dirty = draft !== null && draft !== serverContent;
@@ -36,7 +37,10 @@ export const SymbolMemoForm = ({ pdno }: SymbolMemoFormProps): ReactElement => {
       <textarea
         id={`symbol-memo-${pdno}`}
         value={value}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setSaved(false);
+        }}
         rows={8}
         placeholder="종목 관련 메모를 입력하세요"
         style={{
@@ -55,8 +59,11 @@ export const SymbolMemoForm = ({ pdno }: SymbolMemoFormProps): ReactElement => {
           className="hts-btn"
           disabled={!dirty || isSaving}
           onClick={() => {
-            save(value);
-            setDraft(null);
+            void save(value).then((ok) => {
+              if (!ok) return;
+              setDraft(null);
+              setSaved(true);
+            });
           }}
         >
           {isSaving ? '저장 중…' : '저장'}
@@ -71,6 +78,11 @@ export const SymbolMemoForm = ({ pdno }: SymbolMemoFormProps): ReactElement => {
             {lastError}
           </span>
         )}
+        {saved && !dirty && !lastError ? (
+          <span className="chip chip--live" role="status">
+            저장됨
+          </span>
+        ) : null}
       </div>
     </section>
   );

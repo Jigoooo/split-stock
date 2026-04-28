@@ -1,6 +1,6 @@
 import { Button, SegmentedToggle, TextInput } from '@renderer/shared/ui';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Info, X } from 'lucide-react';
+import { Eye, EyeOff, X } from 'lucide-react';
 import { type ReactElement, useId, useState } from 'react';
 import {
   MODEL_INFO,
@@ -35,7 +35,6 @@ export const AiKeyRegisterModal = ({
   const [apiKey, setApiKey] = useState('');
   const [isDefault, setIsDefault] = useState(editingConfig?.isDefault ?? false);
   const [showApiKey, setShowApiKey] = useState(false);
-  const [hoveredModel, setHoveredModel] = useState<string | null>(null);
   const apiKeyInputId = useId();
   const defaultCheckId = useId();
 
@@ -153,7 +152,7 @@ export const AiKeyRegisterModal = ({
           >
             모델
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          <div role="radiogroup" aria-label="AI 모델" style={{ display: 'grid', gap: '0.5rem' }}>
             {PROVIDER_MODELS[provider].map((m) => {
               const isSelected = model === m;
               const info = MODEL_INFO[m];
@@ -162,6 +161,8 @@ export const AiKeyRegisterModal = ({
                 <motion.button
                   key={m}
                   type="button"
+                  role="radio"
+                  aria-checked={isSelected}
                   onClick={() => setModel(m)}
                   initial={false}
                   animate={{
@@ -182,8 +183,9 @@ export const AiKeyRegisterModal = ({
                     fontWeight: isSelected ? 600 : 400,
                     textAlign: 'left',
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
+                    alignItems: 'stretch',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
                     gap: '0.6rem',
                     position: 'relative',
                   }}
@@ -230,61 +232,15 @@ export const AiKeyRegisterModal = ({
                     </span>
                   </span>
                   {info ? (
-                    // biome-ignore lint/a11y/noStaticElementInteractions: tooltip hover wrapper, info already in title
                     <span
-                      style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}
-                      title={`${info.desc}\n${info.cost}`}
-                      onMouseEnter={() => setHoveredModel(m)}
-                      onMouseLeave={() => setHoveredModel(null)}
+                      style={{
+                        color: 'var(--fg-2)',
+                        fontSize: '1.02rem',
+                        fontWeight: 400,
+                        lineHeight: 1.45,
+                      }}
                     >
-                      <Info
-                        size={14}
-                        style={{
-                          color: hoveredModel === m ? providerColor : 'var(--fg-2)',
-                          transition: 'color 0.15s',
-                        }}
-                      />
-                      {hoveredModel === m ? (
-                        <div
-                          style={{
-                            position: 'absolute',
-                            right: '100%',
-                            top: '50%',
-                            transform: 'translateY(-50%)',
-                            marginRight: '0.6rem',
-                            padding: '0.8rem 1rem',
-                            borderRadius: '0.6rem',
-                            backgroundColor: 'var(--bg)',
-                            border: `0.1rem solid var(--border)`,
-                            boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-                            zIndex: 100,
-                            width: '22rem',
-                            pointerEvents: 'none',
-                          }}
-                        >
-                          <p
-                            style={{
-                              margin: '0 0 0.5rem 0',
-                              fontSize: '1.1rem',
-                              color: 'var(--fg)',
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            {info.desc}
-                          </p>
-                          <p
-                            style={{
-                              margin: 0,
-                              fontSize: '1rem',
-                              color: providerColor,
-                              fontWeight: 600,
-                              fontFamily: 'monospace',
-                            }}
-                          >
-                            {info.cost}
-                          </p>
-                        </div>
-                      ) : null}
+                      {info.desc} · <span style={{ color: providerColor }}>{info.cost}</span>
                     </span>
                   ) : null}
                 </motion.button>

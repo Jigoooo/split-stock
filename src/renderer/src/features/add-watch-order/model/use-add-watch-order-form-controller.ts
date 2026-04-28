@@ -3,6 +3,7 @@ import type { WatchOrder, WatchOrderType, WatchQtyMode } from '@renderer/entitie
 import { trpc } from '@renderer/shared/api/trpc';
 import { useState } from 'react';
 import {
+  type AddWatchOrderFormErrors,
   addMonthsIso,
   todayIsoLocal,
   toIsoDateLocal,
@@ -20,6 +21,7 @@ interface UseAddWatchOrderFormControllerParams {
 export interface AddWatchOrderFormController {
   amountKrwRaw: string;
   error: string | null;
+  errors: AddWatchOrderFormErrors;
   expiresAtIso: string;
   isEdit: boolean;
   isPending: boolean;
@@ -81,14 +83,17 @@ export function useAddWatchOrderFormController({
 
   const [form, setForm] = useState<FormState>(() => initialFormState(prefill));
   const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<AddWatchOrderFormErrors>({});
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]): void => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setErrors({});
   };
 
   const onPickStock = (entry: StockListEntry): void => {
     setForm((prev) => ({ ...prev, pdno: entry.pdno, pdName: entry.name }));
     setError(null);
+    setErrors({});
   };
 
   const onAmountQuick = (delta: number): void => {
@@ -106,13 +111,15 @@ export function useAddWatchOrderFormController({
       amountKrwRaw: form.amountKrwRaw,
       expiresAtIso: form.expiresAtIso,
     });
-    if ('error' in validation) {
-      setError(validation.error);
+    if ('errors' in validation) {
+      setErrors(validation.errors);
+      setError(validation.errors.form ?? null);
       return;
     }
 
     const value = validation.value;
     setError(null);
+    setErrors({});
     try {
       const payload = {
         accountId,
@@ -136,12 +143,14 @@ export function useAddWatchOrderFormController({
       onClose();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+      setErrors({ form: caught instanceof Error ? caught.message : String(caught) });
     }
   };
 
   return {
     amountKrwRaw: form.amountKrwRaw,
     error,
+    errors,
     expiresAtIso: form.expiresAtIso,
     isEdit,
     isPending: createMutation.isPending || updateMutation.isPending,

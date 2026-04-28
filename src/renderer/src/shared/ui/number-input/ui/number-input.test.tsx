@@ -30,4 +30,25 @@ describe('NumberInput', () => {
 
     expect(screen.getByLabelText('가격')).toHaveValue('시장가');
   });
+
+  it('spinner mode에서 입력 필드 ArrowUp/ArrowDown으로 값을 증감한다', () => {
+    const onValueChange = vi.fn();
+    render(
+      <NumberInput
+        value="10"
+        onValueChange={onValueChange}
+        aria-label="수량"
+        showSpinner
+        step={5}
+        min={0}
+      />,
+    );
+
+    const input = screen.getByLabelText('수량');
+    fireEvent.keyDown(input, { key: 'ArrowUp' });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    expect(onValueChange).toHaveBeenNthCalledWith(1, '15');
+    expect(onValueChange).toHaveBeenNthCalledWith(2, '5');
+  });
 });

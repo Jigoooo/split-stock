@@ -1,4 +1,4 @@
-import { type ReactElement, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 export interface WatchContextMenuState {
   x: number;
@@ -31,6 +31,7 @@ interface MenuItemProps {
 const MenuItem = ({ disabled = false, label, onSelect }: MenuItemProps): ReactElement => (
   <button
     type="button"
+    role="menuitem"
     disabled={disabled}
     onClick={onSelect}
     style={{
@@ -77,6 +78,13 @@ export const WatchContextMenu = ({
     });
   }, [menu.x, menu.y]);
 
+  useEffect(() => {
+    const firstEnabled = menuRef.current?.querySelector<HTMLButtonElement>(
+      'button[role="menuitem"]:not(:disabled)',
+    );
+    firstEnabled?.focus();
+  }, []);
+
   return (
     <>
       <button
@@ -99,6 +107,26 @@ export const WatchContextMenu = ({
       <div
         ref={menuRef}
         data-testid="watch-context-menu"
+        role="menu"
+        aria-label={`자동감시 작업 (${menu.ids.length}건)`}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onClose();
+            return;
+          }
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+          event.preventDefault();
+          const items = Array.from(
+            menuRef.current?.querySelectorAll<HTMLButtonElement>(
+              'button[role="menuitem"]:not(:disabled)',
+            ) ?? [],
+          );
+          const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+          const direction = event.key === 'ArrowDown' ? 1 : -1;
+          const next = items[(currentIndex + direction + items.length) % items.length];
+          next?.focus();
+        }}
         style={{
           position: 'fixed',
           top: pos.top,

@@ -1,5 +1,6 @@
 import { usePositionOverlay } from '@renderer/entities/account';
 import { TradeSelectionBar } from '@renderer/entities/stock';
+import { Button } from '@renderer/shared/ui';
 import { PositionChart } from '@renderer/widgets/position-chart';
 import { TradingPanel } from '@renderer/widgets/trading-panel';
 import type { ReactElement } from 'react';
@@ -70,7 +71,42 @@ export const TradePage = ({
             <TradingPanel pdno={selected.pdno} name={selected.name} isProd={runtime.isProd} />
           </div>
         </div>
-      ) : null}
+      ) : (
+        <EmptyTradeSelection onOpenStockPickerPopout={onOpenStockPickerPopout} />
+      )}
     </div>
   );
 };
+
+function EmptyTradeSelection({
+  onOpenStockPickerPopout,
+}: {
+  onOpenStockPickerPopout?: (() => Promise<void> | void) | undefined;
+}): ReactElement {
+  return (
+    <div
+      className="panel"
+      role="status"
+      style={{
+        alignItems: 'center',
+        display: 'grid',
+        flex: 1,
+        gap: '0.8rem',
+        justifyItems: 'center',
+        minHeight: 0,
+        padding: '2rem',
+        textAlign: 'center',
+      }}
+    >
+      <div style={{ display: 'grid', gap: '0.35rem' }}>
+        <strong style={{ fontSize: '1.1rem' }}>거래할 종목을 선택하세요</strong>
+        <span className="muted">선택 후 차트와 주문 패널을 함께 확인할 수 있습니다.</span>
+      </div>
+      {onOpenStockPickerPopout ? (
+        <Button type="button" variant="primary" onClick={() => void onOpenStockPickerPopout()}>
+          종목 선택
+        </Button>
+      ) : null}
+    </div>
+  );
+}

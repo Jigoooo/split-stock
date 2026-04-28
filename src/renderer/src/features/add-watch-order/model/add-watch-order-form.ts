@@ -16,6 +16,15 @@ export interface AddWatchOrderSubmitValue {
   expiresAt?: number;
 }
 
+export interface AddWatchOrderFormErrors {
+  pdno?: string;
+  targetPriceRaw?: string;
+  qtyRaw?: string;
+  amountKrwRaw?: string;
+  expiresAtIso?: string;
+  form?: string;
+}
+
 export interface AmountPreview {
   qty: number;
   filled: number;
@@ -63,14 +72,16 @@ export function addMonthsIso(months: number): string {
 
 export function validateAddWatchOrderForm(
   values: AddWatchOrderFormValues,
-): { error: string } | { value: AddWatchOrderSubmitValue } {
+): { errors: AddWatchOrderFormErrors } | { value: AddWatchOrderSubmitValue } {
+  const errors: AddWatchOrderFormErrors = {};
+
   if (!/^\d{6}$/.test(values.pdno)) {
-    return { error: '종목을 검색해서 선택해주세요.' };
+    errors.pdno = '종목을 검색해서 선택해주세요.';
   }
 
   const targetPrice = toIntOrNull(values.targetPriceRaw);
   if (targetPrice === null) {
-    return { error: '감시가격(목표가)을 양의 정수로 입력하세요.' };
+    errors.targetPriceRaw = '감시가격을 양의 정수로 입력하세요.';
   }
 
   let qty: number | undefined;
@@ -78,24 +89,31 @@ export function validateAddWatchOrderForm(
   if (values.qtyMode === 'QTY') {
     const nextQty = toIntOrNull(values.qtyRaw);
     if (nextQty === null) {
-      return { error: '수량을 양의 정수로 입력하세요.' };
+      errors.qtyRaw = '수량을 양의 정수로 입력하세요.';
+    } else {
+      qty = nextQty;
     }
-    qty = nextQty;
   } else {
     const nextAmount = toIntOrNull(values.amountKrwRaw);
     if (nextAmount === null) {
-      return { error: '주문금액을 양의 정수로 입력하세요.' };
+      errors.amountKrwRaw = '주문금액을 양의 정수로 입력하세요.';
+    } else {
+      amountKrw = nextAmount;
     }
-    amountKrw = nextAmount;
   }
 
   let expiresAt: number | undefined;
   if (values.expiresAtIso.trim() !== '') {
     const ts = Date.parse(`${values.expiresAtIso}T23:59:59`);
     if (!Number.isFinite(ts) || ts <= Date.now()) {
-      return { error: '유효일은 오늘 이후 날짜를 선택하세요.' };
+      errors.expiresAtIso = '유효일은 오늘 이후 날짜를 선택하세요.';
+    } else {
+      expiresAt = ts;
     }
-    expiresAt = ts;
+  }
+
+  if (Object.keys(errors).length > 0 || targetPrice === null) {
+    return { errors };
   }
 
   const result: AddWatchOrderSubmitValue = { targetPrice };

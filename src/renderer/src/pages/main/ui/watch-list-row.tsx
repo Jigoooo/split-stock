@@ -74,7 +74,7 @@ export const WatchListRow = ({
           fontSize: '1rem',
           lineHeight: 1,
           padding: '0.2rem 0.5rem',
-          opacity: 0,
+          opacity: 0.45,
           transition: 'opacity 0.1s',
           zIndex: 1,
         }}
@@ -83,14 +83,14 @@ export const WatchListRow = ({
         }}
         onMouseLeave={(event) => {
           if (document.activeElement !== event.currentTarget) {
-            event.currentTarget.style.opacity = '0';
+            event.currentTarget.style.opacity = '0.45';
           }
         }}
         onFocus={(event) => {
           event.currentTarget.style.opacity = '1';
         }}
         onBlur={(event) => {
-          event.currentTarget.style.opacity = '0';
+          event.currentTarget.style.opacity = '0.45';
         }}
       >
         ···

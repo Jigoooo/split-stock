@@ -3,6 +3,7 @@ import { Button, Select } from '@renderer/shared/ui';
 import type { ReactElement, TransitionStartFunction } from 'react';
 import {
   LOG_LEVELS,
+  LOG_TAIL_LIMIT,
   type LogDateRange,
   type LogExportFormat,
   type LogLevel,
@@ -90,7 +91,9 @@ export const LogsToolbar = ({
         flexWrap: 'wrap',
       }}
     >
-      <span className="muted">{thousandSeparator(entriesCount)}건 표시</span>
+      <span className="muted">
+        최근 최대 {thousandSeparator(LOG_TAIL_LIMIT)}건 중 {thousandSeparator(entriesCount)}건 표시
+      </span>
       <Button dense onClick={() => onExport('csv')} disabled={exportPending}>
         CSV 저장
       </Button>

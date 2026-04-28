@@ -38,10 +38,13 @@ export interface UseReportsResult {
   summaryError: { message: string } | null;
   summary: ReportSummary | null;
   dailyPnlPending: boolean;
+  dailyPnlError: { message: string } | null;
   dailyPnlPoints: DailyPnlPoint[];
   pnlByLotNthPending: boolean;
+  pnlByLotNthError: { message: string } | null;
   pnlByLotNth: LotNthBar[];
   winRateTimelinePending: boolean;
+  winRateTimelineError: { message: string } | null;
   winRateTimeline: WinRatePoint[];
   exportCsv: (kind: CsvKind) => Promise<{ csv: string; filename: string }>;
 }
@@ -89,10 +92,15 @@ export function useReports(): UseReportsResult {
     summaryError: summaryQuery.error ? { message: summaryQuery.error.message } : null,
     summary: summaryQuery.data ?? null,
     dailyPnlPending: dailyPnlQuery.isPending,
+    dailyPnlError: dailyPnlQuery.error ? { message: dailyPnlQuery.error.message } : null,
     dailyPnlPoints: dailyPnlQuery.data?.points ?? [],
     pnlByLotNthPending: pnlByLotNthQuery.isPending,
+    pnlByLotNthError: pnlByLotNthQuery.error ? { message: pnlByLotNthQuery.error.message } : null,
     pnlByLotNth: pnlByLotNthQuery.data?.items ?? [],
     winRateTimelinePending: winRateTimelineQuery.isPending,
+    winRateTimelineError: winRateTimelineQuery.error
+      ? { message: winRateTimelineQuery.error.message }
+      : null,
     winRateTimeline: winRateTimelineQuery.data?.points ?? [],
     exportCsv,
   };

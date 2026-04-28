@@ -83,6 +83,17 @@ export const NumberInput = ({
       onChange={(event) => {
         onValueChange(sanitizeNumberInput(event.target.value, { allowNegative, allowDecimal }));
       }}
+      onKeyDown={(event) => {
+        props.onKeyDown?.(event);
+        if (event.defaultPrevented || !showSpinner) return;
+        if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          adjust(step);
+        } else if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          adjust(-step);
+        }
+      }}
       className={[
         'hts-input',
         'hts-input--num',

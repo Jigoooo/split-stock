@@ -2,6 +2,7 @@ import { trpc } from '@renderer/shared/api/trpc';
 import { useState } from 'react';
 
 export const LOG_LEVELS = ['', 'INFO', 'WARN', 'ERROR'] as const;
+export const LOG_TAIL_LIMIT = 200;
 export const LOG_CATEGORIES = [
   '',
   'AUTH',
@@ -80,7 +81,7 @@ export function useLogTail(): UseLogTailResult {
 
   const tail = trpc.logs.tail.useQuery(
     {
-      limit: 200,
+      limit: LOG_TAIL_LIMIT,
       ...(level ? { level: level as 'INFO' | 'WARN' | 'ERROR' } : {}),
       ...(selectedCategories ? { categories: selectedCategories } : {}),
       ...(search ? { search } : {}),

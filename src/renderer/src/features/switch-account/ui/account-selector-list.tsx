@@ -92,6 +92,20 @@ export const AccountSelectorList = ({
       role="listbox"
       aria-label="계좌 목록"
       className="panel"
+      onKeyDown={(event) => {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        event.preventDefault();
+        const options = Array.from(
+          event.currentTarget.querySelectorAll<HTMLButtonElement>(
+            'button[role="option"]:not(:disabled)',
+          ),
+        );
+        if (options.length === 0) return;
+        const currentIndex = options.indexOf(document.activeElement as HTMLButtonElement);
+        const baseIndex = currentIndex >= 0 ? currentIndex : event.key === 'ArrowDown' ? -1 : 0;
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        options[(baseIndex + direction + options.length) % options.length]?.focus();
+      }}
       style={{
         position: 'absolute',
         top: 'calc(100% + 0.4rem)',
@@ -204,6 +218,8 @@ const SortableAccountItem = ({
       </button>
       <button
         type="button"
+        role="option"
+        aria-selected={a.isActive}
         onClick={() => onPick(a.id)}
         disabled={switching || a.isActive}
         style={{

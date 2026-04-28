@@ -1,5 +1,6 @@
 import type { WatchOrder } from '@renderer/entities/watch-order';
 import type { WatchOrderFormPrefill } from '@renderer/features/add-watch-order';
+import { Button, DialogType, dialog } from '@renderer/shared/ui';
 import { type ReactElement, useEffectEvent, useMemo, useState } from 'react';
 import { useWatchOrderActions } from '../model/use-watch-order-actions';
 import { WatchContextMenu, type WatchContextMenuState } from './watch-context-menu';
@@ -38,6 +39,10 @@ export const WatchList = (props: WatchListProps): ReactElement => {
     () => (menu ? orders.filter((order) => menu.ids.includes(order.id)) : []),
     [menu, orders],
   );
+  const selectedOrderRows = useMemo(
+    () => orders.filter((order) => selected.has(order.id)),
+    [orders, selected],
+  );
   const canPause =
     selectedRows.length > 0 && selectedRows.every((order) => order.status === 'WATCHING');
   const canResume =
@@ -50,6 +55,35 @@ export const WatchList = (props: WatchListProps): ReactElement => {
     closeMenu();
     setSelected(new Set());
     void run(ids);
+  };
+  const confirmAndDelete = async (ids: number[]): Promise<void> => {
+    const rows = orders.filter((order) => ids.includes(order.id));
+    const confirmed = await dialog.openAsync({
+      type: DialogType.WARNING,
+      title: '자동감시 삭제',
+      confirmText: '삭제',
+      cancelText: '취소',
+      isCancelWith: true,
+      message: (
+        <div style={{ display: 'grid', gap: '0.5rem' }}>
+          <div>
+            선택한 자동감시 <strong>{ids.length}건</strong>을 삭제합니다.
+          </div>
+          {rows.length > 0 ? (
+            <div className="muted">
+              {rows
+                .slice(0, 3)
+                .map((order) => `${order.pdno} ${order.orderType}`)
+                .join(', ')}
+              {rows.length > 3 ? ` 외 ${rows.length - 3}건` : ''}
+            </div>
+          ) : null}
+          <div className="muted">삭제 후 해당 조건으로는 더 이상 자동감시가 실행되지 않습니다.</div>
+        </div>
+      ),
+    });
+    if (!confirmed) return;
+    clearAndRun(actions.deleteSelected, ids);
   };
 
   const editSelected = (): void => {
@@ -75,6 +109,54 @@ export const WatchList = (props: WatchListProps): ReactElement => {
           {error.message}
         </div>
       ) : null}
+      {allowMutations && selected.size > 0 ? (
+        <div
+          role="toolbar"
+          aria-label="선택한 자동감시 작업"
+          style={{
+            alignItems: 'center',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+            padding: '0.5rem',
+            borderBottom: '1px solid var(--hts-line, rgba(0,0,0,0.12))',
+          }}
+        >
+          <span className="muted">{selected.size}건 선택</span>
+          <Button
+            dense
+            disabled={
+              actions.mutationPending ||
+              selectedOrderRows.length === 0 ||
+              !selectedOrderRows.every((order) => order.status === 'PAUSED')
+            }
+            onClick={() => clearAndRun(actions.resumeSelected, Array.from(selected))}
+          >
+            시작
+          </Button>
+          <Button
+            dense
+            disabled={
+              actions.mutationPending ||
+              selectedOrderRows.length === 0 ||
+              !selectedOrderRows.every((order) => order.status === 'WATCHING')
+            }
+            onClick={() => clearAndRun(actions.pauseSelected, Array.from(selected))}
+          >
+            중지
+          </Button>
+          <Button
+            dense
+            variant="danger"
+            disabled={actions.mutationPending}
+            onClick={() => {
+              void confirmAndDelete(Array.from(selected));
+            }}
+          >
+            삭제
+          </Button>
+        </div>
+      ) : null}
       <WatchTable
         allowMutations={allowMutations}
         isPending={isPending}
@@ -92,7 +174,9 @@ export const WatchList = (props: WatchListProps): ReactElement => {
           menu={menu}
           mutationPending={actions.mutationPending}
           onClose={closeMenu}
-          onDelete={(ids) => clearAndRun(actions.deleteSelected, ids)}
+          onDelete={(ids) => {
+            void confirmAndDelete(ids);
+          }}
           onEdit={editSelected}
           onPause={(ids) => clearAndRun(actions.pauseSelected, ids)}
           onResume={(ids) => clearAndRun(actions.resumeSelected, ids)}

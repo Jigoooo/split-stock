@@ -1,5 +1,7 @@
+import { useDialogFocus } from '@renderer/shared/lib/interaction';
 import { Button } from '@renderer/shared/ui';
-import type { ReactElement } from 'react';
+import { X } from 'lucide-react';
+import { type ReactElement, useRef } from 'react';
 import type { AddWatchOrderFormController } from '../model/use-add-watch-order-form-controller';
 import {
   ExecutionConditionsSection,
@@ -18,14 +20,23 @@ export const AddWatchOrderDialogContent = ({
   onClose,
 }: AddWatchOrderDialogContentProps): ReactElement => {
   const isPageLayout = layout === 'page';
+  const modalRef = useRef<HTMLDivElement | null>(null);
   const isDense = !isPageLayout;
   const titleText = controller.isEdit ? '자동감시 수정' : '자동감시 추가';
   const chromePadding = isPageLayout ? '0.9rem 1.1rem' : '0.35rem 0.6rem';
   const bodyPadding = isPageLayout ? '1rem 1.1rem' : '0.4rem 0.6rem';
   const bodyGap = isPageLayout ? '1rem 1.5rem' : '0.5rem 0.8rem';
+  useDialogFocus({
+    enabled: !isPageLayout,
+    rootRef: modalRef,
+    onEscape: controller.isPending ? undefined : onClose,
+  });
+
   const content = (
     <div
+      ref={modalRef}
       className={`panel${layout === 'page' ? ' add-watch-order-page' : ' modal'}`}
+      tabIndex={isPageLayout ? undefined : -1}
       style={
         isPageLayout
           ? {
@@ -39,8 +50,28 @@ export const AddWatchOrderDialogContent = ({
       }
     >
       {isPageLayout ? null : (
-        <div className="panel__title" style={{ padding: chromePadding, fontSize: '1rem' }}>
-          {titleText}
+        <div
+          className="panel__title"
+          style={{
+            alignItems: 'center',
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: '0.6rem',
+            padding: chromePadding,
+            fontSize: '1rem',
+          }}
+        >
+          <span>{titleText}</span>
+          <Button
+            variant="ghost"
+            iconOnly
+            dense
+            iconLeading={<X size={14} />}
+            onClick={onClose}
+            disabled={controller.isPending}
+            aria-label="닫기"
+            title="닫기"
+          />
         </div>
       )}
       <div
@@ -64,6 +95,7 @@ export const AddWatchOrderDialogContent = ({
           isPageLayout={isPageLayout}
           isDense={isDense}
           isPending={controller.isPending}
+          errors={controller.errors}
           setTargetPriceRaw={controller.setTargetPriceRaw}
           setExpiresAtIso={controller.setExpiresAtIso}
           onPickStock={controller.onPickStock}
@@ -78,6 +110,7 @@ export const AddWatchOrderDialogContent = ({
           isPageLayout={isPageLayout}
           isDense={isDense}
           isPending={controller.isPending}
+          errors={controller.errors}
           setOrderType={controller.setOrderType}
           setQtyMode={controller.setQtyMode}
           setQtyRaw={controller.setQtyRaw}
@@ -132,7 +165,21 @@ export const AddWatchOrderDialogContent = ({
   }
 
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={titleText}>
+    <div
+      className="modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label={titleText}
+      onClick={(event) => {
+        if (event.target !== event.currentTarget || controller.isPending) return;
+        onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || controller.isPending) return;
+        event.preventDefault();
+        onClose();
+      }}
+    >
       {content}
     </div>
   );

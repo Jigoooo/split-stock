@@ -150,4 +150,76 @@ describe('DialogProvider', () => {
       expect(onCancel).not.toHaveBeenCalled();
     });
   });
+
+  it('confirm dialog는 취소 버튼에 초기 포커스를 두고 Tab을 dialog 안에 가둔다', async () => {
+    render(<DialogProvider />);
+
+    act(() => {
+      useDialogStore.getState().actions.open({
+        message: '삭제 확인',
+        cancelText: '취소',
+        confirmText: '삭제',
+      });
+    });
+
+    const cancelButton = await screen.findByRole('button', { name: '취소' });
+    const confirmButton = screen.getByRole('button', { name: '삭제' });
+
+    await waitFor(() => expect(cancelButton).toHaveFocus());
+
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(confirmButton).toHaveFocus();
+
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(cancelButton).toHaveFocus();
+  });
+
+  it('Escape로 닫으면 opener 포커스를 복구한다', async () => {
+    render(
+      <>
+        <button type="button">opener</button>
+        <DialogProvider />
+      </>,
+    );
+
+    const opener = screen.getByRole('button', { name: 'opener' });
+    opener.focus();
+
+    act(() => {
+      useDialogStore.getState().actions.open({
+        message: '닫기 테스트',
+      });
+    });
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(opener).toHaveFocus();
+    });
+  });
+
+  it('dialog 전역 Enter는 destructive confirm을 실행하지 않는다', async () => {
+    const onConfirm = vi.fn();
+    render(<DialogProvider />);
+
+    act(() => {
+      useDialogStore.getState().actions.open({
+        type: DialogType.WARNING,
+        message: '삭제 확인',
+        cancelText: '취소',
+        confirmText: '삭제',
+        onConfirm,
+      });
+    });
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    fireEvent.keyDown(document, { key: 'Enter' });
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
 });

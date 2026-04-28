@@ -1,12 +1,14 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 
 interface AddWatchOrderFormRowProps {
-  children: ReactElement | ReactElement[];
+  children: ReactNode;
+  error?: string | undefined;
   label: string;
 }
 
 export const AddWatchOrderFormRow = ({
   children,
+  error,
   label,
 }: AddWatchOrderFormRowProps): ReactElement => (
   <div
@@ -20,6 +22,13 @@ export const AddWatchOrderFormRow = ({
     <span className="muted" style={{ paddingTop: '0.35rem' }}>
       {label}
     </span>
-    <div>{children}</div>
+    <div style={{ display: 'grid', gap: '0.25rem' }}>
+      {children}
+      {error ? (
+        <span className="chip chip--down" role="alert" style={{ width: 'fit-content' }}>
+          {error}
+        </span>
+      ) : null}
+    </div>
   </div>
 );

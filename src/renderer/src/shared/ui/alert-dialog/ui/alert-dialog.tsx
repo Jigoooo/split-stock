@@ -1,4 +1,5 @@
 import { Z_INDEX } from '@renderer/shared/config';
+import { useDialogFocus } from '@renderer/shared/lib/interaction';
 import { useColors } from '@renderer/shared/theme';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ReactElement } from 'react';
@@ -40,6 +41,9 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
   const historyIdRef = useRef<string | null>(null);
   const ignoreOverlayResolveRef = useRef(false);
   const latestCancelRef = useRef(config.onCancel);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement | null>(null);
+  const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
   const {
     isOpen,
     mode,
@@ -105,24 +109,13 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
     ignoreOverlayResolveRef.current = false;
   });
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (!isTopOverlay()) return;
-
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        closeWithHistory(true);
-      } else if (event.key === 'Escape' && isOverlayPressClose) {
-        event.preventDefault();
-        closeWithHistory(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isOverlayPressClose]);
+  useDialogFocus({
+    enabled: isOpen,
+    rootRef: dialogRef,
+    initialFocusRef: mode === DialogMode.CONFIRM ? cancelButtonRef : confirmButtonRef,
+    onEscape: isOverlayPressClose ? () => closeWithHistory(false) : undefined,
+    canHandleEscape: isTopOverlay,
+  });
 
   if (!isOpen) return null;
 
@@ -151,9 +144,11 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
             }}
           />
           <motion.div
+            ref={dialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={title ? 'app-dialog-title' : undefined}
+            tabIndex={-1}
             initial={{ opacity: 0, scale: 1.05, x: '-50%', y: '-50%' }}
             animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%', pointerEvents: 'auto' }}
             exit={{ opacity: 0, scale: 0.98, x: '-50%', y: '-50%', pointerEvents: 'none' }}
@@ -240,6 +235,7 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
                 <>
                   {mode === DialogMode.CONFIRM ? (
                     <button
+                      ref={cancelButtonRef}
                       type="button"
                       onClick={() => closeWithHistory(false)}
                       style={{
@@ -258,6 +254,7 @@ export function AlertDialogRenderer({ config }: AlertDialogRendererProps): React
                     </button>
                   ) : null}
                   <button
+                    ref={confirmButtonRef}
                     type="button"
                     onClick={() => closeWithHistory(true)}
                     style={{

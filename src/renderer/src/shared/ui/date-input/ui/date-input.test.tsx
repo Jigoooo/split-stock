@@ -286,6 +286,18 @@ describe('DateInput', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('일 달력에서 방향키로 날짜 셀 포커스를 이동한다', async () => {
+    render(<DateHarness initial="2026-04-10" />);
+
+    fireEvent.click(screen.getByRole('button', { name: '날짜 선택기 열기' }));
+
+    const selectedDay = await screen.findByRole('button', { name: '2026-04-10 선택' });
+    selectedDay.focus();
+    fireEvent.keyDown(selectedDay, { key: 'ArrowRight' });
+
+    expect(screen.getByRole('button', { name: '2026-04-11 선택' })).toHaveFocus();
+  });
+
   it('popup이 열린 상태에서 draft를 수정해도 calendar는 열린 채 유지된다', async () => {
     render(<DateHarness initial="2026-04-10" />);
 

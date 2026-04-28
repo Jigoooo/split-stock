@@ -7,15 +7,39 @@ const setToStr = vi.fn();
 
 vi.mock('../model/use-reports', () => ({
   useReports: () => ({
+    dailyPnlError: null,
+    dailyPnlPending: false,
+    dailyPnlPoints: [],
     exportCsv: vi.fn(),
     fromStr: '2026-04-20',
+    pnlByLotNth: [],
+    pnlByLotNthError: null,
+    pnlByLotNthPending: false,
     setFromStr,
     setToStr,
     summary: null,
     summaryError: null,
     summaryPending: false,
     toStr: '2026-04-20',
+    winRateTimeline: [],
+    winRateTimelineError: null,
+    winRateTimelinePending: false,
   }),
+}));
+
+vi.mock('@renderer/shared/api/trpc', () => ({
+  trpc: {
+    monitoring: {
+      getRealtimeStats: {
+        useQuery: () => ({ data: null }),
+      },
+    },
+    reports: {
+      getDailyOpsSummary: {
+        useQuery: () => ({ data: null, error: null, isPending: false }),
+      },
+    },
+  },
 }));
 
 import { ReportsPage } from './reports-page';

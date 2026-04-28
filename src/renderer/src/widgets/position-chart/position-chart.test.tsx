@@ -290,12 +290,24 @@ describe('PositionChart', () => {
 
     await waitFor(() => expect(createChartMock).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole('tab', { name: '주' }));
+    fireEvent.click(screen.getByRole('radio', { name: '주' }));
 
     await waitFor(() =>
       expect(fetchChartMock).toHaveBeenCalledWith({ code: '005930', period: 'W' }),
     );
     expect(createChartMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('봉 조회가 성공했지만 데이터가 없으면 빈 상태를 차트와 구분해 보여준다', async () => {
+    fetchChartMock.mockResolvedValueOnce({ candles: [], toMs: Date.UTC(2026, 3, 19) });
+
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+
+    expect(await screen.findByText('표시할 봉 데이터가 없습니다')).toBeInTheDocument();
+    expect(
+      screen.getByText('다른 봉 단위를 선택하거나 잠시 후 다시 시도하세요.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '봉 다시 시도' })).not.toBeInTheDocument();
   });
 
   it('거래량 시리즈의 마지막 값 라벨과 가격선을 숨긴다', async () => {

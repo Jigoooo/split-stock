@@ -7,11 +7,12 @@ import {
   QTY_MODE_ITEMS,
   sectionCardStyle,
 } from '../config/add-watch-order-section-options';
-import { calcAmountPreview } from '../model/add-watch-order-form';
+import { type AddWatchOrderFormErrors, calcAmountPreview } from '../model/add-watch-order-form';
 import { AddWatchOrderFormRow } from './add-watch-order-form-row';
 
 interface ExecutionConditionsSectionProps {
   amountKrwRaw: string;
+  errors: AddWatchOrderFormErrors;
   isDense: boolean;
   isPageLayout: boolean;
   isPending: boolean;
@@ -29,6 +30,7 @@ interface ExecutionConditionsSectionProps {
 
 export const ExecutionConditionsSection = ({
   amountKrwRaw,
+  errors,
   isDense,
   isPageLayout,
   isPending,
@@ -93,7 +95,7 @@ export const ExecutionConditionsSection = ({
       </AddWatchOrderFormRow>
 
       {qtyMode === 'QTY' ? (
-        <AddWatchOrderFormRow label="수량">
+        <AddWatchOrderFormRow label="수량" error={errors.qtyRaw}>
           <div
             style={{
               display: 'flex',
@@ -106,6 +108,7 @@ export const ExecutionConditionsSection = ({
               onValueChange={setQtyRaw}
               placeholder="0"
               aria-label="수량"
+              aria-invalid={Boolean(errors.qtyRaw)}
               dense={isDense}
               disabled={isPending}
             />
@@ -113,7 +116,7 @@ export const ExecutionConditionsSection = ({
           </div>
         </AddWatchOrderFormRow>
       ) : (
-        <AddWatchOrderFormRow label="주문금액">
+        <AddWatchOrderFormRow label="주문금액" error={errors.amountKrwRaw}>
           <div style={{ display: 'grid', gap: isPageLayout ? '0.55rem' : '0.3rem' }}>
             <div
               style={{
@@ -127,6 +130,7 @@ export const ExecutionConditionsSection = ({
                 onValueChange={setAmountKrwRaw}
                 placeholder="0"
                 aria-label="주문금액"
+                aria-invalid={Boolean(errors.amountKrwRaw)}
                 dense={isDense}
                 disabled={isPending}
               />

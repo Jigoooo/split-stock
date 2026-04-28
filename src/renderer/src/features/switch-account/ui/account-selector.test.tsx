@@ -161,6 +161,23 @@ describe('AccountSelector', () => {
     expect(screen.getByRole('listbox', { name: '계좌 목록' })).toBeInTheDocument();
   });
 
+  it('계좌 선택 항목은 option으로 노출되고 방향키로 포커스를 이동한다', async () => {
+    render(<AccountSelector />);
+
+    fireEvent.click(screen.getByRole('button', { name: /모의 계좌 · mock 5678/i }));
+
+    const listbox = await screen.findByRole('listbox', { name: '계좌 목록' });
+    const activeOption = screen.getByRole('option', { name: /모의 계좌 · MOCK 5678/i });
+    const nextOption = screen.getByRole('option', { name: /실전 계좌 · PROD 4321/i });
+
+    expect(activeOption).toHaveAttribute('aria-selected', 'true');
+    expect(nextOption).toHaveAttribute('aria-selected', 'false');
+
+    fireEvent.keyDown(listbox, { key: 'ArrowDown' });
+
+    expect(nextOption).toHaveFocus();
+  });
+
   it('계좌 목록이 비어도 저장된 자격증명을 fallback 옵션으로 보여준다', async () => {
     useQueryMock.mockReturnValue({
       data: { accounts: [], activeAccountId: 7 },
