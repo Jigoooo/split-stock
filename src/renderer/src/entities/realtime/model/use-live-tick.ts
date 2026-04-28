@@ -20,9 +20,23 @@ export interface LiveTick {
 }
 
 export function useLiveTick(pdno: string, pollMs = 1000): LiveTick | null {
+  const envQuery = trpc.auth.getEnv.useQuery();
+  const env = envQuery.data?.env ?? null;
   useWatch(pdno, 'tick');
-  const query = trpc.realtime.getLatestTick.useQuery({ pdno }, { refetchInterval: pollMs });
-  return (query.data?.tick ?? null) as LiveTick | null;
+  const subscription = trpc.realtime.onTick.useSubscription(
+    { pdno },
+    {
+      enabled: env !== null,
+    },
+  );
+  const fallbackQuery = trpc.realtime.getLatestTick.useQuery(
+    { pdno },
+    {
+      enabled: env !== null && subscription.status === 'error',
+      refetchInterval: pollMs,
+    },
+  );
+  return (subscription.data ?? fallbackQuery.data?.tick ?? null) as LiveTick | null;
 }
 
 function useWatch(pdno: string, topic: Topic): void {

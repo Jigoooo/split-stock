@@ -12,14 +12,30 @@ export function useLiveTicks(pdnos: string[], pollMs = 1000): Record<string, Liv
     [pdnos],
   );
   useWatchMany(uniquePdnos, 'tick');
-  const query = trpc.realtime.getLatestTicks.useQuery(
+  const subscription = trpc.realtime.onTicks.useSubscription(
     { pdnos: uniquePdnos },
     {
       enabled: env !== null && uniquePdnos.length > 0,
+    },
+  );
+  const fallbackQuery = trpc.realtime.getLatestTicks.useQuery(
+    { pdnos: uniquePdnos },
+    {
+      enabled: env !== null && uniquePdnos.length > 0 && subscription.status === 'error',
       refetchInterval: pollMs,
     },
   );
-  return (query.data?.ticks ?? {}) as Record<string, LiveTick | null>;
+  const ticks = (subscription.data ?? fallbackQuery.data?.ticks) as
+    | Record<string, LiveTick | null>
+    | undefined;
+  return useMemo(
+    () =>
+      uniquePdnos.reduce<Record<string, LiveTick | null>>((acc, pdno) => {
+        acc[pdno] = ticks?.[pdno] ?? null;
+        return acc;
+      }, {}),
+    [ticks, uniquePdnos],
+  );
 }
 
 function useWatchMany(pdnos: string[], topic: Topic): void {

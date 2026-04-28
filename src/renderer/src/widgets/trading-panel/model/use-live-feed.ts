@@ -26,14 +26,32 @@ export interface LiveOrderbook {
 }
 
 export function useLiveOrderbook(pdno: string, pollMs = 500): LiveOrderbook | null {
+  const envQuery = trpc.auth.getEnv.useQuery();
+  const env = envQuery.data?.env ?? null;
   useWatch(pdno, 'orderbook');
-  const ws = trpc.realtime.getLatestOrderbook.useQuery({ pdno }, { refetchInterval: pollMs });
+  const subscription = trpc.realtime.onOrderbook.useSubscription(
+    { pdno },
+    {
+      enabled: env !== null,
+    },
+  );
+  const fallbackWs = trpc.realtime.getLatestOrderbook.useQuery(
+    { pdno },
+    {
+      enabled: env !== null && subscription.status === 'error',
+      refetchInterval: pollMs,
+    },
+  );
+  const wsData = (subscription.data ?? fallbackWs.data?.orderbook ?? null) as LiveOrderbook | null;
   // WS 피드가 오지 않는 장외 시간대를 위한 REST fallback (5초 간격).
   const rest = trpc.market.getOrderbook.useQuery(
     { code: pdno },
-    { refetchInterval: 5000, staleTime: 3000 },
+    {
+      enabled: env !== null && wsData === null,
+      refetchInterval: env !== null && wsData === null ? 5000 : false,
+      staleTime: 3000,
+    },
   );
-  const wsData = (ws.data?.orderbook ?? null) as LiveOrderbook | null;
   if (wsData) return wsData;
   return (rest.data?.orderbook ?? null) as LiveOrderbook | null;
 }
