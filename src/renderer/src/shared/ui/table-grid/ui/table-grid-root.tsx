@@ -169,6 +169,9 @@ export function TableGridRoot(props: RootProps): ReactElement {
     ],
   );
 
+  const hasStorageKey = storageKey !== undefined;
+  const hasManualWidths = Object.keys(manualColumnWidths).length > 0;
+
   return (
     <TableGridContext.Provider value={ctx}>
       {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: role=region supports aria-label */}
@@ -232,12 +235,60 @@ export function TableGridRoot(props: RootProps): ReactElement {
             {overlayScrollbar ? <OverlayScrollbar containerRef={bodyRef} alwaysVisible /> : null}
           </>
         )}
-        {/* horizontalScroll=true 시: wrapper 가 세로+가로 모두 담당 → 두 방향 모두 부착 */}
         {horizontalScroll && overlayScrollbar ? (
           <>
             <OverlayScrollbar containerRef={hScrollRef} alwaysVisible />
             <OverlayScrollbar containerRef={hScrollRef} orientation="horizontal" alwaysVisible />
           </>
+        ) : null}
+        {hasStorageKey && hasManualWidths ? (
+          <button
+            type="button"
+            title="컬럼 너비 초기화"
+            onClick={resetColumnWidths}
+            style={{
+              appearance: 'none',
+              border: 'none',
+              background: 'var(--bg-elevated, rgba(255,255,255,0.9))',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '2.2rem',
+              height: '2.2rem',
+              padding: 0,
+              position: 'absolute',
+              top: '0.2rem',
+              right: '0.2rem',
+              zIndex: 10,
+              borderRadius: '0.4rem',
+              color: 'var(--text-secondary, #888)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.12)',
+              opacity: 0.7,
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.opacity = '1';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = '0.7';
+            }}
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <title>컬럼 너비 초기화</title>
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+          </button>
         ) : null}
       </div>
     </TableGridContext.Provider>
