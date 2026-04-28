@@ -114,6 +114,14 @@ export const strategyRouter = router({
           message: `전략 저장 실패: ${r.error.kind}`,
         });
       }
+      if (input.pdno === null) {
+        ctx.strategyRepo.applyAutoControlsToSymbolActives(accountId, {
+          autoBuyEnabled: input.profile.autoBuyEnabled,
+          autoBuyOrderType: input.profile.autoBuyOrderType,
+          autoSellEnabled: input.profile.autoSellEnabled,
+          autoSellOrderType: input.profile.autoSellOrderType,
+        });
+      }
       requestImmediateStrategyEvaluation(ctx, accountId, input.pdno);
       return { ok: true as const };
     }),

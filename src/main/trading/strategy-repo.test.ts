@@ -250,4 +250,37 @@ describe('StrategyRepo — backfill', () => {
     expect(repo.getActive(ACC_A, '005930')._unsafeUnwrap()?.autoBuyEnabled).toBe(true);
     expect(repo.getActive(ACC_A, '000660')._unsafeUnwrap()?.autoBuyEnabled).toBe(false);
   });
+
+  it('기본 자동매매 ON/OFF 저장은 기존 종목별 전략의 자동 제어만 갱신한다', () => {
+    const { repo } = setup();
+    repo.setActive(ACC_A, null, baseProfile({ autoBuyEnabled: false, autoSellEnabled: false }));
+    repo.setActive(
+      ACC_A,
+      '005930',
+      baseProfile({
+        autoBuyEnabled: false,
+        autoSellEnabled: false,
+        buyRules: createStrategyRules(5, { amountKrw: 500_000 }).buyRules,
+      }),
+    );
+    repo.setActive(ACC_B, '000660', baseProfile({ autoBuyEnabled: false }));
+
+    const result = repo.applyAutoControlsToSymbolActives(ACC_A, {
+      autoBuyEnabled: true,
+      autoBuyOrderType: 'MARKET',
+      autoSellEnabled: true,
+      autoSellOrderType: 'MARKET',
+    });
+
+    const updated = repo.getActive(ACC_A, '005930')._unsafeUnwrap();
+    expect(result).toEqual({ updated: 1, failed: 0 });
+    expect(updated).toMatchObject({
+      autoBuyEnabled: true,
+      autoBuyOrderType: 'MARKET',
+      autoSellEnabled: true,
+      autoSellOrderType: 'MARKET',
+    });
+    expect(updated?.buyRules[0]?.amountKrw).toBe(500_000);
+    expect(repo.getActive(ACC_B, '000660')._unsafeUnwrap()?.autoBuyEnabled).toBe(false);
+  });
 });

@@ -15,6 +15,11 @@ export type StrategyRepoError =
 
 export type StrategyEffectiveSource = 'symbol' | 'global' | 'default';
 
+export type StrategyAutoControls = Pick<
+  StrategyProfile,
+  'autoBuyEnabled' | 'autoBuyOrderType' | 'autoSellEnabled' | 'autoSellOrderType'
+>;
+
 const ACTIVE_PREFIX = 'strategy.active';
 const PRESET_PREFIX = 'strategy.preset';
 const LEGACY_ACTIVE_PREFIX = 'strategy.active'; // 단일 계좌 시절 키 prefix
@@ -88,6 +93,66 @@ export class StrategyRepo {
       },
     });
     return ok(undefined);
+  }
+
+  applyAutoControlsToSymbolActives(
+    accountId: number,
+    controls: StrategyAutoControls,
+  ): { updated: number; failed: number } {
+    const prefix = `${ACTIVE_PREFIX}.${accountId}.`;
+    let updated = 0;
+    let failed = 0;
+
+    for (const row of this.settings.list()) {
+      if (!row.key.startsWith(prefix)) continue;
+      const pdno = row.key.slice(prefix.length);
+      if (!/^\d{6}$/.test(pdno)) continue;
+
+      const current = this.readProfile(row.key);
+      if (current.isErr() || current.value === null) {
+        failed += 1;
+        this.logger.log({
+          level: 'ERROR',
+          category: 'FSM',
+          message: 'strategy.auto_controls.apply_failed',
+          payload: {
+            accountId,
+            pdno,
+            reason: current.isErr() ? current.error.kind : 'MISSING_PROFILE',
+          },
+        });
+        continue;
+      }
+
+      if (hasSameAutoControls(current.value, controls)) continue;
+
+      const saved = this.setActive(accountId, pdno, {
+        ...current.value,
+        ...controls,
+      });
+      if (saved.isErr()) {
+        failed += 1;
+        this.logger.log({
+          level: 'ERROR',
+          category: 'FSM',
+          message: 'strategy.auto_controls.apply_failed',
+          payload: { accountId, pdno, reason: saved.error.kind },
+        });
+        continue;
+      }
+      updated += 1;
+    }
+
+    if (updated > 0 || failed > 0) {
+      this.logger.log({
+        level: failed > 0 ? 'WARN' : 'INFO',
+        category: 'FSM',
+        message: 'strategy.auto_controls.applied',
+        payload: { accountId, updated, failed, controls },
+      });
+    }
+
+    return { updated, failed };
   }
 
   getEffectiveForEdit(
@@ -425,4 +490,13 @@ function isUnsafeDefaultAutoProfile(profile: StrategyProfile): boolean {
     autoSellEnabled: false,
   };
   return JSON.stringify(disabled) === JSON.stringify(DEFAULT_STRATEGY_PROFILE);
+}
+
+function hasSameAutoControls(profile: StrategyProfile, controls: StrategyAutoControls): boolean {
+  return (
+    profile.autoBuyEnabled === controls.autoBuyEnabled &&
+    profile.autoBuyOrderType === controls.autoBuyOrderType &&
+    profile.autoSellEnabled === controls.autoSellEnabled &&
+    profile.autoSellOrderType === controls.autoSellOrderType
+  );
 }

@@ -60,15 +60,32 @@ describe('strategy-router', () => {
     expect(saved.isOk() ? saved.value?.autoSellEnabled : false).toBe(true);
   });
 
-  it('글로벌 전략 저장 후 추적 중인 전체 종목을 즉시 평가 요청한다', async () => {
-    const { caller, strategyEngine } = setup();
+  it('글로벌 전략 저장 후 기존 종목별 자동 제어를 갱신하고 전체 종목을 즉시 평가 요청한다', async () => {
+    const { caller, strategyEngine, strategyRepo } = setup();
+    strategyRepo.setActive(
+      1,
+      '005930',
+      baseProfile({ autoBuyEnabled: false, autoSellEnabled: false }),
+    );
 
     await caller.setActive({
       accountId: 1,
       pdno: null,
-      profile: baseProfile({ autoSellEnabled: true }),
+      profile: baseProfile({
+        autoBuyEnabled: true,
+        autoBuyOrderType: 'MARKET',
+        autoSellEnabled: true,
+        autoSellOrderType: 'MARKET',
+      }),
     });
 
+    const symbolProfile = strategyRepo.getActive(1, '005930')._unsafeUnwrap();
+    expect(symbolProfile).toMatchObject({
+      autoBuyEnabled: true,
+      autoBuyOrderType: 'MARKET',
+      autoSellEnabled: true,
+      autoSellOrderType: 'MARKET',
+    });
     expect(strategyEngine.refreshTrackedSymbols).toHaveBeenCalledTimes(1);
     expect(strategyEngine.evaluateLatest).not.toHaveBeenCalled();
     expect(strategyEngine.evaluateLatestForTracked).toHaveBeenCalledTimes(1);
