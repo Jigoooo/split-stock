@@ -287,10 +287,9 @@ export const aiRouter = router({
           },
         };
       }
-      const krx =
-        input?.pdnos && input.pdnos.length > 0
-          ? await ctx.marketContextService.refreshKrxForPdnos(input.pdnos)
-          : { inserted: 0 };
+      const krx = await ctx.marketContextService.refreshKrxForPdnos(
+        input?.pdnos && input.pdnos.length > 0 ? input.pdnos : ['005930'],
+      );
       const ecos = await ctx.marketContextService.refreshDefaultEcosSeries();
       return {
         krxInserted: krx.inserted,

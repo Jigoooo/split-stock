@@ -51,7 +51,7 @@ export const MarketContextSection = (): ReactElement => {
           disabled={refresh.isPending}
           onClick={() => refresh.mutate({})}
         >
-          {refresh.isPending ? '갱신 중...' : 'ECOS 갱신'}
+          {refresh.isPending ? '갱신 중...' : '상태 갱신'}
         </Button>
       </div>
       <div className="panel__body" style={{ display: 'grid', gap: '0.6rem' }}>
