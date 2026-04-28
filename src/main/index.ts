@@ -788,6 +788,7 @@ function bootstrapDeps(userDataDir: string) {
     rateGuardRepo,
     protectionLimitsRepo,
     watchEngine,
+    strategyEngine,
     pendingOrderWatcher,
     bus,
     aiCredentialsRepo,

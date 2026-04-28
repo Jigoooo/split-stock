@@ -28,6 +28,7 @@ const overflowClass = (mode: OverflowMode): string => `table-grid-cell--ovf-${mo
  */
 interface TableGridCellInternalProps extends CellProps {
   columnIndex?: number;
+  isHeader?: boolean;
 }
 
 export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
@@ -40,17 +41,27 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
     overflow = 'nowrap',
     numeric = false,
     sticky,
+    resizable = true,
     className,
     style,
     title,
     children,
     columnIndex,
+    isHeader,
   } = props;
-  const { columnWidths, reportColumnWidth } = useTableGridContext();
+  const {
+    columnWidths,
+    reportColumnWidth,
+    manualColumnWidths,
+    setManualColumnWidth,
+    resizable: rootResizable,
+  } = useTableGridContext();
   const cellRef = useRef<HTMLDivElement | null>(null);
 
-  const resolvedWidth =
+  const manualWidth = columnIndex !== undefined ? manualColumnWidths[columnIndex] : undefined;
+  const calculatedWidth =
     width !== undefined ? Math.max(width, columnWidths[columnIndex ?? -1] ?? 0) : undefined;
+  const resolvedWidth = manualWidth !== undefined ? manualWidth : calculatedWidth;
 
   const flexBasis: CSSProperties =
     resolvedWidth !== undefined
@@ -66,7 +77,6 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
         position: 'sticky',
         [sticky]: 0,
         zIndex: 1,
-        // 좌/우 구분선
         ...(sticky === 'right'
           ? { borderLeft: '1px solid var(--border-strong, rgba(0,0,0,0.15))' }
           : {}),
@@ -74,50 +84,130 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
           ? { borderRight: '1px solid var(--border-strong, rgba(0,0,0,0.15))' }
           : {}),
       }
-    : {};
+    : { position: 'relative', overflow: 'clip' };
 
+  // 수동 너비가 설정된 경우 reportColumnWidth를 건너뛰어 무한 루프 방지
+  // deps를 지정하여 입력값 변경 시에만 측정 (매 렌더링 실행 방지)
   useLayoutEffect(() => {
-    if (width === undefined || columnIndex === undefined) {
-      return;
-    }
+    if (manualWidth !== undefined) return;
+    if (width === undefined || columnIndex === undefined) return;
 
     const el = cellRef.current;
-    if (!el) {
-      return;
-    }
+    if (!el) return;
 
     reportColumnWidth(columnIndex, Math.max(width, el.scrollWidth));
-  });
+  }, [width, columnIndex, manualWidth, reportColumnWidth]);
+
+  const isResizable =
+    isHeader && resizable !== false && rootResizable !== false && columnIndex !== undefined;
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isResizable || columnIndex === undefined) return;
+    const el = cellRef.current;
+    if (!el) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    el.setPointerCapture(e.pointerId);
+    startXRef.current = e.clientX;
+    startWidthRef.current = el.getBoundingClientRect().width;
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - startXRef.current;
+      const newWidth = startWidthRef.current + deltaX;
+      setManualColumnWidth(columnIndex, Math.max(minWidth ?? 30, newWidth));
+    };
+
+    const onPointerUp = (upEvent: PointerEvent) => {
+      el.releasePointerCapture(upEvent.pointerId);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  };
+
+  const cellClassName = [
+    'table-grid-cell',
+    numeric ? 'table-grid-cell--num' : '',
+    sticky ? `table-grid-cell--sticky-${sticky}` : '',
+    overflowClass(overflow),
+    className ?? '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const cellStyle: CSSProperties = {
+    boxSizing: 'border-box',
+    ...flexBasis,
+    ...(width === undefined && minWidth !== undefined ? { minWidth } : {}),
+    ...(maxWidth !== undefined ? { maxWidth } : {}),
+    ...(finalAlign ? { textAlign: finalAlign } : {}),
+    ...overflowStyle(overflow),
+    ...stickyStyle,
+    ...style,
+  };
+
+  const resizer = isResizable ? (
+    <button
+      type="button"
+      onPointerDown={handlePointerDown}
+      style={{
+        appearance: 'none',
+        border: 'none',
+        padding: 0,
+        margin: 0,
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        width: '8px',
+        height: '100%',
+        cursor: 'col-resize',
+        zIndex: 10,
+        touchAction: 'none',
+        background: 'transparent',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget.firstChild as HTMLDivElement).style.background =
+          'var(--accent, #3b82f6)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget.firstChild as HTMLDivElement).style.background = 'transparent';
+      }}
+    >
+      <div
+        style={{
+          width: '2px',
+          height: '100%',
+          marginLeft: 'auto',
+          background: 'transparent',
+          transition: 'background 0.2s',
+        }}
+      />
+    </button>
+  ) : null;
+
+  const dataProps = {
+    'data-grid-role': 'cell' as const,
+    'data-numeric': numeric || undefined,
+    'data-overflow': overflow,
+    'data-sticky': sticky || undefined,
+  };
 
   return (
     <div
       ref={cellRef}
-      data-grid-role="cell"
-      data-numeric={numeric || undefined}
-      data-overflow={overflow}
-      data-sticky={sticky || undefined}
+      {...dataProps}
       title={title}
-      className={[
-        'table-grid-cell',
-        numeric ? 'table-grid-cell--num' : '',
-        sticky ? `table-grid-cell--sticky-${sticky}` : '',
-        overflowClass(overflow),
-        className ?? '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      style={{
-        boxSizing: 'border-box',
-        ...flexBasis,
-        ...(width === undefined && minWidth !== undefined ? { minWidth } : {}),
-        ...(maxWidth !== undefined ? { maxWidth } : {}),
-        ...(finalAlign ? { textAlign: finalAlign } : {}),
-        ...overflowStyle(overflow),
-        ...stickyStyle,
-        ...style,
-      }}
+      className={cellClassName}
+      style={cellStyle}
     >
       {children}
+      {resizer}
     </div>
   );
 }

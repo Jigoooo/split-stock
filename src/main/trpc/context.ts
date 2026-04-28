@@ -34,6 +34,7 @@ import type { PendingOrderWatcher } from '../trading/pending-order-watcher';
 import type { PrebuyRepo } from '../trading/prebuy-repo';
 import type { StockMasterRepo } from '../trading/stock-master-repo';
 import type { StockMasterSyncService } from '../trading/stock-master-sync';
+import type { StrategyExecutionEngine } from '../trading/strategy-execution-engine';
 import type { StrategyRepo } from '../trading/strategy-repo';
 import type { WatchEngine } from '../trading/watch-engine';
 
@@ -73,6 +74,7 @@ export interface Context {
   rateGuardRepo: RateGuardRepo;
   protectionLimitsRepo: ProtectionLimitsRepo;
   watchEngine: WatchEngine | null;
+  strategyEngine: StrategyExecutionEngine | null;
   currentStateSync: CurrentStateSync | undefined;
   prebuyRepo: PrebuyRepo;
   /** 미체결 자동취소(F6) 감시 인스턴스 — 부팅 시 주입, 미활성화 시 null. */

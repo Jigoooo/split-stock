@@ -57,6 +57,8 @@ export const PositionsTable = ({
       variant="hts"
       stickyHeader
       horizontalScroll
+      storageKey="main-positions-table"
+      className="positions-table"
       aria-label="보유 종목 테이블"
       style={{ flex: 1, minHeight: 0 }}
     >

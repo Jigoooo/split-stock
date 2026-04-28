@@ -23,6 +23,8 @@ export interface CellProps {
   numeric?: boolean;
   /** sticky 컬럼 — 가로 스크롤 시 고정. right: 우측 고정(액션 컬럼 등) */
   sticky?: 'left' | 'right';
+  /** 크기 조절 가능 여부 (기본값: true). Root의 설정이나 개별 컬럼에서 false로 끄면 리사이저가 나타나지 않음. */
+  resizable?: boolean;
   /** 추가 CSS class */
   className?: string;
   /** inline style override */
@@ -68,6 +70,10 @@ export interface RootProps {
   overlayScrollbar?: boolean;
   /** 가로 스크롤 활성화 — Header + Body 를 공통 wrapper 로 가로 스크롤 (default false) */
   horizontalScroll?: boolean;
+  /** 컬럼 사이즈 조절 활성화 (default true) */
+  resizable?: boolean;
+  /** 브라우저 LocalStorage에 컬럼 너비를 유지하기 위한 고유 키. 지정 시 새로고침해도 너비 유지. */
+  storageKey?: string;
   /** 접근성 레이블 */
   'aria-label'?: string;
   className?: string;

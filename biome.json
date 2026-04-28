@@ -53,6 +53,11 @@
       },
       "complexity": {
         "noForEach": "off"
+      },
+      "a11y": {
+        "useButtonType": "warn",
+        "noStaticElementInteractions": "warn",
+        "useSemanticElements": "warn"
       }
     }
   },

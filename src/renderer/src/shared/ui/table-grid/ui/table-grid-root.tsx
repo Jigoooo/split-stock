@@ -17,6 +17,8 @@ interface TableGridContextValue {
   columnDividers: boolean;
   overlayScrollbar: boolean;
   horizontalScroll: boolean;
+  /** 컬럼 리사이즈 활성화 여부 */
+  resizable: boolean;
   /** Body 가 등록한 scroll container ref — Root 가 OverlayScrollbar 에 전달 */
   bodyRef: React.RefObject<HTMLDivElement | null>;
   /** horizontalScroll=true 시 Header+Body 를 감싸는 가로 스크롤 wrapper ref */
@@ -24,6 +26,13 @@ interface TableGridContextValue {
   /** width prop 을 min-width 로 보고, 실제 더 넓은 콘텐츠를 컬럼 전체에 공유 */
   columnWidths: Record<number, number>;
   reportColumnWidth: (columnIndex: number, width: number) => void;
+  /** 사용자가 드래그하여 수동으로 설정한 너비 (이 값이 우선 적용됨) */
+  manualColumnWidths: Record<number, number>;
+  setManualColumnWidth: (columnIndex: number, width: number) => void;
+  /** 수동 너비 초기화 (localStorage도 함께 제거) */
+  resetColumnWidths: () => void;
+  /** storageKey가 설정되어 있는지 여부 (초기화 버튼 표시 조건) */
+  hasStorageKey: boolean;
 }
 
 const TableGridContext = createContext<TableGridContextValue | null>(null);
@@ -50,6 +59,8 @@ export function TableGridRoot(props: RootProps): ReactElement {
     zebra = true,
     overlayScrollbar = true,
     horizontalScroll = false,
+    resizable = true,
+    storageKey,
     'aria-label': ariaLabel,
     className,
     style,
@@ -61,6 +72,51 @@ export function TableGridRoot(props: RootProps): ReactElement {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const hScrollRef = useRef<HTMLDivElement | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
+  
+  // 초기 렌더링 시 로컬 스토리지에서 수동 너비 가져오기
+  const [manualColumnWidths, setManualColumnWidths] = useState<Record<number, number>>(() => {
+    if (storageKey) {
+      try {
+        const stored = localStorage.getItem(`table-grid-cols-${storageKey}`);
+        if (stored) {
+          return JSON.parse(stored);
+        }
+      } catch (e) {
+        console.warn('Failed to parse table grid column widths from localStorage', e);
+      }
+    }
+    return {};
+  });
+
+  const setManualColumnWidth = useCallback((columnIndex: number, width: number) => {
+    setManualColumnWidths((prev) => {
+      const next = {
+        ...prev,
+        [columnIndex]: Math.max(30, Math.round(width)), // 최소 30px
+      };
+      
+      if (storageKey) {
+        try {
+          localStorage.setItem(`table-grid-cols-${storageKey}`, JSON.stringify(next));
+        } catch (e) {
+          console.warn('Failed to save table grid column widths to localStorage', e);
+        }
+      }
+      
+      return next;
+    });
+  }, [storageKey]);
+
+  const resetColumnWidths = useCallback(() => {
+    setManualColumnWidths({});
+    if (storageKey) {
+      try {
+        localStorage.removeItem(`table-grid-cols-${storageKey}`);
+      } catch (e) {
+        console.warn('Failed to remove table grid column widths from localStorage', e);
+      }
+    }
+  }, [storageKey]);
 
   const reportColumnWidth = useCallback((columnIndex: number, width: number) => {
     if (!Number.isFinite(width) || width <= 0) return;
@@ -86,10 +142,15 @@ export function TableGridRoot(props: RootProps): ReactElement {
       columnDividers,
       overlayScrollbar,
       horizontalScroll,
+      resizable,
       bodyRef,
       hScrollRef,
       columnWidths,
       reportColumnWidth,
+      manualColumnWidths,
+      setManualColumnWidth,
+      resetColumnWidths,
+      hasStorageKey: storageKey !== undefined,
     }),
     [
       variant,
@@ -98,8 +159,13 @@ export function TableGridRoot(props: RootProps): ReactElement {
       columnDividers,
       overlayScrollbar,
       horizontalScroll,
+      resizable,
       columnWidths,
       reportColumnWidth,
+      manualColumnWidths,
+      setManualColumnWidth,
+      resetColumnWidths,
+      storageKey,
     ],
   );
 

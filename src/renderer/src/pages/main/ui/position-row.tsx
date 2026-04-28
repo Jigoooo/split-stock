@@ -85,7 +85,7 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
                 handleToggle();
               }}
               disabled={isPending}
-              style={expandBtnStyle}
+              style={expandBtnFullStyle}
             >
               {expanded ? '−' : '+'}
             </button>
@@ -166,15 +166,18 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
   },
 );
 
-const expandBtnStyle: CSSProperties = {
+const expandBtnFullStyle: CSSProperties = {
   background: 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(232,236,242,0.95))',
-  border: '1px solid var(--hts-line, rgba(0,0,0,0.18))',
-  borderRadius: 5,
-  width: '1.6rem',
-  height: '1.6rem',
+  border: 'none',
+  borderRadius: 0,
+  width: '100%',
+  height: '100%',
   cursor: 'pointer',
   fontFamily: 'monospace',
   fontSize: '1rem',
   lineHeight: 1,
   padding: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 };

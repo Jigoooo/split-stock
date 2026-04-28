@@ -6,6 +6,7 @@ import {
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { applyPriceRatio } from '../../trading/respiit-planner';
+import type { Context } from '../context';
 import { resolveAccountId } from '../router-helpers';
 import { publicProcedure, router } from '../trpc-core';
 
@@ -23,6 +24,22 @@ const PresetNameSchema = z.object({
   name: z.string().min(1).max(50),
   accountId: AccountIdField,
 });
+
+function requestImmediateStrategyEvaluation(
+  ctx: Context,
+  accountId: number,
+  pdno: string | null,
+): void {
+  const engine = ctx.strategyEngine;
+  if (!engine) return;
+  if (ctx.activeAccountId !== accountId) return;
+  engine.refreshTrackedSymbols();
+  if (pdno) {
+    engine.evaluateLatest(pdno);
+    return;
+  }
+  engine.evaluateLatestForTracked();
+}
 
 export const strategyRouter = router({
   getActive: publicProcedure.input(ActiveSelectorSchema).query(({ ctx, input }) => {
@@ -97,6 +114,7 @@ export const strategyRouter = router({
           message: `전략 저장 실패: ${r.error.kind}`,
         });
       }
+      requestImmediateStrategyEvaluation(ctx, accountId, input.pdno);
       return { ok: true as const };
     }),
 
@@ -127,12 +145,14 @@ export const strategyRouter = router({
           message: `자동매매 상태 저장 실패: ${saveResult.error.kind}`,
         });
       }
+      requestImmediateStrategyEvaluation(ctx, accountId, input.pdno);
       return { ok: true as const, profile: nextProfile };
     }),
 
   clearActive: publicProcedure.input(ActiveSelectorSchema).mutation(({ ctx, input }) => {
     const accountId = resolveAccountId(ctx, input);
     ctx.strategyRepo.clearActive(accountId, input.pdno);
+    requestImmediateStrategyEvaluation(ctx, accountId, input.pdno);
     return { ok: true as const };
   }),
 

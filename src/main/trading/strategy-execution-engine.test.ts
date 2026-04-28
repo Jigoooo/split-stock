@@ -309,4 +309,74 @@ describe('StrategyExecutionEngine', () => {
       }),
     );
   });
+
+  it('자동매도 ON 저장 직후 최신 tick으로 즉시 익절 주문을 평가한다', async () => {
+    const { bus, lotsRepo, safetyRegistry, strategyRepo } = setup();
+    lotsRepo.insertLot({
+      accountId: 1,
+      pdno: '005930',
+      nth: 2,
+      buyPrice: 68_000,
+      qty: 10,
+      amountKrw: 680_000,
+      status: 'OPEN',
+      boughtAt: new Date(),
+    });
+    strategyRepo.setActive(1, '005930', {
+      version: 2,
+      maxStages: 3,
+      ...createStrategyRules(3, {
+        amountKrw: 700_000,
+        dropPct: 0.03,
+        profitPct: 0.05,
+      }),
+      autoBuyEnabled: false,
+      autoBuyOrderType: 'LIMIT',
+      autoSellEnabled: false,
+      autoSellOrderType: 'LIMIT',
+    });
+    const executeOrder = vi.fn(async () => undefined);
+
+    const engine = new StrategyExecutionEngine({
+      bus,
+      logger: { log: vi.fn() } as never,
+      lotsRepo,
+      strategyRepo,
+      safetyRegistry,
+      getActiveAccountId: () => 1,
+      executeOrder,
+    });
+    engine.refreshTrackedSymbols();
+
+    emitSamsungTick(bus, 71_400);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(executeOrder).not.toHaveBeenCalled();
+
+    strategyRepo.setActive(1, '005930', {
+      version: 2,
+      maxStages: 3,
+      ...createStrategyRules(3, {
+        amountKrw: 700_000,
+        dropPct: 0.03,
+        profitPct: 0.05,
+      }),
+      autoBuyEnabled: false,
+      autoBuyOrderType: 'LIMIT',
+      autoSellEnabled: true,
+      autoSellOrderType: 'LIMIT',
+    });
+
+    expect(engine.evaluateLatest('005930')).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(executeOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 1,
+        nth: 2,
+        pdno: '005930',
+        side: 'SELL',
+        triggerReason: 'PROFIT_SELL',
+      }),
+    );
+  });
 });

@@ -65,6 +65,23 @@ export class StrategyExecutionEngine {
     this.replaceTracked(Array.from(tracked).sort((a, b) => a.localeCompare(b)));
   }
 
+  evaluateLatest(pdno: string): boolean {
+    const tick = this.opts.bus.getLatestTick(pdno);
+    if (!tick) return false;
+    void this.onTick(pdno, tick.price).catch((error) => {
+      this.handleTickFailure(pdno, tick.price, error);
+    });
+    return true;
+  }
+
+  evaluateLatestForTracked(): number {
+    let requested = 0;
+    for (const pdno of this.unsubscribers.keys()) {
+      if (this.evaluateLatest(pdno)) requested += 1;
+    }
+    return requested;
+  }
+
   dispose(): void {
     for (const unsubscribe of this.unsubscribers.values()) unsubscribe();
     this.unsubscribers.clear();
