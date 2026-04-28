@@ -254,68 +254,80 @@ describe('LlmClient — Anthropic tool 루프', () => {
   it('Anthropic 이 JSON 앞뒤에 설명을 붙여도 첫 JSON 객체를 파싱한다', async () => {
     const { LlmClient } = await import('../llm-client');
     const client = new LlmClient({ logger: stubLogger });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    anthropicCreateMock.mockResolvedValueOnce({
-      stop_reason: 'end_turn',
-      content: [{ type: 'text', text: '분석 결과입니다.\n{"answer":"wrapped"}\n완료' }],
-    });
+    try {
+      anthropicCreateMock.mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: '분석 [참고]\n{"answer":"wrapped"}\n완료' }],
+      });
 
-    const result = await client.chat({
-      config: anthropicConfig,
-      messages: [{ role: 'user', content: 'go' }],
-      schema: z.object({ answer: z.string() }),
-    });
+      const result = await client.chat({
+        config: anthropicConfig,
+        messages: [{ role: 'user', content: 'go' }],
+        schema: z.object({ answer: z.string() }),
+      });
 
-    expect(result.parsed).toEqual({ answer: 'wrapped' });
+      expect(result.parsed).toEqual({ answer: 'wrapped' });
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('Anthropic 이 도구 호출 후 설명문으로 끝내면 JSON repair 호출로 복구한다', async () => {
     const { LlmClient } = await import('../llm-client');
     const client = new LlmClient({ logger: stubLogger });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    anthropicCreateMock.mockResolvedValueOnce({
-      stop_reason: 'tool_use',
-      content: [
-        { type: 'tool_use', id: 'tu_1', name: 'search_news', input: { query: '피아이이' } },
-      ],
-    });
-    anthropicCreateMock.mockResolvedValueOnce({
-      stop_reason: 'end_turn',
-      content: [
-        {
-          type: 'text',
-          text: '충분한 데이터를 수집했습니다. 이제 최종 분석 결과를 작성합니다.',
-        },
-      ],
-    });
-    anthropicCreateMock.mockResolvedValueOnce({
-      stop_reason: 'end_turn',
-      content: [{ type: 'text', text: '"answer":"repaired"}' }],
-    });
+    try {
+      anthropicCreateMock.mockResolvedValueOnce({
+        stop_reason: 'tool_use',
+        content: [
+          { type: 'tool_use', id: 'tu_1', name: 'search_news', input: { query: '피아이이' } },
+        ],
+      });
+      anthropicCreateMock.mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [
+          {
+            type: 'text',
+            text: '충분한 데이터를 수집했습니다. 이제 최종 분석 결과를 작성합니다.',
+          },
+        ],
+      });
+      anthropicCreateMock.mockResolvedValueOnce({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: '"answer":"repaired"}' }],
+      });
 
-    const result = await client.chat({
-      config: anthropicConfig,
-      messages: [{ role: 'user', content: 'go' }],
-      schema: z.object({ answer: z.string() }),
-      tools: [
-        {
-          name: 'search_news',
-          description: 'mock',
-          parameters: z.object({ query: z.string() }),
-          run: vi.fn().mockResolvedValue('[]'),
-        },
-      ],
-    });
+      const result = await client.chat({
+        config: anthropicConfig,
+        messages: [{ role: 'user', content: 'go' }],
+        schema: z.object({ answer: z.string() }),
+        tools: [
+          {
+            name: 'search_news',
+            description: 'mock',
+            parameters: z.object({ query: z.string() }),
+            run: vi.fn().mockResolvedValue('[]'),
+          },
+        ],
+      });
 
-    expect(result.parsed).toEqual({ answer: 'repaired' });
-    expect(result.text).toBe('{"answer":"repaired"}');
-    expect(anthropicCreateMock).toHaveBeenCalledTimes(3);
-    expect(anthropicCreateMock.mock.calls[2]?.[0]?.tools).toBeUndefined();
-    expect(anthropicCreateMock.mock.calls[2]?.[0]?.messages.at(-1)).toEqual({
-      role: 'assistant',
-      content: '{',
-    });
-    expect(loggedEvents.at(-1)?.payload).toMatchObject({ repaired: true, parsedOk: true });
+      expect(result.parsed).toEqual({ answer: 'repaired' });
+      expect(result.text).toBe('{"answer":"repaired"}');
+      expect(anthropicCreateMock).toHaveBeenCalledTimes(3);
+      expect(anthropicCreateMock.mock.calls[2]?.[0]?.tools).toBeUndefined();
+      expect(anthropicCreateMock.mock.calls[2]?.[0]?.messages.at(-1)).toEqual({
+        role: 'assistant',
+        content: '{',
+      });
+      expect(loggedEvents.at(-1)?.payload).toMatchObject({ repaired: true, parsedOk: true });
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });
 

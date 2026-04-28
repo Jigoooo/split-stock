@@ -379,13 +379,13 @@ export class LlmClient {
   private tryParseJson<T>(text: string, schema: z.ZodType<T>): T | null {
     const stripped = stripCodeFence(text).trim();
     if (!stripped) return null;
-    const jsonCandidate = extractFirstJsonValue(stripped);
+    const jsonCandidates = extractJsonValues(stripped);
     // prose 앞에 붙은 코드펜스 처리 — stripCodeFence 는 text 전체가 ``` 로 시작해야만 동작.
     const fenceMatch = text.match(/```(?:json|JSON)?\s*\n([\s\S]*?)\n?```/);
     const fencedJson = fenceMatch?.[1]?.trim() ?? null;
     const seen = new Set<string>();
     const raw: string[] = [];
-    for (const c of [stripped, jsonCandidate, fencedJson]) {
+    for (const c of [...jsonCandidates, fencedJson, stripped]) {
       if (c && !seen.has(c)) {
         seen.add(c);
         raw.push(c);
@@ -396,15 +396,12 @@ export class LlmClient {
         const json = JSON.parse(candidate);
         const parsed = schema.safeParse(json);
         if (parsed.success) return parsed.data;
-        console.error('[tryParseJson] safeParse failed:', parsed.error.issues.slice(0, 3));
-      } catch (e) {
-        console.error(
-          '[tryParseJson] JSON.parse failed, candidate len:',
-          candidate.length,
-          String(e).slice(0, 80),
-        );
+      } catch {
+        // Ignore malformed candidates; repair/fallback handles final failure.
       }
     }
+    // 파싱 실패는 JSON repair/fallback 을 트리거하는 정상 제어 흐름이다.
+    // 최종 실패 로깅은 각 caller 의 parse-failed 경로에서만 남긴다.
     return null;
   }
 
@@ -518,12 +515,25 @@ function stripCodeFence(text: string): string {
   return trimmed;
 }
 
-function extractFirstJsonValue(text: string): string | null {
+function extractJsonValues(text: string): string[] {
   const objectStart = text.indexOf('{');
   const arrayStart = text.indexOf('[');
-  const start = objectStart !== -1 ? objectStart : arrayStart;
-  if (start === -1) return null;
+  const starts = [objectStart, arrayStart].filter((i) => i !== -1).sort((a, b) => a - b);
+  const seen = new Set<string>();
+  const values: string[] = [];
 
+  for (const start of starts) {
+    const value = extractJsonValueAt(text, start);
+    if (value && !seen.has(value)) {
+      seen.add(value);
+      values.push(value);
+    }
+  }
+
+  return values;
+}
+
+function extractJsonValueAt(text: string, start: number): string | null {
   const stack: string[] = [];
   let inString = false;
   let escaped = false;
