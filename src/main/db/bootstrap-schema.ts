@@ -179,6 +179,53 @@ const CREATE_STATEMENTS: readonly string[] = [
     rate_guard_max_count INTEGER DEFAULT 5,
     updated_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS krx_daily_trade_cache (
+    market TEXT NOT NULL,
+    pdno TEXT NOT NULL,
+    date TEXT NOT NULL,
+    name TEXT NOT NULL,
+    close INTEGER,
+    change INTEGER,
+    change_rate REAL,
+    open INTEGER,
+    high INTEGER,
+    low INTEGER,
+    volume INTEGER,
+    trade_value INTEGER,
+    market_cap INTEGER,
+    listed_shares INTEGER,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (market, pdno, date)
+  )`,
+  `CREATE TABLE IF NOT EXISTS krx_base_info_cache (
+    market TEXT NOT NULL,
+    pdno TEXT NOT NULL,
+    date TEXT NOT NULL,
+    isin TEXT,
+    name TEXT NOT NULL,
+    short_name TEXT,
+    english_name TEXT,
+    listed_at TEXT,
+    market_name TEXT,
+    security_group TEXT,
+    section TEXT,
+    stock_kind TEXT,
+    par_value TEXT,
+    listed_shares INTEGER,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (market, pdno, date)
+  )`,
+  `CREATE TABLE IF NOT EXISTS ecos_series_cache (
+    indicator TEXT NOT NULL,
+    stat_code TEXT NOT NULL,
+    item_code TEXT NOT NULL,
+    frequency TEXT NOT NULL,
+    date TEXT NOT NULL,
+    value REAL NOT NULL,
+    unit_name TEXT,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (indicator, date)
+  )`,
 ];
 
 /**

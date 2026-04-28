@@ -61,6 +61,26 @@ export interface RecommendedItem {
     avgVolume60d: number | null;
     rangePct120d: number | null;
   };
+  marketContext: {
+    krx: {
+      date: string;
+      close: number | null;
+      changeRate: number | null;
+      volume: number | null;
+      tradeValue: number | null;
+      marketCap: number | null;
+    } | null;
+    ecos: ReadonlyArray<{
+      indicator: string;
+      date: string;
+      value: number;
+      unitName: string | null;
+    }>;
+    status: {
+      krx: { isAvailable: boolean; isStale: boolean; lastError: string | null };
+      ecos: { isAvailable: boolean; isStale: boolean; lastError: string | null };
+    };
+  } | null;
   algoScore: number | null;
   algoLabels: ReadonlyArray<string>;
   aiOff: boolean;

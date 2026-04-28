@@ -1,5 +1,13 @@
 import { sql } from 'drizzle-orm';
-import { blob, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+  blob,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 /**
  * 자격증명 — safeStorage로 암호화된 직렬화 결과를 BLOB으로 저장.
@@ -310,6 +318,79 @@ export const dartCorpCodes = sqliteTable('dart_corp_codes', {
   modifyDate: text('modify_date'), // YYYYMMDD
   fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
 });
+
+/**
+ * KRX 일별매매정보 캐시 — confirmed KRX Open API daily trading info only.
+ *
+ * 데이터 출처는 KOSPI/KOSDAQ/KONEX 일별매매정보 API 이며, market_cap 은 추천 컨텍스트와
+ * 향후 market-cap candidate expansion 검증용 보조 데이터로만 사용한다.
+ */
+export const krxDailyTradeCache = sqliteTable(
+  'krx_daily_trade_cache',
+  {
+    market: text('market').notNull(), // KOSPI | KOSDAQ | KONEX
+    pdno: text('pdno').notNull(),
+    date: text('date').notNull(), // YYYY-MM-DD
+    name: text('name').notNull(),
+    close: integer('close'),
+    change: integer('change'),
+    changeRate: real('change_rate'),
+    open: integer('open'),
+    high: integer('high'),
+    low: integer('low'),
+    volume: integer('volume'),
+    tradeValue: integer('trade_value'),
+    marketCap: integer('market_cap', { mode: 'number' }),
+    listedShares: integer('listed_shares', { mode: 'number' }),
+    fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.market, t.pdno, t.date] })],
+);
+
+/**
+ * KRX 종목기본정보 캐시 — basic info endpoint only.
+ */
+export const krxBaseInfoCache = sqliteTable(
+  'krx_base_info_cache',
+  {
+    market: text('market').notNull(), // KOSPI | KOSDAQ | KONEX
+    pdno: text('pdno').notNull(),
+    date: text('date').notNull(), // YYYY-MM-DD
+    isin: text('isin'),
+    name: text('name').notNull(),
+    shortName: text('short_name'),
+    englishName: text('english_name'),
+    listedAt: text('listed_at'), // YYYY-MM-DD
+    marketName: text('market_name'),
+    securityGroup: text('security_group'),
+    section: text('section'),
+    stockKind: text('stock_kind'),
+    parValue: text('par_value'),
+    listedShares: integer('listed_shares', { mode: 'number' }),
+    fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.market, t.pdno, t.date] })],
+);
+
+/**
+ * ECOS 시계열 캐시 — StatisticSearch generic series.
+ *
+ * indicator 는 앱 내부의 의미 이름이고 stat/item/frequency 는 ECOS source contract 를 보존한다.
+ */
+export const ecosSeriesCache = sqliteTable(
+  'ecos_series_cache',
+  {
+    indicator: text('indicator').notNull(),
+    statCode: text('stat_code').notNull(),
+    itemCode: text('item_code').notNull(),
+    frequency: text('frequency').notNull(), // D | M | Q | A 등 ECOS cycle
+    date: text('date').notNull(),
+    value: real('value').notNull(),
+    unitName: text('unit_name'),
+    fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.indicator, t.date] })],
+);
 
 export const aiProviderConfigs = sqliteTable(
   'ai_provider_configs',

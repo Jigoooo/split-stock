@@ -46,3 +46,67 @@ SET sort_order = (
     return;
   }
 }
+
+/**
+ * 개발/패키지 DB에서 drizzle journal timestamp 순서가 꼬여 0015 캐시 테이블이
+ * 스킵된 상태를 복구한다. 모두 캐시 테이블이라 기존 도메인 데이터와 독립적이다.
+ */
+export function repairMarketContextRuntimeSchema(db: Db): void {
+  try {
+    db.run(
+      sql.raw(`CREATE TABLE IF NOT EXISTS krx_daily_trade_cache (
+        market TEXT NOT NULL,
+        pdno TEXT NOT NULL,
+        date TEXT NOT NULL,
+        name TEXT NOT NULL,
+        close INTEGER,
+        change INTEGER,
+        change_rate REAL,
+        open INTEGER,
+        high INTEGER,
+        low INTEGER,
+        volume INTEGER,
+        trade_value INTEGER,
+        market_cap INTEGER,
+        listed_shares INTEGER,
+        fetched_at INTEGER NOT NULL,
+        PRIMARY KEY (market, pdno, date)
+      )`),
+    );
+    db.run(
+      sql.raw(`CREATE TABLE IF NOT EXISTS krx_base_info_cache (
+        market TEXT NOT NULL,
+        pdno TEXT NOT NULL,
+        date TEXT NOT NULL,
+        isin TEXT,
+        name TEXT NOT NULL,
+        short_name TEXT,
+        english_name TEXT,
+        listed_at TEXT,
+        market_name TEXT,
+        security_group TEXT,
+        section TEXT,
+        stock_kind TEXT,
+        par_value TEXT,
+        listed_shares INTEGER,
+        fetched_at INTEGER NOT NULL,
+        PRIMARY KEY (market, pdno, date)
+      )`),
+    );
+    db.run(
+      sql.raw(`CREATE TABLE IF NOT EXISTS ecos_series_cache (
+        indicator TEXT NOT NULL,
+        stat_code TEXT NOT NULL,
+        item_code TEXT NOT NULL,
+        frequency TEXT NOT NULL,
+        date TEXT NOT NULL,
+        value REAL NOT NULL,
+        unit_name TEXT,
+        fetched_at INTEGER NOT NULL,
+        PRIMARY KEY (indicator, date)
+      )`),
+    );
+  } catch {
+    return;
+  }
+}

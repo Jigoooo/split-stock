@@ -14,6 +14,7 @@ import {
 } from './algo/composite-score';
 import { buildCandidatePool, type CandidateEntry } from './build-candidate-pool';
 import type { LlmClient, ToolDef } from './llm-client';
+import type { MarketContextSnapshot } from './market-context-service';
 import type { NewsItem } from './news-fetcher';
 import { computeSymbolStats, type SymbolStat } from './symbol-stats';
 
@@ -59,6 +60,11 @@ export interface SuggestSymbolsInput {
     days: number,
   ) => Promise<ReadonlyArray<{ date: string; title: string; report: string }>>;
   /**
+   * KRX/ECOS 캐시 기반 시장 컨텍스트. LLM/UI 는 여기서 확인된 캐시 데이터만 사용하고,
+   * 추천 점수나 consensusCount 의 직접 입력으로 쓰지 않는다.
+   */
+  getMarketContextForPdnos?: (pdnos: ReadonlyArray<string>) => Promise<MarketContextSnapshot>;
+  /**
    * AI 끄기 모드 — true 면 LLM 호출 0회, 알고리즘 신호만으로 ranking. 결과 카드의
    * pros/cons/entryNote 는 알고리즘 라벨에서 합성.
    */
@@ -101,6 +107,27 @@ export interface RankedSymbolStats {
   rangePct120d: number | null;
 }
 
+export interface RankedMarketContext {
+  krx: {
+    date: string;
+    close: number | null;
+    changeRate: number | null;
+    volume: number | null;
+    tradeValue: number | null;
+    marketCap: number | null;
+  } | null;
+  ecos: ReadonlyArray<{
+    indicator: string;
+    date: string;
+    value: number;
+    unitName: string | null;
+  }>;
+  status: {
+    krx: { isAvailable: boolean; isStale: boolean; lastError: string | null };
+    ecos: { isAvailable: boolean; isStale: boolean; lastError: string | null };
+  };
+}
+
 export type RankedSymbol = z.infer<typeof RankedItemSchema> & {
   /** 응답에 lookup 한 종목명. */
   name: string;
@@ -108,6 +135,8 @@ export type RankedSymbol = z.infer<typeof RankedItemSchema> & {
   sources: ReadonlyArray<'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO'>;
   /** 통계 수치 — UI 에서 LLM 점수 근거를 직접 노출. */
   stats: RankedSymbolStats;
+  /** KRX/ECOS 캐시 컨텍스트 — 보조 사실/리스크 플래그 전용. */
+  marketContext: RankedMarketContext | null;
   /** 결정론적 알고리즘 점수 (0~100). LLM 점수와 비교해 일관성 검증 가능. */
   algoScore: number | null;
   /** 알고리즘 라벨 (변동성/박스권/RSI/거래량 spike 등). */
@@ -213,15 +242,26 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
   // 사용자가 extras 로 직접 넣은 종목 — Top 10 외에라도 LLM 검증 받게 분리.
   const extraSet = new Set(input.extraPdnos ?? []);
   const extraCandidates = pool.filter((c) => extraSet.has(c.pdno));
+  const contextTargets = [...topCandidates, ...extraCandidates];
+  const marketContext = input.getMarketContextForPdnos
+    ? await input.getMarketContextForPdnos(contextTargets.map((c) => c.pdno))
+    : null;
 
   // AI 끄기 — 알고리즘만으로 결과 합성.
   if (aiOff) {
-    const ranked = buildAlgoOnlyRanked(topCandidates, algoByPdno, statsByPdno, input.topN ?? 8);
+    const ranked = buildAlgoOnlyRanked(
+      topCandidates,
+      algoByPdno,
+      statsByPdno,
+      input.topN ?? 8,
+      marketContext,
+    );
     const userInputResults = buildAlgoOnlyRanked(
       extraCandidates,
       algoByPdno,
       statsByPdno,
       extraCandidates.length,
+      marketContext,
     );
     input.logger.log({
       level: 'INFO',
@@ -256,6 +296,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
     stats,
     algoByPdno,
     newsByPdno,
+    marketContext,
     topN: input.topN ?? 8,
   });
 
@@ -264,7 +305,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
   }
 
   // === Tools — LLM 이 필요 시 호출 ===
-  const tools = buildTools(input);
+  const tools = buildTools(input, marketContext);
 
   const result = await input.llmClient.chat({
     config,
@@ -333,6 +374,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
           avgVolume60d: stat?.avgVolume60d ?? null,
           rangePct120d: stat?.rangePct120d ?? null,
         },
+        marketContext: buildRankedMarketContext(item.pdno, marketContext),
         algoScore: algo?.splitScore ?? null,
         algoLabels: algo?.labels ?? [],
         aiOff: false,
@@ -385,13 +427,14 @@ const SYSTEM_PROMPT = [
   '3. consensus 규칙: BB/RSI/MFI/momentum/Stochastic/CCI 중 3개 이상이 동일 방향(과매수 또는 과매도)일 때만 strong 신호로 판단. 1~2개 동의 = weak. consensusCount 필드에 동의 개수 명시.',
   '4. conflicts 가 비어있지 않으면 cons 에 반드시 인용. 무시 X.',
   '5. 데이터 부족(통계 부족 / 뉴스 0건)이면 confidence=low 로 표기 + cons 에 "데이터 부족" 명시.',
-  '6. 도구 사용 우선: 알고리즘 신호가 모호하거나 confidence=low 면 search_news / get_dart_disclosures 를 호출해 보강. 호출한 도구는 citedTools 에 기록. 빈 배열이면 "추가 검증 미수행" 으로 간주.',
+  '6. 도구 사용 우선: 알고리즘 신호가 모호하거나 confidence=low 면 search_news / get_dart_disclosures / get_market_context 를 호출해 보강. 호출한 도구는 citedTools 에 기록. 빈 배열이면 "추가 검증 미수행" 으로 간주.',
   '7. tier 매핑: score ≥85 top, 70-84 strong, 55-69 moderate, 40-54 watch, <40 avoid. 종목별로 tier 를 명시.',
   '8. 응답 분배:',
   '   - recommended: top/strong/moderate/watch/avoid 골고루 — 사용자에게 다양한 정보 제공.',
   '   - userInputResults: 사용자가 입력한 종목(extras) 의 평가. recommended 와 별도. tier 분배 X.',
   '9. summary 는 사실 기반 한 줄. pros/cons 는 행동 가이드. entryNote 는 진입 시점/주의사항 1줄.',
   '10. 알고리즘 점수(algoScore) 와 LLM 점수(score) 차이가 30점 이상이면 그 이유를 cons 에 짧게 적기.',
+  '11. KRX/ECOS 컨텍스트는 캐시된 외부 사실입니다. modifier/risk flag/근거 사실로만 사용하고 consensusCount 계산에는 포함하지 마세요.',
   '',
   '매직스플릿 차수 구조 (중요):',
   '- 2차 이후 매수 트리거는 1차 가격 기준이 아니라 직전 차수 매수가 기준이다.',
@@ -406,9 +449,10 @@ function buildPrompt(args: {
   stats: ReadonlyArray<SymbolStat>;
   algoByPdno: Map<string, AlgoSignals>;
   newsByPdno: Map<string, ReadonlyArray<NewsItem>>;
+  marketContext: MarketContextSnapshot | null;
   topN: number;
 }): string {
-  const { topCandidates, extras, stats, algoByPdno, newsByPdno, topN } = args;
+  const { topCandidates, extras, stats, algoByPdno, newsByPdno, marketContext, topN } = args;
   const statsByPdno = new Map(stats.map((s) => [s.pdno, s]));
   const lines: string[] = [];
   lines.push(
@@ -436,13 +480,13 @@ function buildPrompt(args: {
   lines.push('');
   lines.push('=== recommended 풀 ===');
   for (const c of topCandidates) {
-    appendCandidateBlock(c, statsByPdno, algoByPdno, newsByPdno, lines);
+    appendCandidateBlock(c, statsByPdno, algoByPdno, newsByPdno, marketContext, lines);
   }
   if (extras.length > 0) {
     lines.push('');
     lines.push('=== user input ===');
     for (const c of extras) {
-      appendCandidateBlock(c, statsByPdno, algoByPdno, newsByPdno, lines);
+      appendCandidateBlock(c, statsByPdno, algoByPdno, newsByPdno, marketContext, lines);
     }
   }
   lines.push('');
@@ -451,6 +495,7 @@ function buildPrompt(args: {
   lines.push('- conflicts 가 있으면 반드시 cons 에 그대로 인용.');
   lines.push('- consensusCount 는 BB/RSI/MFI/momentum/Stoch/CCI 중 동의한 개수.');
   lines.push('- citedTools 는 호출한 도구 이름. 호출 안 했으면 빈 배열.');
+  lines.push('- KRX/ECOS 값은 캐시 보조 사실이며 consensusCount 에 포함하지 마세요.');
   return lines.join('\n');
 }
 
@@ -459,6 +504,7 @@ function appendCandidateBlock(
   statsByPdno: Map<string, SymbolStat>,
   algoByPdno: Map<string, AlgoSignals>,
   newsByPdno: Map<string, ReadonlyArray<NewsItem>>,
+  marketContext: MarketContextSnapshot | null,
   lines: string[],
 ): void {
   const s = statsByPdno.get(c.pdno);
@@ -502,6 +548,10 @@ function appendCandidateBlock(
       `    reasons: ${algo.indicatorReasons.map((r) => `[${r.indicator}] ${r.value}`).join(' / ')}`,
     );
   }
+  const marketBits = formatMarketContextForPrompt(c.pdno, marketContext);
+  if (marketBits) {
+    lines.push(`    시장 컨텍스트(캐시): ${marketBits}`);
+  }
   const news = newsByPdno.get(c.pdno);
   if (news && news.length > 0) {
     lines.push(`    뉴스 ${news.length}건:`);
@@ -513,7 +563,87 @@ function appendCandidateBlock(
   }
 }
 
-function buildTools(input: SuggestSymbolsInput): ToolDef[] {
+function buildRankedMarketContext(
+  pdno: string,
+  snapshot: MarketContextSnapshot | null,
+): RankedMarketContext | null {
+  if (!snapshot) return null;
+  const krx = snapshot.krxByPdno.get(pdno);
+  const ecos = snapshot.ecos.map((p) => ({
+    indicator: p.indicator,
+    date: p.date,
+    value: p.value,
+    unitName: p.unitName,
+  }));
+  if (!krx && ecos.length === 0) return null;
+  return {
+    krx: krx
+      ? {
+          date: krx.date,
+          close: krx.close,
+          changeRate: krx.changeRate,
+          volume: krx.volume,
+          tradeValue: krx.tradeValue,
+          marketCap: krx.marketCap,
+        }
+      : null,
+    ecos,
+    status: {
+      krx: {
+        isAvailable: snapshot.status.krx.isAvailable,
+        isStale: snapshot.status.krx.isStale,
+        lastError: snapshot.status.krx.lastError,
+      },
+      ecos: {
+        isAvailable: snapshot.status.ecos.isAvailable,
+        isStale: snapshot.status.ecos.isStale,
+        lastError: snapshot.status.ecos.lastError,
+      },
+    },
+  };
+}
+
+function formatMarketContextForPrompt(
+  pdno: string,
+  snapshot: MarketContextSnapshot | null,
+): string | null {
+  const context = buildRankedMarketContext(pdno, snapshot);
+  if (!context) return null;
+  const parts: string[] = [];
+  if (context.krx) {
+    parts.push(
+      [
+        `KRX date=${context.krx.date}`,
+        context.krx.close !== null ? `close=${context.krx.close}` : null,
+        context.krx.changeRate !== null ? `changeRate=${context.krx.changeRate}%` : null,
+        context.krx.marketCap !== null ? `marketCap=${context.krx.marketCap}` : null,
+        context.krx.volume !== null ? `volume=${context.krx.volume}` : null,
+      ]
+        .filter((v): v is string => v !== null)
+        .join(', '),
+    );
+  }
+  if (context.ecos.length > 0) {
+    parts.push(
+      `ECOS ${context.ecos
+        .map((p) => `${p.indicator}=${p.value}${p.unitName ? p.unitName : ''}@${p.date}`)
+        .join(', ')}`,
+    );
+  }
+  const staleFlags = [
+    context.status.krx.isStale ? 'KRX stale' : null,
+    context.status.ecos.isStale ? 'ECOS stale' : null,
+    context.status.krx.lastError ? `KRX error=${context.status.krx.lastError}` : null,
+    context.status.ecos.lastError ? `ECOS error=${context.status.ecos.lastError}` : null,
+  ].filter((v): v is string => v !== null);
+  if (staleFlags.length > 0) parts.push(`status: ${staleFlags.join(' / ')}`);
+  return parts.join(' | ');
+}
+
+function buildTools(
+  input: SuggestSymbolsInput,
+  marketContext: MarketContextSnapshot | null,
+): ToolDef[] {
   const tools: ToolDef[] = [];
   if (input.searchNewsTool) {
     const searchNews = input.searchNewsTool;
@@ -556,6 +686,24 @@ function buildTools(input: SuggestSymbolsInput): ToolDef[] {
       },
     };
     tools.push(dartTool as ToolDef);
+  }
+  if (marketContext && (marketContext.krxByPdno.size > 0 || marketContext.ecos.length > 0)) {
+    const marketParams = z.object({
+      pdno: z
+        .string()
+        .regex(/^\d{6}$/)
+        .describe('후보 풀의 6자리 종목코드'),
+    });
+    const marketTool: ToolDef<z.infer<typeof marketParams>> = {
+      name: 'get_market_context',
+      description:
+        'KRX/ECOS 캐시 컨텍스트 조회. 추천 점수 직접 산출이 아닌 보조 사실·리스크 플래그 확인용.',
+      parameters: marketParams,
+      run: async (args) => {
+        return JSON.stringify(buildRankedMarketContext(args.pdno, marketContext));
+      },
+    };
+    tools.push(marketTool as ToolDef);
   }
   return tools;
 }
@@ -610,6 +758,7 @@ function buildAlgoOnlyRanked(
   algoByPdno: Map<string, AlgoSignals>,
   statsByPdno: Map<string, SymbolStat>,
   topN: number,
+  marketContext: MarketContextSnapshot | null,
 ): RankedSymbol[] {
   const ranked = [...pool]
     .map((c) => {
@@ -671,6 +820,7 @@ function buildAlgoOnlyRanked(
           avgVolume60d: stat?.avgVolume60d ?? null,
           rangePct120d: stat?.rangePct120d ?? null,
         },
+        marketContext: buildRankedMarketContext(c.pdno, marketContext),
         algoScore: algo?.splitScore ?? null,
         algoLabels: labels,
         aiOff: true,

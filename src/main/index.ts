@@ -49,14 +49,21 @@ import { repairAccountFromStoredCredentials } from './account/repair-stored-acco
 import { AiCredentialsRepo } from './ai/ai-credentials-repo';
 import { DartClient } from './ai/dart-client';
 import { DartCorpCodeRepo } from './ai/dart-corp-code-repo';
+import { EcosClient } from './ai/ecos-client';
+import { KrxClient } from './ai/krx-client';
 import { LlmClient } from './ai/llm-client';
+import { MarketContextRepo } from './ai/market-context-repo';
+import { MarketContextService } from './ai/market-context-service';
 import { NewsFetcher } from './ai/news-fetcher';
 import { BackupScheduler } from './backup/scheduler';
 import { KiwoomHttpClient } from './brokers/kiwoom/http-client';
 import { KIWOOM_BASE_URL } from './brokers/kiwoom/metadata/endpoints';
 import { KiwoomTokenStore } from './brokers/kiwoom/token-store';
 import { defaultDbPath, migrate, openDb } from './db/client';
-import { repairAccountsRuntimeSchema } from './db/runtime-schema-repair';
+import {
+  repairAccountsRuntimeSchema,
+  repairMarketContextRuntimeSchema,
+} from './db/runtime-schema-repair';
 import { orders } from './db/schema';
 import {
   readPendingCancelConfig,
@@ -123,6 +130,7 @@ function bootstrapDeps(userDataDir: string) {
   const db = openDb(defaultDbPath(userDataDir));
   migrate(db, resolveMigrationsDir());
   repairAccountsRuntimeSchema(db);
+  repairMarketContextRuntimeSchema(db);
 
   const credentialsRepo = new CredentialsRepo(db, {
     isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
@@ -219,6 +227,23 @@ function bootstrapDeps(userDataDir: string) {
     logger: eventLogger,
     naverClientId: process.env.NAVER_CLIENT_ID ?? '',
     naverClientSecret: process.env.NAVER_CLIENT_SECRET ?? '',
+  });
+  const krxClient = new KrxClient({
+    logger: eventLogger,
+    apiKey: process.env.KRX_API_KEY ?? '',
+  });
+  const ecosClient = new EcosClient({
+    logger: eventLogger,
+    apiKey: process.env.ECOS_API_KEY ?? '',
+  });
+  const marketContextRepo = new MarketContextRepo(db);
+  const marketContextService = new MarketContextService({
+    krxClient,
+    ecosClient,
+    repo: marketContextRepo,
+    settingsRepo,
+    stockMasterRepo,
+    logger: eventLogger,
   });
   const protectionGuard = new ProtectionGuard(db, protectionLimitsRepo);
   // 활성 계좌 보장 — 계좌 0개면 null. 자격증명 저장 시 자동 시드.
@@ -795,6 +820,7 @@ function bootstrapDeps(userDataDir: string) {
     llmClient,
     dartClient,
     dartCorpCodeRepo,
+    marketContextService,
     newsFetcher,
     initialActiveAccountId,
     realtimeFactory: (env) => {

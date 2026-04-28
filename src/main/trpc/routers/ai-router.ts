@@ -223,6 +223,57 @@ export const aiRouter = router({
   }),
 
   /**
+   * KRX/ECOS 시장 컨텍스트 상태 — 키/캐시/오류 상태만 노출하고 추천은 캐시된 값만 사용.
+   */
+  getMarketContextStatus: publicProcedure.query(({ ctx }) => {
+    if (!ctx.marketContextService) {
+      return {
+        krx: { isAvailable: false, isStale: true, lastSuccessAt: null, lastError: null },
+        ecos: { isAvailable: false, isStale: true, lastSuccessAt: null, lastError: null },
+      };
+    }
+    return ctx.marketContextService.getStatus();
+  }),
+
+  /**
+   * KRX/ECOS 시장 컨텍스트 수동 갱신. KRX 는 대상 pdno 가 있을 때만 호출하고,
+   * ECOS 는 기본 매크로 시리즈만 refresh 한다.
+   */
+  refreshMarketContext: publicProcedure
+    .input(
+      z
+        .object({
+          pdnos: z
+            .array(z.string().regex(/^\d{6}$/))
+            .max(30)
+            .optional(),
+        })
+        .optional(),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.marketContextService) {
+        return {
+          krxInserted: 0,
+          ecosInserted: 0,
+          status: {
+            krx: { isAvailable: false, isStale: true, lastSuccessAt: null, lastError: null },
+            ecos: { isAvailable: false, isStale: true, lastSuccessAt: null, lastError: null },
+          },
+        };
+      }
+      const krx =
+        input?.pdnos && input.pdnos.length > 0
+          ? await ctx.marketContextService.refreshKrxForPdnos(input.pdnos)
+          : { inserted: 0 };
+      const ecos = await ctx.marketContextService.refreshDefaultEcosSeries();
+      return {
+        krxInserted: krx.inserted,
+        ecosInserted: ecos.inserted,
+        status: ctx.marketContextService.getStatus(),
+      };
+    }),
+
+  /**
    * Phase 1 — AI 매직스플릿 종목 추천.
    *
    * 후보 풀(보유 + 자동감시) 안에서 매직스플릿 적합도 Top N. 사용자 입력 0.
@@ -288,6 +339,12 @@ export const aiRouter = router({
               }));
             }
           : undefined;
+      const marketContextService = ctx.marketContextService;
+      const getMarketContextForPdnos = marketContextService
+        ? async (pdnos: ReadonlyArray<string>) => {
+            return await marketContextService.getContextForPdnos(pdnos);
+          }
+        : undefined;
       try {
         return await suggestSymbols({
           db: ctx.db,
@@ -308,6 +365,7 @@ export const aiRouter = router({
           ...(fetchNews ? { fetchNews } : {}),
           ...(searchNewsTool ? { searchNewsTool } : {}),
           ...(getDartDisclosuresTool ? { getDartDisclosuresTool } : {}),
+          ...(getMarketContextForPdnos ? { getMarketContextForPdnos } : {}),
         });
       } catch (cause) {
         throw new TRPCError({

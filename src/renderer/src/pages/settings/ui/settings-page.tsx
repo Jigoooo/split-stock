@@ -1,4 +1,8 @@
-import { AiKeysSection, DartCorpCodeSection } from '@renderer/features/ai-settings';
+import {
+  AiKeysSection,
+  DartCorpCodeSection,
+  MarketContextSection,
+} from '@renderer/features/ai-settings';
 import { BackupPanel } from '@renderer/features/backup-restore';
 import {
   ChartSettingsForm,
@@ -213,6 +217,9 @@ export const SettingsPage = (): ReactElement => {
               </Section>
               <Section name="DART 매핑">
                 <DartCorpCodeSection />
+              </Section>
+              <Section name="KRX/ECOS 컨텍스트">
+                <MarketContextSection />
               </Section>
             </div>
           ) : null}

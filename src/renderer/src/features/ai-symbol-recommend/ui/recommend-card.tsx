@@ -73,6 +73,7 @@ export const RecommendCard = ({ item, onPick }: RecommendCardProps): ReactElemen
     item.cons.length > 0 ||
     item.entryNote !== null ||
     hasAnyStat(item.stats) ||
+    item.marketContext !== null ||
     item.news.length > 0 ||
     item.indicatorReasons.length > 0 ||
     item.conflicts.length > 0 ||
@@ -222,6 +223,7 @@ export const RecommendCard = ({ item, onPick }: RecommendCardProps): ReactElemen
                 <div style={{ padding: '1rem 1.2rem', display: 'grid', gap: '0.9rem' }}>
                   {/* 섹션 1 — 기본 진단 */}
                   {hasAnyStat(item.stats) ? <StatRow stats={item.stats} /> : null}
+                  {item.marketContext ? <MarketContextRow context={item.marketContext} /> : null}
                   {/* 섹션 2 — 지표별 사유 */}
                   {item.indicatorReasons.length > 0 ? (
                     <IndicatorReasonsList reasons={item.indicatorReasons} />
@@ -305,6 +307,75 @@ function StatCell({ label, value }: { label: string; value: string }): ReactElem
       <div style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--fg)' }}>{value}</div>
     </div>
   );
+}
+
+function MarketContextRow({
+  context,
+}: {
+  context: NonNullable<RecommendedItem['marketContext']>;
+}): ReactElement | null {
+  const cells: Array<{ label: string; value: string }> = [];
+  if (context.krx) {
+    cells.push(
+      {
+        label: 'KRX 종가',
+        value:
+          context.krx.close !== null
+            ? `${context.krx.close.toLocaleString()}원 (${context.krx.date})`
+            : `— (${context.krx.date})`,
+      },
+      {
+        label: 'KRX 등락률',
+        value: context.krx.changeRate !== null ? `${context.krx.changeRate}%` : '—',
+      },
+    );
+    if (context.krx.marketCap !== null) {
+      cells.push({ label: 'KRX 시가총액', value: formatKrw(context.krx.marketCap) });
+    }
+  }
+  for (const point of context.ecos) {
+    cells.push({
+      label: `ECOS ${indicatorLabel(point.indicator)}`,
+      value: `${point.value.toLocaleString()}${point.unitName ?? ''} (${point.date})`,
+    });
+  }
+  if (cells.length === 0) return null;
+
+  const statusTitle = [
+    context.status.krx.isStale ? 'KRX stale' : null,
+    context.status.ecos.isStale ? 'ECOS stale' : null,
+    context.status.krx.lastError ? `KRX: ${context.status.krx.lastError}` : null,
+    context.status.ecos.lastError ? `ECOS: ${context.status.ecos.lastError}` : null,
+  ]
+    .filter(Boolean)
+    .join(' / ');
+
+  return (
+    <div
+      title={statusTitle || undefined}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(11rem, 1fr))',
+        gap: '0.6rem',
+      }}
+    >
+      {cells.map((cell) => (
+        <StatCell key={`${cell.label}:${cell.value}`} label={cell.label} value={cell.value} />
+      ))}
+    </div>
+  );
+}
+
+function indicatorLabel(indicator: string): string {
+  if (indicator === 'usdKrw') return 'USD/KRW';
+  if (indicator === 'callRate') return '콜금리';
+  return indicator;
+}
+
+function formatKrw(value: number): string {
+  if (value >= 1_0000_0000_0000) return `${(value / 1_0000_0000_0000).toFixed(1)}조원`;
+  if (value >= 1_0000_0000) return `${Math.round(value / 1_0000_0000).toLocaleString()}억원`;
+  return `${value.toLocaleString()}원`;
 }
 
 function ProConList({

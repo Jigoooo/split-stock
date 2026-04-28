@@ -37,6 +37,7 @@ function loadEnvLocal(): Record<string, string> {
 const envLocal = loadEnvLocal();
 const EMBEDDED_KEYS = [
   'DART_API_KEY',
+  'ECOS_API_KEY',
   'KRX_API_KEY',
   'NAVER_CLIENT_ID',
   'NAVER_CLIENT_SECRET',
