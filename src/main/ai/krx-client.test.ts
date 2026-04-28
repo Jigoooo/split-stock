@@ -45,7 +45,7 @@ describe('KrxClient', () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      'http://data-dbg.krx.co.kr/svc/apis/sto/stk_bydd_trd?basDd=20260428',
+      'https://data-dbg.krx.co.kr/svc/apis/sto/stk_bydd_trd?basDd=20260428',
       {
         headers: {
           'Content-Type': 'application/json',
@@ -113,7 +113,7 @@ describe('KrxClient', () => {
     });
 
     expect(fetchImpl).toHaveBeenCalledWith(
-      'http://data-dbg.krx.co.kr/svc/apis/sto/stk_isu_base_info?basDd=20260428',
+      'https://data-dbg.krx.co.kr/svc/apis/sto/stk_isu_base_info?basDd=20260428',
       {
         headers: {
           'Content-Type': 'application/json',

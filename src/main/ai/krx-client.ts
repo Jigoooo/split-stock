@@ -43,15 +43,15 @@ export interface KrxBaseInfoRow {
 }
 
 const KRX_DAILY_TRADE_URL: Record<KrxMarket, string> = {
-  KOSPI: 'http://data-dbg.krx.co.kr/svc/apis/sto/stk_bydd_trd',
-  KOSDAQ: 'http://data-dbg.krx.co.kr/svc/apis/sto/ksq_bydd_trd',
-  KONEX: 'http://data-dbg.krx.co.kr/svc/apis/sto/knx_bydd_trd',
+  KOSPI: 'https://data-dbg.krx.co.kr/svc/apis/sto/stk_bydd_trd',
+  KOSDAQ: 'https://data-dbg.krx.co.kr/svc/apis/sto/ksq_bydd_trd',
+  KONEX: 'https://data-dbg.krx.co.kr/svc/apis/sto/knx_bydd_trd',
 };
 
 const KRX_BASE_INFO_URL: Record<KrxMarket, string> = {
-  KOSPI: 'http://data-dbg.krx.co.kr/svc/apis/sto/stk_isu_base_info',
-  KOSDAQ: 'http://data-dbg.krx.co.kr/svc/apis/sto/ksq_isu_base_info',
-  KONEX: 'http://data-dbg.krx.co.kr/svc/apis/sto/knx_isu_base_info',
+  KOSPI: 'https://data-dbg.krx.co.kr/svc/apis/sto/stk_isu_base_info',
+  KOSDAQ: 'https://data-dbg.krx.co.kr/svc/apis/sto/ksq_isu_base_info',
+  KONEX: 'https://data-dbg.krx.co.kr/svc/apis/sto/knx_isu_base_info',
 };
 
 export class KrxClient {
@@ -85,7 +85,7 @@ export class KrxClient {
     const raw = await this.fetchOutBlock(KRX_BASE_INFO_URL[input.market], input.basDd);
     const filter = toPdnoSet(input.pdnos);
     return raw
-      .map((row) => toBaseInfoRow(input.market, row))
+      .map((row) => toBaseInfoRow(input.market, input.basDd, row))
       .filter((row) => (filter ? filter.has(row.pdno) : true));
   }
 
@@ -144,10 +144,10 @@ function toDailyTradeRow(market: KrxMarket, row: Record<string, string>): KrxDai
   };
 }
 
-function toBaseInfoRow(market: KrxMarket, row: Record<string, string>): KrxBaseInfoRow {
+function toBaseInfoRow(market: KrxMarket, basDd: string, row: Record<string, string>): KrxBaseInfoRow {
   return {
     market,
-    date: ymd8ToIso(row.BAS_DD),
+    date: ymd8ToIso(basDd),
     isin: nonEmpty(row.ISU_CD),
     pdno: (row.ISU_SRT_CD ?? '').padStart(6, '0'),
     name: row.ISU_NM ?? '',
