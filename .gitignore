@@ -34,5 +34,7 @@ test-results
 .DS_Store
 
 .omx
+.omg
+
 .claude
 .serena
