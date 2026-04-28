@@ -15,6 +15,7 @@ export interface AiKeyRegisterModalProps {
   onSubmit: (data: AiKeySubmitInput) => void;
   editingConfig: AiProviderConfigView | null;
   isSubmitting?: boolean;
+  isConfigLocked?: boolean;
 }
 
 export const AiKeyRegisterModal = ({
@@ -22,6 +23,7 @@ export const AiKeyRegisterModal = ({
   onSubmit,
   editingConfig,
   isSubmitting = false,
+  isConfigLocked = false,
 }: AiKeyRegisterModalProps): ReactElement => {
   const isEditMode = editingConfig !== null;
 
@@ -39,6 +41,9 @@ export const AiKeyRegisterModal = ({
 
   const handleSubmit = (): void => {
     if (!isEditMode && apiKey.trim().length < 8) {
+      return;
+    }
+    if (isConfigLocked) {
       return;
     }
     onSubmit({
@@ -99,6 +104,11 @@ export const AiKeyRegisterModal = ({
             ? 'AI API 키 정보를 수정합니다.'
             : 'split-stock 의 AI 추천 기능에 사용할 키를 등록하세요.'}
         </p>
+        {isConfigLocked ? (
+          <p style={{ margin: '0.8rem 0 0', fontSize: '1.05rem', color: '#D97757' }}>
+            AI 추천 분석 중에는 AI 키 설정을 변경할 수 없습니다.
+          </p>
+        ) : null}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
@@ -348,6 +358,7 @@ export const AiKeyRegisterModal = ({
             id={defaultCheckId}
             type="checkbox"
             checked={isDefault}
+            disabled={isConfigLocked}
             onChange={(e) => setIsDefault(e.currentTarget.checked)}
             style={{ width: '1.6rem', height: '1.6rem', accentColor: providerColor }}
           />
@@ -357,7 +368,7 @@ export const AiKeyRegisterModal = ({
 
       <Button
         onClick={handleSubmit}
-        disabled={isSubmitting || (!isEditMode && apiKey.trim().length < 8)}
+        disabled={isConfigLocked || isSubmitting || (!isEditMode && apiKey.trim().length < 8)}
         variant="primary"
         style={{
           width: '100%',

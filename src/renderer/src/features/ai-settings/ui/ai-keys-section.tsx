@@ -19,6 +19,7 @@ export const AiKeysSection = (): ReactElement | null => {
     isPending,
     isCreating,
     isUpdating,
+    isConfigLocked,
     isDeletingId,
     isTestingId,
     isSettingDefaultId,
@@ -53,7 +54,13 @@ export const AiKeysSection = (): ReactElement | null => {
               variant="primary"
               dense
               iconLeading={<Plus size={14} />}
+              disabled={isConfigLocked}
               onClick={handleOpenRegisterModal}
+              title={
+                isConfigLocked
+                  ? 'AI 추천 분석 중에는 AI 키 설정을 변경할 수 없습니다.'
+                  : 'AI 키 등록'
+              }
             >
               키 등록
             </Button>
@@ -63,6 +70,22 @@ export const AiKeysSection = (): ReactElement | null => {
               OpenAI / Anthropic 키를 등록하고 하나를 기본으로 설정하세요. 평문 키는 OS 키체인에
               암호화 저장되며 화면에는 마스킹된 형태만 표시됩니다.
             </div>
+            {isConfigLocked ? (
+              <div
+                style={{
+                  marginBottom: '1.2rem',
+                  padding: '0.8rem 1rem',
+                  borderRadius: '0.6rem',
+                  border: '0.1rem solid rgba(217, 119, 87, 0.45)',
+                  backgroundColor: 'rgba(217, 119, 87, 0.08)',
+                  color: '#D97757',
+                  fontSize: '1.05rem',
+                  fontWeight: 600,
+                }}
+              >
+                AI 추천 분석 중입니다. 분석이 끝날 때까지 기본 AI 키 변경, 수정, 삭제를 잠급니다.
+              </div>
+            ) : null}
 
             {configs.length > 0 ? (
               <div
@@ -84,6 +107,7 @@ export const AiKeysSection = (): ReactElement | null => {
                       isDeletingId={isDeletingId}
                       isTestingId={isTestingId}
                       isSettingDefaultId={isSettingDefaultId}
+                      isConfigLocked={isConfigLocked}
                       onDelete={handleDelete}
                       onEdit={handleOpenEditModal}
                       onSetDefault={handleSetDefault}
@@ -93,7 +117,7 @@ export const AiKeysSection = (): ReactElement | null => {
                 ))}
               </div>
             ) : (
-              <EmptyKeysPlaceholder onClick={handleOpenRegisterModal} />
+              <EmptyKeysPlaceholder onClick={handleOpenRegisterModal} disabled={isConfigLocked} />
             )}
           </div>
         </div>
@@ -142,6 +166,7 @@ export const AiKeysSection = (): ReactElement | null => {
                 onSubmit={handleSubmit}
                 editingConfig={editingConfig}
                 isSubmitting={isCreating || isUpdating}
+                isConfigLocked={isConfigLocked}
               />
             </motion.div>
           </motion.div>
@@ -151,7 +176,13 @@ export const AiKeysSection = (): ReactElement | null => {
   );
 };
 
-function EmptyKeysPlaceholder({ onClick }: { onClick: () => void }): ReactElement {
+function EmptyKeysPlaceholder({
+  onClick,
+  disabled,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+}): ReactElement {
   return (
     <div
       style={{
@@ -175,7 +206,13 @@ function EmptyKeysPlaceholder({ onClick }: { onClick: () => void }): ReactElemen
           "키 등록" 버튼을 눌러 OpenAI 또는 Claude 키를 추가하세요.
         </div>
       </div>
-      <Button variant="primary" dense iconLeading={<Plus size={14} />} onClick={onClick}>
+      <Button
+        variant="primary"
+        dense
+        iconLeading={<Plus size={14} />}
+        disabled={disabled}
+        onClick={onClick}
+      >
         키 등록
       </Button>
     </div>

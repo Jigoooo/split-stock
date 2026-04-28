@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { getAiRuntimeStatus, runWithAiRuntimeOperation } from '../../ai/ai-runtime-state';
 import { ensureDailyCandles } from '../../ai/ensure-candles';
 import type { NewsItem } from '../../ai/news-fetcher';
 import { suggestStrategy } from '../../ai/suggest-strategy';
@@ -23,6 +24,17 @@ function buildEnsureCandles(ctx: Context): (pdnos: ReadonlyArray<string>) => Pro
       logger: ctx.logger,
     });
   };
+}
+
+const AI_CONFIG_LOCKED_MESSAGE =
+  'AI 추천 분석이 진행 중입니다. 분석이 끝난 뒤 AI 키 설정을 변경하세요.';
+
+function assertAiConfigMutable(): void {
+  if (!getAiRuntimeStatus().isConfigLocked) return;
+  throw new TRPCError({
+    code: 'PRECONDITION_FAILED',
+    message: AI_CONFIG_LOCKED_MESSAGE,
+  });
 }
 
 const ProviderSchema = z.enum(['openai', 'anthropic']);
@@ -49,6 +61,11 @@ export const aiRouter = router({
     };
   }),
 
+  /**
+   * AI 분석 런타임 상태. 추천 분석 중에는 기본 AI 키 변경/삭제 같은 설정 변경을 막는다.
+   */
+  getRuntimeStatus: publicProcedure.query(() => getAiRuntimeStatus()),
+
   createConfig: publicProcedure
     .input(
       z.object({
@@ -62,6 +79,7 @@ export const aiRouter = router({
       if (!ctx.aiCredentialsRepo) {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI 저장소 미초기화' });
       }
+      assertAiConfigMutable();
       try {
         return ctx.aiCredentialsRepo.create(input);
       } catch (cause) {
@@ -87,6 +105,7 @@ export const aiRouter = router({
       if (!ctx.aiCredentialsRepo) {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI 저장소 미초기화' });
       }
+      assertAiConfigMutable();
       try {
         return ctx.aiCredentialsRepo.update(input);
       } catch (cause) {
@@ -103,6 +122,7 @@ export const aiRouter = router({
       if (!ctx.aiCredentialsRepo) {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI 저장소 미초기화' });
       }
+      assertAiConfigMutable();
       ctx.aiCredentialsRepo.delete(input.id);
       return { ok: true as const };
     }),
@@ -113,6 +133,7 @@ export const aiRouter = router({
       if (!ctx.aiCredentialsRepo) {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI 저장소 미초기화' });
       }
+      assertAiConfigMutable();
       try {
         return ctx.aiCredentialsRepo.setDefault(input.id);
       } catch (cause) {
@@ -165,6 +186,9 @@ export const aiRouter = router({
       if (!ctx.aiCredentialsRepo || !ctx.llmClient || !ctx.dartClient) {
         throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'AI 모듈 미초기화' });
       }
+      const aiCredentialsRepo = ctx.aiCredentialsRepo;
+      const llmClient = ctx.llmClient;
+      const dartClient = ctx.dartClient;
       // corpCode 자동 lookup — 사용자 입력이 우선, 없으면 dartCorpCodeRepo 매핑.
       let resolvedCorpCode = input.corpCode;
       if (!resolvedCorpCode && ctx.dartCorpCodeRepo?.isAvailable()) {
@@ -173,18 +197,20 @@ export const aiRouter = router({
       }
 
       try {
-        return await suggestStrategy({
-          pdno: input.pdno,
-          candlesRepo: ctx.candlesRepo,
-          stockMasterRepo: ctx.stockMasterRepo,
-          aiCredentialsRepo: ctx.aiCredentialsRepo,
-          llmClient: ctx.llmClient,
-          dartClient: ctx.dartClient,
-          logger: ctx.logger,
-          ensureCandles: buildEnsureCandles(ctx),
-          ...(input.desiredStages !== undefined ? { desiredStages: input.desiredStages } : {}),
-          ...(resolvedCorpCode !== undefined ? { corpCode: resolvedCorpCode } : {}),
-        });
+        return await runWithAiRuntimeOperation('strategyRecommendation', async () =>
+          suggestStrategy({
+            pdno: input.pdno,
+            candlesRepo: ctx.candlesRepo,
+            stockMasterRepo: ctx.stockMasterRepo,
+            aiCredentialsRepo,
+            llmClient,
+            dartClient,
+            logger: ctx.logger,
+            ensureCandles: buildEnsureCandles(ctx),
+            ...(input.desiredStages !== undefined ? { desiredStages: input.desiredStages } : {}),
+            ...(resolvedCorpCode !== undefined ? { corpCode: resolvedCorpCode } : {}),
+          }),
+        );
       } catch (cause) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -306,6 +332,9 @@ export const aiRouter = router({
           message: '활성 계좌가 없습니다. 계좌를 먼저 선택하세요.',
         });
       }
+      const accountId = ctx.activeAccountId;
+      const aiCredentialsRepo = ctx.aiCredentialsRepo;
+      const llmClient = ctx.llmClient;
       // 알고리즘 상위 N (기본 8) 만 뉴스 fetch — Naver 일일 한도 + 응답 시간 트레이드오프.
       const newsFetcher = ctx.newsFetcher;
       const fetchNews =
@@ -346,27 +375,29 @@ export const aiRouter = router({
           }
         : undefined;
       try {
-        return await suggestSymbols({
-          db: ctx.db,
-          accountId: ctx.activeAccountId,
-          candlesRepo: ctx.candlesRepo,
-          aiCredentialsRepo: ctx.aiCredentialsRepo,
-          llmClient: ctx.llmClient,
-          logger: ctx.logger,
-          ensureCandles: buildEnsureCandles(ctx),
-          ...(input?.topN !== undefined ? { topN: input.topN } : {}),
-          ...(input?.extraPdnos && input.extraPdnos.length > 0
-            ? { extraPdnos: input.extraPdnos }
-            : {}),
-          ...(input?.aiOff === true ? { aiOff: true } : {}),
-          ...(input?.includeAutoDiscovery !== undefined
-            ? { includeAutoDiscovery: input.includeAutoDiscovery }
-            : {}),
-          ...(fetchNews ? { fetchNews } : {}),
-          ...(searchNewsTool ? { searchNewsTool } : {}),
-          ...(getDartDisclosuresTool ? { getDartDisclosuresTool } : {}),
-          ...(getMarketContextForPdnos ? { getMarketContextForPdnos } : {}),
-        });
+        return await runWithAiRuntimeOperation('symbolRecommendation', async () =>
+          suggestSymbols({
+            db: ctx.db,
+            accountId,
+            candlesRepo: ctx.candlesRepo,
+            aiCredentialsRepo,
+            llmClient,
+            logger: ctx.logger,
+            ensureCandles: buildEnsureCandles(ctx),
+            ...(input?.topN !== undefined ? { topN: input.topN } : {}),
+            ...(input?.extraPdnos && input.extraPdnos.length > 0
+              ? { extraPdnos: input.extraPdnos }
+              : {}),
+            ...(input?.aiOff === true ? { aiOff: true } : {}),
+            ...(input?.includeAutoDiscovery !== undefined
+              ? { includeAutoDiscovery: input.includeAutoDiscovery }
+              : {}),
+            ...(fetchNews ? { fetchNews } : {}),
+            ...(searchNewsTool ? { searchNewsTool } : {}),
+            ...(getDartDisclosuresTool ? { getDartDisclosuresTool } : {}),
+            ...(getMarketContextForPdnos ? { getMarketContextForPdnos } : {}),
+          }),
+        );
       } catch (cause) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',

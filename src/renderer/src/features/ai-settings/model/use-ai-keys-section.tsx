@@ -14,12 +14,18 @@ import type { AiKeySubmitInput, AiProviderConfigView } from './types';
 export function useAiKeysSection() {
   const utils = trpc.useUtils();
   const list = trpc.ai.listConfigs.useQuery();
+  const runtime = trpc.ai.getRuntimeStatus.useQuery(undefined, {
+    refetchInterval: 1_000,
+    staleTime: 500,
+  });
 
   const [isModalOpen, setModalOpen] = useState(false);
   const [editingConfig, setEditingConfig] = useState<AiProviderConfigView | null>(null);
   const [isDeletingId, setIsDeletingId] = useState<number | null>(null);
   const [isTestingId, setIsTestingId] = useState<number | null>(null);
   const [isSettingDefaultId, setIsSettingDefaultId] = useState<number | null>(null);
+  const isConfigLocked = runtime.data?.isConfigLocked ?? false;
+  const lockMessage = 'AI 추천 분석 중에는 AI 키 설정을 변경할 수 없습니다.';
 
   const create = trpc.ai.createConfig.useMutation({
     onSuccess: () => {
@@ -74,10 +80,18 @@ export function useAiKeysSection() {
   });
 
   const handleOpenRegisterModal = (): void => {
+    if (isConfigLocked) {
+      toast.warning(lockMessage);
+      return;
+    }
     setEditingConfig(null);
     setModalOpen(true);
   };
   const handleOpenEditModal = (config: AiProviderConfigView): void => {
+    if (isConfigLocked) {
+      toast.warning(lockMessage);
+      return;
+    }
     setEditingConfig(config);
     setModalOpen(true);
   };
@@ -88,6 +102,10 @@ export function useAiKeysSection() {
   };
 
   const handleSubmit = (input: AiKeySubmitInput): void => {
+    if (isConfigLocked) {
+      toast.warning(lockMessage);
+      return;
+    }
     if (editingConfig) {
       update.mutate({
         id: editingConfig.id,
@@ -107,6 +125,10 @@ export function useAiKeysSection() {
   };
 
   const handleDelete = async (id: number, label: string): Promise<void> => {
+    if (isConfigLocked) {
+      toast.warning(lockMessage);
+      return;
+    }
     const confirmed = await dialog.openAsync({
       type: 'WARNING',
       title: 'AI 키 삭제',
@@ -128,6 +150,10 @@ export function useAiKeysSection() {
   };
 
   const handleSetDefault = (id: number, _label: string): void => {
+    if (isConfigLocked) {
+      toast.warning(lockMessage);
+      return;
+    }
     setIsSettingDefaultId(id);
     setDefault.mutate({ id });
   };
@@ -156,6 +182,7 @@ export function useAiKeysSection() {
     isPending: list.isLoading,
     isCreating: create.isPending,
     isUpdating: update.isPending,
+    isConfigLocked,
     isDeletingId,
     isTestingId,
     isSettingDefaultId,

@@ -10,6 +10,7 @@ export interface AiKeyCardProps {
   isDeletingId: number | null;
   isTestingId: number | null;
   isSettingDefaultId: number | null;
+  isConfigLocked: boolean;
   onDelete: (id: number, label: string) => void;
   onEdit: (config: AiProviderConfigView) => void;
   onSetDefault: (id: number, label: string) => void;
@@ -21,6 +22,7 @@ export const AiKeyCard = ({
   isDeletingId,
   isTestingId,
   isSettingDefaultId,
+  isConfigLocked,
   onDelete,
   onEdit,
   onSetDefault,
@@ -31,8 +33,11 @@ export const AiKeyCard = ({
   const isDeleting = isDeletingId === config.id;
   const isTesting = isTestingId === config.id;
   const isSettingDefault = isSettingDefaultId === config.id;
-  const isAnyLoading = isDeleting || isTesting || isSettingDefault;
+  const isAnyLoading = isDeleting || isTesting || isSettingDefault || isConfigLocked;
   const label = `${providerLabel} / ${config.model}`;
+  const lockedTitle = isConfigLocked
+    ? 'AI 추천 분석 중에는 AI 키 설정을 변경할 수 없습니다.'
+    : undefined;
 
   return (
     <motion.div
@@ -126,7 +131,7 @@ export const AiKeyCard = ({
                   disabled={isAnyLoading}
                   onClick={() => onSetDefault(config.id, label)}
                   aria-label="기본 키 설정"
-                  title="기본 키 설정"
+                  title={lockedTitle ?? '기본 키 설정'}
                 />
               )}
               <Button
@@ -137,17 +142,17 @@ export const AiKeyCard = ({
                 disabled={isAnyLoading}
                 onClick={() => onEdit(config)}
                 aria-label="수정"
-                title="수정"
+                title={lockedTitle ?? '수정'}
               />
               <Button
                 variant="ghost-danger"
                 iconOnly
                 dense
                 iconLeading={<Trash2 size={14} />}
-                disabled={isDeleting}
+                disabled={isDeleting || isConfigLocked}
                 onClick={() => onDelete(config.id, label)}
                 aria-label="삭제"
-                title="삭제"
+                title={lockedTitle ?? '삭제'}
               />
             </div>
           </div>
