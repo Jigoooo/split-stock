@@ -74,6 +74,16 @@ export interface SuggestSymbolsInput {
 const TierSchema = z.enum(['top', 'strong', 'moderate', 'watch', 'avoid']);
 const ConfidenceSchema = z.enum(['high', 'med', 'low']);
 
+function compactText(value: string, max: number): string {
+  const compact = value.trim().replace(/\s+/g, ' ');
+  if (compact.length <= max) return compact;
+  return `${compact.slice(0, Math.max(0, max - 3)).trimEnd()}...`;
+}
+
+function compactTextList(values: ReadonlyArray<string>, max: number): string[] {
+  return values.map((value) => compactText(value, max)).filter((value) => value.length > 0);
+}
+
 const RankedItemSchema = z.object({
   pdno: z.string(),
   score: z.number().min(0).max(100),
@@ -82,13 +92,13 @@ const RankedItemSchema = z.object({
   volatilityFit: z.enum(['low', 'mid', 'high']),
   liquidityFit: z.enum(['good', 'ok', 'poor']),
   /** 한 줄 평 — 카드 기본 노출. */
-  summary: z.string().min(1).max(200),
+  summary: z.string().min(1),
   /** 매직스플릿 적용 시 강점. 0~3개. */
-  pros: z.array(z.string().max(200)).max(3).default([]),
+  pros: z.array(z.string()).max(3).default([]),
   /** 주의점/리스크. 0~3개. */
-  cons: z.array(z.string().max(200)).max(3).default([]),
+  cons: z.array(z.string()).max(3).default([]),
   /** 진입 시 참고할 한 줄 (예: "박스권 하단 근처 1차 매수 추천"). 없으면 null. */
-  entryNote: z.string().max(300).nullable().default(null),
+  entryNote: z.string().nullable().default(null),
   /** 몇 개 지표가 동의했는지 (LLM 판단). */
   consensusCount: z.number().int().min(0).max(10).default(0),
   /** 호출한 도구 이름 — 빈 배열이면 추가 검증 미수행 표시. */
@@ -327,7 +337,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
     input.logger.log({
       level: 'WARN',
       category: 'SYS',
-      message: 'ai.suggest-symbols.parse-failed',
+      message: 'ai.suggest-symbols.parse-failed-fallback',
       payload: { rawChars: result.text.length, toolCalls: result.toolCalls.length },
     });
     // 디버그용 — 실제 응답 텍스트와 도구 호출 이력 출력.
@@ -344,7 +354,30 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
         ),
       );
     }
-    return emptyResult('AI 응답을 해석할 수 없습니다. 잠시 후 다시 시도하세요.', startedAt);
+    const ranked = buildAlgoOnlyRanked(
+      topCandidates,
+      algoByPdno,
+      statsByPdno,
+      input.topN ?? 8,
+      marketContext,
+    );
+    const userInputResults = buildAlgoOnlyRanked(
+      extraCandidates,
+      algoByPdno,
+      statsByPdno,
+      extraCandidates.length,
+      marketContext,
+    );
+    return {
+      ranked,
+      userInputResults,
+      distribution: summarizeTiers(ranked),
+      poolSize: pool.length,
+      emptyReason:
+        ranked.length === 0 ? 'AI 응답 파싱에 실패했고 알고리즘 fallback 결과도 비었습니다.' : null,
+      rejectedCount: 0,
+      durationMs: Date.now() - startedAt,
+    };
   }
 
   // === Stage 3 — 검증 + 합성 ===
@@ -362,10 +395,15 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       const poolEntry = poolByPdno.get(item.pdno);
       const stat = statsByPdno.get(item.pdno);
       const algo = algoByPdno.get(item.pdno);
-      const cons = enrichCons(item, algo);
+      const cons = compactTextList(enrichCons(item, algo), 200);
+      const summary = compactText(item.summary, 200) || '분석 요약이 부족합니다.';
+      const entryNote = item.entryNote ? compactText(item.entryNote, 300) || null : null;
       out.push({
         ...item,
+        summary,
+        pros: compactTextList(item.pros ?? [], 200).slice(0, 3),
         cons,
+        entryNote,
         name: poolEntry?.name ?? item.pdno,
         sources: poolEntry?.sources ?? [],
         stats: {

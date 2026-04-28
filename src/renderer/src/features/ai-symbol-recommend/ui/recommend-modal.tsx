@@ -4,6 +4,7 @@ import { RefreshCw, Sparkles, X } from 'lucide-react';
 import { type MouseEvent, type PointerEvent, type ReactElement, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type {
+  RecommendationProgressState,
   RecommendationViewState,
   TierDistribution,
 } from '../model/use-symbol-recommendations';
@@ -52,6 +53,70 @@ function formatRelative(ts: number): string {
   const min = Math.floor(elapsedSec / 60);
   if (min < 60) return `${min}분 전`;
   return `${Math.floor(min / 60)}시간 전`;
+}
+
+function formatElapsed(ms: number): string {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  if (sec < 60) return `${sec}초`;
+  const min = Math.floor(sec / 60);
+  const rest = sec % 60;
+  return rest > 0 ? `${min}분 ${rest}초` : `${min}분`;
+}
+
+function LoadingProgress({ progress }: { progress: RecommendationProgressState }): ReactElement {
+  return (
+    <div
+      style={{
+        width: '100%',
+        maxWidth: '34rem',
+        display: 'grid',
+        gap: '0.55rem',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          gap: '0.8rem',
+        }}
+      >
+        <strong style={{ fontSize: '1.08rem', color: 'var(--fg)' }}>{progress.label}</strong>
+        <span className="muted" style={{ fontSize: '0.95rem' }}>
+          {progress.percent}% · {formatElapsed(progress.elapsedMs)}
+        </span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress.percent}
+        aria-label={progress.label}
+        style={{
+          width: '100%',
+          height: '0.7rem',
+          borderRadius: '999px',
+          overflow: 'hidden',
+          backgroundColor: 'var(--border)',
+        }}
+      >
+        <motion.div
+          initial={false}
+          animate={{ width: `${progress.percent}%` }}
+          transition={{ duration: 0.35, ease: 'easeOut' }}
+          style={{
+            width: `${progress.percent}%`,
+            height: '100%',
+            borderRadius: '999px',
+            backgroundColor: '#D97757',
+          }}
+        />
+      </div>
+      <div className="muted" style={{ fontSize: '1rem', textAlign: 'center', lineHeight: 1.45 }}>
+        {progress.detail}
+      </div>
+    </div>
+  );
 }
 
 export interface RecommendModalProps {
@@ -104,6 +169,14 @@ export const RecommendModal = ({
     view.distribution.moderate +
     view.distribution.watch +
     view.distribution.avoid;
+  const pendingProgress = view.progress ?? {
+    key: 'initial',
+    percent: 8,
+    label: '분석 준비 중',
+    detail: '후보 종목을 확인하는 중입니다.',
+    elapsedMs: 0,
+  };
+  const controlsDisabled = view.isPending;
 
   const handleOverlayPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
     overlayPointerStartRef.current = {
@@ -224,12 +297,14 @@ export const RecommendModal = ({
                     border: '0.1rem solid var(--border)',
                     fontSize: '1rem',
                     color: 'var(--fg-2)',
-                    cursor: 'pointer',
+                    cursor: controlsDisabled ? 'not-allowed' : 'pointer',
+                    opacity: controlsDisabled ? 0.65 : 1,
                   }}
                 >
                   <input
                     type="checkbox"
                     checked={includeAutoDiscovery}
+                    disabled={controlsDisabled}
                     onChange={(e) => onToggleAutoDiscovery(e.currentTarget.checked)}
                     style={{ accentColor: '#D97757', margin: 0 }}
                   />
@@ -250,14 +325,14 @@ export const RecommendModal = ({
                     border: '0.1rem solid var(--border)',
                     fontSize: '1rem',
                     color: 'var(--fg-2)',
-                    cursor: hasDefaultKey ? 'pointer' : 'not-allowed',
-                    opacity: hasDefaultKey ? 1 : 0.7,
+                    cursor: hasDefaultKey && !controlsDisabled ? 'pointer' : 'not-allowed',
+                    opacity: hasDefaultKey && !controlsDisabled ? 1 : 0.7,
                   }}
                 >
                   <input
                     type="checkbox"
                     checked={!aiOff}
-                    disabled={!hasDefaultKey}
+                    disabled={controlsDisabled || !hasDefaultKey}
                     onChange={(e) => onToggleAiOff(!e.currentTarget.checked)}
                     style={{ accentColor: '#D97757', margin: 0 }}
                   />
@@ -280,6 +355,7 @@ export const RecommendModal = ({
                 extras={extras}
                 onAdd={onAddExtra}
                 onRemove={onRemoveExtra}
+                disabled={controlsDisabled}
                 max={10}
               />
             </div>
@@ -304,6 +380,7 @@ export const RecommendModal = ({
                 <div className="muted" style={{ fontSize: '1.2rem' }}>
                   보유/감시 종목을 분석 중...
                 </div>
+                <LoadingProgress progress={pendingProgress} />
               </div>
             ) : view.error ? (
               <div

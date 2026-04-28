@@ -172,8 +172,7 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
         background: 'transparent',
       }}
       onMouseEnter={(e) => {
-        (e.currentTarget.firstChild as HTMLDivElement).style.background =
-          'var(--accent, #3b82f6)';
+        (e.currentTarget.firstChild as HTMLDivElement).style.background = 'var(--accent, #3b82f6)';
       }}
       onMouseLeave={(e) => {
         (e.currentTarget.firstChild as HTMLDivElement).style.background = 'transparent';
@@ -199,13 +198,7 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
   };
 
   return (
-    <div
-      ref={cellRef}
-      {...dataProps}
-      title={title}
-      className={cellClassName}
-      style={cellStyle}
-    >
+    <div ref={cellRef} {...dataProps} title={title} className={cellClassName} style={cellStyle}>
       {children}
       {resizer}
     </div>

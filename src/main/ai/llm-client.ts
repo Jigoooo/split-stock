@@ -65,8 +65,23 @@ export class LlmClient {
   async chat<T>(req: ChatRequest<T>): Promise<ChatResponse<T>> {
     const startedAt = Date.now();
     try {
-      const { text, toolCalls } = await this.callProvider(req);
-      const parsed = req.schema ? this.tryParseJson(text, req.schema) : null;
+      let { text, toolCalls } = await this.callProvider(req);
+      let parsed = req.schema ? this.tryParseJson(text, req.schema) : null;
+      let repaired = false;
+      if (req.schema && parsed === null) {
+        const repairedText = await this.repairJsonResponse(
+          req as ChatRequest<T> & { schema: z.ZodType<T> },
+          text,
+        );
+        if (repairedText) {
+          const repairedParsed = this.tryParseJson(repairedText, req.schema);
+          if (repairedParsed !== null) {
+            text = repairedText;
+            parsed = repairedParsed;
+            repaired = true;
+          }
+        }
+      }
       this.opts.logger.log({
         level: 'INFO',
         category: 'SYS',
@@ -77,6 +92,7 @@ export class LlmClient {
           durationMs: Date.now() - startedAt,
           schemaName: req.schemaName,
           parsedOk: req.schema ? parsed !== null : null,
+          repaired,
           chars: text.length,
           toolCalls: toolCalls.length,
         },
@@ -391,6 +407,69 @@ export class LlmClient {
     }
     return null;
   }
+
+  private async repairJsonResponse<T>(
+    req: ChatRequest<T> & { schema: z.ZodType<T> },
+    rawText: string,
+  ): Promise<string | null> {
+    if (!rawText.trim()) return null;
+    try {
+      if (req.config.provider === 'openai') {
+        const client = new OpenAI({ apiKey: req.config.apiKeyPlain });
+        const response = await client.chat.completions.create({
+          model: req.config.model,
+          max_tokens: req.maxOutputTokens ?? 1024,
+          temperature: 0,
+          response_format: buildOpenAiJsonSchema(
+            req.schema,
+            `${req.schemaName ?? 'AiResponse'}Repair`,
+          ),
+          messages: [
+            { role: 'system', content: buildJsonRepairSystem(req) },
+            { role: 'user', content: buildJsonRepairPrompt(req, rawText) },
+          ],
+        });
+        return response.choices[0]?.message.content ?? null;
+      }
+
+      if (req.config.provider === 'anthropic') {
+        const client = new Anthropic({ apiKey: req.config.apiKeyPlain });
+        const response = await client.messages.create({
+          model: req.config.model,
+          max_tokens: req.maxOutputTokens ?? 1024,
+          temperature: 0,
+          system: buildJsonRepairSystem(req),
+          messages: [
+            { role: 'user', content: buildJsonRepairPrompt(req, rawText) },
+            { role: 'assistant', content: '{' },
+          ],
+        });
+        const text = response.content
+          .filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
+          .map((b) => b.text)
+          .join('\n')
+          .trim();
+        if (!text) return null;
+        return text.startsWith('{') ? text : `{${text}`;
+      }
+    } catch (cause) {
+      this.opts.logger.log({
+        level: 'WARN',
+        category: 'SYS',
+        message: 'ai.chat.json-repair-failed',
+        payload: {
+          provider: req.config.provider,
+          model: req.config.model,
+          schemaName: req.schemaName,
+          msg: redactKey(
+            cause instanceof Error ? cause.message : String(cause),
+            req.config.apiKeyPlain,
+          ),
+        },
+      });
+    }
+    return null;
+  }
 }
 
 function buildSystemPrompt<T>(req: ChatRequest<T>): string {
@@ -400,6 +479,31 @@ function buildSystemPrompt<T>(req: ChatRequest<T>): string {
   const jsonInstr =
     '응답은 반드시 단일 JSON 객체로만 답하세요. 코드 블록(```), 설명, 추가 텍스트 금지.';
   return baseSystem ? `${baseSystem}\n\n${jsonInstr}` : jsonInstr;
+}
+
+function buildJsonRepairSystem<T>(req: ChatRequest<T> & { schema: z.ZodType<T> }): string {
+  return [
+    '당신은 JSON repair 엔진입니다.',
+    '입력으로 받은 assistant 응답을 요청 schema 에 맞는 단일 JSON 객체로 변환하세요.',
+    '설명문, 마크다운, 코드 블록, 접두사, 접미사는 절대 출력하지 마세요.',
+    '문자열은 schema 의 maxLength 제약을 넘지 않게 핵심만 남겨 짧게 줄이세요.',
+    `schemaName: ${req.schemaName ?? 'AiResponse'}`,
+  ].join('\n');
+}
+
+function buildJsonRepairPrompt<T>(
+  req: ChatRequest<T> & { schema: z.ZodType<T> },
+  rawText: string,
+): string {
+  return [
+    'JSON Schema:',
+    JSON.stringify(zodToJsonSchema(req.schema)),
+    '',
+    'Original assistant response:',
+    rawText.slice(0, 16_000),
+    '',
+    'Return only the JSON object.',
+  ].join('\n');
 }
 
 function stripCodeFence(text: string): string {

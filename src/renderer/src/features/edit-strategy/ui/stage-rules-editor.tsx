@@ -73,9 +73,7 @@ export const StageRulesEditor = ({
                 </strong>
               </>
             ) : (
-              <>
-                <strong style={{ color: 'var(--color-text-primary)' }}>1~50차 모든 차수</strong>
-              </>
+              <strong style={{ color: 'var(--color-text-primary)' }}>1~50차 모든 차수</strong>
             )}
             에 일괄 적용합니다.
           </div>

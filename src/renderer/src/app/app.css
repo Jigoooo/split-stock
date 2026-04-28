@@ -1789,8 +1789,7 @@ body {
 }
 
 /* 계좌 추가 팝아웃 내 모든 fieldset 라벨/입력 폰트 상향 — 기존 1rem → 1.15rem 으로 가독성 보강. */
-.add-account-page label > span:first-child,
-.add-account-page .form-section__title {
+.add-account-page label > span:first-child {
   font-size: 1.15rem;
 }
 
@@ -2489,6 +2488,10 @@ body {
   font-weight: 700;
   color: var(--fg);
   letter-spacing: 0.01em;
+}
+
+.add-account-page .form-section__title {
+  font-size: 1.15rem;
 }
 
 .form-section__icon {

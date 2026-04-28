@@ -38,6 +38,7 @@ export interface MarketContextServiceOptions {
 }
 
 const STALE_MS = 24 * 60 * 60 * 1000;
+const KRX_LOOKBACK_DAYS = 7;
 const KRX_SUCCESS_KEY = 'market_context.krx.last_success_at';
 const KRX_ERROR_KEY = 'market_context.krx.last_error';
 const ECOS_SUCCESS_KEY = 'market_context.ecos.last_success_at';
@@ -55,7 +56,7 @@ export const DEFAULT_ECOS_SERIES: readonly DefaultEcosSeries[] = [
   },
   {
     indicator: 'callRate',
-    statCode: '010Y002',
+    statCode: '817Y002',
     itemCode: '010101000',
     frequency: 'D',
     count: 30,
@@ -106,21 +107,29 @@ export class MarketContextService {
     }
     let inserted = 0;
     try {
-      const basDd = ymdCompact(this.now());
       for (const [market, codes] of grouped.entries()) {
-        const dailyRows = await this.opts.krxClient.getDailyTradeInfo({
-          market,
-          basDd,
-          pdnos: codes,
-        });
-        inserted += this.opts.repo.upsertKrxDailyTrade(dailyRows);
+        const remaining = new Set(codes);
+        for (let offset = 0; offset <= KRX_LOOKBACK_DAYS && remaining.size > 0; offset++) {
+          const basDd = ymdCompact(shiftDays(this.now(), -offset));
+          const targets = [...remaining];
+          const dailyRows = await this.opts.krxClient.getDailyTradeInfo({
+            market,
+            basDd,
+            pdnos: targets,
+          });
+          if (dailyRows.length === 0) continue;
 
-        const baseRows = await this.opts.krxClient.getBaseInfo({
-          market,
-          basDd,
-          pdnos: codes,
-        });
-        inserted += this.opts.repo.upsertKrxBaseInfo(baseRows);
+          inserted += this.opts.repo.upsertKrxDailyTrade(dailyRows);
+          const foundPdnos = dailyRows.map((row) => row.pdno);
+          for (const pdno of foundPdnos) remaining.delete(pdno);
+
+          const baseRows = await this.opts.krxClient.getBaseInfo({
+            market,
+            basDd,
+            pdnos: foundPdnos,
+          });
+          inserted += this.opts.repo.upsertKrxBaseInfo(baseRows);
+        }
       }
       if (inserted > 0) {
         this.recordSuccess('krx');

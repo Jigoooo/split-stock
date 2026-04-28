@@ -1,4 +1,4 @@
-CREATE TABLE `krx_daily_trade_cache` (
+CREATE TABLE IF NOT EXISTS `krx_daily_trade_cache` (
   `market` text NOT NULL,
   `pdno` text NOT NULL,
   `date` text NOT NULL,
@@ -17,7 +17,7 @@ CREATE TABLE `krx_daily_trade_cache` (
   PRIMARY KEY(`market`, `pdno`, `date`)
 );
 --> statement-breakpoint
-CREATE TABLE `krx_base_info_cache` (
+CREATE TABLE IF NOT EXISTS `krx_base_info_cache` (
   `market` text NOT NULL,
   `pdno` text NOT NULL,
   `date` text NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE `krx_base_info_cache` (
   PRIMARY KEY(`market`, `pdno`, `date`)
 );
 --> statement-breakpoint
-CREATE TABLE `ecos_series_cache` (
+CREATE TABLE IF NOT EXISTS `ecos_series_cache` (
   `indicator` text NOT NULL,
   `stat_code` text NOT NULL,
   `item_code` text NOT NULL,

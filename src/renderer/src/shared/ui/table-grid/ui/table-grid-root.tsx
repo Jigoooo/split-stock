@@ -72,7 +72,7 @@ export function TableGridRoot(props: RootProps): ReactElement {
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const hScrollRef = useRef<HTMLDivElement | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
-  
+
   // 초기 렌더링 시 로컬 스토리지에서 수동 너비 가져오기
   const [manualColumnWidths, setManualColumnWidths] = useState<Record<number, number>>(() => {
     if (storageKey) {
@@ -88,24 +88,27 @@ export function TableGridRoot(props: RootProps): ReactElement {
     return {};
   });
 
-  const setManualColumnWidth = useCallback((columnIndex: number, width: number) => {
-    setManualColumnWidths((prev) => {
-      const next = {
-        ...prev,
-        [columnIndex]: Math.max(30, Math.round(width)), // 최소 30px
-      };
-      
-      if (storageKey) {
-        try {
-          localStorage.setItem(`table-grid-cols-${storageKey}`, JSON.stringify(next));
-        } catch (e) {
-          console.warn('Failed to save table grid column widths to localStorage', e);
+  const setManualColumnWidth = useCallback(
+    (columnIndex: number, width: number) => {
+      setManualColumnWidths((prev) => {
+        const next = {
+          ...prev,
+          [columnIndex]: Math.max(30, Math.round(width)), // 최소 30px
+        };
+
+        if (storageKey) {
+          try {
+            localStorage.setItem(`table-grid-cols-${storageKey}`, JSON.stringify(next));
+          } catch (e) {
+            console.warn('Failed to save table grid column widths to localStorage', e);
+          }
         }
-      }
-      
-      return next;
-    });
-  }, [storageKey]);
+
+        return next;
+      });
+    },
+    [storageKey],
+  );
 
   const resetColumnWidths = useCallback(() => {
     setManualColumnWidths({});

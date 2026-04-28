@@ -7,6 +7,7 @@ export interface ExtraPdnoPickerProps {
   extras: ReadonlyArray<string>;
   onAdd: (pdno: string) => void;
   onRemove: (pdno: string) => void;
+  disabled?: boolean;
   /** 최대 개수. 기본 10. */
   max?: number;
 }
@@ -20,11 +21,12 @@ export const ExtraPdnoPicker = ({
   extras,
   onAdd,
   onRemove,
+  disabled = false,
   max = 10,
 }: ExtraPdnoPickerProps): ReactElement => {
   const [keyword, setKeyword] = useState('');
   const trimmed = keyword.trim();
-  const enabled = trimmed.length >= 1;
+  const enabled = !disabled && trimmed.length >= 1;
 
   const search = trpc.market.searchStock.useQuery(
     { term: trimmed, limit: 6 },
@@ -71,7 +73,7 @@ export const ExtraPdnoPicker = ({
           }
           value={keyword}
           onChange={(e) => setKeyword(e.currentTarget.value)}
-          disabled={reachedMax}
+          disabled={disabled || reachedMax}
         />
         {enabled && !reachedMax && matches.length > 0 ? (
           <div
@@ -89,7 +91,7 @@ export const ExtraPdnoPicker = ({
                 <button
                   key={m.pdno}
                   type="button"
-                  disabled={already}
+                  disabled={disabled || already}
                   onClick={() => {
                     onAdd(m.pdno);
                     setKeyword('');
@@ -103,7 +105,7 @@ export const ExtraPdnoPicker = ({
                     borderRadius: '0.4rem',
                     border: '0.1rem solid var(--border)',
                     background: already ? 'var(--bg-2, rgba(0,0,0,0.04))' : 'var(--bg)',
-                    cursor: already ? 'default' : 'pointer',
+                    cursor: disabled || already ? 'default' : 'pointer',
                     fontSize: '1.15rem',
                     color: 'var(--fg)',
                     textAlign: 'left',
@@ -155,14 +157,16 @@ export const ExtraPdnoPicker = ({
                 type="button"
                 aria-label={`${p} 제거`}
                 onClick={() => onRemove(p)}
+                disabled={disabled}
                 style={{
                   background: 'none',
                   border: 'none',
-                  cursor: 'pointer',
+                  cursor: disabled ? 'default' : 'pointer',
                   padding: 0,
                   color: '#D97757',
                   display: 'inline-flex',
                   alignItems: 'center',
+                  opacity: disabled ? 0.5 : 1,
                 }}
               >
                 <X size={12} />

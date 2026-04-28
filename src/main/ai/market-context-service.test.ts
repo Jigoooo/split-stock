@@ -112,6 +112,22 @@ describe('MarketContextService', () => {
     await expect(service.refreshDefaultEcosSeries()).resolves.toEqual({ inserted: 2 });
     const snapshot = await service.getContextForPdnos(['005930']);
     const baseInfo = deps.db.select().from(krxBaseInfoCache).all();
+    expect(ecosClient.getRecentSeries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        indicator: 'usdKrw',
+        statCode: '731Y001',
+        itemCode: '0000001',
+        frequency: 'D',
+      }),
+    );
+    expect(ecosClient.getRecentSeries).toHaveBeenCalledWith(
+      expect.objectContaining({
+        indicator: 'callRate',
+        statCode: '817Y002',
+        itemCode: '010101000',
+        frequency: 'D',
+      }),
+    );
 
     expect(snapshot.status.krx).toMatchObject({ isAvailable: true, isStale: false });
     expect(snapshot.status.ecos).toMatchObject({ isAvailable: true, isStale: false });
@@ -191,5 +207,79 @@ describe('MarketContextService', () => {
 
     expect(snapshot.status.krx.lastError).toContain('KRX HTTP 500');
     expect(snapshot.krxByPdno.get('005930')?.marketCap).toBe(420000000000000);
+  });
+
+  it('KRX 당일 데이터가 비어 있으면 직전 날짜 캐시로 fallback 한다', async () => {
+    const deps = fresh();
+    const getDailyTradeInfo = vi.fn(async (req: { basDd: string }) =>
+      req.basDd === '20260427'
+        ? [
+            {
+              market: 'KOSPI' as const,
+              date: '2026-04-27',
+              pdno: '005930',
+              name: '삼성전자',
+              close: 72000,
+              change: null,
+              changeRate: null,
+              open: null,
+              high: null,
+              low: null,
+              volume: null,
+              tradeValue: null,
+              marketCap: 420000000000000,
+              listedShares: null,
+            },
+          ]
+        : [],
+    );
+    const getBaseInfo = vi.fn(async (req: { basDd: string }) =>
+      req.basDd === '20260427'
+        ? [
+            {
+              market: 'KOSPI' as const,
+              date: '2026-04-27',
+              isin: 'KR7005930003',
+              pdno: '005930',
+              name: '삼성전자',
+              shortName: '삼성전자',
+              englishName: null,
+              listedAt: null,
+              marketName: 'KOSPI',
+              securityGroup: null,
+              section: null,
+              stockKind: null,
+              parValue: null,
+              listedShares: null,
+            },
+          ]
+        : [],
+    );
+    const service = new MarketContextService({
+      ...deps,
+      krxClient: {
+        isAvailable: () => true,
+        getDailyTradeInfo,
+        getBaseInfo,
+      } as unknown as KrxClient,
+      ecosClient: { isAvailable: () => false } as unknown as EcosClient,
+      logger: logger(),
+      now,
+    });
+
+    await expect(service.refreshKrxForPdnos(['005930'])).resolves.toEqual({ inserted: 2 });
+    const snapshot = await service.getContextForPdnos(['005930']);
+
+    expect(getDailyTradeInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ basDd: '20260428', pdnos: ['005930'] }),
+    );
+    expect(getDailyTradeInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ basDd: '20260427', pdnos: ['005930'] }),
+    );
+    expect(getBaseInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ basDd: '20260427', pdnos: ['005930'] }),
+    );
+    expect(snapshot.status.krx).toMatchObject({ isAvailable: true, isStale: false });
+    expect(snapshot.krxByPdno.get('005930')?.date).toBe('2026-04-27');
   });
 });
