@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { authedProcedure, router } from '../trpc-core';
 
 const PdnoSchema = z.object({ pdno: z.string().regex(/^\d{6}$/) });
+const PdnosSchema = z.object({
+  pdnos: z.array(z.string().regex(/^\d{6}$/)).max(200),
+});
 const TopicSchema = z.object({
   pdno: z.string().regex(/^\d{6}$/),
   topic: z.enum(['tick', 'orderbook']),
@@ -57,6 +60,14 @@ export const realtimeRouter = router({
   getLatestTick: authedProcedure.input(PdnoSchema).query(({ ctx, input }) => ({
     tick: ctx.bus?.getLatestTick(input.pdno) ?? null,
   })),
+
+  getLatestTicks: authedProcedure.input(PdnosSchema).query(({ ctx, input }) => {
+    const ticks: Record<string, ReturnType<NonNullable<typeof ctx.bus>['getLatestTick']>> = {};
+    for (const pdno of Array.from(new Set(input.pdnos))) {
+      ticks[pdno] = ctx.bus?.getLatestTick(pdno) ?? null;
+    }
+    return { ticks };
+  }),
 
   getLatestOrderbook: authedProcedure.input(PdnoSchema).query(({ ctx, input }) => ({
     orderbook: ctx.bus?.getLatestOrderbook(input.pdno) ?? null,

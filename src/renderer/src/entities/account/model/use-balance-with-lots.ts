@@ -1,3 +1,4 @@
+import { useLiveTicks } from '@renderer/entities/realtime';
 import { trpc } from '@renderer/shared/api/trpc';
 import { skipToken } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
@@ -65,7 +66,7 @@ export interface UseBalanceWithLotsResult {
   error: { message: string } | null;
 }
 
-interface BalanceWithLotsSnapshot {
+export interface BalanceWithLotsSnapshot {
   positions: BalanceWithLotsPosition[];
   deposit: number;
   d2Deposit: number;
@@ -83,6 +84,64 @@ interface BalanceWithLotsSnapshot {
   }>;
   syncStatus: 'IN_SYNC' | 'MISMATCH';
   strategiesByPdno: Record<string, BalanceWithLotsStrategyMeta>;
+}
+
+interface LatestPriceLike {
+  price: number;
+}
+
+export function applyLiveTicksToBalanceSnapshot(
+  snapshot: BalanceWithLotsSnapshot | null | undefined,
+  latestTicks: Record<string, LatestPriceLike | null | undefined>,
+): BalanceWithLotsSnapshot | null | undefined {
+  if (!snapshot) return snapshot;
+
+  let changed = false;
+  const positions = snapshot.positions.map((position) => {
+    const livePrice = latestTicks[position.code]?.price;
+    if (
+      typeof livePrice !== 'number' ||
+      !Number.isFinite(livePrice) ||
+      livePrice <= 0 ||
+      livePrice === position.currentPrice
+    ) {
+      return position;
+    }
+
+    changed = true;
+    const evalAmount = position.qty * livePrice;
+    const buyAmount = position.qty * position.avgPrice;
+    const pnlAmount = evalAmount - buyAmount;
+    const pnlRate = buyAmount > 0 ? (pnlAmount / buyAmount) * 100 : 0;
+    return {
+      ...position,
+      currentPrice: livePrice,
+      evalAmount,
+      pnlAmount,
+      pnlRate,
+    };
+  });
+
+  if (!changed) return snapshot;
+
+  const previousEval = snapshot.positions.reduce((sum, position) => sum + position.evalAmount, 0);
+  const totalBuyAmount = positions.reduce(
+    (sum, position) => sum + position.qty * position.avgPrice,
+    0,
+  );
+  const totalEval = positions.reduce((sum, position) => sum + position.evalAmount, 0);
+  const totalPnlAmount = positions.reduce((sum, position) => sum + position.pnlAmount, 0);
+  const totalPnlRate = totalBuyAmount > 0 ? (totalPnlAmount / totalBuyAmount) * 100 : 0;
+
+  return {
+    ...snapshot,
+    positions,
+    totalBuyAmount,
+    totalEval,
+    totalPnlAmount,
+    totalPnlRate,
+    estimatedAsset: snapshot.estimatedAsset + (totalEval - previousEval),
+  };
 }
 
 function readCachedSnapshot(accountId: number | null): BalanceWithLotsSnapshot | null {
@@ -138,7 +197,16 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
       staleTime: 0,
     },
   );
-  const data = (query.data as BalanceWithLotsSnapshot | undefined) ?? cachedSnapshot;
+  const rawData = (query.data as BalanceWithLotsSnapshot | undefined) ?? cachedSnapshot;
+  const livePdnos = useMemo(
+    () => (rawData?.positions ?? []).map((position) => position.code).sort(),
+    [rawData?.positions],
+  );
+  const latestTicks = useLiveTicks(livePdnos, 1000);
+  const data = useMemo(
+    () => applyLiveTicksToBalanceSnapshot(rawData, latestTicks),
+    [rawData, latestTicks],
+  );
   const strategyPdnos = useMemo(() => {
     if (!data) return [];
     return Array.from(
@@ -196,8 +264,7 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
     strategiesByPdno:
       strategyMetaQuery.data?.strategiesByPdno ??
       (strategyPdnos.length > 0 ? {} : (data?.strategiesByPdno ?? {})),
-    isPending:
-      (query.isPending && cachedSnapshot === null) || (hideTransientError && data === null),
+    isPending: (query.isPending && cachedSnapshot === null) || (hideTransientError && data == null),
     error: query.error && !hideTransientError ? { message: query.error.message } : null,
   };
 }
