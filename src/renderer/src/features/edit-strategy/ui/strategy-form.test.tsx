@@ -60,6 +60,25 @@ describe('StrategyForm', () => {
     );
   });
 
+  it('저장 버튼은 sticky action bar 안에 렌더링된다', () => {
+    render(<StrategyForm initial={initial} onSubmit={vi.fn()} />);
+
+    const saveButton = screen.getByRole('button', { name: '자동매매 설정 저장' });
+
+    expect(saveButton.closest('.form-sticky-action-bar')).not.toBeNull();
+    expect(screen.getByText('저장 대상 · 자동매매 설정')).toBeInTheDocument();
+  });
+
+  it('content chrome는 sticky 하단 바 보정 클래스를 적용한다', () => {
+    render(<StrategyForm initial={initial} chrome="content" onSubmit={vi.fn()} />);
+
+    const form = screen.getByRole('form', { name: '자동매매 설정 폼' });
+    const saveButton = screen.getByRole('button', { name: '자동매매 설정 저장' });
+
+    expect(form).toHaveClass('strategy-form--content');
+    expect(saveButton.closest('.strategy-form--content')).toBe(form);
+  });
+
   it('최대 관리차수를 줄였다 늘려도 비활성 차수 값을 보존한다', () => {
     const onSubmit = vi.fn();
     render(<StrategyForm initial={initial} onSubmit={onSubmit} />);
@@ -100,7 +119,11 @@ describe('StrategyForm', () => {
 
   it('템플릿 이름이 비어있으면 저장 버튼이 비활성화된다', () => {
     render(<StrategyForm initial={initial} onSubmit={vi.fn()} onSaveAsPreset={vi.fn()} />);
-    expect(screen.getByRole('button', { name: '템플릿 저장' })).toBeDisabled();
+    const savePresetButton = screen.getByRole('button', { name: '템플릿 저장' });
+    expect(savePresetButton).toBeDisabled();
+    expect(savePresetButton.closest('.form-sticky-action-bar')).toBeNull();
+    expect(screen.getByRole('button', { name: '자동매매 설정 저장' })).toBeInTheDocument();
+
     fireEvent.change(screen.getByRole('textbox', { name: '템플릿 이름' }), {
       target: { value: '기본전략' },
     });

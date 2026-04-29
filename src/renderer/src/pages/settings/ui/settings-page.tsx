@@ -36,6 +36,7 @@ const STRATEGY_TABS_WITH_FEE = [
   { id: 'fee' as const, label: '수수료' },
 ] as const satisfies ReadonlyArray<HtsTabItem<string>>;
 type ExtendedStrategyTab = StrategySettingsTab | 'fee';
+const STRATEGY_STICKY_ACTION_BAR_SCROLLBAR_OFFSET_PX = 52;
 
 // 라벨 정의와 id 유니온을 한 곳에서 동기화 (single source of truth).
 // 'monitoring'(Sentry DSN) 탭은 사용자 facing 가치가 낮아 일시 숨김 — 향후 빌드 환경변수
@@ -96,6 +97,11 @@ export const SettingsPage = (): ReactElement => {
   // 매번 최상단으로 리셋되는 문제(P2-Settings) 해결.
   // strategy 안의 sub-tab(strategyTab) 도 키에 포함해 세분화.
   const tabKey = topTab === 'strategy' ? `${topTab}:${strategyTab}` : topTab;
+  const hasStrategyStickyActionBar =
+    topTab === 'strategy' && (strategyTab === 'basic' || strategyTab === 'templates');
+  const scrollbarOffset = hasStrategyStickyActionBar
+    ? { bottom: STRATEGY_STICKY_ACTION_BAR_SCROLLBAR_OFFSET_PX }
+    : undefined;
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
   const prevTabKeyRef = useRef<string>(tabKey);
 
@@ -170,7 +176,12 @@ export const SettingsPage = (): ReactElement => {
         }}
         className="settings-scroll-area"
       >
-        <OverlayScrollbar containerRef={scrollRef} orientation="vertical" alwaysVisible={true} />
+        <OverlayScrollbar
+          containerRef={scrollRef}
+          orientation="vertical"
+          alwaysVisible={true}
+          {...(scrollbarOffset ? { offset: scrollbarOffset } : {})}
+        />
         <div style={{ display: 'grid', gap: '1rem', minWidth: 0 }}>
           {topTab === 'strategy' && strategyTab === 'fee' ? (
             <Section name="수수료">

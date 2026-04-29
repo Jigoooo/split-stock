@@ -20,16 +20,24 @@ export function OverlayScrollbar({
   const shouldReduceMotion = useReducedMotion();
   const { scrollTop, scrollHeight, clientHeight, scrollLeft, scrollWidth, clientWidth } =
     useScrollState(containerRef);
+  const topOffset = offset?.top ?? 0;
+  const rightOffset = offset?.right ?? 0;
+  const bottomOffset = offset?.bottom ?? 0;
+  const leftOffset = offset?.left ?? 0;
 
   const isHorizontal = orientation === 'horizontal';
+  const verticalTrackHeight = Math.max(0, clientHeight - topOffset - bottomOffset);
 
   // vertical 계산
   const hasVerticalScroll = scrollHeight > clientHeight;
   const thumbHeight = hasVerticalScroll
-    ? Math.max(minThumbSize, (clientHeight / scrollHeight) * clientHeight)
+    ? Math.min(
+        verticalTrackHeight,
+        Math.max(minThumbSize, (clientHeight / scrollHeight) * verticalTrackHeight),
+      )
     : 0;
   const maxScrollTop = scrollHeight - clientHeight;
-  const maxThumbTop = clientHeight - thumbHeight;
+  const maxThumbTop = verticalTrackHeight - thumbHeight;
   const thumbTop = maxScrollTop > 0 ? (scrollTop / maxScrollTop) * maxThumbTop : 0;
 
   // horizontal 계산
@@ -93,7 +101,7 @@ export function OverlayScrollbar({
       <div
         style={{
           position: 'sticky',
-          bottom: offset?.bottom ?? 0,
+          bottom: bottomOffset,
           left: 0,
           width: 0,
           overflow: 'visible',
@@ -109,7 +117,7 @@ export function OverlayScrollbar({
               style={{
                 position: 'absolute',
                 bottom: 0,
-                left: offset?.left ?? 0,
+                left: leftOffset,
                 height: '0.6rem',
                 width: clientWidth,
                 backgroundColor: trackBg,
@@ -175,7 +183,7 @@ export function OverlayScrollbar({
     <div
       style={{
         position: 'sticky',
-        top: offset?.top ?? 0,
+        top: topOffset,
         float: 'right',
         height: 0,
         overflow: 'visible',
@@ -191,9 +199,9 @@ export function OverlayScrollbar({
             style={{
               position: 'absolute',
               top: 0,
-              right: offset?.right ?? 0,
+              right: rightOffset,
               width: '0.6rem',
-              height: clientHeight,
+              height: verticalTrackHeight,
               backgroundColor: trackBg,
               borderRadius: '0.4rem',
               transformOrigin: 'right',

@@ -1,4 +1,12 @@
-import { Button, type HtsTabItem, HtsTabs, Select } from '@renderer/shared/ui';
+import {
+  alertDialog,
+  Button,
+  DialogType,
+  type HtsTabItem,
+  HtsTabs,
+  Select,
+  TextInput,
+} from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { useMemo, useState } from 'react';
@@ -70,6 +78,7 @@ function DefaultStrategyPanel(): ReactElement {
       disabled={strategy.isPending}
       chrome="content"
       submitLabel="기본값 저장"
+      submitContextLabel="기본값"
       onSubmit={(profile) => {
         void strategy.save(profile);
       }}
@@ -81,6 +90,7 @@ function TemplateManagementPanel(): ReactElement {
   const strategy = useEditStrategy(null);
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [draftOverride, setDraftOverride] = useState<StrategyProfile | null>(null);
+  const [newTemplateName, setNewTemplateName] = useState('');
 
   const presets = useMemo(
     () => strategy.presets.data?.presets ?? [],
@@ -88,6 +98,8 @@ function TemplateManagementPanel(): ReactElement {
   );
   const selectedPreset = presets.find((preset) => preset.name === selectedTemplate) ?? null;
   const initial = draftOverride ?? selectedPreset?.profile ?? strategy.active.data?.profile ?? null;
+  const isEditingExisting = selectedTemplate.length > 0;
+  const trimmedNewTemplateName = newTemplateName.trim();
 
   if (strategy.active.isPending || strategy.presets.isPending) {
     return <div className="muted">템플릿 로드 중…</div>;
@@ -110,6 +122,7 @@ function TemplateManagementPanel(): ReactElement {
             const name = event.target.value;
             setSelectedTemplate(name);
             setDraftOverride(null);
+            setNewTemplateName('');
           }}
           aria-label="템플릿 선택"
           disabled={strategy.isPending || presets.length === 0}
@@ -127,6 +140,7 @@ function TemplateManagementPanel(): ReactElement {
           onClick={() => {
             setSelectedTemplate('');
             setDraftOverride(strategy.active.data?.profile ?? null);
+            setNewTemplateName('');
           }}
           disabled={strategy.isPending}
           dense
@@ -135,9 +149,20 @@ function TemplateManagementPanel(): ReactElement {
         </Button>
         <Button
           onClick={() => {
-            if (selectedTemplate) void strategy.removePreset(selectedTemplate);
-            setSelectedTemplate('');
-            setDraftOverride(null);
+            if (!selectedTemplate) return;
+            void (async () => {
+              const confirmed = await alertDialog.confirm({
+                type: DialogType.WARNING,
+                title: '템플릿 삭제',
+                message: `"${selectedTemplate}" 템플릿을 삭제합니다. 이 작업은 되돌릴 수 없습니다.`,
+                confirmText: '삭제',
+                cancelText: '취소',
+              });
+              if (!confirmed) return;
+              await strategy.removePreset(selectedTemplate);
+              setSelectedTemplate('');
+              setDraftOverride(null);
+            })();
           }}
           disabled={!selectedTemplate || strategy.isPending}
           dense
@@ -149,21 +174,70 @@ function TemplateManagementPanel(): ReactElement {
         ) : null}
       </div>
 
+      {isEditingExisting ? (
+        <div className="chip" style={{ justifySelf: 'start' }}>
+          편집 중 · {selectedTemplate}
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.6rem',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            padding: '0.8rem',
+            border: '0.1rem solid var(--border)',
+            borderRadius: '0.6rem',
+            background: 'var(--bg-2, rgba(0,0,0,0.03))',
+          }}
+        >
+          <div style={{ display: 'grid', gap: '0.2rem', minWidth: '12rem' }}>
+            <strong style={{ color: 'var(--fg)' }}>새 템플릿 작성</strong>
+            <span className="muted" style={{ fontSize: '0.95rem' }}>
+              이름을 입력하면 하단 저장 버튼으로 템플릿을 생성합니다.
+            </span>
+          </div>
+          <TextInput
+            id="strategy-template-new-name"
+            value={newTemplateName}
+            onChange={(event) => setNewTemplateName(event.target.value)}
+            placeholder="템플릿 이름"
+            aria-label="새 템플릿 이름"
+            disabled={strategy.isPending}
+            dense
+            style={{ flex: '1 1 16rem', minWidth: '14rem' }}
+          />
+        </div>
+      )}
+
       <StrategyForm
-        key={`${selectedTemplate}:${profileKey(initial)}`}
+        key={`${selectedTemplate || 'new'}:${profileKey(initial)}`}
         initial={initial}
         disabled={strategy.isPending}
         chrome="content"
-        submitLabel="템플릿 덮어쓰기"
-        submitDisabled={!selectedTemplate}
+        submitLabel={isEditingExisting ? '템플릿 덮어쓰기' : '템플릿 저장'}
+        submitContextLabel="템플릿"
+        submitDisabled={isEditingExisting ? !selectedTemplate : trimmedNewTemplateName.length === 0}
         onSubmit={(profile) => {
-          if (!selectedTemplate) return;
-          void strategy.saveAsPreset(selectedTemplate, profile);
-        }}
-        onSaveAsPreset={(name, profile) => {
-          void strategy.saveAsPreset(name, profile);
-          setSelectedTemplate(name);
-          setDraftOverride(null);
+          if (isEditingExisting) {
+            void (async () => {
+              const confirmed = await alertDialog.confirm({
+                type: DialogType.WARNING,
+                title: '템플릿 덮어쓰기',
+                message: `"${selectedTemplate}" 템플릿을 현재 차수 설정으로 덮어씁니다.`,
+                confirmText: '덮어쓰기',
+                cancelText: '취소',
+              });
+              if (!confirmed) return;
+              await strategy.saveAsPreset(selectedTemplate, profile);
+            })();
+            return;
+          }
+          if (trimmedNewTemplateName.length === 0) return;
+          void strategy.saveAsPreset(trimmedNewTemplateName, profile);
+          setSelectedTemplate(trimmedNewTemplateName);
+          setNewTemplateName('');
+          setDraftOverride(profile);
         }}
       />
     </div>

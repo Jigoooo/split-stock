@@ -11,6 +11,7 @@ import {
   Select,
 } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
+import type { CSSProperties } from 'react';
 import { type ReactElement, useMemo, useRef, useState } from 'react';
 import { type TradeHistoryTabKey, useTradeHistoryTabs } from '../model/use-trade-history-tabs';
 import { TradeHistoryList } from './trade-history-list';
@@ -29,6 +30,7 @@ const ALL_TABS: ReadonlyArray<HtsTabItem<TradeHistoryTabKey>> = [
   { id: 'closed', label: '종료' },
   { id: 'memo', label: '종목메모' },
 ];
+const STRATEGY_STICKY_ACTION_BAR_SCROLLBAR_OFFSET_PX = 52;
 
 /**
  * 우측 매매내역 패널 — R2 5탭.
@@ -140,11 +142,22 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
       : active.data?.source === 'global'
         ? '기본값 적용 중'
         : '내장 기본값 적용 중';
+  const openTemplateManagement = (): void => {
+    try {
+      window.localStorage.setItem('popout:settings:initialTab', 'strategy');
+      window.localStorage.setItem('popout:settings:strategyTab', 'templates');
+    } catch {
+      // localStorage 차단 시 — 기본 탭 fallback.
+    }
+    onOpenStrategySettings?.();
+  };
 
   return (
     <div
       ref={scrollRef}
       style={{
+        flex: 1,
+        minHeight: 0,
         overflow: 'auto',
         padding: 0,
         scrollbarWidth: 'none',
@@ -154,14 +167,19 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
         containerRef={scrollRef}
         orientation="vertical"
         alwaysVisible={true}
-        offset={{ right: 2 }}
+        offset={{ right: 2, bottom: STRATEGY_STICKY_ACTION_BAR_SCROLLBAR_OFFSET_PX }}
       />
       <div
-        style={{
-          padding: '0.8rem 1.6rem 0.8rem 0.8rem',
-          display: 'grid',
-          gap: '0.8rem',
-        }}
+        style={
+          {
+            '--form-sticky-action-bar-bleed-left': '0.8rem',
+            '--form-sticky-action-bar-bleed-right': '1.6rem',
+            '--form-sticky-action-bar-bleed-bottom': '0.8rem',
+            padding: '0.8rem 1.6rem 0.8rem 0.8rem',
+            display: 'grid',
+            gap: '0.8rem',
+          } as CSSProperties
+        }
       >
         <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="chip">{sourceLabel}</span>
@@ -205,27 +223,19 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
           </Select>
           <Button
             onClick={() => {
-              if (presetItems.length === 0) {
-                // "템플릿 관리" — 설정 팝아웃을 매매설정관리 + 템플릿 관리 sub-tab 으로 이동.
-                try {
-                  window.localStorage.setItem('popout:settings:initialTab', 'strategy');
-                  window.localStorage.setItem('popout:settings:strategyTab', 'templates');
-                } catch {
-                  // localStorage 차단 시 — 기본 탭 fallback.
-                }
-                onOpenStrategySettings?.();
-                return;
-              }
               if (selectedPreset) setInitialOverride(selectedPreset.profile);
             }}
-            disabled={
-              isPending ||
-              (presetItems.length === 0 && !onOpenStrategySettings) ||
-              (presetItems.length > 0 && !selectedPreset)
-            }
+            disabled={isPending || !selectedPreset}
             dense
           >
-            {presetItems.length === 0 ? '템플릿 관리' : '템플릿 불러오기'}
+            템플릿 불러오기
+          </Button>
+          <Button
+            onClick={openTemplateManagement}
+            disabled={isPending || !onOpenStrategySettings}
+            dense
+          >
+            템플릿 관리
           </Button>
           <RecommendStrategyButton
             pdno={pdno}
@@ -241,6 +251,7 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
           disabled={isPending}
           chrome="content"
           submitLabel="종목 설정 저장"
+          submitContextLabel="종목 설정"
           onSubmit={(profile) => {
             void save(profile);
             setInitialOverride(null);

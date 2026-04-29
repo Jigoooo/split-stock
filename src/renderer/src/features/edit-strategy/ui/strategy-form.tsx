@@ -1,4 +1,4 @@
-import { Select } from '@renderer/shared/ui';
+import { Button, Select, TextInput } from '@renderer/shared/ui';
 import type { StrategyAutoMode, StrategyOrderType, StrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
@@ -26,6 +26,7 @@ export interface StrategyFormProps {
   submitLabel?: string;
   submitAriaLabel?: string;
   submitDisabled?: boolean;
+  submitContextLabel?: string;
 }
 
 export const StrategyForm = (props: StrategyFormProps): ReactElement => {
@@ -39,6 +40,7 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
   const activeMaxStages = Number(raw.maxStages);
   const validated = validateProfile(toProfile(raw, rows, props.initial));
   const showPresetSave = props.onSaveAsPreset !== undefined;
+  const canSavePreset = !props.disabled && presetInput.trim().length > 0 && validated.ok;
 
   const updateRaw = <K extends keyof FormRaw>(key: K, value: FormRaw[K]): void => {
     setRaw((prev) => ({ ...prev, [key]: value }));
@@ -98,13 +100,16 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
   const autoBuyEnabled = raw.autoMode === 'ALL_ON' || raw.autoMode === 'BUY_ONLY';
   const autoSellEnabled = raw.autoMode === 'ALL_ON' || raw.autoMode === 'SELL_ONLY';
   const bodyStyle = { display: 'grid', gap: '1rem' } as const;
+  const formClassName =
+    chrome === 'panel' ? 'panel strategy-form' : 'strategy-form strategy-form--content';
+  const submitContextLabel =
+    props.submitContextLabel ?? inferSubmitContextLabel(props.submitLabel ?? '자동매매 설정 저장');
 
   return (
     <form
-      className={chrome === 'panel' ? 'panel' : undefined}
+      className={formClassName}
       onSubmit={(event) => event.preventDefault()}
       aria-label="자동매매 설정 폼"
-      style={chrome === 'content' ? bodyStyle : undefined}
     >
       <div className={chrome === 'panel' ? 'panel__body' : undefined} style={bodyStyle}>
         <section
@@ -144,6 +149,66 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
           </div>
         </section>
 
+        {showPresetSave ? (
+          <section
+            aria-label="템플릿으로 저장"
+            style={{
+              display: 'grid',
+              gap: '0.6rem',
+              padding: '0.8rem',
+              border: '0.1rem solid var(--border)',
+              borderRadius: '0.6rem',
+              background: 'var(--bg-2, rgba(0,0,0,0.03))',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.8rem',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ display: 'grid', gap: '0.2rem', minWidth: '12rem' }}>
+                <strong style={{ fontSize: '1.05rem', color: 'var(--fg)' }}>템플릿으로 저장</strong>
+                <span className="muted" style={{ fontSize: '0.95rem' }}>
+                  현재 차수 설정을 새 템플릿 이름으로 저장합니다.
+                </span>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: '0.5rem',
+                  flex: '1 1 18rem',
+                  minWidth: 0,
+                }}
+              >
+                <TextInput
+                  id="strategy-preset-name"
+                  value={presetInput}
+                  onChange={(event) => setPresetInput(event.target.value)}
+                  placeholder="템플릿 이름"
+                  aria-label="템플릿 이름"
+                  disabled={props.disabled}
+                  dense
+                  style={{ flex: '1 1 12rem', minWidth: '10rem' }}
+                />
+                <Button
+                  onClick={handleSavePreset}
+                  disabled={!canSavePreset}
+                  dense
+                  aria-label="템플릿 저장"
+                >
+                  템플릿 저장
+                </Button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <StageRulesEditor
           rows={rows}
           activeMaxStages={activeMaxStages}
@@ -166,18 +231,20 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
         />
       </div>
       <StrategyFormActions
-        canSavePreset={!props.disabled && presetInput.trim().length > 0 && validated.ok}
         canSubmit={!props.disabled && !props.submitDisabled && validated.ok}
         chrome={chrome}
-        disabled={props.disabled}
-        onSavePreset={handleSavePreset}
         onSubmit={handleSubmit}
-        presetInput={presetInput}
-        setPresetInput={setPresetInput}
-        showPresetSave={showPresetSave}
         submitAriaLabel={props.submitAriaLabel}
+        submitContextLabel={submitContextLabel}
         submitLabel={props.submitLabel}
       />
     </form>
   );
 };
+
+function inferSubmitContextLabel(label: string): string {
+  if (label.includes('종목')) return '종목 설정';
+  if (label.includes('기본')) return '기본값';
+  if (label.includes('템플릿')) return '템플릿';
+  return '자동매매 설정';
+}

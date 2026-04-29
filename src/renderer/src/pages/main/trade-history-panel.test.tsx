@@ -3,6 +3,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TradeHistoryPanel } from './ui/trade-history-panel';
 
+vi.mock('@renderer/features/ai-strategy-recommend', () => ({
+  RecommendStrategyButton: () => <button type="button">AI 추천</button>,
+}));
+
 vi.mock('@renderer/shared/api/trpc', () => ({
   trpc: {
     account: {
@@ -42,7 +46,53 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       get: {
         useQuery: () => ({ data: null, isPending: false, error: null }),
       },
+      getEffectiveForEdit: {
+        useQuery: () => ({
+          data: {
+            effectiveProfile: {
+              version: 2,
+              maxStages: 5,
+              buyRules: Array.from({ length: 50 }, (_, index) => ({
+                nth: index + 1,
+                triggerDropPct: index === 0 ? null : 0.03,
+                amountKrw: 1_000_000,
+              })),
+              sellRules: Array.from({ length: 50 }, (_, index) => ({
+                nth: index + 1,
+                targetProfitPct: 0.05,
+              })),
+              autoBuyEnabled: true,
+              autoBuyOrderType: 'LIMIT',
+              autoSellEnabled: true,
+              autoSellOrderType: 'LIMIT',
+            },
+            source: 'global',
+            hasOverride: false,
+          },
+          isPending: false,
+          error: null,
+        }),
+        invalidate: vi.fn(),
+      },
+      getActive: { invalidate: vi.fn() },
+      getEffectiveMetas: { invalidate: vi.fn() },
+      listPresets: {
+        useQuery: () => ({ data: { presets: [] }, isPending: false, error: null }),
+        invalidate: vi.fn(),
+      },
       set: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      setActive: {
+        useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+      },
+      clearActive: {
+        useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+      },
+      savePreset: {
+        useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+      },
+      deletePreset: {
+        useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+      },
     },
     symbolMemo: {
       get: {
@@ -55,6 +105,16 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       tradingWindows: { list: { invalidate: vi.fn() } },
       rateGuard: { getSettings: { invalidate: vi.fn() } },
       lots: { cyclesByPdno: { invalidate: vi.fn() } },
+      strategy: {
+        getActive: { invalidate: vi.fn() },
+        getEffectiveForEdit: { invalidate: vi.fn() },
+        getEffectiveMetas: { invalidate: vi.fn() },
+        listPresets: { invalidate: vi.fn() },
+      },
+      account: {
+        getBalanceWithLots: { invalidate: vi.fn() },
+        getPositionOverlay: { invalidate: vi.fn() },
+      },
     }),
   },
 }));
@@ -86,5 +146,19 @@ describe('TradeHistoryPanel', () => {
       'aria-selected',
       'false',
     );
+  });
+
+  it('종목 자동매매 탭은 저장 버튼과 템플릿 관리 진입을 항상 보여준다', () => {
+    const openSettings = vi.fn();
+
+    render(<TradeHistoryPanel accountId={1} pdno="005930" onOpenStrategySettings={openSettings} />);
+
+    expect(screen.getByRole('button', { name: '종목 설정 저장' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '템플릿 관리' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '템플릿 불러오기' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: '템플릿 관리' }));
+
+    expect(openSettings).toHaveBeenCalledTimes(1);
   });
 });

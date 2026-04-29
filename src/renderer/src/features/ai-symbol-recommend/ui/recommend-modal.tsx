@@ -147,6 +147,7 @@ export const RecommendModal = ({
     () => [...view.ranked, ...view.userInputResults],
     [view.ranked, view.userInputResults],
   );
+  const hasResults = !view.isPending && !view.error && allItems.length > 0;
   const [selectedPdno, setSelectedPdno] = useState<string | null>(null);
   const selectedItem = allItems.find((item) => item.pdno === selectedPdno) ?? allItems[0] ?? null;
 
@@ -214,6 +215,7 @@ export const RecommendModal = ({
               width: 'min(96rem, calc(100vw - 3.2rem))',
               maxWidth: 'calc(100vw - 3.2rem)',
               maxHeight: 'calc(100vh - 3.2rem)',
+              height: hasResults ? 'min(72rem, calc(100vh - 3.2rem))' : undefined,
               overflow: 'hidden',
               backgroundColor: 'var(--bg)',
               border: '0.1rem solid var(--border)',
@@ -221,6 +223,8 @@ export const RecommendModal = ({
               boxShadow: '0 24px 64px rgba(0, 0, 0, 0.25)',
               padding: '1.6rem',
               boxSizing: 'border-box',
+              display: 'flex',
+              flexDirection: 'column',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -231,6 +235,7 @@ export const RecommendModal = ({
                 justifyContent: 'space-between',
                 gap: '0.8rem',
                 marginBottom: '1.2rem',
+                flex: '0 0 auto',
               }}
             >
               <div
@@ -332,7 +337,7 @@ export const RecommendModal = ({
               </div>
             </div>
 
-            <div style={{ marginBottom: '1.2rem' }}>
+            <div style={{ marginBottom: '1.2rem', flex: '0 0 auto' }}>
               <ExtraPdnoPicker
                 extras={extras}
                 onAdd={onAddExtra}
@@ -450,8 +455,13 @@ export const RecommendModal = ({
                 style={{
                   display: 'grid',
                   gridTemplateColumns: isNarrow ? '1fr' : 'minmax(18rem, 22rem) minmax(0, 1fr)',
+                  gridTemplateRows: isNarrow
+                    ? 'minmax(0, 1fr) minmax(0, 1fr) auto'
+                    : 'minmax(0, 1fr) auto',
                   gap: '1rem',
-                  minHeight: '32rem',
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  overflow: 'hidden',
                 }}
               >
                 <div
@@ -459,9 +469,10 @@ export const RecommendModal = ({
                     display: 'grid',
                     gap: '1rem',
                     alignContent: 'start',
-                    maxHeight: 'calc(100vh - 15rem)',
+                    minHeight: 0,
                     overflowY: 'auto',
                     paddingRight: '0.25rem',
+                    paddingBottom: '0.6rem',
                   }}
                 >
                   <section style={{ display: 'grid', gap: '0.6rem' }}>
@@ -548,12 +559,13 @@ export const RecommendModal = ({
                 <section
                   style={{
                     minWidth: 0,
-                    maxHeight: 'calc(100vh - 15rem)',
+                    minHeight: 0,
                     overflowY: 'auto',
                     border: '0.1rem solid var(--border)',
                     borderRadius: '0.8rem',
                     background: 'var(--bg-2, rgba(0,0,0,0.02))',
                     padding: '1rem',
+                    boxSizing: 'border-box',
                   }}
                 >
                   {selectedItem ? <RecommendDetail item={selectedItem} onPick={onPick} /> : null}

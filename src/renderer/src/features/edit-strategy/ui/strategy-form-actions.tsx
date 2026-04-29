@@ -1,65 +1,54 @@
-import { Button, TextInput } from '@renderer/shared/ui';
-import type { Dispatch, ReactElement, SetStateAction } from 'react';
+import { Button } from '@renderer/shared/ui';
+import type { ReactElement } from 'react';
 import type { FormChrome } from '../model/strategy-form-types';
 
 interface StrategyFormActionsProps {
-  canSavePreset: boolean;
   canSubmit: boolean;
   chrome: FormChrome;
-  disabled?: boolean | undefined;
-  onSavePreset: () => void;
   onSubmit: () => void;
-  presetInput: string;
-  setPresetInput: Dispatch<SetStateAction<string>>;
-  showPresetSave: boolean;
   submitAriaLabel: string | undefined;
+  submitContextLabel: string;
   submitLabel: string | undefined;
 }
 
 const actionsStyle = {
   display: 'flex',
+  alignItems: 'center',
   gap: '0.6rem',
-  justifyContent: 'flex-end',
+  justifyContent: 'space-between',
   flexWrap: 'wrap',
 } as const;
 
 export const StrategyFormActions = ({
-  canSavePreset,
   canSubmit,
   chrome,
-  disabled,
-  onSavePreset,
   onSubmit,
-  presetInput,
-  setPresetInput,
-  showPresetSave,
   submitAriaLabel,
+  submitContextLabel,
   submitLabel,
 }: StrategyFormActionsProps): ReactElement => (
-  <div className={chrome === 'panel' ? 'panel__body' : undefined} style={actionsStyle}>
-    {showPresetSave ? (
-      <>
-        <TextInput
-          id="strategy-preset-name"
-          value={presetInput}
-          onChange={(event) => setPresetInput(event.target.value)}
-          placeholder="템플릿 이름"
-          aria-label="템플릿 이름"
-          disabled={disabled}
-          dense
-          style={{ flex: 1, minWidth: 120 }}
-        />
-        <Button onClick={onSavePreset} disabled={!canSavePreset} dense aria-label="템플릿 저장">
-          템플릿 저장
-        </Button>
-      </>
-    ) : null}
+  <div
+    className={`${chrome === 'panel' ? 'panel__body ' : ''}form-sticky-action-bar`}
+    style={actionsStyle}
+  >
+    <span
+      className="muted"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        minHeight: '2.4rem',
+        fontSize: '1rem',
+        fontWeight: 600,
+      }}
+    >
+      저장 대상 · {submitContextLabel}
+    </span>
     <Button
       onClick={onSubmit}
       disabled={!canSubmit}
       dense
       variant="primary"
-      aria-label={submitAriaLabel ?? '자동매매 설정 저장'}
+      aria-label={submitAriaLabel ?? submitLabel ?? '자동매매 설정 저장'}
     >
       {submitLabel ?? '저장'}
     </Button>

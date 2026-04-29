@@ -2564,12 +2564,32 @@ body {
   position: sticky;
   bottom: 0;
   z-index: 5;
+  box-sizing: border-box;
   display: flex;
   gap: 0.6rem;
   justify-content: flex-end;
   padding: 0.55rem 0.85rem;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--bg), var(--bg));
   border-top: 1px solid var(--border);
+  box-shadow: 0 -0.7rem 1.1rem -1rem rgba(15, 23, 42, 0.35);
+}
+
+.strategy-form {
+  min-width: 0;
+}
+
+.strategy-form--content {
+  display: grid;
+  gap: 1rem;
+}
+
+.strategy-form--content .form-sticky-action-bar {
+  margin-right: calc(-1 * var(--form-sticky-action-bar-bleed-right, 0.8rem));
+  margin-bottom: calc(-1 * var(--form-sticky-action-bar-bleed-bottom, 0.8rem));
+  margin-left: calc(-1 * var(--form-sticky-action-bar-bleed-left, 0.8rem));
+  padding-right: calc(0.85rem + var(--form-sticky-action-bar-bleed-right, 0.8rem));
+  padding-left: calc(0.85rem + var(--form-sticky-action-bar-bleed-left, 0.8rem));
 }
 
 /* 자격증명 / 계좌정보 등 두 fieldset 을 좌우 배치. ≥640px 자동 2열, 그 미만 단일. */
