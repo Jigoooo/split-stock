@@ -1,5 +1,5 @@
 import { useMediaQuery } from '@renderer/shared/lib/interaction';
-import { Button, TableGrid } from '@renderer/shared/ui';
+import { AnimatedProgress, Button, TableGrid } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
@@ -22,6 +22,12 @@ export interface StrategyPreviewModalProps {
   dataQualityReason?: string | undefined;
   error?: string | null;
   isPending?: boolean;
+  progress?: {
+    percent: number;
+    label: string;
+    detail: string;
+    elapsedMs: number;
+  } | null;
   onApply: () => void;
   onDismiss: () => void;
   onRetry?: () => void;
@@ -43,11 +49,12 @@ export const StrategyPreviewModal = ({
   dataQualityReason,
   error = null,
   isPending = false,
+  progress = null,
   onApply,
   onDismiss,
   onRetry,
 }: StrategyPreviewModalProps): ReactElement => {
-  const shouldRender = open && (profile !== null || error !== null || isPending);
+  const shouldRender = open;
   const [selectedNth, setSelectedNth] = useState(1);
   const isNarrow = useMediaQuery('(max-width: 860px)');
   useEffect(() => {
@@ -57,7 +64,9 @@ export const StrategyPreviewModal = ({
     ? 'AI 추천 strategy 분석 중'
     : error
       ? 'AI 추천 strategy 실패'
-      : `AI 추천 strategy 상세 (${profile?.maxStages ?? 0}차)`;
+      : profile
+        ? `AI 추천 strategy 상세 (${profile.maxStages}차)`
+        : 'AI 추천 strategy';
   const stages = profile
     ? Array.from({ length: profile.maxStages }, (_, index) => ({
         id: `stage-${index + 1}`,
@@ -88,6 +97,9 @@ export const StrategyPreviewModal = ({
           onClick={onDismiss}
         >
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 6 }}
@@ -151,6 +163,15 @@ export const StrategyPreviewModal = ({
                 <div className="muted" style={{ fontSize: '1.2rem' }}>
                   종목 통계와 공시 컨텍스트를 분석 중...
                 </div>
+                {progress ? (
+                  <AnimatedProgress
+                    percent={progress.percent}
+                    label={progress.label}
+                    meta={`${Math.round(progress.percent)}% · ${formatElapsed(progress.elapsedMs)}`}
+                    detail={progress.detail}
+                    ariaLabel={progress.label}
+                  />
+                ) : null}
               </div>
             ) : error ? (
               <div
@@ -270,7 +291,26 @@ export const StrategyPreviewModal = ({
                   </div>
                 </div>
               </>
-            ) : null}
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  padding: '3.2rem 1rem',
+                  textAlign: 'center',
+                }}
+              >
+                <Sparkles size={32} color="#D97757" />
+                <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--fg)' }}>
+                  차수 분석을 시작할 준비가 되었습니다.
+                </div>
+                <div className="muted" style={{ fontSize: '1.05rem', lineHeight: 1.55 }}>
+                  종목 통계, 뉴스, 공시, 시장 컨텍스트를 새로 수집해 추천안을 만듭니다.
+                </div>
+              </div>
+            )}
 
             <div
               style={{
@@ -303,7 +343,7 @@ export const StrategyPreviewModal = ({
                 <Button variant="ghost" dense onClick={onDismiss}>
                   닫기
                 </Button>
-              ) : (
+              ) : profile ? (
                 <>
                   <Button variant="ghost" dense onClick={onDismiss}>
                     취소
@@ -321,6 +361,25 @@ export const StrategyPreviewModal = ({
                     폼에 적용
                   </Button>
                 </>
+              ) : (
+                <>
+                  <Button variant="ghost" dense onClick={onDismiss}>
+                    취소
+                  </Button>
+                  <Button
+                    variant="primary"
+                    dense
+                    iconLeading={<Sparkles size={14} />}
+                    onClick={onRetry}
+                    style={{
+                      backgroundColor: '#D97757',
+                      borderColor: '#D97757',
+                      minWidth: '8rem',
+                    }}
+                  >
+                    분석 시작
+                  </Button>
+                </>
               )}
             </div>
           </motion.div>
@@ -330,6 +389,14 @@ export const StrategyPreviewModal = ({
     document.body,
   );
 };
+
+function formatElapsed(ms: number): string {
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  if (sec < 60) return `${sec}초`;
+  const min = Math.floor(sec / 60);
+  const rest = sec % 60;
+  return rest > 0 ? `${min}분 ${rest}초` : `${min}분`;
+}
 
 function StageRow({ nth, profile }: { nth: number; profile: StrategyProfile }): ReactElement {
   const buy = profile.buyRules[nth - 1];

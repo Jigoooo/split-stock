@@ -42,10 +42,10 @@ export const DartCorpCodeSection = (): ReactElement => {
       'OpenDART API 키가 빌드 시점에 임베드되어야 합니다. 시스템 관리자에게 문의하세요.';
     statusTone = 'off';
   } else if (stale) {
-    statusLabel = '갱신 필요 (없음 또는 30일 이상 경과)';
+    statusLabel = '갱신 필요 (없음 또는 1일 이상 경과)';
     statusTone = 'warn';
   } else {
-    statusLabel = '최신 (30일 이내)';
+    statusLabel = '최신 (당일 캐시)';
     statusTone = 'ok';
   }
 
@@ -84,7 +84,8 @@ export const DartCorpCodeSection = (): ReactElement => {
       <div className="panel__body" style={{ display: 'grid', gap: '0.6rem' }}>
         <div className="muted" style={{ fontSize: '1.1rem', lineHeight: 1.6 }}>
           종목별 strategy AI 추천 시 OpenDART 의 최근 공시를 컨텍스트로 사용하려면 stock_code →
-          corp_code 매핑이 필요합니다. 한 번 갱신하면 30일간 캐시 유지.
+          corp_code 매핑이 필요합니다. 앱 실행 시 매일 자동 갱신하고, 버튼으로 즉시 다시 갱신할 수
+          있습니다.
         </div>
         <span
           className="chip"

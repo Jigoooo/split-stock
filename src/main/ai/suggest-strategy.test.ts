@@ -130,4 +130,50 @@ describe('suggestStrategy', () => {
     expect(result.suggestion?.evidenceRefs.some((ref) => ref.kind === 'dataQuality')).toBe(true);
     expect(result.suggestion?.evidenceRefs.some((ref) => ref.id === 'made-up')).toBe(false);
   });
+
+  it('recovers slightly non-conforming AI JSON and logs parse recovery details', async () => {
+    const raw = {
+      maxStages: '5',
+      buyRules: [
+        { nth: '1', triggerDropPct: '수동 진입', amountKrw: '100,000원' },
+        { nth: '2', triggerDropPct: '3%', amountKrw: '120,000원' },
+        { nth: '3', triggerDropPct: '3.5%', amountKrw: '130,000원' },
+        { nth: '4', triggerDropPct: '4%', amountKrw: '140,000원' },
+        { nth: '5', triggerDropPct: '4.5%', amountKrw: '150,000원' },
+      ],
+      sellRules: [
+        { nth: '1', targetProfitPct: '3%' },
+        { nth: '2', targetProfitPct: '2.7%' },
+        { nth: '3', targetProfitPct: '2.5%' },
+        { nth: '4', targetProfitPct: '2.3%' },
+        { nth: '5', targetProfitPct: '2.1%' },
+      ],
+      reasoning: '모델이 퍼센트 문자열과 medium confidence를 반환해도 복구한다.',
+      stageRationales: [{ nth: 1, rationale: '근거', evidenceRefs: [{ id: 'data:limited' }] }],
+      globalRisks: ['limited data'],
+      evidenceRefs: [{ id: 'data:limited', kind: 'quality', title: '제한 분석', detail: '테스트' }],
+      analysisConfidence: 'medium',
+      dataQuality: 'limited',
+    };
+    const chat = vi.fn().mockResolvedValue({
+      parsed: null,
+      text: `응답:\n\`\`\`json\n${JSON.stringify(raw)}\n\`\`\``,
+      toolCalls: [],
+    } satisfies ChatResponse<StrategySuggestion>);
+    const logger = { log: vi.fn() };
+
+    const result = await suggestStrategy({
+      ...baseInput(createRepo(45), chat),
+      logger: logger as unknown as EventLogger,
+    });
+
+    expect(result.suggestion).not.toBeNull();
+    expect(result.suggestion?.buyRules[1]?.triggerDropPct).toBe(0.03);
+    expect(result.suggestion?.analysisConfidence).toBe('low');
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'ai.suggest-strategy.parse-recovered',
+      }),
+    );
+  });
 });

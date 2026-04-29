@@ -1,3 +1,5 @@
+export type { AnimatedProgressProps } from './animated-progress';
+export { AnimatedProgress } from './animated-progress';
 export type { ButtonProps } from './button';
 export { Button } from './button';
 export type { CheckboxProps } from './checkbox';

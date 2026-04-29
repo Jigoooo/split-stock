@@ -258,7 +258,7 @@ function buildProgress(elapsedMs: number, aiOff: boolean): RecommendationProgres
 
   return {
     key: current.key,
-    percent: Math.round(percent),
+    percent,
     label: current.label,
     detail: current.detail,
     elapsedMs,
@@ -362,7 +362,7 @@ export function useSymbolRecommendations() {
     };
 
     tick();
-    const id = window.setInterval(tick, 800);
+    const id = window.setInterval(tick, 250);
     return () => window.clearInterval(id);
   }, [aiOff, view.isPending]);
 

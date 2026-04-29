@@ -4,8 +4,8 @@ import { trpc } from '@renderer/shared/api/trpc';
 import { DialogProvider } from '@renderer/shared/ui';
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import type { PropsWithChildren, ReactElement } from 'react';
-import { useEffect, useState } from 'react';
-import { Toaster } from 'sonner';
+import { useEffect, useRef, useState } from 'react';
+import { Toaster, toast } from 'sonner';
 import superjson from 'superjson';
 import { ipcLink } from 'trpc-electron/renderer';
 
@@ -44,6 +44,88 @@ const SettingsSyncRuntime = (): null => {
   return null;
 };
 
+interface MarketSourceStatus {
+  isAvailable: boolean;
+  isStale: boolean;
+  lastError: string | null;
+}
+
+const autoRefreshKeys = {
+  market: '',
+  dart: '',
+};
+
+const AiDataAutoRefreshRuntime = (): null => {
+  const utils = trpc.useUtils();
+  const marketStatus = trpc.ai.getMarketContextStatus.useQuery(undefined, { staleTime: 30_000 });
+  const dartStatus = trpc.ai.getDartCorpCodeStatus.useQuery(undefined, { staleTime: 30_000 });
+  const marketHadPreviousErrorRef = useRef(false);
+
+  const marketRefresh = trpc.ai.refreshMarketContext.useMutation({
+    onSuccess: () => {
+      void utils.ai.getMarketContextStatus.invalidate();
+      if (marketHadPreviousErrorRef.current) {
+        toast.success('KRX/ECOS 컨텍스트 자동 복구 완료');
+      }
+      marketHadPreviousErrorRef.current = false;
+    },
+    onError: (err) => {
+      toast.error(`KRX/ECOS 자동 갱신 실패: ${err.message}`);
+    },
+  });
+  const dartRefresh = trpc.ai.syncDartCorpCodes.useMutation({
+    onSuccess: (res) => {
+      void utils.ai.getDartCorpCodeStatus.invalidate();
+      if (res.inserted === 0) {
+        toast.error(`DART 매핑 자동 갱신 실패: ${res.reason ?? '원인 불명'}`);
+      }
+    },
+    onError: (err) => {
+      toast.error(`DART 매핑 자동 갱신 실패: ${err.message}`);
+    },
+  });
+
+  useEffect(() => {
+    const krx = marketStatus.data?.krx;
+    const ecos = marketStatus.data?.ecos;
+    if (!krx && !ecos) return;
+    if (marketRefresh.isPending) return;
+    const shouldRefresh = sourceNeedsRefresh(krx) || sourceNeedsRefresh(ecos);
+    if (!shouldRefresh) return;
+    const hadPreviousError = Boolean(krx?.lastError || ecos?.lastError);
+    const key = [
+      krx?.isAvailable,
+      krx?.isStale,
+      krx?.lastSuccessAt,
+      krx?.lastError,
+      ecos?.isAvailable,
+      ecos?.isStale,
+      ecos?.lastSuccessAt,
+      ecos?.lastError,
+    ].join('|');
+    if (autoRefreshKeys.market === key) return;
+    autoRefreshKeys.market = key;
+    marketHadPreviousErrorRef.current = hadPreviousError;
+    marketRefresh.mutate({});
+  }, [marketRefresh, marketRefresh.isPending, marketStatus.data?.ecos, marketStatus.data?.krx]);
+
+  useEffect(() => {
+    const status = dartStatus.data;
+    if (!status?.available || !status.stale) return;
+    if (dartRefresh.isPending) return;
+    const key = `${status.available}|${status.stale}`;
+    if (autoRefreshKeys.dart === key) return;
+    autoRefreshKeys.dart = key;
+    dartRefresh.mutate();
+  }, [dartRefresh, dartRefresh.isPending, dartStatus.data]);
+
+  return null;
+};
+
+function sourceNeedsRefresh(status: MarketSourceStatus | undefined): boolean {
+  return Boolean(status?.isAvailable && (status.isStale || status.lastError));
+}
+
 export const AppProviders = ({ children }: PropsWithChildren): ReactElement => {
   const [queryClient] = useState(() => createQueryClient());
   const [trpcClient] = useState(() =>
@@ -58,6 +140,7 @@ export const AppProviders = ({ children }: PropsWithChildren): ReactElement => {
       <QueryClientProvider client={queryClient}>
         <DisplaySettingsRuntime />
         <SettingsSyncRuntime />
+        <AiDataAutoRefreshRuntime />
         <Toaster
           position="top-right"
           theme="light"

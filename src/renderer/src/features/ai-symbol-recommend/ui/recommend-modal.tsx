@@ -1,5 +1,5 @@
 import { useMediaQuery } from '@renderer/shared/lib/interaction';
-import { Button } from '@renderer/shared/ui';
+import { AnimatedProgress, Button } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
 import {
@@ -74,57 +74,13 @@ function formatElapsed(ms: number): string {
 
 function LoadingProgress({ progress }: { progress: RecommendationProgressState }): ReactElement {
   return (
-    <div
-      style={{
-        width: '100%',
-        maxWidth: '34rem',
-        display: 'grid',
-        gap: '0.55rem',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          gap: '0.8rem',
-        }}
-      >
-        <strong style={{ fontSize: '1.08rem', color: 'var(--fg)' }}>{progress.label}</strong>
-        <span className="muted" style={{ fontSize: '0.95rem' }}>
-          {progress.percent}% · {formatElapsed(progress.elapsedMs)}
-        </span>
-      </div>
-      <div
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={progress.percent}
-        aria-label={progress.label}
-        style={{
-          width: '100%',
-          height: '0.7rem',
-          borderRadius: '999px',
-          overflow: 'hidden',
-          backgroundColor: 'var(--border)',
-        }}
-      >
-        <motion.div
-          initial={false}
-          animate={{ width: `${progress.percent}%` }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
-          style={{
-            width: `${progress.percent}%`,
-            height: '100%',
-            borderRadius: '999px',
-            backgroundColor: '#D97757',
-          }}
-        />
-      </div>
-      <div className="muted" style={{ fontSize: '1rem', textAlign: 'center', lineHeight: 1.45 }}>
-        {progress.detail}
-      </div>
-    </div>
+    <AnimatedProgress
+      percent={progress.percent}
+      label={progress.label}
+      meta={`${Math.round(progress.percent)}% · ${formatElapsed(progress.elapsedMs)}`}
+      detail={progress.detail}
+      ariaLabel={progress.label}
+    />
   );
 }
 

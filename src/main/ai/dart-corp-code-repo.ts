@@ -19,14 +19,14 @@ export interface DartCorpCodeRepoOptions {
 }
 
 const DART_CORP_CODE_URL = 'https://opendart.fss.or.kr/api/corpCode.xml';
-const STALE_MS = 30 * 24 * 60 * 60 * 1000; // 30일
+const STALE_MS = 24 * 60 * 60 * 1000; // 1일
 
 /**
  * DART corp_code 매핑 저장소 + sync 파이프라인.
  *
  * - sync(): zip 다운로드 → corpCode.xml 추출 → 상장 종목만 upsert
  * - findByStockCode(): DB lookup
- * - isStale(): 30일 이상 갱신 안 됐으면 true
+ * - isStale(): 1일 이상 갱신 안 됐으면 true
  *
  * XML 은 flat 구조라 별도 파서 없이 정규식으로 파싱 — 의존성 추가 회피.
  */
@@ -57,7 +57,7 @@ export class DartCorpCodeRepo {
     };
   }
 
-  /** 마지막 sync 후 30일 이상 경과하거나 데이터 없으면 stale. */
+  /** 마지막 sync 후 1일 이상 경과하거나 데이터 없으면 stale. */
   isStale(): boolean {
     const sample = this.opts.db.select().from(dartCorpCodes).limit(1).get();
     if (!sample) return true;
@@ -67,7 +67,7 @@ export class DartCorpCodeRepo {
 
   /**
    * OpenDART corpCode 전체 sync. 약 1.5MB zip → ~3MB XML → 100K+ 회사 (상장은 ~3K).
-   * 한 번 받으면 30일 재사용. UI '갱신' 버튼 또는 부팅 시 stale 검사로 호출.
+   * 한 번 받으면 당일 재사용. UI '갱신' 버튼 또는 부팅 시 stale 검사로 호출.
    */
   async sync(): Promise<{ inserted: number; reason?: string }> {
     if (!this.isAvailable()) {

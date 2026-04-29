@@ -60,7 +60,8 @@ export const MarketContextSection = (): ReactElement => {
           <StatusChip label="ECOS" status={ecos} />
         </div>
         <div className="muted" style={{ fontSize: '1.1rem', lineHeight: 1.6 }}>
-          종목 추천은 KRX 종가/시가총액과 ECOS 기본 지표를 캐시된 보조 사실로만 사용합니다.
+          종목 추천은 KRX 종가/시가총액과 ECOS 기본 지표를 캐시된 보조 사실로만 사용합니다. 앱 실행
+          시 매일 자동 갱신하고, 오류가 남아 있으면 자동 재시도합니다.
         </div>
       </div>
     </div>

@@ -74,6 +74,46 @@ const StrategySuggestionSchema = z.object({
 
 export type StrategySuggestion = z.infer<typeof StrategySuggestionSchema>;
 
+const LenientStrategySuggestionSchema = z.object({
+  maxStages: normalizeIntSchema(2, 20),
+  buyRules: z.array(
+    z.object({
+      nth: normalizeIntSchema(1, 50),
+      triggerDropPct: normalizeNullableRatioSchema(0.001, 0.5),
+      amountKrw: normalizeIntSchema(10000),
+    }),
+  ),
+  sellRules: z.array(
+    z.object({
+      nth: normalizeIntSchema(1, 50),
+      targetProfitPct: normalizeRatioSchema(0.005, 0.5),
+    }),
+  ),
+  reasoning: normalizeTextSchema(400),
+  stageRationales: z
+    .array(
+      z.object({
+        nth: normalizeIntSchema(1, 50),
+        rationale: normalizeTextSchema(300),
+        evidenceRefs: normalizeStringArraySchema(),
+      }),
+    )
+    .default([]),
+  globalRisks: z.array(normalizeTextSchema(140)).max(8).default([]),
+  evidenceRefs: z
+    .array(
+      z.object({
+        id: normalizeTextSchema(120),
+        kind: normalizeEvidenceKindSchema(),
+        title: normalizeTextSchema(160),
+        detail: normalizeTextSchema(300),
+      }),
+    )
+    .default([]),
+  analysisConfidence: normalizeConfidenceSchema(),
+  dataQuality: normalizeDataQualitySchema(),
+}) satisfies z.ZodType<StrategySuggestion>;
+
 export interface SuggestStrategyResult {
   suggestion: StrategySuggestion | null;
   emptyReason: string | null;
@@ -215,7 +255,7 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
     config,
     schema: StrategySuggestionSchema,
     schemaName: 'AiStrategySuggestion',
-    maxOutputTokens: 2200,
+    maxOutputTokens: 3500,
     messages: [
       {
         role: 'system',
@@ -230,12 +270,44 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
     ],
   });
 
-  if (!result.parsed) {
+  let rawSuggestion = result.parsed;
+  let parseRecovered = false;
+  if (!rawSuggestion) {
+    const recovered = parseStrategySuggestionLenient(result.text);
+    if (recovered.suggestion) {
+      rawSuggestion = recovered.suggestion;
+      parseRecovered = true;
+      input.logger.log({
+        level: 'WARN',
+        category: 'SYS',
+        message: 'ai.suggest-strategy.parse-recovered',
+        payload: {
+          pdno: input.pdno,
+          provider: config.provider,
+          model: config.model,
+          rawChars: result.text.length,
+          toolCalls: result.toolCalls.length,
+          issues: recovered.issues.slice(0, 6),
+        },
+      });
+    }
+  }
+
+  if (!rawSuggestion) {
+    const failure = parseStrategySuggestionLenient(result.text);
     input.logger.log({
       level: 'WARN',
       category: 'SYS',
       message: 'ai.suggest-strategy.parse-failed',
-      payload: { rawChars: result.text.length, pdno: input.pdno },
+      payload: {
+        rawChars: result.text.length,
+        pdno: input.pdno,
+        provider: config.provider,
+        model: config.model,
+        toolCalls: result.toolCalls.length,
+        issues: failure.issues.slice(0, 8),
+        rawPreview: previewForLog(result.text),
+      },
     });
     return {
       suggestion: null,
@@ -244,7 +316,7 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
     };
   }
 
-  const suggestion = normalizeSuggestion(result.parsed, facts.dataQuality, evidenceRefs);
+  const suggestion = normalizeSuggestion(rawSuggestion, facts.dataQuality, evidenceRefs);
 
   // dry-run StrategyProfileSchema 검증 — renderer 가 mergeIntoProfile 후 적용 시 기존
   // validateProfile 에서 실패할 케이스를 사전에 차단해 "적용" 클릭 후 실패 UX 를 방지.
@@ -291,6 +363,7 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
       model: config.model,
       maxStages: suggestion.maxStages,
       durationMs: Date.now() - startedAt,
+      parseRecovered,
     },
   });
 
@@ -396,6 +469,219 @@ function dedupeEvidenceRefs(refs: ReadonlyArray<EvidenceRef>): EvidenceRef[] {
     if (seen.has(ref.id)) continue;
     seen.add(ref.id);
     out.push(ref);
+  }
+  return out;
+}
+
+function parseStrategySuggestionLenient(text: string): {
+  suggestion: StrategySuggestion | null;
+  issues: string[];
+} {
+  const issues: string[] = [];
+  const candidates = extractJsonCandidates(text);
+  if (candidates.length === 0) {
+    return { suggestion: null, issues: ['no-json-candidate'] };
+  }
+
+  for (const candidate of candidates) {
+    let json: unknown;
+    try {
+      json = JSON.parse(candidate);
+    } catch (cause) {
+      issues.push(`json-parse: ${cause instanceof Error ? cause.message : String(cause)}`);
+      continue;
+    }
+
+    const parsed = LenientStrategySuggestionSchema.safeParse(json);
+    if (parsed.success) return { suggestion: parsed.data, issues };
+    issues.push(
+      ...parsed.error.issues
+        .slice(0, 8)
+        .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`),
+    );
+  }
+  return { suggestion: null, issues: dedupeStrings(issues).slice(0, 12) };
+}
+
+function normalizeIntSchema(min: number, max = Number.MAX_SAFE_INTEGER): z.ZodType<number> {
+  return z.preprocess((value) => {
+    if (typeof value === 'number') return Math.round(value);
+    if (typeof value !== 'string') return value;
+    const normalized = Number(value.replace(/[^\d.-]/g, ''));
+    return Number.isFinite(normalized) ? Math.round(normalized) : value;
+  }, z.number().int().min(min).max(max));
+}
+
+function normalizeNullableRatioSchema(min: number, max: number): z.ZodType<number | null> {
+  return z.preprocess((value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'string') {
+      const lower = value.trim().toLowerCase();
+      if (!lower || lower === 'null' || lower === 'none' || lower.includes('수동')) return null;
+    }
+    return normalizeRatioValue(value);
+  }, z.number().min(min).max(max).nullable());
+}
+
+function normalizeRatioSchema(min: number, max: number): z.ZodType<number> {
+  return z.preprocess((value) => normalizeRatioValue(value), z.number().min(min).max(max));
+}
+
+function normalizeRatioValue(value: unknown): unknown {
+  let numeric: number;
+  if (typeof value === 'number') {
+    numeric = value;
+  } else if (typeof value === 'string') {
+    const normalized = Number(value.replace(/[%％,\s]/g, ''));
+    if (!Number.isFinite(normalized)) return value;
+    numeric = normalized;
+  } else {
+    return value;
+  }
+  return numeric > 1 && numeric <= 100 ? numeric / 100 : numeric;
+}
+
+function normalizeTextSchema(max: number): z.ZodType<string> {
+  return z.preprocess((value) => {
+    if (typeof value !== 'string') return value;
+    return value.trim().slice(0, max);
+  }, z.string().min(1).max(max));
+}
+
+function normalizeStringArraySchema(): z.ZodType<string[]> {
+  return z
+    .preprocess((value) => {
+      if (!Array.isArray(value)) return [];
+      return value
+        .map((item) => {
+          if (typeof item === 'string') return item;
+          if (item && typeof item === 'object' && 'id' in item) return String(item.id);
+          return null;
+        })
+        .filter((item): item is string => item !== null);
+    }, z.array(z.string()))
+    .default([]);
+}
+
+function normalizeEvidenceKindSchema(): z.ZodType<EvidenceRef['kind']> {
+  return z.preprocess(
+    (value) => {
+      if (typeof value !== 'string') return 'market';
+      const lower = value.toLowerCase();
+      if (lower.includes('indicator') || lower.includes('지표')) return 'indicator';
+      if (lower.includes('news') || lower.includes('뉴스')) return 'news';
+      if (lower.includes('disclosure') || lower.includes('dart') || lower.includes('공시')) {
+        return 'disclosure';
+      }
+      if (lower.includes('quality') || lower.includes('품질')) return 'dataQuality';
+      return 'market';
+    },
+    z.enum(['indicator', 'news', 'disclosure', 'market', 'dataQuality']),
+  );
+}
+
+function normalizeConfidenceSchema(): z.ZodType<StrategySuggestion['analysisConfidence']> {
+  return z
+    .preprocess(
+      (value) => {
+        if (typeof value !== 'string') return 'low';
+        const lower = value.toLowerCase();
+        if (lower === 'high' || lower.includes('높')) return 'high';
+        if (lower === 'med' || lower === 'medium' || lower.includes('중')) return 'med';
+        return 'low';
+      },
+      z.enum(['high', 'med', 'low']),
+    )
+    .default('low');
+}
+
+function normalizeDataQualitySchema(): z.ZodType<StrategySuggestion['dataQuality']> {
+  return z
+    .preprocess(
+      (value) => {
+        if (typeof value !== 'string') return 'blocked';
+        const lower = value.toLowerCase();
+        if (lower === 'normal' || lower.includes('정상')) return 'normal';
+        if (lower === 'limited' || lower.includes('제한')) return 'limited';
+        return 'blocked';
+      },
+      z.enum(['blocked', 'limited', 'normal']),
+    )
+    .default('blocked');
+}
+
+function extractJsonCandidates(text: string): string[] {
+  const stripped = stripCodeFence(text).trim();
+  const fenced = text.match(/```(?:json|JSON)?\s*\n([\s\S]*?)\n?```/)?.[1]?.trim();
+  const extracted = extractJsonValues(stripped);
+  return dedupeStrings(
+    [fenced, ...extracted, stripped].filter((value): value is string => !!value),
+  );
+}
+
+function stripCodeFence(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('```')) return trimmed;
+  const firstNewline = trimmed.indexOf('\n');
+  const lastFence = trimmed.lastIndexOf('```');
+  if (firstNewline === -1 || lastFence <= firstNewline) return trimmed;
+  return trimmed.slice(firstNewline + 1, lastFence).trim();
+}
+
+function extractJsonValues(text: string): string[] {
+  const starts = [text.indexOf('{'), text.indexOf('[')]
+    .filter((index) => index !== -1)
+    .sort((a, b) => a - b);
+  return dedupeStrings(
+    starts
+      .map((start) => extractJsonValueAt(text, start))
+      .filter((value): value is string => value !== null),
+  );
+}
+
+function extractJsonValueAt(text: string, start: number): string | null {
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') {
+      stack.push('}');
+      continue;
+    }
+    if (ch === '[') {
+      stack.push(']');
+      continue;
+    }
+    if ((ch === '}' || ch === ']') && stack[stack.length - 1] === ch) {
+      stack.pop();
+      if (stack.length === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function previewForLog(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 500);
+}
+
+function dedupeStrings(values: ReadonlyArray<string | undefined>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
   }
   return out;
 }

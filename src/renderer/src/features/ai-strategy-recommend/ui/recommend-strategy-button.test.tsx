@@ -37,6 +37,11 @@ describe('RecommendStrategyButton', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'AI 추천 strategy' }));
 
+    expect(screen.getByRole('dialog')).toHaveTextContent('차수 분석을 시작할 준비');
+    expect(mutateMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '분석 시작' }));
+
     expect(mutateMock).toHaveBeenCalledWith({ pdno: '005930' });
     expect(onApply).not.toHaveBeenCalled();
   });

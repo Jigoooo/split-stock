@@ -1,4 +1,4 @@
-import stringSimilarity from 'string-similarity-js';
+import * as stringSimilarityModule from 'string-similarity-js';
 import type { NewsItem, NewsSearchOptions } from './news-fetcher';
 
 export interface NewsEvidenceArticle extends NewsItem {
@@ -42,6 +42,12 @@ export const DEFAULT_MAX_SYMBOLS_PER_PASS = 6;
 const DEFAULT_MAX_CLUSTERS = 8;
 const DEFAULT_REPRESENTATIVES = 2;
 const SIMILAR_TITLE_THRESHOLD = 0.72;
+type StringSimilarityFn = (left: string, right: string) => number;
+const stringSimilarityExports = stringSimilarityModule as {
+  default?: unknown;
+  stringSimilarity?: unknown;
+};
+const compareStrings = resolveStringSimilarity();
 
 export function buildNewsQueries(name: string): string[] {
   const base = name.trim();
@@ -118,7 +124,7 @@ function dedupeArticles(articles: ReadonlyArray<NewsEvidenceArticle>): NewsEvide
       return (
         normalized.length > 0 &&
         existingTitle.length > 0 &&
-        stringSimilarity(normalized, existingTitle) >= SIMILAR_TITLE_THRESHOLD
+        compareStrings(normalized, existingTitle) >= SIMILAR_TITLE_THRESHOLD
       );
     });
     if (duplicate) continue;
@@ -138,7 +144,7 @@ function clusterArticles(
     const bucket = buckets.find((candidate) => {
       const head = candidate[0];
       if (!head) return false;
-      return stringSimilarity(normalized, normalizeText(head.title)) >= SIMILAR_TITLE_THRESHOLD;
+      return compareStrings(normalized, normalizeText(head.title)) >= SIMILAR_TITLE_THRESHOLD;
     });
     if (bucket) bucket.push(article);
     else buckets.push([article]);
@@ -180,4 +186,14 @@ function compact(value: string, max: number): string {
   const oneLine = value.trim().replace(/\s+/g, ' ');
   if (oneLine.length <= max) return oneLine;
   return `${oneLine.slice(0, Math.max(0, max - 3)).trimEnd()}...`;
+}
+
+function resolveStringSimilarity(): StringSimilarityFn {
+  if (typeof stringSimilarityExports.stringSimilarity === 'function') {
+    return stringSimilarityExports.stringSimilarity as StringSimilarityFn;
+  }
+  if (typeof stringSimilarityExports.default === 'function') {
+    return stringSimilarityExports.default as StringSimilarityFn;
+  }
+  return (left, right) => (left === right ? 1 : 0);
 }
