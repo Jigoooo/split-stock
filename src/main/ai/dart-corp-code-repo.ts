@@ -2,7 +2,7 @@ import AdmZip from 'adm-zip';
 import { eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { dartCorpCodes } from '../db/schema';
-import type { EventLogger } from '../logging/event-logger';
+import { type EventLogger, logExternalApiFailure } from '../logging/event-logger';
 
 export interface DartCorpCodeEntry {
   stockCode: string;
@@ -138,11 +138,11 @@ export class DartCorpCodeRepo {
   }
 
   private logFail(scope: string, detail: unknown): void {
-    this.opts.logger.log({
-      level: 'WARN',
-      category: 'SYS',
-      message: 'dart.corp-code.sync-failed',
-      payload: { scope, detail: String(detail).slice(0, 300) },
+    logExternalApiFailure(this.opts.logger, {
+      source: 'dart',
+      endpoint: DART_CORP_CODE_URL,
+      status: null,
+      reason: `${scope}: ${detail instanceof Error ? detail.message : String(detail)}`,
     });
   }
 }

@@ -28,11 +28,40 @@ export interface EventLogger {
 const DEFAULT_SECRET_KEYS = [
   'appKey',
   'appSecret',
+  'apiKey',
+  'serviceKey',
+  'clientSecret',
+  'client_secret',
+  'x-naver-client-secret',
   'token',
   'access_token',
   'password',
   'authorization',
 ] as const;
+
+export const API_EXTERNAL_FAILED_MESSAGE = 'api.external.failed';
+
+export type ExternalApiLogSource =
+  | 'naver-news'
+  | 'naver-datalab'
+  | 'dart'
+  | 'krx'
+  | 'ecos'
+  | 'ksd'
+  | 'fsc-stock-lending'
+  | 'eia'
+  | 'kosis';
+
+export interface ExternalApiFailureLogInput {
+  source: ExternalApiLogSource;
+  endpoint: string;
+  status?: string | number | null | undefined;
+  reason: string;
+  usedCache?: boolean | undefined;
+  stale?: boolean | undefined;
+  durationMs?: number | undefined;
+  responseBody?: string | null | undefined;
+}
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -46,9 +75,10 @@ export function maskPayload(
     return value.map((v) => maskPayload(v, secretKeys));
   }
   if (!isPlainObject(value)) return value;
+  const secretKeySet = new Set(secretKeys.map((k) => k.toLowerCase()));
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) {
-    if (secretKeys.includes(k) && typeof v === 'string') {
+    if (secretKeySet.has(k.toLowerCase()) && typeof v === 'string') {
       out[k] = maskSecret(v);
     } else if (isPlainObject(v) || Array.isArray(v)) {
       out[k] = maskPayload(v, secretKeys);
@@ -82,6 +112,55 @@ export function teeLoggers(...loggers: EventLogger[]): EventLogger {
       for (const l of loggers) l.log(entry);
     },
   };
+}
+
+/**
+ * API 실패 이벤트만 dedicated sink 에도 복제한다.
+ *
+ * primaryLogger 는 기존 DB/일반 파일 로그를 그대로 담당하고, apiFailureLogger 는
+ * `api.external.failed` 이벤트만 받는다. API 정상/일반 경고가 api-errors 파일에 섞이지 않게
+ * 하기 위한 얇은 라우팅 계층.
+ */
+export function createApiFailureLogger(
+  primaryLogger: EventLogger,
+  apiFailureLogger: EventLogger,
+): EventLogger {
+  return {
+    log(entry: EventLogEntry): void {
+      try {
+        primaryLogger.log(entry);
+      } catch {
+        // logger 실패는 업무 흐름에 영향을 주면 안 된다.
+      }
+      if (entry.message !== API_EXTERNAL_FAILED_MESSAGE) return;
+      try {
+        apiFailureLogger.log(entry);
+      } catch {
+        // dedicated API 파일 로그 실패도 삼킨다.
+      }
+    },
+  };
+}
+
+export function logExternalApiFailure(
+  logger: EventLogger,
+  input: ExternalApiFailureLogInput,
+): void {
+  logger.log({
+    level: 'WARN',
+    category: 'SYS',
+    message: API_EXTERNAL_FAILED_MESSAGE,
+    payload: {
+      source: input.source,
+      endpoint: truncate(input.endpoint, 300),
+      status: input.status ?? null,
+      reason: truncate(input.reason, 500),
+      usedCache: input.usedCache ?? false,
+      stale: input.stale ?? false,
+      ...(input.durationMs !== undefined ? { durationMs: input.durationMs } : {}),
+      ...(input.responseBody ? { responseBody: truncate(input.responseBody, 1000) } : {}),
+    },
+  });
 }
 
 /**
@@ -132,4 +211,8 @@ export function createEventLogger(db: Db): EventLogger {
       }
     },
   };
+}
+
+function truncate(value: string, max: number): string {
+  return value.length <= max ? value : value.slice(0, max);
 }

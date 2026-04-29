@@ -90,6 +90,14 @@ describe('EcosClient', () => {
         end: '20260428',
       }),
     ).rejects.toThrow('ECOS 응답에 StatisticSearch.row 없음');
-    expect(log.log).toHaveBeenCalledWith(expect.objectContaining({ message: 'ecos.fetch.failed' }));
+    expect(log.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'api.external.failed',
+        payload: expect.objectContaining({
+          source: 'ecos',
+          reason: 'ECOS 응답에 StatisticSearch.row 없음',
+        }),
+      }),
+    );
   });
 });

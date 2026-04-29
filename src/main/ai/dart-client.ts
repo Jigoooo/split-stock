@@ -1,4 +1,4 @@
-import type { EventLogger } from '../logging/event-logger';
+import { type EventLogger, logExternalApiFailure } from '../logging/event-logger';
 
 /**
  * OpenDART OpenAPI (https://opendart.fss.or.kr) 직접 호출 — 빌드 임베드 키 사용.
@@ -135,11 +135,11 @@ export class DartClient {
   }
 
   private logFail(scope: 'company' | 'list', detail: unknown): void {
-    this.opts.logger.log({
-      level: 'WARN',
-      category: 'SYS',
-      message: 'dart.fetch.failed',
-      payload: { scope, detail: String(detail) },
+    logExternalApiFailure(this.opts.logger, {
+      source: 'dart',
+      endpoint: `${DART_BASE}/${scope}.json`,
+      status: typeof detail === 'number' || typeof detail === 'string' ? detail : null,
+      reason: detail instanceof Error ? detail.message : String(detail),
     });
   }
 }

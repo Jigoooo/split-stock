@@ -107,6 +107,18 @@ describe('createFileLogger', () => {
     expect(() => logger.log({ level: 'ERROR', category: 'SYS', message: 'boom' })).not.toThrow();
   });
 
+  it('중첩된 api-errors 디렉토리도 자동 생성한다', () => {
+    const apiDir = join(tmpDir, 'logs', 'dev', 'api-errors');
+    const logger = createFileLogger({
+      dir: apiDir,
+      now: () => Date.UTC(2026, 3, 18),
+    });
+
+    logger.log({ level: 'WARN', category: 'SYS', message: 'api.external.failed' });
+
+    expect(existsSync(join(apiDir, '2026-04-18.log'))).toBe(true);
+  });
+
   it('summarizeLogDir: 파일별 크기 요약', () => {
     writeFileSync(join(tmpDir, '2026-04-18.log'), 'hello world\n', 'utf8');
     const summary = summarizeLogDir(tmpDir);

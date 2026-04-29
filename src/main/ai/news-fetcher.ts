@@ -1,6 +1,6 @@
 import Bottleneck from 'bottleneck';
 import { decode } from 'html-entities';
-import type { EventLogger } from '../logging/event-logger';
+import { type EventLogger, logExternalApiFailure } from '../logging/event-logger';
 
 export interface NewsItem {
   /** 발행 일자 (KST, YYYY-MM-DD HH:mm). */
@@ -64,6 +64,7 @@ export class NewsFetcher {
   async search(options: NewsSearchOptions): Promise<NewsItem[]> {
     const query = options.query.trim();
     if (!this.isAvailable() || !query) return [];
+    const startedAt = Date.now();
     const display = clampInt(options.display ?? 10, 1, 100);
     const start = clampInt(options.start ?? 1, 1, 1000);
     const sort = options.sort ?? 'date';
@@ -84,23 +85,27 @@ export class NewsFetcher {
         }),
       );
       if (!res.ok) {
-        this.logFail('http', `${res.status}`);
+        this.logFail(`HTTP ${res.status}`, {
+          status: res.status,
+          durationMs: Date.now() - startedAt,
+        });
         return [];
       }
       const json = (await res.json()) as { items?: NaverNewsRaw[] };
       return (json.items ?? []).slice(0, display).map(toNewsItem);
     } catch (cause) {
-      this.logFail('exception', cause);
+      this.logFail(cause, { durationMs: Date.now() - startedAt });
       return [];
     }
   }
 
-  private logFail(scope: 'http' | 'exception', detail: unknown): void {
-    this.opts.logger.log({
-      level: 'WARN',
-      category: 'SYS',
-      message: 'news.fetch.failed',
-      payload: { scope, detail: String(detail).slice(0, 300) },
+  private logFail(reason: unknown, meta: { status?: number; durationMs?: number } = {}): void {
+    logExternalApiFailure(this.opts.logger, {
+      source: 'naver-news',
+      endpoint: NAVER_NEWS_URL,
+      status: meta.status ?? null,
+      reason: reason instanceof Error ? reason.message : String(reason),
+      durationMs: meta.durationMs,
     });
   }
 }

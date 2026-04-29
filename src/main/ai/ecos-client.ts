@@ -1,4 +1,4 @@
-import type { EventLogger } from '../logging/event-logger';
+import { type EventLogger, logExternalApiFailure } from '../logging/event-logger';
 
 export type EcosFrequency = 'A' | 'S' | 'Q' | 'M' | 'SM' | 'D';
 
@@ -60,9 +60,16 @@ export class EcosClient {
       encodeURIComponent(req.itemCode),
     ].join('/');
 
+    const startedAt = Date.now();
+    let logged = false;
     try {
       const res = await this.fetchImpl(url);
       if (!res.ok) {
+        logged = true;
+        this.logFail(ECOS_BASE, `HTTP ${res.status}`, {
+          status: res.status,
+          durationMs: Date.now() - startedAt,
+        });
         throw new Error(`ECOS HTTP ${res.status}`);
       }
       const json = (await res.json()) as EcosResponse;
@@ -80,14 +87,25 @@ export class EcosClient {
         unitName: row.UNIT_NAME?.trim() || null,
       }));
     } catch (cause) {
-      this.opts.logger.log({
-        level: 'WARN',
-        category: 'SYS',
-        message: 'ecos.fetch.failed',
-        payload: { detail: cause instanceof Error ? cause.message : String(cause) },
-      });
+      if (!logged) {
+        this.logFail(ECOS_BASE, cause, { durationMs: Date.now() - startedAt });
+      }
       throw cause;
     }
+  }
+
+  private logFail(
+    endpoint: string,
+    reason: unknown,
+    meta: { status?: number; durationMs?: number } = {},
+  ): void {
+    logExternalApiFailure(this.opts.logger, {
+      source: 'ecos',
+      endpoint,
+      status: meta.status ?? null,
+      reason: reason instanceof Error ? reason.message : String(reason),
+      durationMs: meta.durationMs,
+    });
   }
 }
 

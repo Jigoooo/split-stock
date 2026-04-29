@@ -1,4 +1,4 @@
-import type { EventLogger } from '../logging/event-logger';
+import { type EventLogger, logExternalApiFailure } from '../logging/event-logger';
 
 export type KrxMarket = 'KOSPI' | 'KOSDAQ' | 'KONEX';
 
@@ -93,6 +93,8 @@ export class KrxClient {
     if (!this.isAvailable()) {
       throw new Error('KRX_API_KEY 미설정');
     }
+    const startedAt = Date.now();
+    let logged = false;
     try {
       const res = await this.fetchImpl(`${url}?basDd=${encodeURIComponent(basDd)}`, {
         headers: {
@@ -101,6 +103,11 @@ export class KrxClient {
         },
       });
       if (!res.ok) {
+        logged = true;
+        this.logFail(url, `HTTP ${res.status}`, {
+          status: res.status,
+          durationMs: Date.now() - startedAt,
+        });
         throw new Error(`KRX HTTP ${res.status}`);
       }
       const json = (await res.json()) as { OutBlock_1?: Array<Record<string, string>> };
@@ -109,14 +116,25 @@ export class KrxClient {
       }
       return json.OutBlock_1;
     } catch (cause) {
-      this.opts.logger.log({
-        level: 'WARN',
-        category: 'SYS',
-        message: 'krx.fetch.failed',
-        payload: { detail: cause instanceof Error ? cause.message : String(cause) },
-      });
+      if (!logged) {
+        this.logFail(url, cause, { durationMs: Date.now() - startedAt });
+      }
       throw cause;
     }
+  }
+
+  private logFail(
+    endpoint: string,
+    reason: unknown,
+    meta: { status?: number; durationMs?: number } = {},
+  ): void {
+    logExternalApiFailure(this.opts.logger, {
+      source: 'krx',
+      endpoint,
+      status: meta.status ?? null,
+      reason: reason instanceof Error ? reason.message : String(reason),
+      durationMs: meta.durationMs,
+    });
   }
 }
 

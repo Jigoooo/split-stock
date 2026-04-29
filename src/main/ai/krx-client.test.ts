@@ -150,4 +150,26 @@ describe('KrxClient', () => {
     );
     expect(fetchImpl).not.toHaveBeenCalled();
   });
+
+  it('외부 응답 실패는 표준 API 실패 이벤트로 로그를 남기고 throw 한다', async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response('{}', { status: 429 }),
+    ) as unknown as typeof fetch;
+    const log = logger();
+    const client = new KrxClient({ logger: log, apiKey: 'krx-key', fetchImpl });
+
+    await expect(client.getDailyTradeInfo({ market: 'KOSPI', basDd: '20260428' })).rejects.toThrow(
+      'KRX HTTP 429',
+    );
+    expect(log.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'api.external.failed',
+        payload: expect.objectContaining({
+          source: 'krx',
+          status: 429,
+          reason: 'HTTP 429',
+        }),
+      }),
+    );
+  });
 });

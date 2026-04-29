@@ -1,5 +1,5 @@
 import Bottleneck from 'bottleneck';
-import type { EventLogger } from '../logging/event-logger';
+import { type EventLogger, logExternalApiFailure } from '../logging/event-logger';
 
 export type NaverDatalabTimeUnit = 'date' | 'week' | 'month';
 
@@ -91,6 +91,7 @@ export class NaverDatalabClient {
     options: Required<Pick<NaverDatalabSummaryOptions, 'startDate' | 'endDate' | 'timeUnit'>>,
   ): Promise<NaverSearchTrendSummary[]> {
     if (groups.length === 0) return [];
+    const startedAt = Date.now();
     const body = {
       startDate: options.startDate,
       endDate: options.endDate,
@@ -114,7 +115,10 @@ export class NaverDatalabClient {
         }),
       );
       if (!res.ok) {
-        this.logFail('http', `${res.status}`);
+        this.logFail(`HTTP ${res.status}`, {
+          status: res.status,
+          durationMs: Date.now() - startedAt,
+        });
         return [];
       }
       const json = (await res.json()) as NaverDatalabResponse;
@@ -129,17 +133,18 @@ export class NaverDatalabClient {
         ),
       );
     } catch (cause) {
-      this.logFail('exception', cause);
+      this.logFail(cause, { durationMs: Date.now() - startedAt });
       return [];
     }
   }
 
-  private logFail(scope: 'http' | 'exception', detail: unknown): void {
-    this.opts.logger.log({
-      level: 'WARN',
-      category: 'SYS',
-      message: 'naver-datalab.fetch.failed',
-      payload: { scope, detail: String(detail).slice(0, 300) },
+  private logFail(reason: unknown, meta: { status?: number; durationMs?: number } = {}): void {
+    logExternalApiFailure(this.opts.logger, {
+      source: 'naver-datalab',
+      endpoint: NAVER_DATALAB_SEARCH_URL,
+      status: meta.status ?? null,
+      reason: reason instanceof Error ? reason.message : String(reason),
+      durationMs: meta.durationMs,
     });
   }
 

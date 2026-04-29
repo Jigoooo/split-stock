@@ -80,7 +80,12 @@ import { KisHttpClient } from './kis/http-client';
 import { cancelOrRevise } from './kis/order';
 import { TokenStore } from './kis/token-store';
 import { realTimer, type WsLike } from './kis/ws-client';
-import { cleanupOldEventLogs, createEventLogger, teeLoggers } from './logging/event-logger';
+import {
+  cleanupOldEventLogs,
+  createApiFailureLogger,
+  createEventLogger,
+  teeLoggers,
+} from './logging/event-logger';
 import { createFileLogger } from './logging/file-logger';
 // Sentry 일시 비활성화 — 향후 빌드 환경변수 방식으로 재활성화 예정.
 // import { initSentryFromSettings } from './monitoring/sentry';
@@ -140,10 +145,16 @@ function bootstrapDeps(userDataDir: string) {
   });
   const tokenStore = new TokenStore(db);
   const dbLogger = createEventLogger(db);
-  const logsDir = isDev ? join(process.cwd(), 'logs', 'dev') : join(userDataDir, 'logs');
-  const fileLogger = createFileLogger({ dir: logsDir, retentionDays: 40 });
+  if (!isDev) app.setAppLogsPath();
+  const logsRoot = isDev ? join(process.cwd(), 'logs', 'dev') : app.getPath('logs');
+  const fileLogger = createFileLogger({ dir: logsRoot, retentionDays: 40 });
+  const apiErrorFileLogger = createFileLogger({
+    dir: join(logsRoot, 'api-errors'),
+    retentionDays: 40,
+  });
   // 부팅 시 1회 로테이션 — 40일 경과 파일 정리
   fileLogger.rotate();
+  apiErrorFileLogger.rotate();
   // event_logs 테이블 retention — 30일 초과 row 삭제. 장기 운영 시 디스크/DB 비대 방지.
   // 콘솔에 정리 결과를 한 줄 노출 (event_logger 자체에는 기록 안 함 — 자기참조 회피).
   const removedLogs = cleanupOldEventLogs(db, 30);
@@ -151,6 +162,7 @@ function bootstrapDeps(userDataDir: string) {
     console.info(`[event-logger] cleaned up ${removedLogs} rows older than 30 days`);
   }
   const eventLogger = teeLoggers(dbLogger, fileLogger);
+  const apiFailureLogger = createApiFailureLogger(eventLogger, apiErrorFileLogger);
   // KIS 공식 RPS 한도: 실전 20 req/s, 모의 5 req/s. 20% margin 확보해 실전 18/모의 4로 운영.
   // 모의에서 15 RPS 디폴트 유지 시 watchEngine/quote-feed 와 balance polling 동시 발생 시
   // KIS 가 유량초과로 5xx 반환 → "잔고 서버에 일시적인 문제" 메시지로 변환되던 원인.
@@ -216,30 +228,30 @@ function bootstrapDeps(userDataDir: string) {
   const llmClient = new LlmClient({ logger: eventLogger });
   // DART REST 클라이언트 — 빌드 임베드 키 사용 (사용자 BYO X). 키 누락 시 isAvailable=false → 호출자에서 graceful skip.
   const dartClient = new DartClient({
-    logger: eventLogger,
+    logger: apiFailureLogger,
     apiKey: process.env.DART_API_KEY ?? '',
   });
   const dartCorpCodeRepo = new DartCorpCodeRepo({
     db,
-    logger: eventLogger,
+    logger: apiFailureLogger,
     apiKey: process.env.DART_API_KEY ?? '',
   });
   const newsFetcher = new NewsFetcher({
-    logger: eventLogger,
+    logger: apiFailureLogger,
     naverClientId: process.env.NAVER_CLIENT_ID ?? '',
     naverClientSecret: process.env.NAVER_CLIENT_SECRET ?? '',
   });
   const naverDatalabClient = new NaverDatalabClient({
-    logger: eventLogger,
+    logger: apiFailureLogger,
     naverClientId: process.env.NAVER_CLIENT_ID ?? '',
     naverClientSecret: process.env.NAVER_CLIENT_SECRET ?? '',
   });
   const krxClient = new KrxClient({
-    logger: eventLogger,
+    logger: apiFailureLogger,
     apiKey: process.env.KRX_API_KEY ?? '',
   });
   const ecosClient = new EcosClient({
-    logger: eventLogger,
+    logger: apiFailureLogger,
     apiKey: process.env.ECOS_API_KEY ?? '',
   });
   const marketContextRepo = new MarketContextRepo(db);
@@ -249,7 +261,7 @@ function bootstrapDeps(userDataDir: string) {
     repo: marketContextRepo,
     settingsRepo,
     stockMasterRepo,
-    logger: eventLogger,
+    logger: apiFailureLogger,
   });
   const protectionGuard = new ProtectionGuard(db, protectionLimitsRepo);
   // 활성 계좌 보장 — 계좌 0개면 null. 자격증명 저장 시 자동 시드.

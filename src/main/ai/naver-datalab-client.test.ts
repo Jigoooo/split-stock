@@ -94,7 +94,13 @@ describe('NaverDatalabClient', () => {
 
     expect(result.size).toBe(0);
     expect(log).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'naver-datalab.fetch.failed' }),
+      expect.objectContaining({
+        message: 'api.external.failed',
+        payload: expect.objectContaining({
+          source: 'naver-datalab',
+          status: 429,
+        }),
+      }),
     );
   });
 });
