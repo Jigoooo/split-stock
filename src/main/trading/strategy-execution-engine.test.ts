@@ -1,4 +1,4 @@
-import { createStrategyRules } from '@shared/contracts';
+import { type BrokerErrorKind, createStrategyRules, makeBrokerError } from '@shared/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { Timer } from '../brokers/core/types';
 import { bootstrapSchema } from '../db/bootstrap-schema';
@@ -11,6 +11,7 @@ import { LotsRepo } from './lots-repo';
 import { StockMasterRepo } from './stock-master-repo';
 import { StrategyExecutionEngine } from './strategy-execution-engine';
 import { StrategyRepo } from './strategy-repo';
+import { StrategyOrderError, type StrategyOrderInput } from './watch-order-executor';
 
 function setup() {
   const db = createTestDb();
@@ -58,6 +59,32 @@ function emitSamsungTick(bus: FeedBus, price: number): void {
     bestAsk: price,
     bestBid: price,
   });
+}
+
+function makeStrategyOrderFailure(
+  kind: BrokerErrorKind,
+  message: string,
+  input: Partial<StrategyOrderInput> = {},
+): StrategyOrderError {
+  return new StrategyOrderError(
+    {
+      accountId: 1,
+      division: 'LIMIT',
+      nth: 2,
+      pdno: '005930',
+      price: 67_800,
+      qty: 10,
+      side: 'BUY',
+      triggerReason: 'DROP_BUY',
+      ...input,
+    },
+    makeBrokerError({
+      brokerId: 'KIS',
+      kind,
+      msg: message,
+    }),
+    new Date('2026-04-29T09:30:00+09:00'),
+  );
 }
 
 describe('StrategyExecutionEngine', () => {
@@ -115,7 +142,7 @@ describe('StrategyExecutionEngine', () => {
     );
   });
 
-  it('자동매수 주문 실패는 safety lock 대신 재시도 예약과 사용자 노출 이벤트를 남긴다', async () => {
+  it('자동매수 일시 실패는 safety lock 대신 재시도 예약과 사용자 노출 이벤트를 남긴다', async () => {
     const { bus, logger, lotsRepo, safetyRegistry, strategyRepo } = setup();
     lotsRepo.insertLot({
       accountId: 1,
@@ -128,7 +155,7 @@ describe('StrategyExecutionEngine', () => {
       boughtAt: new Date(),
     });
     setDefaultProfile(strategyRepo);
-    const failure = new Error('주문 실패: API_BUSINESS - 모의투자 영업일이 아닙니다.');
+    const failure = makeStrategyOrderFailure('RATE_LIMITED', '호출 제한으로 잠시 대기합니다.');
     const executeOrder = vi.fn(async () => {
       throw failure;
     });
@@ -184,12 +211,15 @@ describe('StrategyExecutionEngine', () => {
     expect(onAutoOrderRetryScheduled).toHaveBeenCalledWith(
       expect.objectContaining({
         accountId: 1,
+        attempt: 1,
+        errorKind: 'RATE_LIMITED',
         failureType: 'FAILED',
         nth: 2,
         pdno: '005930',
         reason: failure.message,
         retryAfterMs: 3_000,
         side: 'BUY',
+        status: 'RETRYING',
       }),
     );
 
@@ -204,7 +234,7 @@ describe('StrategyExecutionEngine', () => {
     expect(executeOrder).toHaveBeenCalledTimes(2);
   });
 
-  it('자동매도 주문 실패도 safety lock 대신 재시도 예약과 사용자 노출 이벤트를 남긴다', async () => {
+  it('자동매도 일시 실패도 safety lock 대신 재시도 예약과 사용자 노출 이벤트를 남긴다', async () => {
     const { bus, logger, lotsRepo, safetyRegistry, strategyRepo } = setup();
     lotsRepo.insertLot({
       accountId: 1,
@@ -217,7 +247,10 @@ describe('StrategyExecutionEngine', () => {
       boughtAt: new Date(),
     });
     setDefaultProfile(strategyRepo);
-    const failure = new Error('주문 실패: RATE_LIMITED - 주문 재시도 한도를 초과했습니다');
+    const failure = makeStrategyOrderFailure('NETWORK', '일시 연결 문제', {
+      side: 'SELL',
+      triggerReason: 'PROFIT_SELL',
+    });
     const executeOrder = vi.fn(async () => {
       throw failure;
     });
@@ -274,12 +307,15 @@ describe('StrategyExecutionEngine', () => {
     expect(onAutoOrderRetryScheduled).toHaveBeenCalledWith(
       expect.objectContaining({
         accountId: 1,
+        attempt: 1,
+        errorKind: 'NETWORK',
         failureType: 'FAILED',
         nth: 2,
         pdno: '005930',
         reason: failure.message,
         retryAfterMs: 3_000,
         side: 'SELL',
+        status: 'RETRYING',
       }),
     );
     expect(scheduledDelays.at(-1)).toBe(3_000);
@@ -292,6 +328,165 @@ describe('StrategyExecutionEngine', () => {
     scheduledRetries.at(-1)?.();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(executeOrder).toHaveBeenCalledTimes(2);
+    expect(executeOrder).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        reconcileOnly: true,
+        side: 'SELL',
+      }),
+    );
+  });
+
+  it('자동주문 영구 실패는 3초 재시도 대신 확인 필요 이벤트만 남긴다', async () => {
+    const { bus, logger, lotsRepo, safetyRegistry, strategyRepo } = setup();
+    lotsRepo.insertLot({
+      accountId: 1,
+      pdno: '005930',
+      nth: 1,
+      buyPrice: 70_000,
+      qty: 10,
+      amountKrw: 700_000,
+      status: 'OPEN',
+      boughtAt: new Date(),
+    });
+    setDefaultProfile(strategyRepo);
+    const failure = makeStrategyOrderFailure('VALIDATION', '주문 수량이 유효하지 않습니다.');
+    const executeOrder = vi.fn(async () => {
+      throw failure;
+    });
+    const scheduledRetries: Array<() => void> = [];
+    const timer: Timer = {
+      now: () => 1_000,
+      setTimeout: (cb, _ms) => {
+        scheduledRetries.push(cb);
+        return { clear: vi.fn() };
+      },
+      setInterval: () => ({ clear: vi.fn() }),
+    };
+    const onAutoOrderRetryScheduled = vi.fn();
+
+    const engine = new StrategyExecutionEngine({
+      bus,
+      logger: logger as never,
+      lotsRepo,
+      strategyRepo,
+      safetyRegistry,
+      getActiveAccountId: () => 1,
+      executeOrder,
+      timer,
+      onAutoOrderRetryScheduled,
+    });
+    engine.refreshTrackedSymbols();
+
+    emitSamsungTick(bus, 67_800);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(executeOrder).toHaveBeenCalledTimes(1);
+    expect(scheduledRetries).toHaveLength(0);
+    expect(onAutoOrderRetryScheduled).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attempt: 1,
+        errorKind: 'VALIDATION',
+        retryAfterMs: null,
+        status: 'NEEDS_ATTENTION',
+      }),
+    );
+    expect(safetyRegistry.get(1).getSnapshot()).toMatchObject({
+      master: true,
+      errorLock: { active: false },
+    });
+
+    emitSamsungTick(bus, 67_800);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(executeOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('영업일/장 상태 비즈니스 실패는 조건 대기 이벤트로 표시한다', async () => {
+    const { bus, lotsRepo, safetyRegistry, strategyRepo } = setup();
+    lotsRepo.insertLot({
+      accountId: 1,
+      pdno: '005930',
+      nth: 1,
+      buyPrice: 70_000,
+      qty: 10,
+      amountKrw: 700_000,
+      status: 'OPEN',
+      boughtAt: new Date(),
+    });
+    setDefaultProfile(strategyRepo);
+    const failure = makeStrategyOrderFailure('BUSINESS', '모의투자 영업일이 아닙니다.');
+    const executeOrder = vi.fn(async () => {
+      throw failure;
+    });
+    const onAutoOrderRetryScheduled = vi.fn();
+
+    const engine = new StrategyExecutionEngine({
+      bus,
+      logger: { log: vi.fn() } as never,
+      lotsRepo,
+      strategyRepo,
+      safetyRegistry,
+      getActiveAccountId: () => 1,
+      executeOrder,
+      onAutoOrderRetryScheduled,
+    });
+    engine.refreshTrackedSymbols();
+
+    emitSamsungTick(bus, 67_800);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onAutoOrderRetryScheduled).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorKind: 'BUSINESS',
+        retryAfterMs: null,
+        status: 'WAITING_CONDITION',
+      }),
+    );
+  });
+
+  it('reconciled 이벤트는 기존 재시도 errorKind 가 있을 때만 포함한다', async () => {
+    const { bus, lotsRepo, safetyRegistry, strategyRepo } = setup();
+    lotsRepo.insertLot({
+      accountId: 1,
+      pdno: '005930',
+      nth: 1,
+      buyPrice: 70_000,
+      qty: 10,
+      amountKrw: 700_000,
+      status: 'OPEN',
+      boughtAt: new Date(),
+    });
+    setDefaultProfile(strategyRepo);
+    const executeOrder = vi.fn(async () => ({
+      brokerOrderId: '9001',
+      reconciled: true,
+    }));
+    const onAutoOrderRetryScheduled = vi.fn();
+
+    const engine = new StrategyExecutionEngine({
+      bus,
+      logger: { log: vi.fn() } as never,
+      lotsRepo,
+      strategyRepo,
+      safetyRegistry,
+      getActiveAccountId: () => 1,
+      executeOrder,
+      onAutoOrderRetryScheduled,
+    });
+    engine.refreshTrackedSymbols();
+
+    emitSamsungTick(bus, 67_800);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onAutoOrderRetryScheduled).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        errorKind: expect.any(String),
+      }),
+    );
+    expect(onAutoOrderRetryScheduled).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'RECONCILED',
+      }),
+    );
   });
 
   it('장 사전 가드가 차단하면 주문 시도 없이 로그만 남긴다', async () => {

@@ -1,4 +1,4 @@
-import type { AutoOrderRetryEvent, StrategyProfile } from '@shared/contracts';
+import type { AutoOrderRetryEvent, BrokerErrorKind, StrategyProfile } from '@shared/contracts';
 import { ACTIVE_CYCLE_STATUSES, type ActiveCycleStatus } from '@shared/trading/next-nth';
 import { realTimer, type Timer } from '../brokers/core/types';
 import type { EventLogger } from '../logging/event-logger';
@@ -10,6 +10,12 @@ import type { InFlightCoordinator } from './in-flight-coordinator';
 import type { LotsRepo } from './lots-repo';
 import type { AutoOrderMarketGuard } from './market-session-guard';
 import type { StrategyRepo } from './strategy-repo';
+import { isStrategyOrderError } from './watch-order-executor';
+
+export interface StrategyExecutionOrderResult {
+  brokerOrderId: string;
+  reconciled: boolean;
+}
 
 export interface StrategyExecutionEngineOptions {
   bus: FeedBus;
@@ -25,9 +31,10 @@ export interface StrategyExecutionEngineOptions {
     pdno: string;
     price: number;
     qty: number;
+    reconcileOnly?: boolean;
     side: 'BUY' | 'SELL';
     triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
-  }) => Promise<void>;
+  }) => Promise<StrategyExecutionOrderResult | undefined>;
   marketSessionGuard?: AutoOrderMarketGuard;
   onTrackedPdnosChanged?: (pdnos: string[]) => void;
   onAutoOrderRetryScheduled?: (event: AutoOrderRetryEvent) => void;
@@ -43,6 +50,10 @@ export class StrategyExecutionEngine {
   private readonly blockedLogLastAt = new Map<string, number>();
   private readonly retryCooldownUntil = new Map<string, number>();
   private readonly retryTimers = new Map<string, { clear: () => void }>();
+  private readonly retryAttempts = new Map<string, number>();
+  private readonly retryReconcileOnly = new Set<string>();
+  private readonly retryErrorKinds = new Map<string, BrokerErrorKind>();
+  private readonly attentionRequiredKeys = new Set<string>();
   private readonly timer: Timer;
 
   constructor(private readonly opts: StrategyExecutionEngineOptions) {
@@ -97,6 +108,10 @@ export class StrategyExecutionEngine {
     for (const retryTimer of this.retryTimers.values()) retryTimer.clear();
     this.retryTimers.clear();
     this.retryCooldownUntil.clear();
+    this.retryAttempts.clear();
+    this.retryReconcileOnly.clear();
+    this.retryErrorKinds.clear();
+    this.attentionRequiredKeys.clear();
     this.opts.onTrackedPdnosChanged?.([]);
   }
 
@@ -209,16 +224,35 @@ export class StrategyExecutionEngine {
       for (const order of actionableOrders) {
         const triggerReason = order.kind === 'BUY' ? 'DROP_BUY' : 'PROFIT_SELL';
         try {
-          await this.opts.executeOrder({
+          const reconcileErrorKind = this.retryErrorKind(accountId, order);
+          const result = await this.opts.executeOrder({
             accountId,
             division: order.kind === 'BUY' ? profile.autoBuyOrderType : profile.autoSellOrderType,
             nth: order.nth,
             pdno: order.pdno,
             price: order.price,
             qty: order.qty,
+            reconcileOnly: this.isRetryReconcileOnly(accountId, order),
             side: order.kind,
             triggerReason,
           });
+          if (result?.reconciled) {
+            this.emitOrderStatus({
+              accountId,
+              attempt: this.peekNextAttempt(accountId, order.pdno, order.kind, order.nth),
+              ...(reconcileErrorKind !== undefined && { errorKind: reconcileErrorKind }),
+              failureType: 'FAILED',
+              nth: order.nth,
+              pdno: order.pdno,
+              price: order.price,
+              qty: order.qty,
+              reason: '기존 주문 접수를 확인했습니다.',
+              retryAfterMs: null,
+              side: order.kind,
+              status: 'RECONCILED',
+              triggerReason,
+            });
+          }
           this.clearOrderRetry(accountId, order);
         } catch (error) {
           if (isAutoOrderBlockedError(error)) {
@@ -264,12 +298,52 @@ export class StrategyExecutionEngine {
     side: 'BUY' | 'SELL';
     triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
   }): void {
-    const reason = describeUnknownError(input.error);
-    this.scheduleOrderRetry({ ...input, reason });
+    const decision = this.classifyOrderFailure(input.error);
+    if (decision.status === 'RETRYING') {
+      this.scheduleOrderRetry({
+        ...input,
+        ...(decision.errorKind !== undefined && { errorKind: decision.errorKind }),
+        reason: decision.reason,
+      });
+      return;
+    }
+    this.emitOrderStatus({
+      ...input,
+      attempt: this.peekNextAttempt(input.accountId, input.pdno, input.side, input.nth),
+      ...(decision.errorKind !== undefined && { errorKind: decision.errorKind }),
+      failureType: 'FAILED',
+      reason: decision.reason,
+      retryAfterMs: null,
+      status: decision.status,
+    });
+  }
+
+  private classifyOrderFailure(error: unknown): {
+    errorKind?: BrokerErrorKind;
+    reason: string;
+    status: AutoOrderRetryEvent['status'];
+  } {
+    if (!isStrategyOrderError(error)) {
+      return {
+        reason: describeUnknownError(error),
+        status: 'NEEDS_ATTENTION',
+      };
+    }
+
+    if (error.kind === 'NETWORK' || error.kind === 'RATE_LIMITED' || error.kind === 'UNKNOWN') {
+      return { errorKind: error.kind, reason: error.message, status: 'RETRYING' };
+    }
+
+    if (error.kind === 'BUSINESS' && shouldWaitForCondition(error.message)) {
+      return { errorKind: error.kind, reason: error.message, status: 'WAITING_CONDITION' };
+    }
+
+    return { errorKind: error.kind, reason: error.message, status: 'NEEDS_ATTENTION' };
   }
 
   private scheduleOrderRetry(input: {
     accountId: number;
+    errorKind?: BrokerErrorKind;
     nth: number;
     pdno: string;
     price: number;
@@ -278,8 +352,27 @@ export class StrategyExecutionEngine {
     side: 'BUY' | 'SELL';
     triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
   }): void {
-    const retryAfterMs = this.opts.autoOrderRetryCooldownMs ?? 3_000;
     const retryKey = this.retryKey(input.accountId, input.pdno, input.side, input.nth);
+    const attempt = (this.retryAttempts.get(retryKey) ?? 0) + 1;
+    const retryAfterMs = attempt <= 3 ? (this.opts.autoOrderRetryCooldownMs ?? 3_000) : 10_000;
+    if (attempt > 6) {
+      this.retryAttempts.set(retryKey, attempt);
+      this.emitOrderStatus({
+        ...input,
+        attempt,
+        failureType: 'FAILED',
+        retryAfterMs: null,
+        status: 'NEEDS_ATTENTION',
+      });
+      return;
+    }
+    this.retryAttempts.set(retryKey, attempt);
+    if (input.errorKind === 'NETWORK' || input.errorKind === 'UNKNOWN') {
+      this.retryReconcileOnly.add(retryKey);
+    }
+    if (input.errorKind !== undefined) {
+      this.retryErrorKinds.set(retryKey, input.errorKind);
+    }
     const nextRetryAt = this.timer.now() + retryAfterMs;
     this.retryCooldownUntil.set(retryKey, nextRetryAt);
     this.retryTimers.get(retryKey)?.clear();
@@ -305,20 +398,16 @@ export class StrategyExecutionEngine {
         retryAfterMs,
         side: input.side,
         triggerReason: input.triggerReason,
+        attempt,
+        errorKind: input.errorKind,
       },
     });
-    this.opts.onAutoOrderRetryScheduled?.({
-      accountId: input.accountId,
+    this.emitOrderStatus({
+      ...input,
+      attempt,
       failureType: 'FAILED',
-      nth: input.nth,
-      occurredAt: this.timer.now(),
-      pdno: input.pdno,
-      price: input.price,
-      qty: input.qty,
-      reason: input.reason,
       retryAfterMs,
-      side: input.side,
-      triggerReason: input.triggerReason,
+      status: 'RETRYING',
     });
   }
 
@@ -354,17 +443,56 @@ export class StrategyExecutionEngine {
         triggerReason: input.triggerReason,
       },
     });
-    this.opts.onAutoOrderRetryScheduled?.({
+    this.emitOrderStatus({
       accountId: input.accountId,
+      attempt: 1,
       failureType: 'BLOCKED',
       nth: input.nth,
-      occurredAt: now,
       pdno: input.pdno,
       price: input.price,
       qty: input.qty,
       reason: input.reason,
       retryAfterMs: null,
       side: input.side,
+      status: 'WAITING_CONDITION',
+      triggerReason: input.triggerReason,
+    });
+  }
+
+  private emitOrderStatus(input: {
+    accountId: number;
+    attempt: number;
+    errorKind?: BrokerErrorKind;
+    failureType: 'BLOCKED' | 'FAILED';
+    nth: number;
+    pdno: string;
+    price: number;
+    qty: number;
+    reason: string;
+    retryAfterMs: number | null;
+    side: 'BUY' | 'SELL';
+    status: AutoOrderRetryEvent['status'];
+    triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
+  }): void {
+    if (input.status === 'NEEDS_ATTENTION') {
+      this.attentionRequiredKeys.add(
+        this.retryKey(input.accountId, input.pdno, input.side, input.nth),
+      );
+    }
+    this.opts.onAutoOrderRetryScheduled?.({
+      accountId: input.accountId,
+      attempt: input.attempt,
+      ...(input.errorKind !== undefined && { errorKind: input.errorKind }),
+      failureType: input.failureType,
+      nth: input.nth,
+      occurredAt: this.timer.now(),
+      pdno: input.pdno,
+      price: input.price,
+      qty: input.qty,
+      reason: input.reason,
+      retryAfterMs: input.retryAfterMs,
+      side: input.side,
+      status: input.status,
       triggerReason: input.triggerReason,
     });
   }
@@ -393,6 +521,7 @@ export class StrategyExecutionEngine {
     order: { kind: 'BUY' | 'SELL'; nth: number; pdno: string },
   ): boolean {
     const retryKey = this.retryKey(accountId, order.pdno, order.kind, order.nth);
+    if (this.attentionRequiredKeys.has(retryKey)) return true;
     const until = this.retryCooldownUntil.get(retryKey);
     if (until === undefined) return false;
     if (this.timer.now() < until) return true;
@@ -408,6 +537,36 @@ export class StrategyExecutionEngine {
     this.retryCooldownUntil.delete(retryKey);
     this.retryTimers.get(retryKey)?.clear();
     this.retryTimers.delete(retryKey);
+    this.retryAttempts.delete(retryKey);
+    this.retryReconcileOnly.delete(retryKey);
+    this.retryErrorKinds.delete(retryKey);
+    this.attentionRequiredKeys.delete(retryKey);
+  }
+
+  private isRetryReconcileOnly(
+    accountId: number,
+    order: { kind: 'BUY' | 'SELL'; nth: number; pdno: string },
+  ): boolean {
+    const retryKey = this.retryKey(accountId, order.pdno, order.kind, order.nth);
+    return this.retryReconcileOnly.has(retryKey);
+  }
+
+  private retryErrorKind(
+    accountId: number,
+    order: { kind: 'BUY' | 'SELL'; nth: number; pdno: string },
+  ): BrokerErrorKind | undefined {
+    const retryKey = this.retryKey(accountId, order.pdno, order.kind, order.nth);
+    return this.retryErrorKinds.get(retryKey);
+  }
+
+  private peekNextAttempt(
+    accountId: number,
+    pdno: string,
+    side: 'BUY' | 'SELL',
+    nth: number,
+  ): number {
+    const retryKey = this.retryKey(accountId, pdno, side, nth);
+    return (this.retryAttempts.get(retryKey) ?? 0) + 1;
   }
 
   private retryKey(accountId: number, pdno: string, side: 'BUY' | 'SELL', nth: number): string {
@@ -419,6 +578,10 @@ function describeUnknownError(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
   return String(error);
+}
+
+function shouldWaitForCondition(reason: string): boolean {
+  return /장|시간|영업일|주말|휴장|주문가능|market|session/i.test(reason);
 }
 
 function resolveStrategyProfile(

@@ -84,19 +84,57 @@ export const WatchOutcomeEventSchema = z.object({
 });
 export type WatchOutcomeEvent = z.infer<typeof WatchOutcomeEventSchema>;
 
-export const AutoOrderRetryEventSchema = z.object({
-  accountId: z.number().int().positive(),
-  pdno: z.string().regex(/^\d{6}$/),
-  side: z.enum(['BUY', 'SELL']),
-  nth: z.number().int().positive(),
-  triggerReason: z.enum(['DROP_BUY', 'PROFIT_SELL']),
-  failureType: z.enum(['BLOCKED', 'FAILED']),
-  price: z.number().int().positive(),
-  qty: z.number().int().positive(),
-  reason: z.string().min(1),
-  retryAfterMs: z.number().int().nonnegative().nullable(),
-  occurredAt: z.number().int().positive(),
-});
+export const AutoOrderRetryStatusSchema = z.enum([
+  'RETRYING',
+  'WAITING_CONDITION',
+  'NEEDS_ATTENTION',
+  'RECONCILED',
+]);
+export type AutoOrderRetryStatus = z.infer<typeof AutoOrderRetryStatusSchema>;
+
+const AutoOrderRetryErrorKindSchema = z.enum([
+  'NETWORK',
+  'RATE_LIMITED',
+  'AUTH_FAILED',
+  'VALIDATION',
+  'BUSINESS',
+  'NOT_IMPLEMENTED',
+  'UNKNOWN',
+]);
+
+export const AutoOrderRetryEventSchema = z
+  .object({
+    accountId: z.number().int().positive(),
+    pdno: z.string().regex(/^\d{6}$/),
+    side: z.enum(['BUY', 'SELL']),
+    nth: z.number().int().positive(),
+    triggerReason: z.enum(['DROP_BUY', 'PROFIT_SELL']),
+    failureType: z.enum(['BLOCKED', 'FAILED']),
+    status: AutoOrderRetryStatusSchema,
+    attempt: z.number().int().positive(),
+    errorKind: AutoOrderRetryErrorKindSchema.optional(),
+    price: z.number().int().positive(),
+    qty: z.number().int().positive(),
+    reason: z.string().min(1),
+    retryAfterMs: z.number().int().nonnegative().nullable(),
+    occurredAt: z.number().int().positive(),
+  })
+  .superRefine((event, ctx) => {
+    if (event.side === 'BUY' && event.triggerReason !== 'DROP_BUY') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'BUY retry event must use DROP_BUY triggerReason',
+        path: ['triggerReason'],
+      });
+    }
+    if (event.side === 'SELL' && event.triggerReason !== 'PROFIT_SELL') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'SELL retry event must use PROFIT_SELL triggerReason',
+        path: ['triggerReason'],
+      });
+    }
+  });
 export type AutoOrderRetryEvent = z.infer<typeof AutoOrderRetryEventSchema>;
 
 export const TradeExecutionStatusSchema = z.enum(['PARTIAL', 'FILLED']);

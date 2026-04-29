@@ -2,7 +2,10 @@
 import type { AutoOrderRetryEvent } from '@shared/contracts';
 import { render } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useWatchEventNotifications } from './use-watch-event-notifications';
+import {
+  formatAutoOrderRetryToast,
+  useWatchEventNotifications,
+} from './use-watch-event-notifications';
 
 const {
   invalidateBalance,
@@ -177,6 +180,8 @@ describe('useWatchEventNotifications', () => {
     render(<HookHarness />);
     onAutoOrderRetryEvent?.({
       accountId: 1,
+      attempt: 1,
+      errorKind: 'RATE_LIMITED',
       failureType: 'FAILED',
       nth: 2,
       occurredAt: 1_799_999_999_000,
@@ -186,11 +191,141 @@ describe('useWatchEventNotifications', () => {
       reason: '주문 실패: RATE_LIMITED',
       retryAfterMs: 3_000,
       side: 'BUY',
+      status: 'RETRYING',
       triggerReason: 'DROP_BUY',
     });
 
     expect(toastWarning).toHaveBeenCalledWith(
-      '자동매수 재시도 대기: 005930 · 2차 · 3초 후 재시도 · 주문 실패: RATE_LIMITED',
+      '자동매수 재시도 중: 005930 · 2차 · 3초 후 다시 확인 · 주문 실패: RATE_LIMITED',
     );
+  });
+
+  it('자동주문 이벤트가 계약과 맞지 않으면 toast 로 노출하지 않는다', () => {
+    let onAutoOrderRetryEvent: ((event: AutoOrderRetryEvent) => void) | undefined;
+
+    window.appShell = {
+      openPopout: vi.fn().mockResolvedValue({ ok: true }),
+      onPopoutClosed: vi.fn(() => () => undefined),
+      assignStock: vi.fn(),
+      onStockAssigned: vi.fn(() => () => undefined),
+      broadcastAccountChanged: vi.fn(),
+      onAccountChanged: vi.fn(() => () => undefined),
+      broadcastSettingsChanged: vi.fn(),
+      onSettingsChanged: vi.fn(() => () => undefined),
+      onWatchEvent: vi.fn(() => () => undefined),
+      onAutoOrderRetryEvent: vi.fn((listener) => {
+        onAutoOrderRetryEvent = listener;
+        return () => undefined;
+      }),
+      onTradeEvent: vi.fn(() => () => undefined),
+      setAlwaysOnTop: vi.fn().mockResolvedValue(undefined),
+      fitContentHeight: vi.fn().mockResolvedValue(undefined),
+    };
+
+    render(<HookHarness />);
+    onAutoOrderRetryEvent?.({
+      accountId: 1,
+      attempt: 1,
+      failureType: 'FAILED',
+      nth: 1,
+      occurredAt: 1_799_999_999_000,
+      pdno: '005930',
+      price: 67_800,
+      qty: 10,
+      reason: 'side/trigger mismatch',
+      retryAfterMs: null,
+      side: 'BUY',
+      status: 'NEEDS_ATTENTION',
+      triggerReason: 'PROFIT_SELL',
+    });
+
+    expect(toastWarning).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it('동일 자동주문 상태 toast 는 60초 안에 반복 노출하지 않는다', () => {
+    let onAutoOrderRetryEvent: ((event: AutoOrderRetryEvent) => void) | undefined;
+
+    window.appShell = {
+      openPopout: vi.fn().mockResolvedValue({ ok: true }),
+      onPopoutClosed: vi.fn(() => () => undefined),
+      assignStock: vi.fn(),
+      onStockAssigned: vi.fn(() => () => undefined),
+      broadcastAccountChanged: vi.fn(),
+      onAccountChanged: vi.fn(() => () => undefined),
+      broadcastSettingsChanged: vi.fn(),
+      onSettingsChanged: vi.fn(() => () => undefined),
+      onWatchEvent: vi.fn(() => () => undefined),
+      onAutoOrderRetryEvent: vi.fn((listener) => {
+        onAutoOrderRetryEvent = listener;
+        return () => undefined;
+      }),
+      onTradeEvent: vi.fn(() => () => undefined),
+      setAlwaysOnTop: vi.fn().mockResolvedValue(undefined),
+      fitContentHeight: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const event: AutoOrderRetryEvent = {
+      accountId: 1,
+      attempt: 1,
+      errorKind: 'NETWORK',
+      failureType: 'FAILED',
+      nth: 1,
+      occurredAt: 1_799_999_999_000,
+      pdno: '005930',
+      price: 67_800,
+      qty: 10,
+      reason: '일시 연결 문제',
+      retryAfterMs: 3_000,
+      side: 'SELL',
+      status: 'RETRYING',
+      triggerReason: 'PROFIT_SELL',
+    };
+
+    render(<HookHarness />);
+    onAutoOrderRetryEvent?.(event);
+    onAutoOrderRetryEvent?.({ ...event, attempt: 2, occurredAt: event.occurredAt + 3_000 });
+
+    expect(toastWarning).toHaveBeenCalledTimes(1);
+    expect(toastWarning).toHaveBeenCalledWith(
+      '자동매도 재시도 중: 005930 · 1차 · 3초 후 다시 확인 · 일시 연결 문제',
+    );
+  });
+
+  it('자동주문 알림 formatter 는 상태별 문구를 오표기 없이 만든다', () => {
+    const base: AutoOrderRetryEvent = {
+      accountId: 1,
+      attempt: 1,
+      failureType: 'FAILED',
+      nth: 1,
+      occurredAt: 1_799_999_999_000,
+      pdno: '005930',
+      price: 67_800,
+      qty: 10,
+      reason: '매도가능수량 부족',
+      retryAfterMs: null,
+      side: 'SELL',
+      status: 'NEEDS_ATTENTION',
+      triggerReason: 'PROFIT_SELL',
+    };
+
+    expect(formatAutoOrderRetryToast(base)).toEqual({
+      message: '자동매도 확인 필요: 005930 · 1차 · 매도가능수량 부족',
+      tone: 'warning',
+    });
+    expect(
+      formatAutoOrderRetryToast({
+        ...base,
+        reason: '자동주문 차단: 주말',
+        status: 'WAITING_CONDITION',
+      }),
+    ).toEqual({
+      message: '자동매도 대기: 005930 · 1차 · 조건이 다시 맞으면 확인 · 자동주문 차단: 주말',
+      tone: 'warning',
+    });
+    expect(formatAutoOrderRetryToast({ ...base, reason: '', status: 'RECONCILED' })).toEqual({
+      message: '주문 접수 확인: 005930 · 자동매도 · 1차 · 기존 주문과 연결됨',
+      tone: 'success',
+    });
   });
 });

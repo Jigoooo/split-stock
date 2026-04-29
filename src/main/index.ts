@@ -40,6 +40,7 @@ import type {
   TradeExecutionEvent,
   WatchOutcomeEvent,
 } from '@shared/contracts';
+import { AutoOrderRetryEventSchema } from '@shared/contracts';
 import {
   getPopoutRouteConfig,
   getPopoutWindowTitle,
@@ -335,9 +336,19 @@ function bootstrapDeps(userDataDir: string) {
     }
   };
   const broadcastAutoOrderRetry = (event: AutoOrderRetryEvent): void => {
+    const parsed = AutoOrderRetryEventSchema.safeParse(event);
+    if (!parsed.success) {
+      eventLogger.log({
+        level: 'ERROR',
+        category: 'FSM',
+        message: 'auto-order-retry.invalid-event',
+        payload: { reason: parsed.error.message },
+      });
+      return;
+    }
     for (const target of BrowserWindow.getAllWindows()) {
       if (target.isDestroyed()) continue;
-      target.webContents.send('appShell:auto-order-retry', event);
+      target.webContents.send('appShell:auto-order-retry', parsed.data);
     }
   };
   const broadcastTradeExecution = (event: TradeExecutionEvent): void => {
@@ -742,7 +753,7 @@ function bootstrapDeps(userDataDir: string) {
     onAutoOrderRetryScheduled: broadcastAutoOrderRetry,
     marketSessionGuard,
     executeOrder: async (input) => {
-      await executeStrategyOrder(
+      return executeStrategyOrder(
         {
           db,
           settingsRepo,
@@ -766,6 +777,7 @@ function bootstrapDeps(userDataDir: string) {
           nth: input.nth,
           price: input.price,
           qty: input.qty,
+          ...(input.reconcileOnly !== undefined && { reconcileOnly: input.reconcileOnly }),
           triggerReason: input.triggerReason,
         },
       );

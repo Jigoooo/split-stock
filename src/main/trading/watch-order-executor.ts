@@ -1,3 +1,11 @@
+import type {
+  BrokerError,
+  BrokerErrorKind,
+  BrokerId,
+  DailyExecution,
+  OrderAck,
+} from '@shared/contracts';
+import { makeBrokerError } from '@shared/contracts';
 import { correctLimitPrice } from '@shared/market-rules';
 import { hasActiveCycle } from '@shared/trading/next-nth';
 import { and, eq } from 'drizzle-orm';
@@ -49,6 +57,44 @@ export interface StrategyOrderInput {
   price: number;
   qty: number;
   triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
+  reconcileOnly?: boolean;
+}
+
+export interface StrategyOrderExecutionResult {
+  brokerOrderId: string;
+  reconciled: boolean;
+}
+
+export class StrategyOrderError extends Error {
+  readonly brokerError: BrokerError;
+  readonly brokerId: BrokerId;
+  readonly kind: BrokerErrorKind;
+  readonly raw: BrokerError['raw'] | undefined;
+  readonly side: 'BUY' | 'SELL';
+  readonly pdno: string;
+  readonly qty: number;
+  readonly price: number;
+  readonly nth: number;
+  readonly attemptedAt: Date;
+
+  constructor(input: StrategyOrderInput, brokerError: BrokerError, attemptedAt: Date) {
+    super(`주문 실패: ${brokerError.kind} - ${brokerError.msg}`);
+    this.name = 'StrategyOrderError';
+    this.brokerError = brokerError;
+    this.brokerId = brokerError.brokerId;
+    this.kind = brokerError.kind;
+    this.raw = brokerError.raw;
+    this.side = input.side;
+    this.pdno = input.pdno;
+    this.qty = input.qty;
+    this.price = input.division === 'LIMIT' ? input.price : 0;
+    this.nth = input.nth;
+    this.attemptedAt = attemptedAt;
+  }
+}
+
+export function isStrategyOrderError(error: unknown): error is StrategyOrderError {
+  return error instanceof StrategyOrderError;
 }
 
 export async function executeWatchOrder(
@@ -236,9 +282,27 @@ export async function executeWatchOrder(
 export async function executeStrategyOrder(
   deps: WatchOrderExecutorDeps,
   input: StrategyOrderInput,
-): Promise<void> {
+): Promise<StrategyOrderExecutionResult> {
   const broker = deps.getBrokerForAccount(input.accountId);
   if (!broker) throw new Error('자격증명 없음 또는 환경 미선택');
+
+  const attemptedAt = new Date();
+  if (input.reconcileOnly === true) {
+    const recoverableAck = await findRecoverableStrategyOrderAck(deps, broker, input, attemptedAt);
+    if (recoverableAck !== null) {
+      recordStrategyOrder(deps, input, recoverableAck, attemptedAt, { reconciled: true });
+      return { brokerOrderId: recoverableAck.brokerOrderId, reconciled: true };
+    }
+    throw new StrategyOrderError(
+      input,
+      makeBrokerError({
+        brokerId: broker.brokerId,
+        kind: 'UNKNOWN',
+        msg: '주문 접수 여부를 아직 확인하지 못했습니다.',
+      }),
+      attemptedAt,
+    );
+  }
 
   const safety = deps.safetyRegistry.get(input.accountId);
   if (!safety.canTrade(input.pdno)) {
@@ -262,10 +326,137 @@ export async function executeStrategyOrder(
     kind: input.division,
   });
   if (result.isErr()) {
-    throw new Error(`주문 실패: ${result.error.kind} - ${result.error.msg}`);
+    if (isUnknownSubmitResult(result.error.kind)) {
+      const recoverableAck = await findRecoverableStrategyOrderAck(
+        deps,
+        broker,
+        input,
+        attemptedAt,
+      );
+      if (recoverableAck !== null) {
+        recordStrategyOrder(deps, input, recoverableAck, attemptedAt, { reconciled: true });
+        return { brokerOrderId: recoverableAck.brokerOrderId, reconciled: true };
+      }
+    }
+    throw new StrategyOrderError(input, result.error, attemptedAt);
   }
 
-  const now = new Date();
+  recordStrategyOrder(deps, input, result.value, attemptedAt, { reconciled: false });
+  return { brokerOrderId: result.value.brokerOrderId, reconciled: false };
+}
+
+async function findRecoverableStrategyOrderAck(
+  deps: WatchOrderExecutorDeps,
+  broker: BrokerPort,
+  input: StrategyOrderInput,
+  attemptedAt: Date,
+): Promise<OrderAck | null> {
+  const oneMinuteBefore = new Date(attemptedAt.getTime() - 60_000);
+  const twoMinutesAfter = new Date(attemptedAt.getTime() + 120_000);
+  const remote = await listRecoveryExecutions(broker, {
+    from: oneMinuteBefore,
+    to: twoMinutesAfter,
+    symbol: input.pdno,
+    side: input.side,
+  });
+  if (remote.error) {
+    deps.logger.log({
+      level: 'WARN',
+      category: 'ORDER',
+      message: 'strategy.order-reconcile.lookup-failed',
+      payload: {
+        accountId: input.accountId,
+        brokerId: broker.brokerId,
+        kind: remote.error.kind,
+        msg: remote.error.msg,
+        nth: input.nth,
+        pdno: input.pdno,
+        side: input.side,
+      },
+    });
+    return null;
+  }
+
+  const price = input.division === 'LIMIT' ? input.price : 0;
+  const match = remote.value.find((entry) => isMatchingRecoveredOrder(entry, input, price));
+  if (!match) return null;
+
+  deps.logger.log({
+    level: 'WARN',
+    category: 'ORDER',
+    message: 'strategy.order-reconcile.matched',
+    payload: {
+      accountId: input.accountId,
+      brokerId: broker.brokerId,
+      brokerOrderId: match.brokerOrderId,
+      nth: input.nth,
+      pdno: input.pdno,
+      side: input.side,
+    },
+  });
+
+  return {
+    brokerOrderId: match.brokerOrderId,
+    acceptedAt: match.orderedAt,
+  };
+}
+
+async function listRecoveryExecutions(
+  broker: BrokerPort,
+  params: {
+    from: Date;
+    side: 'BUY' | 'SELL';
+    symbol: string;
+    to: Date;
+  },
+): Promise<{ value: DailyExecution[]; error: BrokerError | null }> {
+  const all = new Map<string, DailyExecution>();
+  let firstError: BrokerError | null = null;
+
+  for (const filledOnly of [false, true] as const) {
+    const result = await broker.listDailyExecutions({
+      ...params,
+      filledOnly,
+    });
+    if (result.isErr()) {
+      firstError ??= result.error;
+      continue;
+    }
+    for (const entry of result.value) {
+      all.set(entry.brokerOrderId, entry);
+    }
+  }
+
+  if (all.size === 0 && firstError !== null) {
+    return { value: [], error: firstError };
+  }
+  return { value: Array.from(all.values()), error: null };
+}
+
+function isMatchingRecoveredOrder(
+  entry: DailyExecution,
+  input: StrategyOrderInput,
+  price: number,
+): boolean {
+  if (entry.symbol !== input.pdno) return false;
+  if (entry.side !== input.side) return false;
+  if (entry.orderQty !== input.qty) return false;
+  if (entry.cancelled) return false;
+  if (input.division === 'LIMIT' && entry.orderPrice !== price) return false;
+  return entry.remainingQty > 0 || entry.totalFilledQty > 0;
+}
+
+function isUnknownSubmitResult(kind: BrokerErrorKind): boolean {
+  return kind === 'NETWORK' || kind === 'UNKNOWN';
+}
+
+function recordStrategyOrder(
+  deps: WatchOrderExecutorDeps,
+  input: StrategyOrderInput,
+  ack: OrderAck,
+  now: Date,
+  opts: { reconciled: boolean },
+): void {
   const linkedLot =
     input.side === 'BUY'
       ? createPendingBuyLot(
@@ -300,8 +491,8 @@ export async function executeStrategyOrder(
     .values({
       accountId: input.accountId,
       lotId: linkedLot.lotId,
-      odno: result.value.brokerOrderId,
-      orgNo: result.value.brokerOrgNo ?? null,
+      odno: ack.brokerOrderId,
+      orgNo: ack.brokerOrgNo ?? null,
       pdno: input.pdno,
       side: input.side,
       division: input.division,
@@ -316,15 +507,15 @@ export async function executeStrategyOrder(
   if (
     pendingCfg.enabled &&
     input.division === 'LIMIT' &&
-    result.value.brokerOrgNo &&
+    ack.brokerOrgNo &&
     deps.pendingOrderWatcher
   ) {
     deps.pendingOrderWatcher.register({
       pdno: input.pdno,
       side: input.side,
       nth: linkedLot.nth ?? input.nth,
-      odno: result.value.brokerOrderId,
-      orgNo: result.value.brokerOrgNo,
+      odno: ack.brokerOrderId,
+      orgNo: ack.brokerOrgNo,
       qty: input.qty,
       accountId: input.accountId,
     });
@@ -342,6 +533,7 @@ export async function executeStrategyOrder(
       triggerReason: input.triggerReason,
       qty: input.qty,
       price: input.price,
+      reconciled: opts.reconciled,
     },
   });
 }
