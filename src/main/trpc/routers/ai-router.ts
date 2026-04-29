@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { getAiRuntimeStatus, runWithAiRuntimeOperation } from '../../ai/ai-runtime-state';
 import { ensureDailyCandles } from '../../ai/ensure-candles';
+import type { NaverSearchTrendSummary } from '../../ai/naver-datalab-client';
 import { collectNewsEvidence, DEFAULT_MAX_SYMBOLS_PER_PASS } from '../../ai/news-evidence';
 import type { NewsItem } from '../../ai/news-fetcher';
 import { suggestStrategy } from '../../ai/suggest-strategy';
@@ -204,6 +205,9 @@ export const aiRouter = router({
             : null;
           const stockName = ctx.stockMasterRepo.find(input.pdno)?.name ?? input.pdno;
           const newsFetcher = ctx.newsFetcher;
+          const searchTrend = ctx.naverDatalabClient?.isAvailable()
+            ? await getSingleSearchTrend(ctx.naverDatalabClient, input.pdno, stockName)
+            : undefined;
           const newsEvidence = newsFetcher?.isAvailable()
             ? await collectNewsEvidence({
                 pdno: input.pdno,
@@ -223,6 +227,7 @@ export const aiRouter = router({
             ...(input.desiredStages !== undefined ? { desiredStages: input.desiredStages } : {}),
             ...(resolvedCorpCode !== undefined ? { corpCode: resolvedCorpCode } : {}),
             ...(newsEvidence !== undefined ? { newsEvidence } : {}),
+            ...(searchTrend !== undefined ? { searchTrend } : {}),
             marketContext: buildRankedMarketContext(input.pdno, marketSnapshot),
           });
         });
@@ -403,6 +408,20 @@ export const aiRouter = router({
             return await marketContextService.getContextForPdnos(pdnos);
           }
         : undefined;
+      const naverDatalabClient = ctx.naverDatalabClient;
+      const fetchSearchTrends =
+        naverDatalabClient?.isAvailable() && input?.aiOff !== true
+          ? async (candidates: ReadonlyArray<{ pdno: string; name: string }>) => {
+              return await naverDatalabClient.getTrendSummaries(
+                candidates.slice(0, DEFAULT_MAX_SYMBOLS_PER_PASS).map((candidate) => ({
+                  key: candidate.pdno,
+                  groupName: candidate.name,
+                  keywords: [candidate.name],
+                })),
+                { days: 30, timeUnit: 'date' },
+              );
+            }
+          : undefined;
       try {
         return await runWithAiRuntimeOperation('symbolRecommendation', async () =>
           suggestSymbols({
@@ -426,6 +445,7 @@ export const aiRouter = router({
             ...(searchNewsTool ? { searchNewsTool } : {}),
             ...(getDartDisclosuresTool ? { getDartDisclosuresTool } : {}),
             ...(getMarketContextForPdnos ? { getMarketContextForPdnos } : {}),
+            ...(fetchSearchTrends ? { fetchSearchTrends } : {}),
           }),
         );
       } catch (cause) {
@@ -436,3 +456,15 @@ export const aiRouter = router({
       }
     }),
 });
+
+async function getSingleSearchTrend(
+  client: NonNullable<Context['naverDatalabClient']>,
+  pdno: string,
+  name: string,
+): Promise<NaverSearchTrendSummary | undefined> {
+  const trends = await client.getTrendSummaries(
+    [{ key: pdno, groupName: name, keywords: [name] }],
+    { days: 30, timeUnit: 'date' },
+  );
+  return trends.get(pdno);
+}

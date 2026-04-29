@@ -7,6 +7,7 @@ import type { AiCredentialsRepo } from './ai-credentials-repo';
 import type { DartClient } from './dart-client';
 import type { LlmClient } from './llm-client';
 import { buildMagicSplitFacts, type DataQuality, type EvidenceRef } from './magic-split-facts';
+import type { NaverSearchTrendSummary } from './naver-datalab-client';
 import { formatNewsEvidenceForPrompt, type NewsEvidencePack } from './news-evidence';
 import type { RankedMarketContext } from './suggest-symbols';
 
@@ -23,6 +24,7 @@ export interface SuggestStrategyInput {
   /** DART corp_code 입력 — 외부에서 주입 가능 (corpCode lookup 미구현 시 fallback). */
   corpCode?: string;
   newsEvidence?: NewsEvidencePack;
+  searchTrend?: NaverSearchTrendSummary;
   marketContext?: RankedMarketContext | null;
   /**
    * 일봉 캐시 사전 보충 콜백. 호출자(ai-router)가 KIS env/auth 들고 주입.
@@ -198,6 +200,7 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
     } satisfies EvidenceRef,
     ...facts.evidenceRefs,
     ...disclosureRefs,
+    ...(input.searchTrend ? [searchTrendEvidenceRef(input.searchTrend)] : []),
     ...(input.newsEvidence?.clusters ?? []).map(
       (cluster): EvidenceRef => ({
         id: cluster.id,
@@ -224,6 +227,7 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
     input.marketContext
       ? `시장 컨텍스트: ${JSON.stringify(input.marketContext).slice(0, 1200)}`
       : '',
+    input.searchTrend ? `Naver DataLab 검색 트렌드: ${formatSearchTrend(input.searchTrend)}` : '',
     formatNewsEvidenceForPrompt(input.newsEvidence, 2400),
     disclosuresLine,
     '',
@@ -264,6 +268,8 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
           '응답은 단일 JSON 객체로만 답하고, 차수 nth 는 1부터 maxStages 까지 순서대로 채우세요.',
           '핵심: triggerDropPct 는 "직전 차수 매수가 × (1 - triggerDropPct)" 로 다음 차수 트리거를 산출한다. 1차 가격 누적이 아니다.',
           '따라서 모든 차수에서 비교적 균일한 값(0.02~0.04)이 자연스러우며, 차수가 늘어난다고 해서 triggerDropPct 를 +0.02 씩 단조 증가시키면 안 된다.',
+          'Naver DataLab 검색 트렌드는 종목 관심도/이벤트성 수요를 보는 보조 사실이며, 가격 지표를 대체하지 않는다.',
+          'Naver DataLab ratio 는 요청 묶음 안 상대값이므로 절대 검색량이 아니라 최근 변화 방향만 참고한다.',
         ].join('\n'),
       },
       { role: 'user', content: userPrompt },
@@ -374,6 +380,28 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
     dataQuality: facts.dataQuality,
     dataQualityReason: facts.dataQualityReason,
   };
+}
+
+function searchTrendEvidenceRef(trend: NaverSearchTrendSummary): EvidenceRef {
+  return {
+    id: 'market:naver-datalab',
+    kind: 'market',
+    title: `Naver DataLab ${trend.title}`,
+    detail: formatSearchTrend(trend),
+  };
+}
+
+function formatSearchTrend(trend: NaverSearchTrendSummary): string {
+  const parts = [
+    `${trend.startDate}~${trend.endDate}`,
+    trend.latestRatio !== null && trend.latestPeriod !== null
+      ? `latest=${trend.latestRatio}@${trend.latestPeriod}`
+      : null,
+    trend.changeFromPrevious !== null ? `prevDiff=${trend.changeFromPrevious}` : null,
+    trend.changeFromAverage !== null ? `avgDiff=${trend.changeFromAverage}` : null,
+    trend.slope !== null ? `periodSlope=${trend.slope}` : null,
+  ].filter((value): value is string => value !== null);
+  return parts.join(', ');
 }
 
 /**

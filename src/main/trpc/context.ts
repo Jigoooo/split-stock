@@ -5,6 +5,7 @@ import type { DartClient } from '../ai/dart-client';
 import type { DartCorpCodeRepo } from '../ai/dart-corp-code-repo';
 import type { LlmClient } from '../ai/llm-client';
 import type { MarketContextService } from '../ai/market-context-service';
+import type { NaverDatalabClient } from '../ai/naver-datalab-client';
 import type { NewsFetcher } from '../ai/news-fetcher';
 import type { BackupScheduler } from '../backup/scheduler';
 import { createBrokerPort } from '../brokers/factory';
@@ -96,6 +97,8 @@ export interface Context {
   dartCorpCodeRepo: DartCorpCodeRepo | null;
   /** KRX/ECOS 캐시 기반 시장 컨텍스트 — 키 미설정/캐시 없음이면 status 로 graceful fallback. */
   marketContextService: MarketContextService | null;
+  /** Naver DataLab 검색어 트렌드 — AI 추천 시 종목/브랜드 관심도 컨텍스트. 키 미설정 시 isAvailable=false. */
+  naverDatalabClient: NaverDatalabClient | null;
   /** Naver Open API 뉴스 fetcher — AI 추천 시 종목별 최신 뉴스 컨텍스트. 키 미설정 시 isAvailable=false. */
   newsFetcher: NewsFetcher | null;
   currentEnv: AppEnv | null;

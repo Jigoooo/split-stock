@@ -54,6 +54,7 @@ import { KrxClient } from './ai/krx-client';
 import { LlmClient } from './ai/llm-client';
 import { MarketContextRepo } from './ai/market-context-repo';
 import { MarketContextService } from './ai/market-context-service';
+import { NaverDatalabClient } from './ai/naver-datalab-client';
 import { NewsFetcher } from './ai/news-fetcher';
 import { BackupScheduler } from './backup/scheduler';
 import { KiwoomHttpClient } from './brokers/kiwoom/http-client';
@@ -224,6 +225,11 @@ function bootstrapDeps(userDataDir: string) {
     apiKey: process.env.DART_API_KEY ?? '',
   });
   const newsFetcher = new NewsFetcher({
+    logger: eventLogger,
+    naverClientId: process.env.NAVER_CLIENT_ID ?? '',
+    naverClientSecret: process.env.NAVER_CLIENT_SECRET ?? '',
+  });
+  const naverDatalabClient = new NaverDatalabClient({
     logger: eventLogger,
     naverClientId: process.env.NAVER_CLIENT_ID ?? '',
     naverClientSecret: process.env.NAVER_CLIENT_SECRET ?? '',
@@ -821,6 +827,7 @@ function bootstrapDeps(userDataDir: string) {
     dartClient,
     dartCorpCodeRepo,
     marketContextService,
+    naverDatalabClient,
     newsFetcher,
     initialActiveAccountId,
     realtimeFactory: (env) => {

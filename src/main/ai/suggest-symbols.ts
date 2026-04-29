@@ -22,6 +22,7 @@ import {
   type MagicSplitFacts,
 } from './magic-split-facts';
 import type { MarketContextSnapshot } from './market-context-service';
+import type { NaverSearchTrendSummary } from './naver-datalab-client';
 import {
   DEFAULT_MAX_SYMBOLS_PER_PASS,
   flattenRepresentativeNews,
@@ -63,6 +64,13 @@ export interface SuggestSymbolsInput {
   fetchNewsEvidence?: (
     candidates: ReadonlyArray<{ pdno: string; name: string }>,
   ) => Promise<Map<string, NewsEvidencePack>>;
+  /**
+   * Naver DataLab 검색어 트렌드 — 종목명/브랜드 관심도 보조 신호.
+   * ratio 는 요청 그룹 내 상대값이므로 가격 신호가 아니라 이벤트/관심도 확인용으로만 쓴다.
+   */
+  fetchSearchTrends?: (
+    candidates: ReadonlyArray<{ pdno: string; name: string }>,
+  ) => Promise<Map<string, NaverSearchTrendSummary>>;
   /**
    * Tool: search_news 콜백 — LLM 이 필요 시 추가 키워드로 뉴스 검색.
    * (query, max?) → NewsItem[]. fetchNews 와 별도 — 사전 fetch 가 아닌 LLM 의 능동 호출.
@@ -341,6 +349,9 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       : input.fetchNews
         ? await input.fetchNews(newsTargets)
         : new Map();
+  const searchTrendsByPdno = input.fetchSearchTrends
+    ? await input.fetchSearchTrends(newsTargets)
+    : new Map<string, NaverSearchTrendSummary>();
 
   const userPrompt = buildPrompt({
     topCandidates: promptTopCandidates,
@@ -349,6 +360,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
     algoByPdno,
     newsByPdno,
     newsEvidenceByPdno,
+    searchTrendsByPdno,
     marketContext,
     topN: input.topN ?? 8,
   });
@@ -461,6 +473,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
           newsEvidenceByPdno.get(item.pdno),
           item.citedTools,
           disclosureEvidenceRefs,
+          searchTrendsByPdno.get(item.pdno),
         ),
         globalRisks: fact?.globalRisks ?? [],
         newsClusters: newsEvidenceByPdno.get(item.pdno)?.clusters ?? [],
@@ -533,7 +546,8 @@ const SYSTEM_PROMPT = [
   '   - userInputResults: 사용자가 입력한 종목(extras) 의 평가. recommended 와 별도. tier 분배 X.',
   '9. summary 는 사실 기반 한 줄. pros/cons 는 행동 가이드. entryNote 는 진입 시점/주의사항 1줄.',
   '10. 알고리즘 점수(algoScore) 와 LLM 점수(score) 차이가 30점 이상이면 그 이유를 cons 에 짧게 적기.',
-  '11. KRX/ECOS 컨텍스트는 캐시된 외부 사실입니다. modifier/risk flag/근거 사실로만 사용하고 consensusCount 계산에는 포함하지 마세요.',
+  '11. KRX/ECOS/Naver DataLab 컨텍스트는 캐시된 외부 사실입니다. modifier/risk flag/근거 사실로만 사용하고 consensusCount 계산에는 포함하지 마세요.',
+  '12. Naver DataLab ratio 는 요청 묶음 안 상대값입니다. 종목 간 절대 관심도 비교가 아니라 같은 종목의 최근 변화 방향만 참고하세요.',
   '',
   '매직스플릿 차수 구조 (중요):',
   '- 2차 이후 매수 트리거는 1차 가격 기준이 아니라 직전 차수 매수가 기준이다.',
@@ -549,6 +563,7 @@ function buildPrompt(args: {
   algoByPdno: Map<string, AlgoSignals>;
   newsByPdno: Map<string, ReadonlyArray<NewsItem>>;
   newsEvidenceByPdno: Map<string, NewsEvidencePack>;
+  searchTrendsByPdno: Map<string, NaverSearchTrendSummary>;
   marketContext: MarketContextSnapshot | null;
   topN: number;
 }): string {
@@ -559,6 +574,7 @@ function buildPrompt(args: {
     algoByPdno,
     newsByPdno,
     newsEvidenceByPdno,
+    searchTrendsByPdno,
     marketContext,
     topN,
   } = args;
@@ -595,6 +611,7 @@ function buildPrompt(args: {
       algoByPdno,
       newsByPdno,
       newsEvidenceByPdno,
+      searchTrendsByPdno,
       marketContext,
       lines,
     );
@@ -609,6 +626,7 @@ function buildPrompt(args: {
         algoByPdno,
         newsByPdno,
         newsEvidenceByPdno,
+        searchTrendsByPdno,
         marketContext,
         lines,
       );
@@ -620,7 +638,10 @@ function buildPrompt(args: {
   lines.push('- conflicts 가 있으면 반드시 cons 에 그대로 인용.');
   lines.push('- consensusCount 는 BB/RSI/MFI/momentum/Stoch/CCI 중 동의한 개수.');
   lines.push('- citedTools 는 호출한 도구 이름. 호출 안 했으면 빈 배열.');
-  lines.push('- KRX/ECOS 값은 캐시 보조 사실이며 consensusCount 에 포함하지 마세요.');
+  lines.push('- KRX/ECOS/Naver DataLab 값은 캐시 보조 사실이며 consensusCount 에 포함하지 마세요.');
+  lines.push(
+    '- Naver DataLab ratio 는 종목 간 절대 비교가 아니라 같은 종목의 최근 변화 방향만 참고하세요.',
+  );
   lines.push(
     '- 뉴스 evidence 는 중복 제거된 cluster 중심 보조 근거입니다. raw 기사 수가 많아도 cluster 근거 중심으로 판단하세요.',
   );
@@ -633,6 +654,7 @@ function appendCandidateBlock(
   algoByPdno: Map<string, AlgoSignals>,
   newsByPdno: Map<string, ReadonlyArray<NewsItem>>,
   newsEvidenceByPdno: Map<string, NewsEvidencePack>,
+  searchTrendsByPdno: Map<string, NaverSearchTrendSummary>,
   marketContext: MarketContextSnapshot | null,
   lines: string[],
 ): void {
@@ -680,6 +702,10 @@ function appendCandidateBlock(
   const marketBits = formatMarketContextForPrompt(c.pdno, marketContext);
   if (marketBits) {
     lines.push(`    시장 컨텍스트(캐시): ${marketBits}`);
+  }
+  const searchTrend = searchTrendsByPdno.get(c.pdno);
+  if (searchTrend) {
+    lines.push(`    Naver DataLab 검색 트렌드: ${formatSearchTrendForPrompt(searchTrend)}`);
   }
   const evidence = newsEvidenceByPdno.get(c.pdno);
   if (!evidence) {
@@ -988,6 +1014,7 @@ function buildSymbolEvidenceRefs(
   newsEvidence: NewsEvidencePack | undefined,
   citedTools: ReadonlyArray<string> = [],
   disclosureEvidenceRefs: ReadonlyArray<EvidenceRef> = [],
+  searchTrend: NaverSearchTrendSummary | undefined = undefined,
 ): MagicSplitFacts['evidenceRefs'] {
   const refs: MagicSplitFacts['evidenceRefs'] = [];
   if (facts) {
@@ -1012,10 +1039,35 @@ function buildSymbolEvidenceRefs(
       detail: cluster.summary,
     });
   }
+  if (searchTrend) {
+    refs.push(searchTrendEvidenceRef(searchTrend));
+  }
   if (citedTools.includes('get_dart_disclosures')) {
     refs.push(...disclosureEvidenceRefs);
   }
   return dedupeEvidenceRefs(refs).slice(0, 16);
+}
+
+function searchTrendEvidenceRef(trend: NaverSearchTrendSummary): EvidenceRef {
+  return {
+    id: `market:naver-datalab:${trend.key}`,
+    kind: 'market',
+    title: `Naver DataLab ${trend.title}`,
+    detail: formatSearchTrendForPrompt(trend),
+  };
+}
+
+function formatSearchTrendForPrompt(trend: NaverSearchTrendSummary): string {
+  const parts = [
+    `${trend.startDate}~${trend.endDate}`,
+    trend.latestRatio !== null && trend.latestPeriod !== null
+      ? `latest=${trend.latestRatio}@${trend.latestPeriod}`
+      : null,
+    trend.changeFromPrevious !== null ? `prevDiff=${trend.changeFromPrevious}` : null,
+    trend.changeFromAverage !== null ? `avgDiff=${trend.changeFromAverage}` : null,
+    trend.slope !== null ? `periodSlope=${trend.slope}` : null,
+  ].filter((value): value is string => value !== null);
+  return parts.join(', ');
 }
 
 function extractDisclosureEvidenceRefs(
