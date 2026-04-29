@@ -1,6 +1,7 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import type { StrategyAutoMode } from '@shared/contracts/strategy';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 interface SetPositionAutoModeInput {
   accountId: number;
@@ -19,22 +20,37 @@ interface SetPositionAutoModeInput {
  * caller 는 `displayMode` 를 select 의 value 로 쓰고, `setAutoMode` 만 호출하면 된다.
  * select 는 disable 하지 않는다 — 빠른 연속 변경 시 last-write-wins 로 최종 값만 반영.
  */
-export function usePositionAutoMode(pdno: string, serverMode: StrategyAutoMode) {
+const AUTO_MODE_LABELS: Record<StrategyAutoMode, string> = {
+  ALL_ON: '전체 ON',
+  ALL_OFF: '전체 OFF',
+  BUY_ONLY: '매수만 ON',
+  SELL_ONLY: '매도만 ON',
+};
+
+export function usePositionAutoMode(
+  pdno: string,
+  serverMode: StrategyAutoMode,
+  symbolName?: string,
+) {
   const utils = trpc.useUtils();
   const [optimisticMode, setOptimisticMode] = useState<StrategyAutoMode | null>(null);
 
   const mutation = trpc.strategy.setAutoModeQuick.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       // fire-and-forget — await 하면 무거운 getBalanceWithLots refetch 까지 isPending 잡힘.
       void utils.account.getBalanceWithLots.invalidate();
       void utils.strategy.getActive.invalidate({ pdno });
       void utils.strategy.getEffectiveForEdit.invalidate({ pdno });
       void utils.strategy.getEffectiveMetas.invalidate();
       window.appShell?.broadcastSettingsChanged?.('strategy');
+      toast.success(
+        `${symbolName ?? variables.pdno} 자동매매 상태가 ${AUTO_MODE_LABELS[variables.mode]}으로 변경되었습니다`,
+      );
     },
-    onError: () => {
+    onError: (err) => {
       // 서버 거절 → optimistic 값을 버리고 serverMode 로 복귀.
       setOptimisticMode(null);
+      toast.error(`자동매매 상태 변경 실패: ${err.message}`);
     },
   });
 

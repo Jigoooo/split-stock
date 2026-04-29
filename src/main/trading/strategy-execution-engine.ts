@@ -1,5 +1,6 @@
-import type { StrategyProfile } from '@shared/contracts';
+import type { AutoOrderRetryEvent, StrategyProfile } from '@shared/contracts';
 import { ACTIVE_CYCLE_STATUSES, type ActiveCycleStatus } from '@shared/trading/next-nth';
+import { realTimer, type Timer } from '../brokers/core/types';
 import type { EventLogger } from '../logging/event-logger';
 import type { FeedBus } from '../realtime/feed-bus';
 import type { SafetyStateRegistry } from '../safety/safety-state';
@@ -29,6 +30,9 @@ export interface StrategyExecutionEngineOptions {
   }) => Promise<void>;
   marketSessionGuard?: AutoOrderMarketGuard;
   onTrackedPdnosChanged?: (pdnos: string[]) => void;
+  onAutoOrderRetryScheduled?: (event: AutoOrderRetryEvent) => void;
+  autoOrderRetryCooldownMs?: number;
+  timer?: Timer;
   /** WatchEngine 등 다른 source 와 cross-dedupe 위한 공유 coordinator (선택). */
   inFlightCoordinator?: InFlightCoordinator;
 }
@@ -37,8 +41,13 @@ export class StrategyExecutionEngine {
   private readonly unsubscribers = new Map<string, () => void>();
   private readonly inFlightPdnos = new Set<string>();
   private readonly blockedLogLastAt = new Map<string, number>();
+  private readonly retryCooldownUntil = new Map<string, number>();
+  private readonly retryTimers = new Map<string, { clear: () => void }>();
+  private readonly timer: Timer;
 
-  constructor(private readonly opts: StrategyExecutionEngineOptions) {}
+  constructor(private readonly opts: StrategyExecutionEngineOptions) {
+    this.timer = opts.timer ?? realTimer;
+  }
 
   refreshTrackedSymbols(): void {
     const accountId = this.opts.getActiveAccountId();
@@ -85,6 +94,9 @@ export class StrategyExecutionEngine {
   dispose(): void {
     for (const unsubscribe of this.unsubscribers.values()) unsubscribe();
     this.unsubscribers.clear();
+    for (const retryTimer of this.retryTimers.values()) retryTimer.clear();
+    this.retryTimers.clear();
+    this.retryCooldownUntil.clear();
     this.opts.onTrackedPdnosChanged?.([]);
   }
 
@@ -140,9 +152,9 @@ export class StrategyExecutionEngine {
         sellRules: profile.sellRules,
       },
     );
-    const actionableOrders = orders.filter((order) =>
-      order.kind === 'BUY' ? profile.autoBuyEnabled : profile.autoSellEnabled,
-    );
+    const actionableOrders = orders
+      .filter((order) => (order.kind === 'BUY' ? profile.autoBuyEnabled : profile.autoSellEnabled))
+      .filter((order) => !this.isOrderRetryCoolingDown(accountId, order));
     if (actionableOrders.length === 0) return;
 
     // cross-source dedupe: WatchEngine 이 같은 (accountId, pdno) 으로 동시에 fire 하지 못하도록.
@@ -171,6 +183,7 @@ export class StrategyExecutionEngine {
               nth: guardOrder.nth,
               pdno,
               price,
+              qty: guardOrder.qty,
               reason: error.message,
               side: guardOrder.kind,
               triggerReason: guardOrder.kind === 'BUY' ? 'DROP_BUY' : 'PROFIT_SELL',
@@ -206,6 +219,7 @@ export class StrategyExecutionEngine {
             side: order.kind,
             triggerReason,
           });
+          this.clearOrderRetry(accountId, order);
         } catch (error) {
           if (isAutoOrderBlockedError(error)) {
             this.handleOrderBlocked({
@@ -214,6 +228,7 @@ export class StrategyExecutionEngine {
               nth: order.nth,
               pdno: order.pdno,
               price,
+              qty: order.qty,
               reason: error.message,
               side: order.kind,
               triggerReason,
@@ -226,6 +241,7 @@ export class StrategyExecutionEngine {
             nth: order.nth,
             pdno: order.pdno,
             price,
+            qty: order.qty,
             side: order.kind,
             triggerReason,
           });
@@ -244,25 +260,66 @@ export class StrategyExecutionEngine {
     nth: number;
     pdno: string;
     price: number;
+    qty: number;
     side: 'BUY' | 'SELL';
     triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
   }): void {
     const reason = describeUnknownError(input.error);
+    this.scheduleOrderRetry({ ...input, reason });
+  }
+
+  private scheduleOrderRetry(input: {
+    accountId: number;
+    nth: number;
+    pdno: string;
+    price: number;
+    qty: number;
+    reason: string;
+    side: 'BUY' | 'SELL';
+    triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
+  }): void {
+    const retryAfterMs = this.opts.autoOrderRetryCooldownMs ?? 3_000;
+    const retryKey = this.retryKey(input.accountId, input.pdno, input.side, input.nth);
+    const nextRetryAt = this.timer.now() + retryAfterMs;
+    this.retryCooldownUntil.set(retryKey, nextRetryAt);
+    this.retryTimers.get(retryKey)?.clear();
+    this.retryTimers.set(
+      retryKey,
+      this.timer.setTimeout(() => {
+        this.retryTimers.delete(retryKey);
+        this.retryCooldownUntil.delete(retryKey);
+        this.evaluateLatest(input.pdno);
+      }, retryAfterMs),
+    );
+
     this.opts.logger.log({
-      level: 'ERROR',
+      level: 'WARN',
       category: 'FSM',
-      message: 'strategy-engine.order-failed',
+      message: 'strategy-engine.order-retry-scheduled',
       payload: {
         accountId: input.accountId,
         nth: input.nth,
         pdno: input.pdno,
         price: input.price,
-        reason,
+        reason: input.reason,
+        retryAfterMs,
         side: input.side,
         triggerReason: input.triggerReason,
       },
     });
-    this.opts.safetyRegistry.get(input.accountId).recordError(reason);
+    this.opts.onAutoOrderRetryScheduled?.({
+      accountId: input.accountId,
+      failureType: 'FAILED',
+      nth: input.nth,
+      occurredAt: this.timer.now(),
+      pdno: input.pdno,
+      price: input.price,
+      qty: input.qty,
+      reason: input.reason,
+      retryAfterMs,
+      side: input.side,
+      triggerReason: input.triggerReason,
+    });
   }
 
   private handleOrderBlocked(input: {
@@ -271,14 +328,15 @@ export class StrategyExecutionEngine {
     nth: number;
     pdno: string;
     price: number;
+    qty: number;
     reason: string;
     side: 'BUY' | 'SELL';
     triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
   }): void {
     const logKey = `${input.accountId}:${input.pdno}:${input.code}:${input.side}`;
-    const now = Date.now();
-    const lastAt = this.blockedLogLastAt.get(logKey) ?? 0;
-    if (now - lastAt < 60_000) return;
+    const now = this.timer.now();
+    const lastAt = this.blockedLogLastAt.get(logKey);
+    if (lastAt !== undefined && now - lastAt < 60_000) return;
     this.blockedLogLastAt.set(logKey, now);
     this.opts.logger.log({
       level: 'WARN',
@@ -290,10 +348,24 @@ export class StrategyExecutionEngine {
         nth: input.nth,
         pdno: input.pdno,
         price: input.price,
+        qty: input.qty,
         reason: input.reason,
         side: input.side,
         triggerReason: input.triggerReason,
       },
+    });
+    this.opts.onAutoOrderRetryScheduled?.({
+      accountId: input.accountId,
+      failureType: 'BLOCKED',
+      nth: input.nth,
+      occurredAt: now,
+      pdno: input.pdno,
+      price: input.price,
+      qty: input.qty,
+      reason: input.reason,
+      retryAfterMs: null,
+      side: input.side,
+      triggerReason: input.triggerReason,
     });
   }
 
@@ -314,6 +386,32 @@ export class StrategyExecutionEngine {
     if (accountId !== null) {
       this.opts.safetyRegistry.get(accountId).recordError(reason);
     }
+  }
+
+  private isOrderRetryCoolingDown(
+    accountId: number,
+    order: { kind: 'BUY' | 'SELL'; nth: number; pdno: string },
+  ): boolean {
+    const retryKey = this.retryKey(accountId, order.pdno, order.kind, order.nth);
+    const until = this.retryCooldownUntil.get(retryKey);
+    if (until === undefined) return false;
+    if (this.timer.now() < until) return true;
+    this.retryCooldownUntil.delete(retryKey);
+    return false;
+  }
+
+  private clearOrderRetry(
+    accountId: number,
+    order: { kind: 'BUY' | 'SELL'; nth: number; pdno: string },
+  ): void {
+    const retryKey = this.retryKey(accountId, order.pdno, order.kind, order.nth);
+    this.retryCooldownUntil.delete(retryKey);
+    this.retryTimers.get(retryKey)?.clear();
+    this.retryTimers.delete(retryKey);
+  }
+
+  private retryKey(accountId: number, pdno: string, side: 'BUY' | 'SELL', nth: number): string {
+    return `${accountId}:${pdno}:${side}:${nth}`;
   }
 }
 

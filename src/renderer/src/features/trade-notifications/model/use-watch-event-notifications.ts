@@ -43,6 +43,20 @@ export function useWatchEventNotifications(): void {
   }, [utils]);
 
   useEffect(() => {
+    const unsubscribe = window.appShell?.onAutoOrderRetryEvent?.((event) => {
+      const sideLabel = event.side === 'BUY' ? '자동매수' : '자동매도';
+      const retryLabel =
+        event.retryAfterMs === null
+          ? '조건 유지 시 재시도'
+          : `${Math.ceil(event.retryAfterMs / 1000)}초 후 재시도`;
+      toast.warning(
+        `${sideLabel} 재시도 대기: ${event.pdno} · ${event.nth}차 · ${retryLabel} · ${event.reason}`,
+      );
+    });
+    return () => unsubscribe?.();
+  }, []);
+
+  useEffect(() => {
     const unsubscribe = window.appShell?.onPopoutClosed?.((route) => {
       if (route !== 'add-watch-order') {
         return;

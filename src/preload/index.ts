@@ -1,4 +1,8 @@
-import type { TradeExecutionEvent, WatchOutcomeEvent } from '@shared/contracts';
+import type {
+  AutoOrderRetryEvent,
+  TradeExecutionEvent,
+  WatchOutcomeEvent,
+} from '@shared/contracts';
 import { contextBridge, ipcRenderer } from 'electron';
 import { exposeElectronTRPC } from 'trpc-electron/main';
 
@@ -67,6 +71,11 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:watch-event', handler);
     return () => ipcRenderer.off('appShell:watch-event', handler);
   },
+  onAutoOrderRetryEvent: (listener: (event: AutoOrderRetryEvent) => void): (() => void) => {
+    const handler = (_: unknown, event: AutoOrderRetryEvent): void => listener(event);
+    ipcRenderer.on('appShell:auto-order-retry', handler);
+    return () => ipcRenderer.off('appShell:auto-order-retry', handler);
+  },
   onTradeEvent: (listener: (event: TradeExecutionEvent) => void): (() => void) => {
     const handler = (_: unknown, event: TradeExecutionEvent): void => listener(event);
     ipcRenderer.on('appShell:trade-event', handler);
@@ -102,6 +111,7 @@ export type AppShellBridge = {
   broadcastSettingsChanged: (scope?: string) => void;
   onSettingsChanged: (listener: (scope: string) => void) => () => void;
   onWatchEvent?: (listener: (event: WatchOutcomeEvent) => void) => () => void;
+  onAutoOrderRetryEvent?: (listener: (event: AutoOrderRetryEvent) => void) => () => void;
   onTradeEvent?: (listener: (event: TradeExecutionEvent) => void) => () => void;
   onQuoteFeedCooldown?: (
     listener: (event: { pdno: string; failures: number; reason: string }) => void,

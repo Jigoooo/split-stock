@@ -34,7 +34,12 @@ if (!app.isPackaged) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 }
 
-import type { AppEnv, TradeExecutionEvent, WatchOutcomeEvent } from '@shared/contracts';
+import type {
+  AppEnv,
+  AutoOrderRetryEvent,
+  TradeExecutionEvent,
+  WatchOutcomeEvent,
+} from '@shared/contracts';
 import {
   getPopoutRouteConfig,
   getPopoutWindowTitle,
@@ -327,6 +332,12 @@ function bootstrapDeps(userDataDir: string) {
     for (const target of BrowserWindow.getAllWindows()) {
       if (target.isDestroyed()) continue;
       target.webContents.send('appShell:watch-event', event);
+    }
+  };
+  const broadcastAutoOrderRetry = (event: AutoOrderRetryEvent): void => {
+    for (const target of BrowserWindow.getAllWindows()) {
+      if (target.isDestroyed()) continue;
+      target.webContents.send('appShell:auto-order-retry', event);
     }
   };
   const broadcastTradeExecution = (event: TradeExecutionEvent): void => {
@@ -728,6 +739,7 @@ function bootstrapDeps(userDataDir: string) {
     inFlightCoordinator,
     getActiveAccountId: () => factoryRef.factory?.getActiveAccountId() ?? null,
     onTrackedPdnosChanged: syncStrategyPriceFeed,
+    onAutoOrderRetryScheduled: broadcastAutoOrderRetry,
     marketSessionGuard,
     executeOrder: async (input) => {
       await executeStrategyOrder(

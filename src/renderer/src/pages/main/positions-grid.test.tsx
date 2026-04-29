@@ -3,6 +3,15 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PositionsGrid } from './ui/positions-grid';
 
+const toastMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(),
+}));
+
+vi.mock('sonner', () => ({
+  toast: toastMocks,
+}));
+
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
     getTotalSize: () => count * 36,
@@ -72,10 +81,14 @@ vi.mock('@renderer/shared/api/trpc', () => ({
     },
     strategy: {
       setAutoModeQuick: {
-        useMutation: ({ onSuccess }: { onSuccess: () => Promise<void> | void }) => ({
-          mutate: (args: unknown) => {
+        useMutation: ({
+          onSuccess,
+        }: {
+          onSuccess: (_data: unknown, variables: { mode: string; pdno: string }) => void;
+        }) => ({
+          mutate: (args: { mode: string; pdno: string }) => {
             quickModeMutate(args);
-            void onSuccess();
+            onSuccess(undefined, args);
           },
           isPending: false,
         }),
@@ -223,6 +236,9 @@ describe('PositionsGrid', () => {
       pdno: '005930',
       mode: 'BUY_ONLY',
     });
+    expect(toastMocks.success).toHaveBeenCalledWith(
+      '삼성전자 자동매매 상태가 매수만 ON으로 변경되었습니다',
+    );
   });
 
   it('불일치 경고에서 동기화 버튼을 누르면 현재 계좌로 sync를 호출한다', async () => {

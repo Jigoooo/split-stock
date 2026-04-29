@@ -84,6 +84,21 @@ export const WatchOutcomeEventSchema = z.object({
 });
 export type WatchOutcomeEvent = z.infer<typeof WatchOutcomeEventSchema>;
 
+export const AutoOrderRetryEventSchema = z.object({
+  accountId: z.number().int().positive(),
+  pdno: z.string().regex(/^\d{6}$/),
+  side: z.enum(['BUY', 'SELL']),
+  nth: z.number().int().positive(),
+  triggerReason: z.enum(['DROP_BUY', 'PROFIT_SELL']),
+  failureType: z.enum(['BLOCKED', 'FAILED']),
+  price: z.number().int().positive(),
+  qty: z.number().int().positive(),
+  reason: z.string().min(1),
+  retryAfterMs: z.number().int().nonnegative().nullable(),
+  occurredAt: z.number().int().positive(),
+});
+export type AutoOrderRetryEvent = z.infer<typeof AutoOrderRetryEventSchema>;
+
 export const TradeExecutionStatusSchema = z.enum(['PARTIAL', 'FILLED']);
 export type TradeExecutionStatus = z.infer<typeof TradeExecutionStatusSchema>;
 

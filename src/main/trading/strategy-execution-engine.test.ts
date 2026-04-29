@@ -1,5 +1,6 @@
 import { createStrategyRules } from '@shared/contracts';
 import { describe, expect, it, vi } from 'vitest';
+import type { Timer } from '../brokers/core/types';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
 import { SettingsRepo } from '../db/settings-repo';
@@ -114,7 +115,7 @@ describe('StrategyExecutionEngine', () => {
     );
   });
 
-  it('주문 실행 실패를 safety error lock으로 전환해 재시도 폭주를 막는다', async () => {
+  it('자동매수 주문 실패는 safety lock 대신 재시도 예약과 사용자 노출 이벤트를 남긴다', async () => {
     const { bus, logger, lotsRepo, safetyRegistry, strategyRepo } = setup();
     lotsRepo.insertLot({
       accountId: 1,
@@ -131,6 +132,19 @@ describe('StrategyExecutionEngine', () => {
     const executeOrder = vi.fn(async () => {
       throw failure;
     });
+    let now = 1_000;
+    const scheduledRetries: Array<() => void> = [];
+    const scheduledDelays: number[] = [];
+    const timer: Timer = {
+      now: () => now,
+      setTimeout: (cb, ms) => {
+        scheduledRetries.push(cb);
+        scheduledDelays.push(ms);
+        return { clear: vi.fn() };
+      },
+      setInterval: () => ({ clear: vi.fn() }),
+    };
+    const onAutoOrderRetryScheduled = vi.fn();
 
     const engine = new StrategyExecutionEngine({
       bus,
@@ -140,6 +154,8 @@ describe('StrategyExecutionEngine', () => {
       safetyRegistry,
       getActiveAccountId: () => 1,
       executeOrder,
+      timer,
+      onAutoOrderRetryScheduled,
     });
     engine.refreshTrackedSymbols();
 
@@ -149,9 +165,9 @@ describe('StrategyExecutionEngine', () => {
     expect(executeOrder).toHaveBeenCalledTimes(1);
     expect(logger.log).toHaveBeenCalledWith(
       expect.objectContaining({
-        level: 'ERROR',
+        level: 'WARN',
         category: 'FSM',
-        message: 'strategy-engine.order-failed',
+        message: 'strategy-engine.order-retry-scheduled',
         payload: expect.objectContaining({
           accountId: 1,
           pdno: '005930',
@@ -162,17 +178,120 @@ describe('StrategyExecutionEngine', () => {
       }),
     );
     expect(safetyRegistry.get(1).getSnapshot()).toMatchObject({
-      master: false,
-      errorLock: {
-        active: true,
-        reason: failure.message,
-      },
+      master: true,
+      errorLock: { active: false },
     });
+    expect(onAutoOrderRetryScheduled).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 1,
+        failureType: 'FAILED',
+        nth: 2,
+        pdno: '005930',
+        reason: failure.message,
+        retryAfterMs: 3_000,
+        side: 'BUY',
+      }),
+    );
 
     emitSamsungTick(bus, 67_800);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(executeOrder).toHaveBeenCalledTimes(1);
+
+    now += 1_000;
+    scheduledRetries.at(-1)?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(executeOrder).toHaveBeenCalledTimes(2);
+  });
+
+  it('자동매도 주문 실패도 safety lock 대신 재시도 예약과 사용자 노출 이벤트를 남긴다', async () => {
+    const { bus, logger, lotsRepo, safetyRegistry, strategyRepo } = setup();
+    lotsRepo.insertLot({
+      accountId: 1,
+      pdno: '005930',
+      nth: 2,
+      buyPrice: 68_000,
+      qty: 10,
+      amountKrw: 680_000,
+      status: 'OPEN',
+      boughtAt: new Date(),
+    });
+    setDefaultProfile(strategyRepo);
+    const failure = new Error('주문 실패: RATE_LIMITED - 주문 재시도 한도를 초과했습니다');
+    const executeOrder = vi.fn(async () => {
+      throw failure;
+    });
+    let now = 1_000;
+    const scheduledRetries: Array<() => void> = [];
+    const scheduledDelays: number[] = [];
+    const timer: Timer = {
+      now: () => now,
+      setTimeout: (cb, ms) => {
+        scheduledRetries.push(cb);
+        scheduledDelays.push(ms);
+        return { clear: vi.fn() };
+      },
+      setInterval: () => ({ clear: vi.fn() }),
+    };
+    const onAutoOrderRetryScheduled = vi.fn();
+
+    const engine = new StrategyExecutionEngine({
+      bus,
+      logger: logger as never,
+      lotsRepo,
+      strategyRepo,
+      safetyRegistry,
+      getActiveAccountId: () => 1,
+      executeOrder,
+      timer,
+      onAutoOrderRetryScheduled,
+    });
+    engine.refreshTrackedSymbols();
+
+    emitSamsungTick(bus, 71_400);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(executeOrder).toHaveBeenCalledTimes(1);
+    expect(safetyRegistry.get(1).getSnapshot()).toMatchObject({
+      master: true,
+      errorLock: { active: false },
+    });
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        level: 'WARN',
+        category: 'FSM',
+        message: 'strategy-engine.order-retry-scheduled',
+        payload: expect.objectContaining({
+          accountId: 1,
+          pdno: '005930',
+          nth: 2,
+          reason: failure.message,
+          retryAfterMs: 3_000,
+          side: 'SELL',
+        }),
+      }),
+    );
+    expect(onAutoOrderRetryScheduled).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountId: 1,
+        failureType: 'FAILED',
+        nth: 2,
+        pdno: '005930',
+        reason: failure.message,
+        retryAfterMs: 3_000,
+        side: 'SELL',
+      }),
+    );
+    expect(scheduledDelays.at(-1)).toBe(3_000);
+
+    emitSamsungTick(bus, 71_400);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(executeOrder).toHaveBeenCalledTimes(1);
+
+    now += 3_000;
+    scheduledRetries.at(-1)?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(executeOrder).toHaveBeenCalledTimes(2);
   });
 
   it('장 사전 가드가 차단하면 주문 시도 없이 로그만 남긴다', async () => {

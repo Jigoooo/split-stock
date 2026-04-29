@@ -42,7 +42,7 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
     const { lots, position, strategyMeta } = row;
     const [isPending, startTransition] = useTransition();
     const autoMode = strategyMeta ? deriveStrategyAutoMode(strategyMeta) : 'ALL_OFF';
-    const autoModeMutation = usePositionAutoMode(position.code, autoMode);
+    const autoModeMutation = usePositionAutoMode(position.code, autoMode, position.name);
     const safety = useSafetySwitch();
     const orderingBlocked =
       safety.snapshot !== null &&
