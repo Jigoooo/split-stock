@@ -465,6 +465,104 @@ body {
   color: var(--down);
 }
 
+.ai-recommend-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 8.6rem;
+  min-height: 2.2rem;
+  padding: 0.2rem 0.55rem;
+  border: 0.1rem solid rgba(217, 119, 87, 0.42);
+  border-radius: 0.45rem;
+  background: rgba(217, 119, 87, 0.08);
+  color: #b95538;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+.ai-recommend-status:hover {
+  border-color: rgba(217, 119, 87, 0.72);
+  background: rgba(217, 119, 87, 0.12);
+  box-shadow: 0 0.5rem 1.4rem rgba(217, 119, 87, 0.14);
+  transform: translateY(-0.1rem);
+}
+
+.ai-recommend-status:focus-visible {
+  outline: 0.2rem solid rgba(217, 119, 87, 0.4);
+  outline-offset: 0.2rem;
+}
+
+.ai-recommend-status--strategy {
+  border-color: rgba(37, 99, 235, 0.34);
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+}
+
+.ai-recommend-status--strategy:hover {
+  border-color: rgba(37, 99, 235, 0.64);
+  background: rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0.5rem 1.4rem rgba(37, 99, 235, 0.13);
+}
+
+.ai-recommend-status--pending {
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.08), transparent);
+}
+
+.ai-recommend-status--error {
+  border-color: rgba(212, 69, 58, 0.46);
+  background: rgba(212, 69, 58, 0.1);
+  color: var(--down);
+}
+
+.ai-recommend-status__icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+}
+
+.ai-recommend-status__icon--spin {
+  animation: ai-status-spin 900ms linear infinite;
+}
+
+.ai-recommend-status__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-recommend-status__detail {
+  min-width: 2.8rem;
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@keyframes ai-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-recommend-status,
+  .ai-recommend-status:hover {
+    transition: none;
+    transform: none;
+  }
+
+  .ai-recommend-status__icon--spin {
+    animation: none;
+  }
+}
+
 .hts-switch {
   display: inline-flex;
   align-items: center;

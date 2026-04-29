@@ -5,6 +5,7 @@ import { TradeHistoryPanel } from './ui/trade-history-panel';
 
 vi.mock('@renderer/features/ai-strategy-recommend', () => ({
   RecommendStrategyButton: () => <button type="button">AI 추천</button>,
+  useOptionalStrategyRecommendationSession: () => null,
 }));
 
 vi.mock('@renderer/shared/api/trpc', () => ({

@@ -80,6 +80,7 @@ export const RecommendCard = ({
         borderRadius: '0.6rem',
         border: selected ? '0.15rem solid #D97757' : '0.1rem solid var(--border)',
         background: selected ? 'rgba(217, 119, 87, 0.08)' : 'var(--bg)',
+        boxShadow: selected ? '0 8px 22px rgba(217, 119, 87, 0.14)' : 'none',
         overflow: 'hidden',
       }}
     >
@@ -87,7 +88,7 @@ export const RecommendCard = ({
         type="button"
         onClick={() => onSelect?.(item.pdno)}
         aria-pressed={selected}
-        whileHover={{ y: -1, backgroundColor: 'var(--bg-2, rgba(0,0,0,0.03))' }}
+        whileHover={{ y: -1 }}
         transition={{ duration: 0.15 }}
         style={{
           width: '100%',

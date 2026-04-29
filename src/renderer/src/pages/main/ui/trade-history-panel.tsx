@@ -1,4 +1,7 @@
-import { RecommendStrategyButton } from '@renderer/features/ai-strategy-recommend';
+import {
+  RecommendStrategyButton,
+  useOptionalStrategyRecommendationSession,
+} from '@renderer/features/ai-strategy-recommend';
 import { StrategyForm, useEditStrategy } from '@renderer/features/edit-strategy';
 import { SymbolMemoForm } from '@renderer/features/symbol-memo';
 import {
@@ -12,7 +15,7 @@ import {
 } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import type { CSSProperties } from 'react';
-import { type ReactElement, useMemo, useRef, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { type TradeHistoryTabKey, useTradeHistoryTabs } from '../model/use-trade-history-tabs';
 import { TradeHistoryList } from './trade-history-list';
 
@@ -113,12 +116,27 @@ interface StrategyTabBodyProps {
  */
 const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps): ReactElement => {
   const { active, clear, isPending, presets, save } = useEditStrategy(pdno);
+  const strategySession = useOptionalStrategyRecommendationSession();
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [initialOverride, setInitialOverride] = useState<StrategyProfile | null>(null);
   const presetItems = presets.data?.presets ?? [];
   const selectedPreset = presetItems.find((preset) => preset.name === selectedTemplate) ?? null;
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const consumedAppliedIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return strategySession?.registerApplyConsumer(pdno);
+  }, [pdno, strategySession]);
+
+  useEffect(() => {
+    const applied = strategySession?.lastApplied;
+    if (!applied || applied.pdno !== pdno || applied.id === consumedAppliedIdRef.current) return;
+
+    consumedAppliedIdRef.current = applied.id;
+    setInitialOverride(applied.profile);
+    strategySession.clearLastApplied(applied.id);
+  }, [pdno, strategySession]);
 
   if (active.isPending || presets.isPending) {
     return (

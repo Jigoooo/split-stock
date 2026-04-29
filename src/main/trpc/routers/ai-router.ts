@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { getAiRuntimeStatus, runWithAiRuntimeOperation } from '../../ai/ai-runtime-state';
+import { discoverAutoCandidates as discoverAutoCandidatesForSymbols } from '../../ai/auto-discovery';
 import { ensureDailyCandles } from '../../ai/ensure-candles';
 import type { NaverSearchTrendSummary } from '../../ai/naver-datalab-client';
 import { collectNewsEvidence, DEFAULT_MAX_SYMBOLS_PER_PASS } from '../../ai/news-evidence';
@@ -205,15 +206,20 @@ export const aiRouter = router({
             : null;
           const stockName = ctx.stockMasterRepo.find(input.pdno)?.name ?? input.pdno;
           const newsFetcher = ctx.newsFetcher;
-          const searchTrend = ctx.naverDatalabClient?.isAvailable()
-            ? await getSingleSearchTrend(ctx.naverDatalabClient, input.pdno, stockName)
+          const datalabClient = ctx.naverDatalabClient;
+          const searchTrend = datalabClient?.isAvailable()
+            ? await safeOptionalContext(ctx.logger, 'naver-datalab', () =>
+                getSingleSearchTrend(datalabClient, input.pdno, stockName),
+              )
             : undefined;
           const newsEvidence = newsFetcher?.isAvailable()
-            ? await collectNewsEvidence({
-                pdno: input.pdno,
-                name: stockName,
-                search: (options) => newsFetcher.search(options),
-              })
+            ? await safeOptionalContext(ctx.logger, 'naver-news', () =>
+                collectNewsEvidence({
+                  pdno: input.pdno,
+                  name: stockName,
+                  search: (options) => newsFetcher.search(options),
+                }),
+              )
             : undefined;
           return suggestStrategy({
             pdno: input.pdno,
@@ -432,6 +438,16 @@ export const aiRouter = router({
             llmClient,
             logger: ctx.logger,
             ensureCandles: buildEnsureCandles(ctx),
+            discoverAutoCandidates: (excludePdnos) =>
+              discoverAutoCandidatesForSymbols({
+                db: ctx.db,
+                candlesRepo: ctx.candlesRepo,
+                logger: ctx.logger,
+                stockMasterSync: ctx.stockMasterSync,
+                marketContextService: ctx.marketContextService,
+                broker: ctx.brokerForAccount(accountId),
+                excludePdnos,
+              }),
             ...(input?.topN !== undefined ? { topN: input.topN } : {}),
             ...(input?.extraPdnos && input.extraPdnos.length > 0
               ? { extraPdnos: input.extraPdnos }
@@ -467,4 +483,25 @@ async function getSingleSearchTrend(
     { days: 30, timeUnit: 'date' },
   );
   return trends.get(pdno);
+}
+
+async function safeOptionalContext<T>(
+  logger: Context['logger'],
+  source: string,
+  fn: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await fn();
+  } catch (cause) {
+    logger.log({
+      level: 'WARN',
+      category: 'SYS',
+      message: 'ai.optional-context.failed',
+      payload: {
+        source,
+        reason: cause instanceof Error ? cause.message : String(cause),
+      },
+    });
+    return undefined;
+  }
 }

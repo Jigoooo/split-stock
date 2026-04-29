@@ -25,6 +25,8 @@ export interface CandidatePoolInput {
   candlesRepo?: DailyCandlesRepo;
   /** D 풀 cap — 자동 발굴된 종목 수 상한. 기본 50 (이후 cap 으로 또 잘림). */
   autoCap?: number;
+  /** 비동기 자동발굴 파이프라인이 선별한 AUTO 후보. */
+  autoCandidates?: ReadonlyArray<{ pdno: string; name?: string | undefined }>;
 }
 
 export interface CandidateEntry {
@@ -49,11 +51,13 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
   const cap = Math.max(1, input.cap ?? 30);
   const map = new Map<string, { name: string; sources: Set<CandidateSource> }>();
 
-  const addPdno = (pdno: string, source: CandidateSource): void => {
+  const addPdno = (pdno: string, source: CandidateSource, name?: string): void => {
     if (!map.has(pdno)) {
-      map.set(pdno, { name: pdno, sources: new Set([source]) });
+      map.set(pdno, { name: name ?? pdno, sources: new Set([source]) });
     } else {
-      map.get(pdno)?.sources.add(source);
+      const entry = map.get(pdno);
+      entry?.sources.add(source);
+      if (entry && name && entry.name === pdno) entry.name = name;
     }
   };
 
@@ -89,7 +93,13 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
 
   // D 풀 — 매직스플릿 사전 스크리닝 통과 종목 자동 발굴.
   // A∪B∪C 와 중복은 자동 dedupe. 결정론 알고리즘이라 LLM 호출 0회.
-  if (input.includeAutoDiscovery && input.candlesRepo) {
+  if (input.includeAutoDiscovery && input.autoCandidates) {
+    for (const candidate of input.autoCandidates) {
+      const pdno = candidate.pdno.padStart(6, '0');
+      if (!/^\d{6}$/.test(pdno)) continue;
+      addPdno(pdno, 'AUTO', candidate.name);
+    }
+  } else if (input.includeAutoDiscovery && input.candlesRepo) {
     const exclude = new Set(map.keys());
     const screened = screenMagicSplitFit({
       db: input.db,
@@ -97,7 +107,7 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
       cap: input.autoCap ?? 50,
       excludePdnos: exclude,
     });
-    for (const s of screened) addPdno(s.pdno, 'AUTO');
+    for (const s of screened) addPdno(s.pdno, 'AUTO', s.name);
   }
 
   if (map.size === 0) return [];
@@ -114,7 +124,37 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
     if (entry && n.name) entry.name = n.name;
   }
 
-  return Array.from(map.entries())
-    .slice(0, cap)
-    .map(([pdno, v]) => ({ pdno, name: v.name, sources: Array.from(v.sources) }));
+  const entries = Array.from(map.entries()).map(([pdno, v]) => ({
+    pdno,
+    name: v.name,
+    sources: Array.from(v.sources) as CandidateSource[],
+  }));
+  return selectWithAutoReserve(entries, cap);
+}
+
+function selectWithAutoReserve(entries: CandidateEntry[], cap: number): CandidateEntry[] {
+  const out: CandidateEntry[] = [];
+  const seen = new Set<string>();
+  const push = (entry: CandidateEntry): void => {
+    if (out.length >= cap || seen.has(entry.pdno)) return;
+    seen.add(entry.pdno);
+    out.push(entry);
+  };
+
+  const manual = entries.filter((entry) => entry.sources.includes('MANUAL'));
+  const auto = entries.filter((entry) => entry.sources.includes('AUTO'));
+  const base = entries.filter(
+    (entry) => !entry.sources.includes('AUTO') && !entry.sources.includes('MANUAL'),
+  );
+  const reserveAuto = auto.length > 0 ? Math.min(6, auto.length, cap) : 0;
+  const baseBudget = Math.max(0, cap - reserveAuto);
+
+  for (const entry of manual) push(entry);
+  for (const entry of base) {
+    if (out.length >= baseBudget) break;
+    push(entry);
+  }
+  for (const entry of auto) push(entry);
+  for (const entry of base) push(entry);
+  return out;
 }

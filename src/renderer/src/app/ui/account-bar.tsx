@@ -1,3 +1,5 @@
+import { StrategyRecommendStatusButton } from '@renderer/features/ai-strategy-recommend';
+import { RecommendStatusButton } from '@renderer/features/ai-symbol-recommend';
 import { SafetySwitchHeader } from '@renderer/features/safety-switch';
 import { AccountSelector } from '@renderer/features/switch-account';
 import { WatchGlobalToggle } from '@renderer/features/watch-global-toggle';
@@ -46,6 +48,8 @@ export const AccountBar = ({ env }: AccountBarProps): ReactElement => (
       <SafetySwitchHeader />
       <WatchGlobalToggle />
       <RealtimeFallbackChip />
+      <RecommendStatusButton />
+      <StrategyRecommendStatusButton />
     </div>
   </div>
 );

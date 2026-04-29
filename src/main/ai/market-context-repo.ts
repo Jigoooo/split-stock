@@ -152,6 +152,41 @@ export class MarketContextRepo {
     return out;
   }
 
+  getLatestKrxDailyTradeByMarkets(markets: ReadonlyArray<KrxMarket>): CachedKrxDailyTrade[] {
+    if (markets.length === 0) return [];
+    const rows = this.db
+      .select()
+      .from(krxDailyTradeCache)
+      .where(inArray(krxDailyTradeCache.market, [...markets]))
+      .orderBy(desc(krxDailyTradeCache.date))
+      .all();
+    const out: CachedKrxDailyTrade[] = [];
+    const seen = new Set<string>();
+    for (const row of rows) {
+      const key = `${row.market}:${row.pdno}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        market: row.market as KrxMarket,
+        date: row.date,
+        pdno: row.pdno,
+        name: row.name,
+        close: row.close ?? null,
+        change: row.change ?? null,
+        changeRate: row.changeRate ?? null,
+        open: row.open ?? null,
+        high: row.high ?? null,
+        low: row.low ?? null,
+        volume: row.volume ?? null,
+        tradeValue: row.tradeValue ?? null,
+        marketCap: row.marketCap ?? null,
+        listedShares: row.listedShares ?? null,
+        fetchedAt: row.fetchedAt,
+      });
+    }
+    return out;
+  }
+
   getLatestEcosPoints(): CachedEcosSeriesPoint[] {
     const rows = this.db.select().from(ecosSeriesCache).orderBy(desc(ecosSeriesCache.date)).all();
     const seen = new Set<string>();

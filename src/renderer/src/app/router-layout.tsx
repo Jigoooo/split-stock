@@ -1,3 +1,5 @@
+import { StrategyRecommendationProvider } from '@renderer/features/ai-strategy-recommend';
+import { SymbolRecommendationProvider } from '@renderer/features/ai-symbol-recommend';
 import { CredentialsReentryBanner } from '@renderer/features/backup-restore';
 import { SwitchEnvDialog } from '@renderer/features/switch-env';
 import {
@@ -192,10 +194,14 @@ export const MainRoutePage = (): ReactElement => {
         />
       }
     >
-      <AppShellFrame shell={shell} popout={popout}>
-        <CredentialsReentryBanner />
-        <PanelWorkspace popout={popout} />
-      </AppShellFrame>
+      <SymbolRecommendationProvider>
+        <StrategyRecommendationProvider>
+          <AppShellFrame shell={shell} popout={popout}>
+            <CredentialsReentryBanner />
+            <PanelWorkspace popout={popout} />
+          </AppShellFrame>
+        </StrategyRecommendationProvider>
+      </SymbolRecommendationProvider>
     </Suspense>
   );
 };

@@ -3,6 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10분 — LLM 비용 절감 + 모달 재오픈 시 즉시 표시.
 
+export type RecommendationPickHandler = (pdno: string, name: string) => void;
+
+export interface OpenRecommendationOptions {
+  onPick?: RecommendationPickHandler | undefined;
+}
+
 interface ProgressStage {
   key: string;
   atMs: number;
@@ -17,28 +23,35 @@ const AI_PROGRESS_STAGES: ReadonlyArray<ProgressStage> = [
     atMs: 0,
     percent: 0,
     label: '후보 풀 구성 중',
-    detail: '보유/감시/관심 종목을 모으는 중입니다.',
+    detail: '보유/감시/관심 종목과 전체 종목 후보군을 준비하는 중입니다.',
+  },
+  {
+    key: 'discovery',
+    atMs: 1_200,
+    percent: 16,
+    label: '자동발굴 후보 선별 중',
+    detail: 'KRX/KSD 기반 종목 universe에서 유동성과 변동성 후보를 추리는 중입니다.',
   },
   {
     key: 'signals',
-    atMs: 1_500,
-    percent: 24,
+    atMs: 3_000,
+    percent: 32,
     label: '일봉과 지표 계산 중',
-    detail: '가격 캐시와 매직스플릿 신호를 계산하는 중입니다.',
+    detail: '필요한 후보의 일봉을 보충하고 매직스플릿 신호를 계산하는 중입니다.',
   },
   {
     key: 'context',
-    atMs: 4_000,
-    percent: 42,
-    label: '시장 컨텍스트 확인 중',
-    detail: 'KRX/ECOS 캐시와 후보별 보조 데이터를 확인하는 중입니다.',
+    atMs: 6_000,
+    percent: 48,
+    label: '시장/수급/거시 컨텍스트 확인 중',
+    detail: 'KRX/ECOS/FSC/KOSIS/EIA/Naver DataLab 중 사용 가능한 근거를 확인하는 중입니다.',
   },
   {
     key: 'news',
-    atMs: 7_500,
-    percent: 58,
+    atMs: 9_000,
+    percent: 62,
     label: '뉴스와 공시 근거 수집 중',
-    detail: 'AI 판단에 필요한 외부 근거를 압축하는 중입니다.',
+    detail: 'Naver 뉴스와 DART 공시 근거를 압축하는 중입니다.',
   },
   {
     key: 'llm',
@@ -62,21 +75,28 @@ const ALGO_PROGRESS_STAGES: ReadonlyArray<ProgressStage> = [
     atMs: 0,
     percent: 0,
     label: '후보 풀 구성 중',
-    detail: '보유/감시/관심 종목을 모으는 중입니다.',
+    detail: '보유/감시/관심 종목과 자동발굴 후보군을 준비하는 중입니다.',
+  },
+  {
+    key: 'discovery',
+    atMs: 800,
+    percent: 24,
+    label: '자동발굴 후보 선별 중',
+    detail: 'KRX/KSD 기반 종목 universe에서 알고리즘 후보를 추리는 중입니다.',
   },
   {
     key: 'signals',
-    atMs: 1_000,
-    percent: 42,
+    atMs: 2_000,
+    percent: 50,
     label: '일봉과 지표 계산 중',
-    detail: '가격 캐시와 매직스플릿 신호를 계산하는 중입니다.',
+    detail: '필요한 후보의 일봉을 보충하고 매직스플릿 신호를 계산하는 중입니다.',
   },
   {
     key: 'context',
-    atMs: 2_500,
-    percent: 70,
-    label: '시장 컨텍스트 확인 중',
-    detail: 'KRX/ECOS 캐시 상태를 결과에 붙이는 중입니다.',
+    atMs: 3_500,
+    percent: 74,
+    label: '시장/수급/거시 컨텍스트 확인 중',
+    detail: 'KRX/ECOS/FSC/KOSIS/EIA/Naver DataLab 상태를 결과에 붙이는 중입니다.',
   },
   {
     key: 'finalize',
@@ -99,6 +119,7 @@ interface RecommendCache {
   ranked: RecommendedItem[];
   userInputResults: RecommendedItem[];
   distribution: TierDistribution;
+  diagnostics: RecommendationDiagnostics;
   emptyReason: string | null;
   rejectedCount: number;
   durationMs: number;
@@ -139,6 +160,44 @@ export interface TierDistribution {
   moderate: number;
   watch: number;
   avoid: number;
+}
+
+export type RecommendationApiSource =
+  | 'krx'
+  | 'ksd'
+  | 'fsc-stock-lending'
+  | 'eia'
+  | 'kosis'
+  | 'ecos'
+  | 'naver-datalab'
+  | 'dart'
+  | 'naver-news';
+
+export interface RecommendationApiDiagnostic {
+  source: RecommendationApiSource;
+  status: 'used' | 'cache' | 'skipped' | 'failed';
+  count?: number;
+  stale?: boolean;
+  reason?: string | null;
+}
+
+export interface RecommendationDiscoveryDiagnostics {
+  enabled: boolean;
+  universeCount: number;
+  basisDate: string | null;
+  seedCount: number;
+  candlesFetched: number;
+  candlesFailed: number;
+  candlesSkipped: boolean;
+  screenedCount: number;
+  addedCount: number;
+  emptyReason: string | null;
+  sources: ReadonlyArray<RecommendationApiDiagnostic>;
+}
+
+export interface RecommendationDiagnostics {
+  discovery: RecommendationDiscoveryDiagnostics;
+  sources: ReadonlyArray<RecommendationApiDiagnostic>;
 }
 
 export interface IndicatorReason {
@@ -216,6 +275,7 @@ export interface RecommendationViewState {
   userInputResults: RecommendedItem[];
   /** Tier 분포 — 모달 헤더 chip 표시용. */
   distribution: TierDistribution;
+  diagnostics: RecommendationDiagnostics;
   emptyReason: string | null;
   rejectedCount: number;
   durationMs: number;
@@ -235,6 +295,22 @@ export interface RecommendationProgressState {
 }
 
 const EMPTY_DIST: TierDistribution = { top: 0, strong: 0, moderate: 0, watch: 0, avoid: 0 };
+const EMPTY_DIAGNOSTICS: RecommendationDiagnostics = {
+  discovery: {
+    enabled: false,
+    universeCount: 0,
+    basisDate: null,
+    seedCount: 0,
+    candlesFetched: 0,
+    candlesFailed: 0,
+    candlesSkipped: false,
+    screenedCount: 0,
+    addedCount: 0,
+    emptyReason: null,
+    sources: [],
+  },
+  sources: [],
+};
 
 function buildProgress(elapsedMs: number, aiOff: boolean): RecommendationProgressState {
   const stages = aiOff ? ALGO_PROGRESS_STAGES : AI_PROGRESS_STAGES;
@@ -278,6 +354,7 @@ export function useSymbolRecommendations() {
     ranked: [],
     userInputResults: [],
     distribution: EMPTY_DIST,
+    diagnostics: EMPTY_DIAGNOSTICS,
     emptyReason: null,
     rejectedCount: 0,
     durationMs: 0,
@@ -287,6 +364,7 @@ export function useSymbolRecommendations() {
   });
   const cacheRef = useRef<RecommendCache | null>(null);
   const activeRequestRef = useRef<ActiveRecommendRequest | null>(null);
+  const pickHandlerRef = useRef<RecommendationPickHandler | null>(null);
 
   const aiList = trpc.ai.listConfigs.useQuery();
   const hasDefaultKey = (aiList.data?.configs ?? []).some((c) => c.isDefault);
@@ -304,12 +382,15 @@ export function useSymbolRecommendations() {
       const request = activeRequestRef.current;
       const distribution: TierDistribution =
         (res as { distribution?: TierDistribution }).distribution ?? EMPTY_DIST;
+      const diagnostics: RecommendationDiagnostics =
+        (res as { diagnostics?: RecommendationDiagnostics }).diagnostics ?? EMPTY_DIAGNOSTICS;
       const userInputResults: RecommendedItem[] =
         (res as { userInputResults?: RecommendedItem[] }).userInputResults ?? [];
       cacheRef.current = {
         ranked: res.ranked,
         userInputResults,
         distribution,
+        diagnostics,
         emptyReason: res.emptyReason,
         rejectedCount: res.rejectedCount,
         durationMs: res.durationMs,
@@ -326,6 +407,7 @@ export function useSymbolRecommendations() {
         ranked: res.ranked,
         userInputResults,
         distribution,
+        diagnostics,
         emptyReason: res.emptyReason,
         rejectedCount: res.rejectedCount,
         durationMs: res.durationMs,
@@ -384,7 +466,11 @@ export function useSymbolRecommendations() {
     }));
   };
 
-  const open = (): void => {
+  const open = (options?: OpenRecommendationOptions): void => {
+    if (options?.onPick) {
+      pickHandlerRef.current = options.onPick;
+    }
+
     if (view.isPending || mut.isPending) {
       syncPendingOpen();
       return;
@@ -417,6 +503,7 @@ export function useSymbolRecommendations() {
         ranked: cached.ranked,
         userInputResults: cached.userInputResults,
         distribution: cached.distribution,
+        diagnostics: cached.diagnostics,
         emptyReason: cached.emptyReason,
         rejectedCount: cached.rejectedCount,
         durationMs: cached.durationMs,
@@ -433,6 +520,7 @@ export function useSymbolRecommendations() {
       ranked: [],
       userInputResults: [],
       distribution: EMPTY_DIST,
+      diagnostics: EMPTY_DIAGNOSTICS,
       emptyReason: null,
       rejectedCount: 0,
       durationMs: 0,
@@ -475,6 +563,15 @@ export function useSymbolRecommendations() {
     setView((prev) => ({ ...prev, isOpen: false }));
   };
 
+  const pick = (
+    pdno: string,
+    name: string,
+    fallback?: RecommendationPickHandler | undefined,
+  ): void => {
+    (pickHandlerRef.current ?? fallback)?.(pdno, name);
+    close();
+  };
+
   const toggleAiOff = (next: boolean): void => {
     setAiOff(next);
     cacheRef.current = null;
@@ -508,6 +605,7 @@ export function useSymbolRecommendations() {
     includeAutoDiscovery,
     open,
     close,
+    pick,
     analyze,
     addExtraPdno,
     removeExtraPdno,

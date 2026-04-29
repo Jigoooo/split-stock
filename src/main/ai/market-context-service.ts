@@ -27,6 +27,19 @@ export interface MarketContextSnapshot {
   ecos: CachedEcosSeriesPoint[];
 }
 
+export interface KrxUniverseSourceStatus {
+  market: KrxMarket;
+  status: 'fresh' | 'cache' | 'failed' | 'skipped';
+  count: number;
+  basDd: string | null;
+  reason: string | null;
+}
+
+export interface KrxUniverseSnapshot {
+  rows: CachedKrxDailyTrade[];
+  statuses: KrxUniverseSourceStatus[];
+}
+
 export interface MarketContextServiceOptions {
   krxClient: KrxClient;
   ecosClient: EcosClient;
@@ -86,6 +99,94 @@ export class MarketContextService {
       krxByPdno: this.opts.repo.getLatestKrxDailyTrade(normalized),
       ecos: this.opts.repo.getLatestEcosPoints(),
     };
+  }
+
+  async getKrxUniverseForAutoDiscovery(
+    markets: ReadonlyArray<KrxMarket> = ['KOSPI', 'KOSDAQ'],
+  ): Promise<KrxUniverseSnapshot> {
+    const statuses: KrxUniverseSourceStatus[] = [];
+    const rows: CachedKrxDailyTrade[] = [];
+
+    if (!this.opts.krxClient.isAvailable()) {
+      this.recordError('krx', 'KRX_API_KEY 미설정');
+      const cached = this.opts.repo.getLatestKrxDailyTradeByMarkets(markets);
+      return {
+        rows: cached,
+        statuses: markets.map((market) => ({
+          market,
+          status: cached.some((row) => row.market === market) ? 'cache' : 'skipped',
+          count: cached.filter((row) => row.market === market).length,
+          basDd: null,
+          reason: 'KRX_API_KEY 미설정',
+        })),
+      };
+    }
+
+    if (!this.statusFor('krx').isStale) {
+      const cached = this.opts.repo.getLatestKrxDailyTradeByMarkets(markets);
+      if (cached.length > 0) {
+        return {
+          rows: cached,
+          statuses: markets.map((market) => ({
+            market,
+            status: 'cache',
+            count: cached.filter((row) => row.market === market).length,
+            basDd: null,
+            reason: 'KRX fresh cache',
+          })),
+        };
+      }
+    }
+
+    for (const market of markets) {
+      let foundRows: CachedKrxDailyTrade[] = [];
+      let foundBasDd: string | null = null;
+      let failure: string | null = null;
+      try {
+        for (let offset = 0; offset <= KRX_LOOKBACK_DAYS; offset++) {
+          const basDd = ymdCompact(shiftDays(this.now(), -offset));
+          const dailyRows = await this.opts.krxClient.getDailyTradeInfo({ market, basDd });
+          if (dailyRows.length === 0) continue;
+          this.opts.repo.upsertKrxDailyTrade(dailyRows);
+          foundRows = dailyRows.map((row) => ({ ...row, fetchedAt: this.now() }));
+          foundBasDd = basDd;
+          break;
+        }
+      } catch (cause) {
+        failure = cause instanceof Error ? cause.message : String(cause);
+        this.recordError('krx', failure);
+      }
+
+      if (foundRows.length > 0) {
+        rows.push(...foundRows);
+        statuses.push({
+          market,
+          status: 'fresh',
+          count: foundRows.length,
+          basDd: foundBasDd,
+          reason: null,
+        });
+        continue;
+      }
+
+      const cached = this.opts.repo
+        .getLatestKrxDailyTradeByMarkets([market])
+        .filter((row) => row.market === market);
+      rows.push(...cached);
+      statuses.push({
+        market,
+        status: cached.length > 0 ? 'cache' : failure ? 'failed' : 'skipped',
+        count: cached.length,
+        basDd: null,
+        reason:
+          failure ?? (cached.length > 0 ? 'KRX 최신 응답 없음, 캐시 사용' : 'KRX 응답 데이터 없음'),
+      });
+    }
+
+    if (rows.length > 0 && statuses.some((status) => status.status === 'fresh')) {
+      this.recordSuccess('krx');
+    }
+    return { rows, statuses };
   }
 
   async refreshKrxForPdnos(pdnos: ReadonlyArray<string>): Promise<{ inserted: number }> {

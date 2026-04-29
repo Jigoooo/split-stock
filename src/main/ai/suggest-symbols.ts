@@ -12,6 +12,13 @@ import {
   type Tier,
   type TierDistribution,
 } from './algo/composite-score';
+import {
+  type ApiContextDiagnostic,
+  type AutoDiscoveredCandidate,
+  type AutoDiscoveryDiagnostics,
+  type AutoDiscoveryResult,
+  disabledAutoDiscoveryDiagnostics,
+} from './auto-discovery';
 import { buildCandidatePool, type CandidateEntry } from './build-candidate-pool';
 import type { LlmClient, ToolDef } from './llm-client';
 import {
@@ -88,6 +95,7 @@ export interface SuggestSymbolsInput {
    * 추천 점수나 consensusCount 의 직접 입력으로 쓰지 않는다.
    */
   getMarketContextForPdnos?: (pdnos: ReadonlyArray<string>) => Promise<MarketContextSnapshot>;
+  discoverAutoCandidates?: (excludePdnos: ReadonlySet<string>) => Promise<AutoDiscoveryResult>;
   /**
    * AI 끄기 모드 — true 면 LLM 호출 0회, 알고리즘 신호만으로 ranking. 결과 카드의
    * pros/cons/entryNote 는 알고리즘 라벨에서 합성.
@@ -206,6 +214,12 @@ export interface SuggestSymbolsResult {
   rejectedCount: number;
   /** LLM 호출 시간 (ms). */
   durationMs: number;
+  diagnostics: SuggestSymbolsDiagnostics;
+}
+
+export interface SuggestSymbolsDiagnostics {
+  discovery: AutoDiscoveryDiagnostics;
+  sources: ApiContextDiagnostic[];
 }
 
 /**
@@ -231,12 +245,65 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
   const startedAt = Date.now();
   const aiOff = input.aiOff === true;
   const includeAutoDiscovery = input.includeAutoDiscovery ?? true;
+  let diagnostics: SuggestSymbolsDiagnostics = {
+    discovery: disabledAutoDiscoveryDiagnostics(),
+    sources: [],
+  };
   const config = aiOff ? null : input.aiCredentialsRepo.getDefaultWithKey();
   if (!aiOff && !config) {
     return emptyResult(
       'AI 키가 등록되지 않았습니다. 설정 → AI 탭에서 키를 등록하거나 "AI 끄기" 모드를 선택하세요.',
       startedAt,
+      diagnostics,
     );
+  }
+
+  const basePool = buildCandidatePool({
+    db: input.db,
+    accountId: input.accountId,
+    cap: input.poolCap ?? 30,
+    candlesRepo: input.candlesRepo,
+    includeAutoDiscovery: false,
+    ...(input.extraPdnos && input.extraPdnos.length > 0 ? { extraPdnos: input.extraPdnos } : {}),
+  });
+  let autoCandidates: AutoDiscoveredCandidate[] | undefined;
+  if (includeAutoDiscovery && input.discoverAutoCandidates) {
+    try {
+      const discovered = await input.discoverAutoCandidates(new Set(basePool.map((p) => p.pdno)));
+      autoCandidates = discovered.candidates;
+      diagnostics = {
+        discovery: discovered.diagnostics,
+        sources: discovered.diagnostics.sources,
+      };
+    } catch (cause) {
+      diagnostics = {
+        discovery: {
+          ...disabledAutoDiscoveryDiagnostics(),
+          enabled: true,
+          emptyReason: 'auto_discovery_failed',
+          sources: [
+            {
+              source: 'krx',
+              status: 'failed',
+              reason: cause instanceof Error ? cause.message : String(cause),
+            },
+          ],
+        },
+        sources: [
+          {
+            source: 'krx',
+            status: 'failed',
+            reason: cause instanceof Error ? cause.message : String(cause),
+          },
+        ],
+      };
+      input.logger.log({
+        level: 'WARN',
+        category: 'SYS',
+        message: 'ai.suggest-symbols.auto-discovery-failed',
+        payload: { reason: cause instanceof Error ? cause.message : String(cause) },
+      });
+    }
   }
 
   const pool = buildCandidatePool({
@@ -245,12 +312,16 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
     cap: input.poolCap ?? 30,
     candlesRepo: input.candlesRepo,
     includeAutoDiscovery,
+    ...(autoCandidates !== undefined ? { autoCandidates } : {}),
     ...(input.extraPdnos && input.extraPdnos.length > 0 ? { extraPdnos: input.extraPdnos } : {}),
   });
   if (pool.length === 0) {
     return emptyResult(
-      '후보 풀이 비었습니다. 보유/감시 종목, 또는 일봉 캐시된 종목이 있어야 추천이 가능합니다.',
+      includeAutoDiscovery
+        ? '후보 풀이 비었습니다. 자동발굴도 후보를 찾지 못했습니다.'
+        : '후보 풀이 비었습니다. 보유/감시 종목 또는 관심 종목을 추가하세요.',
       startedAt,
+      diagnostics,
     );
   }
 
@@ -259,8 +330,22 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
   }
 
   const marketContext = input.getMarketContextForPdnos
-    ? await input.getMarketContextForPdnos(pool.map((c) => c.pdno))
+    ? await safeContextFetch(
+        () => input.getMarketContextForPdnos?.(pool.map((c) => c.pdno)) ?? Promise.resolve(null),
+        input.logger,
+        'market-context',
+        (reason) => {
+          diagnostics.sources = mergeDiagnostics(diagnostics.sources, [
+            { source: 'krx', status: 'failed', reason },
+            { source: 'ecos', status: 'failed', reason },
+          ]);
+        },
+      )
     : null;
+  diagnostics.sources = mergeDiagnostics(
+    diagnostics.sources,
+    marketContext ? diagnosticsFromMarketContext(marketContext) : [],
+  );
 
   // === Stage 1 — 결정론 알고리즘 신호 + 공통 facts ===
   const facts = buildMagicSplitFacts({
@@ -326,6 +411,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
           : null,
       rejectedCount: 0,
       durationMs: Date.now() - startedAt,
+      diagnostics,
     };
   }
 
@@ -336,7 +422,16 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
     DEFAULT_MAX_SYMBOLS_PER_PASS,
   );
   const newsEvidenceByPdno = input.fetchNewsEvidence
-    ? await input.fetchNewsEvidence(newsTargets)
+    ? await safeContextFetch(
+        () => input.fetchNewsEvidence?.(newsTargets) ?? Promise.resolve(new Map()),
+        input.logger,
+        'naver-news',
+        (reason) => {
+          diagnostics.sources = mergeDiagnostics(diagnostics.sources, [
+            { source: 'naver-news', status: 'failed', reason },
+          ]);
+        },
+      )
     : new Map<string, NewsEvidencePack>();
   const newsByPdno =
     newsEvidenceByPdno.size > 0
@@ -347,11 +442,45 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
           ]),
         )
       : input.fetchNews
-        ? await input.fetchNews(newsTargets)
+        ? await safeContextFetch(
+            () => input.fetchNews?.(newsTargets) ?? Promise.resolve(new Map()),
+            input.logger,
+            'naver-news',
+            (reason) => {
+              diagnostics.sources = mergeDiagnostics(diagnostics.sources, [
+                { source: 'naver-news', status: 'failed', reason },
+              ]);
+            },
+          )
         : new Map();
+  diagnostics.sources = mergeDiagnostics(diagnostics.sources, [
+    {
+      source: 'naver-news',
+      status: newsByPdno.size > 0 || newsEvidenceByPdno.size > 0 ? 'used' : 'skipped',
+      count: newsByPdno.size || newsEvidenceByPdno.size,
+      reason: newsByPdno.size > 0 || newsEvidenceByPdno.size > 0 ? null : 'no-news-context',
+    },
+  ]);
   const searchTrendsByPdno = input.fetchSearchTrends
-    ? await input.fetchSearchTrends(newsTargets)
+    ? await safeContextFetch(
+        () => input.fetchSearchTrends?.(newsTargets) ?? Promise.resolve(new Map()),
+        input.logger,
+        'naver-datalab',
+        (reason) => {
+          diagnostics.sources = mergeDiagnostics(diagnostics.sources, [
+            { source: 'naver-datalab', status: 'failed', reason },
+          ]);
+        },
+      )
     : new Map<string, NaverSearchTrendSummary>();
+  diagnostics.sources = mergeDiagnostics(diagnostics.sources, [
+    {
+      source: 'naver-datalab',
+      status: searchTrendsByPdno.size > 0 ? 'used' : 'skipped',
+      count: searchTrendsByPdno.size,
+      reason: searchTrendsByPdno.size > 0 ? null : 'no-search-trend-context',
+    },
+  ]);
 
   const userPrompt = buildPrompt({
     topCandidates: promptTopCandidates,
@@ -366,7 +495,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
   });
 
   if (!config) {
-    return emptyResult('AI 키가 등록되지 않았습니다.', startedAt);
+    return emptyResult('AI 키가 등록되지 않았습니다.', startedAt, diagnostics);
   }
 
   // === Tools — LLM 이 필요 시 호출 ===
@@ -420,6 +549,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
         ranked.length === 0 ? 'AI 응답 파싱에 실패했고 알고리즘 fallback 결과도 비었습니다.' : null,
       rejectedCount: 0,
       durationMs: Date.now() - startedAt,
+      diagnostics,
     };
   }
 
@@ -516,6 +646,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
         : null,
     rejectedCount,
     durationMs: Date.now() - startedAt,
+    diagnostics,
   };
 }
 
@@ -528,6 +659,93 @@ function dedupeCandidates(items: ReadonlyArray<CandidateEntry>): CandidateEntry[
     out.push(item);
   }
   return out;
+}
+
+async function safeContextFetch<T>(
+  fn: () => Promise<T>,
+  logger: EventLogger,
+  label: string,
+  onFailure?: (reason: string) => void,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (cause) {
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    onFailure?.(reason);
+    logger.log({
+      level: 'WARN',
+      category: 'SYS',
+      message: 'ai.context.fetch-failed',
+      payload: {
+        source: label,
+        reason,
+      },
+    });
+    if (label === 'naver-news' || label === 'naver-datalab') {
+      return new Map() as T;
+    }
+    return null as T;
+  }
+}
+
+function mergeDiagnostics(
+  existing: ReadonlyArray<ApiContextDiagnostic>,
+  additions: ReadonlyArray<ApiContextDiagnostic>,
+): ApiContextDiagnostic[] {
+  const out = [...existing];
+  for (const item of additions) {
+    const index = out.findIndex(
+      (current) => current.source === item.source && current.status === item.status,
+    );
+    if (index < 0) {
+      out.push(item);
+      continue;
+    }
+    const current = out[index];
+    if (!current) continue;
+    out[index] = {
+      ...current,
+      count: (current.count ?? 0) + (item.count ?? 0),
+      ...((current.reason ?? item.reason) !== undefined
+        ? { reason: current.reason ?? item.reason ?? null }
+        : {}),
+      ...((current.stale ?? item.stale) !== undefined
+        ? { stale: Boolean(current.stale || item.stale) }
+        : {}),
+    };
+  }
+  return out;
+}
+
+function diagnosticsFromMarketContext(snapshot: MarketContextSnapshot): ApiContextDiagnostic[] {
+  return [
+    {
+      source: 'krx',
+      status: snapshot.status.krx.lastError
+        ? snapshot.krxByPdno.size > 0
+          ? 'cache'
+          : 'failed'
+        : snapshot.krxByPdno.size > 0
+          ? 'used'
+          : 'skipped',
+      count: snapshot.krxByPdno.size,
+      stale: snapshot.status.krx.isStale,
+      reason: snapshot.status.krx.lastError,
+    },
+    {
+      source: 'ecos',
+      status: snapshot.status.ecos.lastError
+        ? snapshot.ecos.length > 0
+          ? 'cache'
+          : 'failed'
+        : snapshot.ecos.length > 0
+          ? 'used'
+          : 'skipped',
+      count: snapshot.ecos.length,
+      stale: snapshot.status.ecos.isStale,
+      reason: snapshot.status.ecos.lastError,
+    },
+  ];
 }
 
 const SYSTEM_PROMPT = [
@@ -897,7 +1115,14 @@ function enrichCons(
   return cons.slice(0, 5);
 }
 
-function emptyResult(reason: string, startedAt: number): SuggestSymbolsResult {
+function emptyResult(
+  reason: string,
+  startedAt: number,
+  diagnostics: SuggestSymbolsDiagnostics = {
+    discovery: disabledAutoDiscoveryDiagnostics(),
+    sources: [],
+  },
+): SuggestSymbolsResult {
   return {
     ranked: [],
     userInputResults: [],
@@ -906,6 +1131,7 @@ function emptyResult(reason: string, startedAt: number): SuggestSymbolsResult {
     emptyReason: reason,
     rejectedCount: 0,
     durationMs: Date.now() - startedAt,
+    diagnostics,
   };
 }
 

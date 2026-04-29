@@ -143,6 +143,40 @@ describe('suggestSymbols', () => {
     expect(result.ranked[0]?.evidenceRefs.some((ref) => ref.kind === 'dataQuality')).toBe(true);
   });
 
+  it('uses auto-discovered candidates when automatic discovery is enabled', async () => {
+    const result = await suggestSymbols(
+      baseInput(65, {
+        aiOff: true,
+        extraPdnos: [],
+        includeAutoDiscovery: true,
+        discoverAutoCandidates: async () => ({
+          candidates: [{ pdno: '000660', name: 'SK하이닉스' }],
+          diagnostics: {
+            enabled: true,
+            universeCount: 2,
+            basisDate: '2026-04-28',
+            seedCount: 1,
+            candlesFetched: 65,
+            candlesFailed: 0,
+            candlesSkipped: false,
+            screenedCount: 1,
+            addedCount: 1,
+            emptyReason: null,
+            sources: [{ source: 'krx', status: 'used', count: 2, stale: false, reason: null }],
+          },
+        }),
+      }),
+    );
+
+    expect(result.poolSize).toBe(1);
+    expect(result.ranked[0]).toMatchObject({
+      pdno: '000660',
+      name: 'SK하이닉스',
+      sources: ['AUTO'],
+    });
+    expect(result.diagnostics.discovery.addedCount).toBe(1);
+  });
+
   it('attaches news clusters to evidence refs for traceability', async () => {
     const chat = vi.fn<LlmClient['chat']>().mockResolvedValue({
       parsed: {

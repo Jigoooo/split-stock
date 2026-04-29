@@ -1,4 +1,11 @@
 import { useActiveAccountId } from '@renderer/entities/account';
+import {
+  type AddWatchOrderPrefillPayload,
+  storeAddWatchOrderPrefill,
+  type WatchOrderFormPrefill,
+} from '@renderer/features/add-watch-order';
+import { StrategyPreviewModalHost } from '@renderer/features/ai-strategy-recommend';
+import { RecommendModalHost } from '@renderer/features/ai-symbol-recommend';
 import type { ReactElement } from 'react';
 import { Group, type Layout, Panel, Separator, useDefaultLayout } from 'react-resizable-panels';
 import { useMainRealtime } from '../model/use-main-realtime';
@@ -76,6 +83,12 @@ export const MainPage = ({ onOpenStrategySettings }: MainPageProps): ReactElemen
     return <MainNoAccount />;
   }
 
+  const openAddWatchOrderPopout = (prefill: WatchOrderFormPrefill | null): void => {
+    const payload: AddWatchOrderPrefillPayload = { accountId, prefill };
+    storeAddWatchOrderPrefill(payload);
+    void window.appShell?.openPopout('add-watch-order');
+  };
+
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
       <Group
@@ -119,6 +132,12 @@ export const MainPage = ({ onOpenStrategySettings }: MainPageProps): ReactElemen
           />
         </Panel>
       </Group>
+      <RecommendModalHost
+        onPick={(pdno, pdName) => {
+          openAddWatchOrderPopout({ pdno, pdName });
+        }}
+      />
+      <StrategyPreviewModalHost />
     </div>
   );
 };

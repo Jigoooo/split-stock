@@ -176,15 +176,27 @@ export async function suggestStrategy(input: SuggestStrategyInput): Promise<Sugg
   let disclosuresLine = '';
   let disclosureRefs: EvidenceRef[] = [];
   if (input.corpCode && input.dartClient.isAvailable()) {
-    const recent = await input.dartClient.listRecentDisclosures(input.corpCode, 30, 8);
-    if (recent.length > 0) {
-      disclosureRefs = recent.map((d, index) => ({
-        id: `disclosure:${d.rceptNo || d.rceptDt}:${index + 1}`,
-        kind: 'disclosure',
-        title: d.reportNm,
-        detail: `${d.rceptDt} 접수번호 ${d.rceptNo}`,
-      }));
-      disclosuresLine = `\n최근 30일 공시(${recent.length}건):\n${disclosureRefs.map((d) => `- [${d.id}] ${d.detail}: ${d.title}`).join('\n')}`;
+    try {
+      const recent = await input.dartClient.listRecentDisclosures(input.corpCode, 30, 8);
+      if (recent.length > 0) {
+        disclosureRefs = recent.map((d, index) => ({
+          id: `disclosure:${d.rceptNo || d.rceptDt}:${index + 1}`,
+          kind: 'disclosure',
+          title: d.reportNm,
+          detail: `${d.rceptDt} 접수번호 ${d.rceptNo}`,
+        }));
+        disclosuresLine = `\n최근 30일 공시(${recent.length}건):\n${disclosureRefs.map((d) => `- [${d.id}] ${d.detail}: ${d.title}`).join('\n')}`;
+      }
+    } catch (cause) {
+      input.logger.log({
+        level: 'WARN',
+        category: 'SYS',
+        message: 'ai.suggest-strategy.disclosure-context-failed',
+        payload: {
+          pdno: input.pdno,
+          reason: cause instanceof Error ? cause.message : String(cause),
+        },
+      });
     }
   }
 

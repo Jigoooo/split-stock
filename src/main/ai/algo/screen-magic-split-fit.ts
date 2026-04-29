@@ -13,6 +13,8 @@ export interface ScreenMagicSplitFitInput {
   minCandles?: number;
   /** 사전 제외할 pdno 목록 — A∪B∪C 와 중복 회피용. */
   excludePdnos?: ReadonlySet<string>;
+  /** KRX 등 외부 universe 로 이미 1차 선별한 후보. 지정하면 이 목록만 스크리닝. */
+  candidatePdnos?: ReadonlyArray<string>;
 }
 
 export interface ScreenedCandidate {
@@ -52,7 +54,12 @@ export function screenMagicSplitFit(input: ScreenMagicSplitFitInput): ScreenedCa
     .having(({ cnt }) => gte(cnt, minCandles))
     .all();
 
-  const eligiblePdnos = pdnoRows.map((r) => r.pdno).filter((p) => !exclude.has(p));
+  const countByPdno = new Map(pdnoRows.map((row) => [row.pdno, row.cnt]));
+  const eligiblePdnos = input.candidatePdnos
+    ? dedupePdnos(input.candidatePdnos).filter(
+        (pdno) => !exclude.has(pdno) && countByPdno.has(pdno),
+      )
+    : pdnoRows.map((r) => r.pdno).filter((p) => !exclude.has(p));
   if (eligiblePdnos.length === 0) return [];
 
   // 종목명 lookup — stock_master 매핑.
@@ -86,6 +93,18 @@ export function screenMagicSplitFit(input: ScreenMagicSplitFitInput): ScreenedCa
   // splitScore 내림차순 정렬, cap 적용.
   passed.sort((a, b) => (b.splitScore ?? 0) - (a.splitScore ?? 0));
   return passed.slice(0, cap);
+}
+
+function dedupePdnos(pdnos: ReadonlyArray<string>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of pdnos) {
+    const pdno = raw.padStart(6, '0');
+    if (!/^\d{6}$/.test(pdno) || seen.has(pdno)) continue;
+    seen.add(pdno);
+    out.push(pdno);
+  }
+  return out;
 }
 
 function evaluateConditions(sig: {

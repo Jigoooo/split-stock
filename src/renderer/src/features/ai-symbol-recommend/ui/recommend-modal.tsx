@@ -13,6 +13,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import type {
+  RecommendationDiagnostics,
   RecommendationProgressState,
   RecommendationViewState,
   TierDistribution,
@@ -82,6 +83,102 @@ function LoadingProgress({ progress }: { progress: RecommendationProgressState }
       ariaLabel={progress.label}
     />
   );
+}
+
+function SegmentButton({
+  active,
+  disabled,
+  children,
+  onClick,
+  title,
+}: {
+  active: boolean;
+  disabled?: boolean;
+  children: string;
+  onClick: () => void;
+  title?: string;
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      disabled={disabled}
+      title={title}
+      onClick={onClick}
+      style={{
+        minHeight: '2rem',
+        padding: '0.25rem 0.65rem',
+        border: '0',
+        borderRadius: '0.45rem',
+        background: active ? '#D97757' : 'transparent',
+        color: active ? '#fff' : 'var(--fg-2)',
+        fontSize: '0.95rem',
+        fontWeight: active ? 800 : 600,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.58 : 1,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function DiscoveryStatus({
+  diagnostics,
+}: {
+  diagnostics: RecommendationDiagnostics;
+}): ReactElement | null {
+  const discovery = diagnostics.discovery;
+  if (!discovery.enabled) return null;
+  const failed = diagnostics.sources
+    .filter((source) => source.status === 'failed')
+    .map((source) => source.source);
+  const text =
+    discovery.addedCount > 0
+      ? `자동발굴 ${discovery.addedCount}개 반영 · seed ${discovery.seedCount} · universe ${discovery.universeCount}`
+      : `자동발굴 제한 · ${formatDiscoveryReason(discovery.emptyReason)}`;
+  return (
+    <span
+      className="muted"
+      title={
+        failed.length > 0
+          ? `실패 source: ${failed.join(', ')}`
+          : discovery.basisDate
+            ? `KRX 기준일 ${discovery.basisDate}`
+            : undefined
+      }
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '0.25rem 0.6rem',
+        borderRadius: '999px',
+        border: '0.1rem solid var(--border)',
+        fontSize: '0.95rem',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {text}
+      {failed.length > 0 ? ` · ${failed.length}개 API 제한` : ''}
+    </span>
+  );
+}
+
+function formatDiscoveryReason(reason: string | null): string {
+  switch (reason) {
+    case 'krx_unavailable':
+      return 'KRX 데이터 없음';
+    case 'broker_unavailable_or_no_cache':
+      return '일봉 수집 불가';
+    case 'no_screen_pass':
+      return '조건 통과 없음';
+    case 'no_seed_after_liquidity_filter':
+      return '유동성 후보 없음';
+    case 'auto_discovery_failed':
+      return '자동발굴 실패';
+    default:
+      return reason ?? '후보 없음';
+  }
 }
 
 export interface RecommendModalProps {
@@ -273,58 +370,6 @@ export const RecommendModal = ({
                 ) : null}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <label
-                  title="ON: 보유/감시/수동 + 매직스플릿 친화 자동 발굴 종목 합집합으로 분석&#10;OFF: 보유/감시/수동만"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.3rem 0.7rem',
-                    borderRadius: '999px',
-                    border: '0.1rem solid var(--border)',
-                    fontSize: '1rem',
-                    color: 'var(--fg-2)',
-                    cursor: controlsDisabled ? 'not-allowed' : 'pointer',
-                    opacity: controlsDisabled ? 0.65 : 1,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={includeAutoDiscovery}
-                    disabled={controlsDisabled}
-                    onChange={(e) => onToggleAutoDiscovery(e.currentTarget.checked)}
-                    style={{ accentColor: '#D97757', margin: 0 }}
-                  />
-                  자동 발굴
-                </label>
-                <label
-                  title={
-                    hasDefaultKey
-                      ? 'ON: 알고리즘 + LLM(공시/뉴스 컨텍스트)\nOFF: 알고리즘만 (LLM 호출 0회)'
-                      : 'AI 키 미등록 — 알고리즘 전용으로만 동작합니다'
-                  }
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    padding: '0.3rem 0.7rem',
-                    borderRadius: '999px',
-                    border: '0.1rem solid var(--border)',
-                    fontSize: '1rem',
-                    color: 'var(--fg-2)',
-                    cursor: hasDefaultKey && !controlsDisabled ? 'pointer' : 'not-allowed',
-                    opacity: hasDefaultKey && !controlsDisabled ? 1 : 0.7,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={!aiOff}
-                    disabled={controlsDisabled || !hasDefaultKey}
-                    onChange={(e) => onToggleAiOff(!e.currentTarget.checked)}
-                    style={{ accentColor: '#D97757', margin: 0 }}
-                  />
-                  AI 사용
-                </label>
                 <Button
                   variant="ghost"
                   iconOnly
@@ -335,6 +380,92 @@ export const RecommendModal = ({
                   title="닫기"
                 />
               </div>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.8rem',
+                flexWrap: 'wrap',
+                marginBottom: '1rem',
+                padding: '0.65rem',
+                border: '0.1rem solid var(--border)',
+                borderRadius: '0.7rem',
+                background: 'var(--bg-2, rgba(0,0,0,0.025))',
+                flex: '0 0 auto',
+              }}
+            >
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}
+              >
+                <span className="muted" style={{ fontSize: '0.95rem', fontWeight: 700 }}>
+                  분석 범위
+                </span>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.2rem',
+                    padding: '0.15rem',
+                    borderRadius: '0.55rem',
+                    border: '0.1rem solid var(--border)',
+                    background: 'var(--bg)',
+                  }}
+                >
+                  <SegmentButton
+                    active={!includeAutoDiscovery}
+                    disabled={controlsDisabled}
+                    onClick={() => onToggleAutoDiscovery(false)}
+                  >
+                    보유/감시만
+                  </SegmentButton>
+                  <SegmentButton
+                    active={includeAutoDiscovery}
+                    disabled={controlsDisabled}
+                    title="KOSPI/KOSDAQ 전체 후보에서 자동발굴 후보를 함께 선별"
+                    onClick={() => onToggleAutoDiscovery(true)}
+                  >
+                    자동 발굴 포함
+                  </SegmentButton>
+                </span>
+              </div>
+              <div
+                style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}
+              >
+                <span className="muted" style={{ fontSize: '0.95rem', fontWeight: 700 }}>
+                  분석 방식
+                </span>
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.2rem',
+                    padding: '0.15rem',
+                    borderRadius: '0.55rem',
+                    border: '0.1rem solid var(--border)',
+                    background: 'var(--bg)',
+                  }}
+                >
+                  <SegmentButton
+                    active={!aiOff}
+                    disabled={controlsDisabled || !hasDefaultKey}
+                    title={hasDefaultKey ? '알고리즘 + AI 근거 합성' : 'AI 키 미등록'}
+                    onClick={() => onToggleAiOff(false)}
+                  >
+                    AI 분석
+                  </SegmentButton>
+                  <SegmentButton
+                    active={aiOff || !hasDefaultKey}
+                    disabled={controlsDisabled}
+                    onClick={() => onToggleAiOff(true)}
+                  >
+                    알고리즘만
+                  </SegmentButton>
+                </span>
+              </div>
+              <DiscoveryStatus diagnostics={view.diagnostics} />
             </div>
 
             <div style={{ marginBottom: '1.2rem', flex: '0 0 auto' }}>
@@ -365,7 +496,7 @@ export const RecommendModal = ({
                   <Sparkles size={32} color="#D97757" />
                 </motion.div>
                 <div className="muted" style={{ fontSize: '1.2rem' }}>
-                  보유/감시 종목을 분석 중...
+                  후보군과 외부 컨텍스트를 분석 중...
                 </div>
                 <LoadingProgress progress={pendingProgress} />
               </div>
@@ -434,7 +565,7 @@ export const RecommendModal = ({
               >
                 <Sparkles size={32} color="#D97757" />
                 <div style={{ fontSize: '1.25rem', color: 'var(--fg)', lineHeight: 1.6 }}>
-                  관심 종목 추가 / AI 사용 토글 등을 설정한 뒤<br />
+                  분석 범위와 방식을 설정한 뒤<br />
                   <strong>분석 시작</strong> 버튼을 눌러주세요.
                 </div>
                 <Button
