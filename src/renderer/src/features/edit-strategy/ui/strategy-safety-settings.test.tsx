@@ -30,6 +30,7 @@ vi.mock('../model/use-protection-limits-form', () => ({
       accountTotalMaxAmount: '',
     },
     isSaving: false,
+    isDirty: false,
     handleFieldChange: mocks.handleFieldChange,
     handleSave: vi.fn(),
   }),
@@ -130,6 +131,12 @@ describe('Strategy safety settings', () => {
     expect(mocks.handleFieldChange).toHaveBeenCalledWith('perSymbolDailyMaxBuys', '3');
   });
 
+  it('보호 한도 저장 버튼은 변경 사항이 없으면 비활성화된다', () => {
+    render(<ProtectionLimits />);
+
+    expect(screen.getByRole('button', { name: '보호 한도 저장' })).toBeDisabled();
+  });
+
   it('연속매수 방지는 스위치 기반으로 켜고 끈다', () => {
     render(<RateGuard />);
 
@@ -140,11 +147,36 @@ describe('Strategy safety settings', () => {
     expect(screen.getByRole('textbox', { name: '최대 매수 시도 횟수' })).toBeDisabled();
   });
 
+  it('연속매수 방지 저장 버튼은 기존 설정과 같으면 비활성화된다', () => {
+    render(<RateGuard />);
+
+    const saveButton = screen.getByRole('button', { name: '연속매수방지 저장' });
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('switch', { name: '연속 자동매수 방지 사용 여부' }));
+    expect(saveButton).not.toBeDisabled();
+  });
+
   it('매매 시간대 설정은 매수 슬롯만 표시하고 매도 슬롯은 숨긴다', () => {
     render(<TimeWindows />);
 
     expect(screen.getByText('매수 허용 시간대')).toBeInTheDocument();
     expect(screen.queryByText('매도 허용 시간대')).not.toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'BUY 슬롯 1 사용 여부' })).toBeInTheDocument();
+  });
+
+  it('매매 시간대 저장 버튼은 정규화된 시간이 기존 값과 같으면 비활성화된다', () => {
+    render(<TimeWindows />);
+
+    const startInput = screen.getByRole('textbox', { name: 'BUY 슬롯 1 시작 시간' });
+    const saveButton = screen.getAllByRole('button', { name: '저장' })[0];
+
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.change(startInput, { target: { value: '09:01' } });
+    expect(saveButton).not.toBeDisabled();
+
+    fireEvent.change(startInput, { target: { value: '9:00' } });
+    expect(saveButton).toBeDisabled();
   });
 });

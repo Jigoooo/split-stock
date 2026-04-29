@@ -15,6 +15,33 @@ type RawFields = {
   accountTotalMaxAmount: string;
 };
 
+type ProtectionLimitsPayload = {
+  perSymbolDailyMaxBuysEnabled: boolean;
+  perSymbolDailyMaxBuys: number | null;
+  dailyTotalMaxAmountEnabled: boolean;
+  dailyTotalMaxAmount: number | null;
+  dailyTotalMaxCountEnabled: boolean;
+  dailyTotalMaxCount: number | null;
+  accountTotalMaxAmountEnabled: boolean;
+  accountTotalMaxAmount: number | null;
+};
+
+const toNullable = (value: string): number | null => {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+const rawToPayload = (raw: RawFields): ProtectionLimitsPayload => ({
+  perSymbolDailyMaxBuysEnabled: raw.perSymbolDailyMaxBuysEnabled,
+  perSymbolDailyMaxBuys: toNullable(raw.perSymbolDailyMaxBuys),
+  dailyTotalMaxAmountEnabled: raw.dailyTotalMaxAmountEnabled,
+  dailyTotalMaxAmount: toNullable(raw.dailyTotalMaxAmount),
+  dailyTotalMaxCountEnabled: raw.dailyTotalMaxCountEnabled,
+  dailyTotalMaxCount: toNullable(raw.dailyTotalMaxCount),
+  accountTotalMaxAmountEnabled: raw.accountTotalMaxAmountEnabled,
+  accountTotalMaxAmount: toNullable(raw.accountTotalMaxAmount),
+});
+
 /**
  * 보호 한도 폼 상태 관리.
  * - 로컬 편집 상태(raw string)를 서버 데이터와 분리
@@ -51,6 +78,18 @@ export function useProtectionLimitsForm() {
     accountTotalMaxAmountEnabled: limits?.accountTotalMaxAmountEnabled ?? false,
     accountTotalMaxAmount: String(limits?.accountTotalMaxAmount ?? ''),
   };
+  const server: RawFields = {
+    perSymbolDailyMaxBuysEnabled: limits?.perSymbolDailyMaxBuysEnabled ?? false,
+    perSymbolDailyMaxBuys: String(limits?.perSymbolDailyMaxBuys ?? ''),
+    dailyTotalMaxAmountEnabled: limits?.dailyTotalMaxAmountEnabled ?? false,
+    dailyTotalMaxAmount: String(limits?.dailyTotalMaxAmount ?? ''),
+    dailyTotalMaxCountEnabled: limits?.dailyTotalMaxCountEnabled ?? false,
+    dailyTotalMaxCount: String(limits?.dailyTotalMaxCount ?? ''),
+    accountTotalMaxAmountEnabled: limits?.accountTotalMaxAmountEnabled ?? false,
+    accountTotalMaxAmount: String(limits?.accountTotalMaxAmount ?? ''),
+  };
+  const payload = rawToPayload(resolved);
+  const isDirty = JSON.stringify(payload) !== JSON.stringify(rawToPayload(server));
 
   const handleFieldChange = (field: keyof RawFields, value: string | boolean): void => {
     setRaw((prev) => ({ ...(prev ?? resolved), [field]: value }));
@@ -58,21 +97,10 @@ export function useProtectionLimitsForm() {
 
   const handleSave = (): void => {
     if (accountId === null) return;
-    const toNullable = (s: string): number | null => {
-      const n = parseInt(s, 10);
-      return Number.isFinite(n) && n > 0 ? n : null;
-    };
     startTransition(() => {
       updateMutation.mutate({
         accountId,
-        perSymbolDailyMaxBuysEnabled: resolved.perSymbolDailyMaxBuysEnabled,
-        perSymbolDailyMaxBuys: toNullable(resolved.perSymbolDailyMaxBuys),
-        dailyTotalMaxAmountEnabled: resolved.dailyTotalMaxAmountEnabled,
-        dailyTotalMaxAmount: toNullable(resolved.dailyTotalMaxAmount),
-        dailyTotalMaxCountEnabled: resolved.dailyTotalMaxCountEnabled,
-        dailyTotalMaxCount: toNullable(resolved.dailyTotalMaxCount),
-        accountTotalMaxAmountEnabled: resolved.accountTotalMaxAmountEnabled,
-        accountTotalMaxAmount: toNullable(resolved.accountTotalMaxAmount),
+        ...payload,
       });
       setRaw(null);
     });
@@ -84,6 +112,7 @@ export function useProtectionLimitsForm() {
     error,
     resolved,
     isSaving: isPendingTrans || updateMutation.isPending,
+    isDirty,
     handleFieldChange,
     handleSave,
   };

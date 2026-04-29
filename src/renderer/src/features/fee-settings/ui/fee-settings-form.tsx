@@ -22,32 +22,26 @@ export const FeeSettingsForm = ({ env }: FeeSettingsFormProps): ReactElement => 
   const updateMutation = useUpdateFeeSettings();
 
   const [form, setForm] = useState<FeeSettings>(DEFAULT_FEES[env]);
-  const [isDirty, setIsDirty] = useState(false);
+  const [savedForm, setSavedForm] = useState<FeeSettings>(DEFAULT_FEES[env]);
 
   useEffect(() => {
-    if (data) {
-      setForm(data);
-      setIsDirty(false);
-    } else {
-      setForm(DEFAULT_FEES[env]);
-      setIsDirty(false);
-    }
+    const next = data ?? DEFAULT_FEES[env];
+    setForm(next);
+    setSavedForm(next);
   }, [data, env]);
 
   const handleChange = (field: keyof FeeSettings, value: number): void => {
     setForm((prev) => ({ ...prev, [field]: value }));
-    setIsDirty(true);
   };
 
   const handleSave = (): void => {
     void updateMutation.mutateAsync({ env, ...form }).then(() => {
-      setIsDirty(false);
+      setSavedForm(form);
     });
   };
 
   const handleReset = (): void => {
-    if (data) setForm(data);
-    setIsDirty(false);
+    setForm(savedForm);
   };
 
   if (isPending) {
@@ -72,6 +66,8 @@ export const FeeSettingsForm = ({ env }: FeeSettingsFormProps): ReactElement => 
 
   const envLabel = env === 'real' ? 'PROD 환경' : 'MOCK 환경';
   const isSaving = updateMutation.isPending;
+  const isDirty =
+    form.buy !== savedForm.buy || form.sell !== savedForm.sell || form.tax !== savedForm.tax;
 
   return (
     <div className="panel">

@@ -2,12 +2,14 @@ import { Button } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
 interface ChartSettingsActionsProps {
+  isDirty: boolean;
   isSaving: boolean;
   onReset: () => void;
   onSave: () => void;
 }
 
 export const ChartSettingsActions = ({
+  isDirty,
   isSaving,
   onReset,
   onSave,
@@ -34,7 +36,7 @@ export const ChartSettingsActions = ({
     </Button>
     <Button
       onClick={onSave}
-      disabled={isSaving}
+      disabled={isSaving || !isDirty}
       variant="primary"
       dense
       aria-label="차트 설정 저장"

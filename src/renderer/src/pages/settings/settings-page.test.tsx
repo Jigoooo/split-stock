@@ -18,6 +18,8 @@ vi.mock('@renderer/features/display-settings', () => ({
     isPending: false,
     error: null,
     isSaving: false,
+    isChartDirty: false,
+    isGridDirty: false,
     resolvedMa: vi.fn(),
     resolvedVolume: {},
     resolvedCrosshair: {},

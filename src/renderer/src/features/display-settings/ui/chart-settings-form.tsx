@@ -10,6 +10,7 @@ import { VolumeSettingsSection } from './volume-settings-section';
 export const ChartSettingsForm = ({
   resolvedMa,
   resolvedVolume,
+  isDirty,
   isSaving,
   onMaChange,
   onVolumeChange,
@@ -23,6 +24,6 @@ export const ChartSettingsForm = ({
       onVolumeChange={onVolumeChange}
       resolvedVolume={resolvedVolume}
     />
-    <ChartSettingsActions isSaving={isSaving} onReset={onReset} onSave={onSave} />
+    <ChartSettingsActions isDirty={isDirty} isSaving={isSaving} onReset={onReset} onSave={onSave} />
   </section>
 );

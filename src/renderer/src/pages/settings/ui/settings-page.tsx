@@ -326,6 +326,7 @@ function DisplaySettingsSection(): ReactElement {
             resolvedMa={display.resolvedMa}
             resolvedVolume={display.resolvedVolume}
             resolvedCrosshair={display.resolvedCrosshair}
+            isDirty={display.isChartDirty}
             isSaving={display.isSaving}
             onMaChange={display.setMaField}
             onVolumeChange={(field, value) => {
@@ -347,6 +348,7 @@ function DisplaySettingsSection(): ReactElement {
         <div className="panel__body">
           <GridDensityForm
             rowHeightPx={display.resolvedRowHeight}
+            isDirty={display.isGridDirty}
             isSaving={display.isSaving}
             onChange={display.setRowHeight}
             onSave={display.handleSave}

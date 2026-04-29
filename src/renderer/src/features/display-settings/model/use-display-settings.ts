@@ -6,6 +6,7 @@ import type {
   MaSettings,
 } from '@renderer/entities/display-settings';
 import {
+  MA_PERIODS,
   useGetDisplaySettings,
   useResetDisplaySettings,
   useUpdateDisplaySettings,
@@ -64,6 +65,44 @@ export function useDisplaySettings() {
 
   const resolvedRowHeight: number = localRowHeight ?? settings?.grid.rowHeightPx ?? 26;
 
+  function serverMa(period: MaPeriod): MaSettings {
+    const server = settings?.chart.ma[period];
+    return {
+      enabled: server?.enabled ?? period <= 20,
+      color: server?.color ?? '#888888',
+      width: server?.width ?? 1,
+      style: server?.style ?? 'solid',
+    };
+  }
+
+  function buildMaPayload(resolve: (period: MaPeriod) => MaSettings): Record<MaPeriod, MaSettings> {
+    return Object.fromEntries(MA_PERIODS.map((period) => [period, resolve(period)])) as Record<
+      MaPeriod,
+      MaSettings
+    >;
+  }
+
+  const isChartDirty =
+    JSON.stringify({
+      ma: buildMaPayload(resolvedMa),
+      volume: resolvedVolume,
+      crosshair: resolvedCrosshair,
+    }) !==
+    JSON.stringify({
+      ma: buildMaPayload(serverMa),
+      volume: {
+        upColor: settings?.chart.volume.upColor ?? 'rgba(220,38,38,0.5)',
+        downColor: settings?.chart.volume.downColor ?? 'rgba(37,99,235,0.5)',
+        heightPercent: settings?.chart.volume.heightPercent ?? 30,
+      },
+      crosshair: {
+        mode: settings?.chart.crosshair.mode ?? 'Magnet',
+        labelVisible: settings?.chart.crosshair.labelVisible ?? true,
+      },
+    });
+
+  const isGridDirty = resolvedRowHeight !== (settings?.grid.rowHeightPx ?? 26);
+
   // ── setters ──────────────────────────────────────────────────────
 
   function setMaField<K extends keyof MaSettings>(
@@ -99,10 +138,7 @@ export function useDisplaySettings() {
 
   function handleSave(): void {
     startTransition(() => {
-      const maPayload: Partial<Record<MaPeriod, MaSettings>> = {};
-      for (const period of [5, 10, 20, 60, 120] as MaPeriod[]) {
-        maPayload[period] = resolvedMa(period);
-      }
+      const maPayload = buildMaPayload(resolvedMa);
 
       mutateAsync({
         chart: {
@@ -157,6 +193,8 @@ export function useDisplaySettings() {
     isPending,
     error,
     isSaving,
+    isChartDirty,
+    isGridDirty,
     resolvedMa,
     resolvedVolume,
     resolvedCrosshair,

@@ -21,6 +21,7 @@ export interface ChartSettingsFormProps {
   resolvedVolume: { upColor: string; downColor: string; heightPercent: number };
   resolvedCrosshair: { mode: CrosshairModeType; labelVisible: boolean };
   isSaving: boolean;
+  isDirty: boolean;
   onMaChange: MaChangeHandler;
   onVolumeChange: VolumeChangeHandler;
   onCrosshairChange: CrosshairChangeHandler;

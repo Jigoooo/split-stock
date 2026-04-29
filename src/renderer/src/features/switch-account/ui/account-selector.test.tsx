@@ -199,4 +199,24 @@ describe('AccountSelector', () => {
     expect(await screen.findByRole('listbox', { name: '계좌 목록' })).toBeInTheDocument();
     expect(screen.getAllByText('[KIS] MOCK · 5678')).toHaveLength(2);
   });
+
+  it('계좌 별칭 저장은 기존 별칭과 같으면 비활성화된다', async () => {
+    render(<AccountSelector />);
+
+    fireEvent.click(screen.getByRole('button', { name: /모의 계좌 · mock 5678/i }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: /모의 계좌 · MOCK 5678 별칭 편집/i }),
+    );
+
+    const nameInput = screen.getByRole('textbox', { name: /별칭/ });
+    const saveButton = screen.getByRole('button', { name: '저장' });
+
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.change(nameInput, { target: { value: '모의 계좌 2' } });
+    expect(saveButton).not.toBeDisabled();
+
+    fireEvent.change(nameInput, { target: { value: '모의 계좌' } });
+    expect(saveButton).toBeDisabled();
+  });
 });

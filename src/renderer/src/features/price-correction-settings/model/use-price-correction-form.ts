@@ -31,6 +31,9 @@ export function usePriceCorrectionForm() {
 
   const resolvedBuy: PriceCorrectionStrategy = localBuy ?? settings?.buy ?? 'AGGRESSIVE';
   const resolvedSell: PriceCorrectionStrategy = localSell ?? settings?.sell ?? 'AGGRESSIVE';
+  const serverBuy: PriceCorrectionStrategy = settings?.buy ?? 'AGGRESSIVE';
+  const serverSell: PriceCorrectionStrategy = settings?.sell ?? 'AGGRESSIVE';
+  const isDirty = resolvedBuy !== serverBuy || resolvedSell !== serverSell;
 
   const handleBuyChange = (value: PriceCorrectionStrategy): void => {
     setLocalBuy(value);
@@ -52,6 +55,7 @@ export function usePriceCorrectionForm() {
     resolvedBuy,
     resolvedSell,
     isSaving: isPendingTrans || updateMutation.isPending,
+    isDirty,
     handleBuyChange,
     handleSellChange,
     handleSave,

@@ -7,7 +7,7 @@ import { StrategyForm } from './strategy-form';
 const initial: StrategyProfile = {
   version: 2,
   maxStages: 5,
-  ...createStrategyRules(5, {
+  ...createStrategyRules(50, {
     amountKrw: 1_000_000,
     dropPct: 0.03,
     profitPct: 0.05,
@@ -31,6 +31,33 @@ describe('StrategyForm', () => {
     expect(screen.getByRole('textbox', { name: '50차 매수금액' })).toBeDisabled();
     expect(screen.queryByText('수익부스터 (선택)')).toBeNull();
     expect(screen.queryByText('자동매매 설정')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '자동매매 설정 저장' })).toBeDisabled();
+  });
+
+  it('저장 버튼은 저장 payload가 기존 프로필과 달라질 때만 활성화된다', () => {
+    render(<StrategyForm initial={initial} onSubmit={vi.fn()} />);
+    const maxStages = screen.getByRole('textbox', { name: '최대 관리차수 (1~50)' });
+    const saveButton = screen.getByRole('button', { name: '자동매매 설정 저장' });
+
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.change(maxStages, { target: { value: '6' } });
+    expect(saveButton).not.toBeDisabled();
+
+    fireEvent.change(maxStages, { target: { value: '5' } });
+    expect(saveButton).toBeDisabled();
+  });
+
+  it('초기 표시값과 저장 기준 프로필이 다르면 저장 버튼이 활성화된다', () => {
+    render(
+      <StrategyForm
+        initial={{ ...initial, maxStages: 6 }}
+        dirtyBaseline={initial}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: '자동매매 설정 저장' })).not.toBeDisabled();
   });
 
   it('차수별 규칙 수정 후 저장 payload는 새 스키마 shape를 유지한다', () => {
@@ -162,6 +189,7 @@ describe('StrategyForm', () => {
       />,
     );
 
+    expect(screen.getByRole('button', { name: '자동매매 설정 저장' })).not.toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '자동매매 설정 저장' }));
 
     const submitted = onSubmit.mock.calls[0]?.[0] as Record<string, unknown> | undefined;

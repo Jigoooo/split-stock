@@ -79,6 +79,7 @@ export const PriceCorrectionForm = (): ReactElement => {
     resolvedBuy,
     resolvedSell,
     isSaving,
+    isDirty,
     handleBuyChange,
     handleSellChange,
     handleSave,
@@ -133,7 +134,7 @@ export const PriceCorrectionForm = (): ReactElement => {
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || !isDirty}
           variant="primary"
           dense
           aria-label="호가 자동 보정 저장"

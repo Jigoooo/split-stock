@@ -1,5 +1,6 @@
 import { Button, Select, TextInput } from '@renderer/shared/ui';
 import type { StrategyAutoMode, StrategyOrderType, StrategyProfile } from '@shared/contracts';
+import { DEFAULT_STRATEGY_PROFILE, normalizeStrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { STRATEGY_AUTO_MODE_OPTIONS } from '../model/options';
@@ -18,6 +19,7 @@ import { StrategyFormActions } from './strategy-form-actions';
 
 export interface StrategyFormProps {
   initial: StrategyProfile | null;
+  dirtyBaseline?: StrategyProfile | null;
   disabled?: boolean | undefined;
   onSubmit: (profile: StrategyProfile) => void;
   presetName?: string;
@@ -27,6 +29,7 @@ export interface StrategyFormProps {
   submitAriaLabel?: string;
   submitDisabled?: boolean;
   submitContextLabel?: string;
+  submitRequiresDirty?: boolean;
 }
 
 export const StrategyForm = (props: StrategyFormProps): ReactElement => {
@@ -41,6 +44,9 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
   const validated = validateProfile(toProfile(raw, rows, props.initial));
   const showPresetSave = props.onSaveAsPreset !== undefined;
   const canSavePreset = !props.disabled && presetInput.trim().length > 0 && validated.ok;
+  const submitRequiresDirty = props.submitRequiresDirty ?? true;
+  const dirtyBaseline = props.dirtyBaseline ?? props.initial;
+  const isDirty = validated.ok && isProfileDirty(dirtyBaseline, validated.profile);
 
   const updateRaw = <K extends keyof FormRaw>(key: K, value: FormRaw[K]): void => {
     setRaw((prev) => ({ ...prev, [key]: value }));
@@ -231,7 +237,12 @@ export const StrategyForm = (props: StrategyFormProps): ReactElement => {
         />
       </div>
       <StrategyFormActions
-        canSubmit={!props.disabled && !props.submitDisabled && validated.ok}
+        canSubmit={
+          !props.disabled &&
+          !props.submitDisabled &&
+          validated.ok &&
+          (!submitRequiresDirty || isDirty)
+        }
         chrome={chrome}
         onSubmit={handleSubmit}
         submitAriaLabel={props.submitAriaLabel}
@@ -247,4 +258,24 @@ function inferSubmitContextLabel(label: string): string {
   if (label.includes('기본')) return '기본값';
   if (label.includes('템플릿')) return '템플릿';
   return '자동매매 설정';
+}
+
+function isProfileDirty(initial: StrategyProfile | null, current: StrategyProfile): boolean {
+  const normalizedInitial = normalizeStrategyProfile(initial) ?? DEFAULT_STRATEGY_PROFILE;
+  if (stableStringify(current) !== stableStringify(normalizedInitial)) return true;
+  if (initial === null) return false;
+  return stableStringify(initial) !== stableStringify(normalizedInitial);
+}
+
+function stableStringify(value: unknown): string {
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'undefined';
 }

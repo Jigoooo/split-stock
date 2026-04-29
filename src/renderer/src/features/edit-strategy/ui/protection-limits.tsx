@@ -104,8 +104,16 @@ function ProtectionLimitRow({
  * 빈 값 = 제한 없음 (null 저장)
  */
 export const ProtectionLimits = (): ReactElement => {
-  const { accountId, isPending, error, resolved, isSaving, handleFieldChange, handleSave } =
-    useProtectionLimitsForm();
+  const {
+    accountId,
+    isPending,
+    error,
+    resolved,
+    isSaving,
+    isDirty,
+    handleFieldChange,
+    handleSave,
+  } = useProtectionLimitsForm();
 
   if (accountId === null) {
     return (
@@ -191,7 +199,7 @@ export const ProtectionLimits = (): ReactElement => {
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={isSaving || !isDirty}
           variant="primary"
           dense
           aria-label="보호 한도 저장"

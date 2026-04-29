@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 
 interface GridDensityFormProps {
   rowHeightPx: number;
+  isDirty: boolean;
   isSaving: boolean;
   onChange: (px: number) => void;
   onSave: () => void;
@@ -11,6 +12,7 @@ interface GridDensityFormProps {
 
 export const GridDensityForm = ({
   rowHeightPx,
+  isDirty,
   isSaving,
   onChange,
   onSave,
@@ -113,7 +115,7 @@ export const GridDensityForm = ({
         </Button>
         <Button
           onClick={onSave}
-          disabled={isSaving}
+          disabled={isSaving || !isDirty}
           variant="primary"
           dense
           aria-label="그리드 설정 저장"

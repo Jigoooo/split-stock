@@ -46,6 +46,7 @@ const SlotRow = ({
       toast.error(`시간대 저장 실패: ${err.message}`);
     },
   });
+  const disabled = isPending || upsert.isPending;
 
   const handleToggle = (checked: boolean): void => {
     const s = hhmmToMinutes(startRaw);
@@ -56,25 +57,38 @@ const SlotRow = ({
     });
   };
 
+  const parsedStart = hhmmToMinutes(startRaw);
+  const parsedEnd = hhmmToMinutes(endRaw);
+  const isDirty =
+    (parsedStart === null
+      ? startRaw !== minutesToHHMM(startMinute)
+      : parsedStart !== startMinute) ||
+    (parsedEnd === null ? endRaw !== minutesToHHMM(endMinute) : parsedEnd !== endMinute);
+
   const handleSave = (): void => {
-    const s = hhmmToMinutes(startRaw);
-    const e = hhmmToMinutes(endRaw);
     let hasErr = false;
-    if (s === null) {
+    if (parsedStart === null) {
       setStartErr('HH:MM 형식으로 입력하세요');
       hasErr = true;
     } else {
       setStartErr('');
     }
-    if (e === null) {
+    if (parsedEnd === null) {
       setEndErr('HH:MM 형식으로 입력하세요');
       hasErr = true;
     } else {
       setEndErr('');
     }
-    if (hasErr || s === null || e === null) return;
+    if (hasErr || parsedStart === null || parsedEnd === null) return;
     startTransition(() => {
-      upsert.mutate({ accountId, side, slot, enabled, startMinute: s, endMinute: e });
+      upsert.mutate({
+        accountId,
+        side,
+        slot,
+        enabled,
+        startMinute: parsedStart,
+        endMinute: parsedEnd,
+      });
     });
   };
 
@@ -111,7 +125,7 @@ const SlotRow = ({
           onChange={(e) => setStartRaw(e.target.value)}
           placeholder="09:00"
           aria-label={`${side} 슬롯 ${slot} 시작 시간`}
-          disabled={!enabled || isPending}
+          disabled={!enabled || disabled}
           dense
         />
         {startErr ? (
@@ -130,7 +144,7 @@ const SlotRow = ({
           onChange={(e) => setEndRaw(e.target.value)}
           placeholder="15:30"
           aria-label={`${side} 슬롯 ${slot} 종료 시간`}
-          disabled={!enabled || isPending}
+          disabled={!enabled || disabled}
           dense
         />
         {endErr ? (
@@ -139,13 +153,18 @@ const SlotRow = ({
           </span>
         ) : null}
       </div>
-      <Button onClick={handleSave} disabled={!enabled || isPending} dense aria-label="저장">
+      <Button
+        onClick={handleSave}
+        disabled={!enabled || disabled || !isDirty}
+        dense
+        aria-label="저장"
+      >
         저장
       </Button>
       <Switch
         checked={enabled}
         onChange={handleToggle}
-        disabled={isPending}
+        disabled={disabled}
         label={enabled ? '사용' : '끄기'}
         aria-label={`${side} 슬롯 ${slot} 사용 여부`}
       />

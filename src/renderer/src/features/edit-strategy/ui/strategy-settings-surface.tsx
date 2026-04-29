@@ -218,6 +218,7 @@ function TemplateManagementPanel(): ReactElement {
         submitLabel={isEditingExisting ? '템플릿 덮어쓰기' : '템플릿 저장'}
         submitContextLabel="템플릿"
         submitDisabled={isEditingExisting ? !selectedTemplate : trimmedNewTemplateName.length === 0}
+        submitRequiresDirty={isEditingExisting}
         onSubmit={(profile) => {
           if (isEditingExisting) {
             void (async () => {

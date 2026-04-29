@@ -368,6 +368,9 @@ const RenameAccountModal = ({
   onCancel: () => void;
 }): ReactElement => {
   const [name, setName] = useState(row.displayName ?? '');
+  const trimmedName = name.trim();
+  const savedName = row.displayName?.trim() ?? '';
+  const isDirty = trimmedName !== savedName;
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="계좌 별칭 편집">
       <div className="modal panel">
@@ -396,7 +399,8 @@ const RenameAccountModal = ({
             취소
           </Button>
           <Button
-            onClick={() => onConfirm(name.trim())}
+            onClick={() => onConfirm(trimmedName)}
+            disabled={!isDirty}
             loading={pending}
             loadingText="저장 중…"
             variant="primary"

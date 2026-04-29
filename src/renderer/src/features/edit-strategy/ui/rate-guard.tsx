@@ -30,11 +30,28 @@ export const RateGuard = (): ReactElement => {
   const [windowRaw, setWindowRaw] = useState<string | null>(null);
   const [maxCountRaw, setMaxCountRaw] = useState<string | null>(null);
   const [isPendingTrans, startTransition] = useTransition();
+  const isSaving = isPendingTrans || updateMutation.isPending;
 
   // 서버 데이터로 초기화 (로컬 편집 상태가 없을 때만)
   const resolvedEnabled = enabled ?? settings?.enabled ?? false;
   const resolvedWindow = windowRaw ?? String(settings?.windowSeconds ?? 40);
   const resolvedMaxCount = maxCountRaw ?? String(settings?.maxCount ?? 5);
+  const serverEnabled = settings?.enabled ?? false;
+  const serverWindowSeconds = settings?.windowSeconds ?? 40;
+  const serverMaxCount = settings?.maxCount ?? 5;
+  const resolvedWindowSeconds = Number(resolvedWindow);
+  const resolvedMaxCountNumber = Number(resolvedMaxCount);
+  const hasValidValues =
+    Number.isInteger(resolvedWindowSeconds) &&
+    resolvedWindowSeconds >= 1 &&
+    resolvedWindowSeconds <= 3600 &&
+    Number.isInteger(resolvedMaxCountNumber) &&
+    resolvedMaxCountNumber >= 1 &&
+    resolvedMaxCountNumber <= 100;
+  const isDirty =
+    resolvedEnabled !== serverEnabled ||
+    (hasValidValues &&
+      (resolvedWindowSeconds !== serverWindowSeconds || resolvedMaxCountNumber !== serverMaxCount));
 
   if (accountId === null) {
     return (
@@ -63,16 +80,13 @@ export const RateGuard = (): ReactElement => {
   }
 
   const handleSave = (): void => {
-    const ws = Number(resolvedWindow);
-    const mc = Number(resolvedMaxCount);
-    if (!Number.isInteger(ws) || ws < 1 || ws > 3600) return;
-    if (!Number.isInteger(mc) || mc < 1 || mc > 100) return;
+    if (!hasValidValues) return;
     startTransition(() => {
       updateMutation.mutate({
         accountId: accountId,
         enabled: resolvedEnabled,
-        windowSeconds: ws,
-        maxCount: mc,
+        windowSeconds: resolvedWindowSeconds,
+        maxCount: resolvedMaxCountNumber,
       });
     });
   };
@@ -121,7 +135,7 @@ export const RateGuard = (): ReactElement => {
               value={resolvedWindow}
               onValueChange={(v) => setWindowRaw(v)}
               aria-label="감지 윈도우 초"
-              disabled={!resolvedEnabled || isPendingTrans}
+              disabled={!resolvedEnabled || isSaving}
               dense
               inputMode="numeric"
             />
@@ -135,7 +149,7 @@ export const RateGuard = (): ReactElement => {
               value={resolvedMaxCount}
               onValueChange={(v) => setMaxCountRaw(v)}
               aria-label="최대 매수 시도 횟수"
-              disabled={!resolvedEnabled || isPendingTrans}
+              disabled={!resolvedEnabled || isSaving}
               dense
               inputMode="numeric"
             />
@@ -148,7 +162,7 @@ export const RateGuard = (): ReactElement => {
             if (checked && resolvedWindow.trim() === '') setWindowRaw('40');
             if (checked && resolvedMaxCount.trim() === '') setMaxCountRaw('5');
           }}
-          disabled={isPendingTrans}
+          disabled={isSaving}
           label={resolvedEnabled ? '사용' : '끄기'}
           aria-label="연속 자동매수 방지 사용 여부"
         />
@@ -157,7 +171,7 @@ export const RateGuard = (): ReactElement => {
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button
           onClick={handleSave}
-          disabled={isPendingTrans}
+          disabled={isSaving || !isDirty || !hasValidValues}
           variant="primary"
           dense
           aria-label="연속매수방지 저장"
