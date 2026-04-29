@@ -1,6 +1,6 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, ChevronUp, ExternalLink, Minus, Newspaper, Plus, Target } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
+import { motion } from 'framer-motion';
+import { ExternalLink, Minus, Newspaper, Plus, Target } from 'lucide-react';
+import type { ReactElement } from 'react';
 import type { RecommendedItem, RecommendTier } from '../model/use-symbol-recommendations';
 import { ConsensusBar } from './consensus-bar';
 import { IndicatorReasonsList } from './indicator-reasons-list';
@@ -60,37 +60,33 @@ const CONFIDENCE_TONE: Record<RecommendedItem['confidence'], string> = {
 export interface RecommendCardProps {
   item: RecommendedItem;
   onPick: (pdno: string, name: string) => void;
+  selected?: boolean;
+  onSelect?: (pdno: string) => void;
 }
 
 /**
  * AI 추천 결과 카드 — 기본 노출은 score+chip+summary, 펼침 시 통계/pros/cons/entryNote.
  * 전체 카드 클릭 = pick (add-watch-order prefill). 펼침 토글은 별도 버튼으로 분리.
  */
-export const RecommendCard = ({ item, onPick }: RecommendCardProps): ReactElement => {
-  const [expanded, setExpanded] = useState(false);
-  const hasDetails =
-    item.pros.length > 0 ||
-    item.cons.length > 0 ||
-    item.entryNote !== null ||
-    hasAnyStat(item.stats) ||
-    item.marketContext !== null ||
-    item.news.length > 0 ||
-    item.indicatorReasons.length > 0 ||
-    item.conflicts.length > 0 ||
-    item.consensusCount > 0;
-
+export const RecommendCard = ({
+  item,
+  onPick: _onPick,
+  selected = false,
+  onSelect,
+}: RecommendCardProps): ReactElement => {
   return (
     <div
       style={{
         borderRadius: '0.6rem',
-        border: '0.1rem solid var(--border)',
-        background: 'var(--bg)',
+        border: selected ? '0.15rem solid #D97757' : '0.1rem solid var(--border)',
+        background: selected ? 'rgba(217, 119, 87, 0.08)' : 'var(--bg)',
         overflow: 'hidden',
       }}
     >
       <motion.button
         type="button"
-        onClick={() => onPick(item.pdno, item.name)}
+        onClick={() => onSelect?.(item.pdno)}
+        aria-pressed={selected}
         whileHover={{ y: -1, backgroundColor: 'var(--bg-2, rgba(0,0,0,0.03))' }}
         transition={{ duration: 0.15 }}
         style={{
@@ -179,79 +175,83 @@ export const RecommendCard = ({ item, onPick }: RecommendCardProps): ReactElemen
           {item.summary}
         </div>
       </motion.button>
-
-      {hasDetails ? (
-        <>
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-            style={{
-              width: '100%',
-              padding: '0.5rem 1.2rem',
-              border: 'none',
-              borderTop: '0.1rem solid var(--border)',
-              background: 'var(--bg-2, rgba(0,0,0,0.02))',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.4rem',
-              fontSize: '1rem',
-              color: 'var(--fg-2)',
-            }}
-          >
-            {expanded ? (
-              <>
-                <ChevronUp size={12} /> 접기
-              </>
-            ) : (
-              <>
-                <ChevronDown size={12} /> 상세 보기
-              </>
-            )}
-          </button>
-          <AnimatePresence initial={false}>
-            {expanded ? (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                style={{ overflow: 'hidden' }}
-              >
-                <div style={{ padding: '1rem 1.2rem', display: 'grid', gap: '0.9rem' }}>
-                  {/* 섹션 1 — 기본 진단 */}
-                  {hasAnyStat(item.stats) ? <StatRow stats={item.stats} /> : null}
-                  {item.marketContext ? <MarketContextRow context={item.marketContext} /> : null}
-                  {/* 섹션 2 — 지표별 사유 */}
-                  {item.indicatorReasons.length > 0 ? (
-                    <IndicatorReasonsList reasons={item.indicatorReasons} />
-                  ) : null}
-                  {/* 섹션 3 — 합의·충돌 + 도구 호출 */}
-                  {item.consensusCount > 0 ||
-                  item.conflicts.length > 0 ||
-                  item.citedTools.length > 0 ? (
-                    <ConsensusBar
-                      count={item.consensusCount}
-                      conflicts={item.conflicts}
-                      citedTools={item.citedTools}
-                    />
-                  ) : null}
-                  {/* 섹션 4 — pros/cons + 진입 가이드 + 뉴스 */}
-                  {item.pros.length > 0 ? <ProConList items={item.pros} kind="pro" /> : null}
-                  {item.cons.length > 0 ? <ProConList items={item.cons} kind="con" /> : null}
-                  {item.entryNote ? <EntryNote note={item.entryNote} /> : null}
-                  {item.news.length > 0 ? <NewsSection news={item.news} /> : null}
-                </div>
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        </>
-      ) : null}
     </div>
   );
 };
+
+export function RecommendDetail({
+  item,
+  onPick,
+}: {
+  item: RecommendedItem;
+  onPick: (pdno: string, name: string) => void;
+}): ReactElement {
+  return (
+    <div style={{ display: 'grid', gap: '1rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: '1rem',
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1.45rem', color: 'var(--fg)' }}>{item.name}</h3>
+          <div className="muted" style={{ fontSize: '1rem', marginTop: '0.25rem' }}>
+            {item.pdno} · {TIER_LABEL[item.tier]} · {item.score}점 ·{' '}
+            {item.dataQualityReason ?? 'data quality n/a'}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onPick(item.pdno, item.name)}
+          style={{
+            border: '0.1rem solid #D97757',
+            background: '#D97757',
+            color: '#fff',
+            borderRadius: '0.5rem',
+            padding: '0.55rem 0.9rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          이 종목 선택
+        </button>
+      </div>
+      <div style={{ fontSize: '1.12rem', lineHeight: 1.55, color: 'var(--fg)' }}>
+        {item.summary}
+      </div>
+      {hasAnyStat(item.stats) ? <StatRow stats={item.stats} /> : null}
+      {item.marketContext ? <MarketContextRow context={item.marketContext} /> : null}
+      {item.indicatorReasons.length > 0 ? (
+        <IndicatorReasonsList reasons={item.indicatorReasons} />
+      ) : null}
+      {item.consensusCount > 0 || item.conflicts.length > 0 || item.citedTools.length > 0 ? (
+        <ConsensusBar
+          count={item.consensusCount}
+          conflicts={item.conflicts}
+          citedTools={item.citedTools}
+        />
+      ) : null}
+      {item.evidenceRefs && item.evidenceRefs.length > 0 ? (
+        <EvidenceList refs={item.evidenceRefs} />
+      ) : null}
+      {item.globalRisks && item.globalRisks.length > 0 ? (
+        <ProConList items={item.globalRisks} kind="con" />
+      ) : null}
+      {item.pros.length > 0 ? <ProConList items={item.pros} kind="pro" /> : null}
+      {item.cons.length > 0 ? <ProConList items={item.cons} kind="con" /> : null}
+      {item.entryNote ? <EntryNote note={item.entryNote} /> : null}
+      {item.newsClusters && item.newsClusters.length > 0 ? (
+        <NewsClusterSection clusters={item.newsClusters} />
+      ) : item.news.length > 0 ? (
+        <NewsSection news={item.news} />
+      ) : null}
+    </div>
+  );
+}
 
 function hasAnyStat(s: RecommendedItem['stats']): boolean {
   return (
@@ -409,6 +409,103 @@ function ProConList({
         {items.map((it) => (
           <li key={it} style={{ fontSize: '1.1rem', color: 'var(--fg)', lineHeight: 1.5 }}>
             {it}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function EvidenceList({
+  refs,
+}: {
+  refs: NonNullable<RecommendedItem['evidenceRefs']>;
+}): ReactElement {
+  return (
+    <div>
+      <div style={{ marginBottom: '0.4rem', color: 'var(--fg-2)', fontWeight: 700 }}>
+        근거 연결 ({refs.length})
+      </div>
+      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: '0.4rem' }}>
+        {refs.map((ref) => (
+          <li
+            key={ref.id}
+            style={{
+              padding: '0.55rem 0.7rem',
+              borderRadius: '0.4rem',
+              border: '0.1rem solid var(--border)',
+              background: 'var(--bg)',
+            }}
+          >
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--fg)' }}>{ref.title}</div>
+            <div style={{ fontSize: '0.95rem', color: 'var(--fg-2)', lineHeight: 1.5 }}>
+              {ref.detail}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function NewsClusterSection({
+  clusters,
+}: {
+  clusters: NonNullable<RecommendedItem['newsClusters']>;
+}): ReactElement {
+  return (
+    <div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.4rem',
+          marginBottom: '0.4rem',
+          color: 'var(--fg-2)',
+          fontWeight: 700,
+          fontSize: '1.05rem',
+        }}
+      >
+        <Newspaper size={14} />
+        뉴스 클러스터 ({clusters.length})
+      </div>
+      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: '0.5rem' }}>
+        {clusters.map((cluster) => (
+          <li
+            key={cluster.id}
+            style={{
+              padding: '0.65rem 0.75rem',
+              borderRadius: '0.45rem',
+              border: '0.1rem solid var(--border)',
+              background: 'var(--bg)',
+            }}
+          >
+            <div style={{ fontSize: '1.08rem', fontWeight: 700, color: 'var(--fg)' }}>
+              {cluster.title}
+            </div>
+            <div style={{ fontSize: '0.98rem', color: 'var(--fg-2)', lineHeight: 1.5 }}>
+              {cluster.summary}
+            </div>
+            {cluster.representative.length > 0 ? (
+              <div style={{ display: 'grid', gap: '0.25rem', marginTop: '0.45rem' }}>
+                {cluster.representative.map((article) => (
+                  <a
+                    key={article.link}
+                    href={article.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: '#D97757', textDecoration: 'none', fontSize: '0.95rem' }}
+                  >
+                    {article.publishedAt} · {article.title}
+                  </a>
+                ))}
+              </div>
+            ) : null}
+            {cluster.hiddenCount > 0 ? (
+              <div className="muted" style={{ fontSize: '0.9rem', marginTop: '0.3rem' }}>
+                유사 기사 {cluster.hiddenCount}건 압축
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>

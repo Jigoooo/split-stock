@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
+import { alertDialog } from '@renderer/shared/ui';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { WatchGlobalToggle } from './watch-global-toggle';
 
@@ -52,9 +53,12 @@ describe('WatchGlobalToggle', () => {
     expect(screen.getByText('ON (3)')).toBeInTheDocument();
   });
 
-  it('클릭 시 전역 OFF mutation 호출', () => {
+  it('클릭 시 전역 OFF mutation 호출', async () => {
+    const confirmSpy = vi.spyOn(alertDialog, 'confirm').mockResolvedValue(true);
     render(<WatchGlobalToggle />);
     fireEvent.click(screen.getByRole('switch', { name: '자동감시 ON (3)' }));
-    expect(mutateMock).toHaveBeenCalledWith({ enabled: false });
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+    await waitFor(() => expect(mutateMock).toHaveBeenCalledWith({ enabled: false }));
+    confirmSpy.mockRestore();
   });
 });

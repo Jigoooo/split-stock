@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const saveMock = vi.fn(async () => {});
@@ -30,14 +30,22 @@ describe('CredentialsForm', () => {
     fireEvent.change(screen.getByLabelText('App Secret'), {
       target: { value: 'app-secret' },
     });
-    fireEvent.change(screen.getByRole('textbox', { name: '계좌 (앞 8자리)' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: /계좌번호 앞 8자리/ }), {
       target: { value: '1234567890' },
     });
-    fireEvent.change(screen.getByRole('textbox', { name: '상품코드 (뒤 2자리)' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: /상품코드/ }), {
       target: { value: '0199' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: '저장하고 접속' }));
+    fireEvent.click(screen.getByRole('button', { name: '실전 자격증명 저장' }));
+    const confirmDialog = screen.getByRole('dialog', { name: '실전(PROD) 자격증명 저장' });
+    fireEvent.click(within(confirmDialog).getByRole('checkbox', { name: '실전 모드 동의' }));
+    fireEvent.change(within(confirmDialog).getByRole('textbox', { name: '실전전환 확인 문구' }), {
+      target: { value: '실전전환' },
+    });
+    fireEvent.click(
+      within(confirmDialog).getByRole('button', { name: '실전 자격증명 저장 (실전)' }),
+    );
 
     await waitFor(() =>
       expect(saveMock).toHaveBeenCalledWith({

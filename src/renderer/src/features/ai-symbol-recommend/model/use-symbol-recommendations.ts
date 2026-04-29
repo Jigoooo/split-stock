@@ -121,6 +121,14 @@ export interface RecommendedNewsItem {
   summary: string;
   link: string;
 }
+export interface RecommendedNewsCluster {
+  id: string;
+  title: string;
+  summary: string;
+  latestPublishedAt: string;
+  representative: ReadonlyArray<RecommendedNewsItem>;
+  hiddenCount: number;
+}
 
 export type RecommendTier = 'top' | 'strong' | 'moderate' | 'watch' | 'avoid';
 export type RecommendConfidence = 'high' | 'med' | 'low';
@@ -186,6 +194,17 @@ export interface RecommendedItem {
   news: ReadonlyArray<RecommendedNewsItem>;
   conflicts: ReadonlyArray<string>;
   indicatorReasons: ReadonlyArray<IndicatorReason>;
+  dataQuality?: 'blocked' | 'limited' | 'normal';
+  dataQualityReason?: string;
+  analysisConfidence?: RecommendConfidence;
+  evidenceRefs?: ReadonlyArray<{
+    id: string;
+    kind: 'indicator' | 'news' | 'disclosure' | 'market' | 'dataQuality';
+    title: string;
+    detail: string;
+  }>;
+  globalRisks?: ReadonlyArray<string>;
+  newsClusters?: ReadonlyArray<RecommendedNewsCluster>;
 }
 
 export interface RecommendationViewState {

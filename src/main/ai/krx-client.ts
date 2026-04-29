@@ -144,7 +144,11 @@ function toDailyTradeRow(market: KrxMarket, row: Record<string, string>): KrxDai
   };
 }
 
-function toBaseInfoRow(market: KrxMarket, basDd: string, row: Record<string, string>): KrxBaseInfoRow {
+function toBaseInfoRow(
+  market: KrxMarket,
+  basDd: string,
+  row: Record<string, string>,
+): KrxBaseInfoRow {
   return {
     market,
     date: ymd8ToIso(basDd),

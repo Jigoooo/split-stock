@@ -3,7 +3,7 @@ import type { Db } from '../db/client';
 import type { EventLogger } from '../logging/event-logger';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import type { AiCredentialsRepo } from './ai-credentials-repo';
-import { type AlgoSignals, computeAlgoSignals } from './algo/algo-signals';
+import type { AlgoSignals } from './algo/algo-signals';
 import {
   applyTierQuota,
   preRank,
@@ -14,9 +14,22 @@ import {
 } from './algo/composite-score';
 import { buildCandidatePool, type CandidateEntry } from './build-candidate-pool';
 import type { LlmClient, ToolDef } from './llm-client';
+import {
+  buildMagicSplitFacts,
+  capSymbolByDataQuality,
+  type DataQuality,
+  type EvidenceRef,
+  type MagicSplitFacts,
+} from './magic-split-facts';
 import type { MarketContextSnapshot } from './market-context-service';
+import {
+  DEFAULT_MAX_SYMBOLS_PER_PASS,
+  flattenRepresentativeNews,
+  formatNewsEvidenceForPrompt,
+  type NewsEvidencePack,
+} from './news-evidence';
 import type { NewsItem } from './news-fetcher';
-import { computeSymbolStats, type SymbolStat } from './symbol-stats';
+import type { SymbolStat } from './symbol-stats';
 
 export interface SuggestSymbolsInput {
   db: Db;
@@ -47,6 +60,9 @@ export interface SuggestSymbolsInput {
   fetchNews?: (
     candidates: ReadonlyArray<{ pdno: string; name: string }>,
   ) => Promise<Map<string, ReadonlyArray<NewsItem>>>;
+  fetchNewsEvidence?: (
+    candidates: ReadonlyArray<{ pdno: string; name: string }>,
+  ) => Promise<Map<string, NewsEvidencePack>>;
   /**
    * Tool: search_news 콜백 — LLM 이 필요 시 추가 키워드로 뉴스 검색.
    * (query, max?) → NewsItem[]. fetchNews 와 별도 — 사전 fetch 가 아닌 LLM 의 능동 호출.
@@ -159,6 +175,12 @@ export type RankedSymbol = z.infer<typeof RankedItemSchema> & {
   conflicts: ReadonlyArray<string>;
   /** 지표별 사실 기반 사유 (UI 카드 펼침 노출). */
   indicatorReasons: ReadonlyArray<{ indicator: string; value: string; meaning: string }>;
+  dataQuality: DataQuality;
+  dataQualityReason: string;
+  analysisConfidence: 'high' | 'med' | 'low';
+  evidenceRefs: MagicSplitFacts['evidenceRefs'];
+  globalRisks: ReadonlyArray<string>;
+  newsClusters: ReadonlyArray<NewsEvidencePack['clusters'][number]>;
 };
 
 export interface SuggestSymbolsResult {
@@ -228,18 +250,21 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
     await input.ensureCandles(pool.map((p) => p.pdno));
   }
 
-  // === Stage 1 — 결정론 알고리즘 신호 ===
-  const algoSignals = computeAlgoSignals({
+  const marketContext = input.getMarketContextForPdnos
+    ? await input.getMarketContextForPdnos(pool.map((c) => c.pdno))
+    : null;
+
+  // === Stage 1 — 결정론 알고리즘 신호 + 공통 facts ===
+  const facts = buildMagicSplitFacts({
     candlesRepo: input.candlesRepo,
     pdnos: pool.map((p) => p.pdno),
+    marketContextByPdno: (pdno) => buildRankedMarketContext(pdno, marketContext),
   });
+  const factsByPdno = new Map(facts.map((f) => [f.pdno, f]));
+  const algoSignals = facts.map((f) => f.algo);
   const algoByPdno = new Map(algoSignals.map((s) => [s.pdno, s]));
 
-  const stats = computeSymbolStats({
-    candlesRepo: input.candlesRepo,
-    pdnos: pool.map((p) => p.pdno),
-    precomputedSignals: algoByPdno,
-  });
+  const stats = facts.map((f) => f.stat);
   const statsByPdno = new Map(stats.map((s) => [s.pdno, s]));
 
   // === Pre-rank — LLM 입력 압축 (30→Top 10) ===
@@ -252,11 +277,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
   // 사용자가 extras 로 직접 넣은 종목 — Top 10 외에라도 LLM 검증 받게 분리.
   const extraSet = new Set(input.extraPdnos ?? []);
   const extraCandidates = pool.filter((c) => extraSet.has(c.pdno));
-  const contextTargets = [...topCandidates, ...extraCandidates];
-  const marketContext = input.getMarketContextForPdnos
-    ? await input.getMarketContextForPdnos(contextTargets.map((c) => c.pdno))
-    : null;
-
+  const promptTopCandidates = topCandidates.filter((c) => !extraSet.has(c.pdno));
   // AI 끄기 — 알고리즘만으로 결과 합성.
   if (aiOff) {
     const ranked = buildAlgoOnlyRanked(
@@ -265,13 +286,15 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       statsByPdno,
       input.topN ?? 8,
       marketContext,
-    );
+      factsByPdno,
+    ).filter((item) => item.dataQuality !== 'blocked');
     const userInputResults = buildAlgoOnlyRanked(
       extraCandidates,
       algoByPdno,
       statsByPdno,
       extraCandidates.length,
       marketContext,
+      factsByPdno,
     );
     input.logger.log({
       level: 'INFO',
@@ -289,7 +312,10 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       userInputResults,
       distribution: summarizeTiers(ranked),
       poolSize: pool.length,
-      emptyReason: ranked.length === 0 ? '추천 가능한 종목이 없습니다.' : null,
+      emptyReason:
+        ranked.length === 0 && userInputResults.length === 0
+          ? '추천 가능한 종목이 없습니다.'
+          : null,
       rejectedCount: 0,
       durationMs: Date.now() - startedAt,
     };
@@ -297,15 +323,32 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
 
   // === Stage 2 — LLM 합성 ===
   // 알고리즘 상위 + extras 만 뉴스 fetch (토큰/호출 절감).
-  const newsTargets = [...topCandidates, ...extraCandidates];
-  const newsByPdno = input.fetchNews ? await input.fetchNews(newsTargets) : new Map();
+  const newsTargets = dedupeCandidates([...topCandidates, ...extraCandidates]).slice(
+    0,
+    DEFAULT_MAX_SYMBOLS_PER_PASS,
+  );
+  const newsEvidenceByPdno = input.fetchNewsEvidence
+    ? await input.fetchNewsEvidence(newsTargets)
+    : new Map<string, NewsEvidencePack>();
+  const newsByPdno =
+    newsEvidenceByPdno.size > 0
+      ? new Map(
+          [...newsEvidenceByPdno.entries()].map(([pdno, pack]) => [
+            pdno,
+            flattenRepresentativeNews(pack),
+          ]),
+        )
+      : input.fetchNews
+        ? await input.fetchNews(newsTargets)
+        : new Map();
 
   const userPrompt = buildPrompt({
-    topCandidates,
+    topCandidates: promptTopCandidates,
     extras: extraCandidates,
     stats,
     algoByPdno,
     newsByPdno,
+    newsEvidenceByPdno,
     marketContext,
     topN: input.topN ?? 8,
   });
@@ -340,33 +383,21 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       message: 'ai.suggest-symbols.parse-failed-fallback',
       payload: { rawChars: result.text.length, toolCalls: result.toolCalls.length },
     });
-    // 디버그용 — 실제 응답 텍스트와 도구 호출 이력 출력.
-    console.error(
-      '[suggestSymbols] parse failed. rawText:',
-      JSON.stringify(result.text.slice(0, 500)),
-    );
-    console.error('[suggestSymbols] toolCalls count:', result.toolCalls.length);
-    if (result.toolCalls.length > 0) {
-      console.error(
-        '[suggestSymbols] toolCalls:',
-        JSON.stringify(
-          result.toolCalls.map((tc) => ({ name: tc.name, resultLen: String(tc.result).length })),
-        ),
-      );
-    }
     const ranked = buildAlgoOnlyRanked(
       topCandidates,
       algoByPdno,
       statsByPdno,
       input.topN ?? 8,
       marketContext,
-    );
+      factsByPdno,
+    ).filter((item) => item.dataQuality !== 'blocked');
     const userInputResults = buildAlgoOnlyRanked(
       extraCandidates,
       algoByPdno,
       statsByPdno,
       extraCandidates.length,
       marketContext,
+      factsByPdno,
     );
     return {
       ranked,
@@ -383,6 +414,7 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
   // === Stage 3 — 검증 + 합성 ===
   const allowedPdnos = new Set(pool.map((p) => p.pdno));
   const poolByPdno = new Map(pool.map((p) => [p.pdno, p]));
+  const disclosureEvidenceRefs = extractDisclosureEvidenceRefs(result.toolCalls);
   let rejectedCount = 0;
 
   const buildRanked = (items: ReadonlyArray<z.infer<typeof RankedItemSchema>>): RankedSymbol[] => {
@@ -395,13 +427,15 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
       const poolEntry = poolByPdno.get(item.pdno);
       const stat = statsByPdno.get(item.pdno);
       const algo = algoByPdno.get(item.pdno);
-      const cons = compactTextList(enrichCons(item, algo), 200);
+      const fact = factsByPdno.get(item.pdno);
+      const capped = capSymbolByDataQuality(item, fact?.dataQuality ?? 'blocked');
+      const cons = compactTextList(enrichCons(capped, algo), 200);
       const summary = compactText(item.summary, 200) || '분석 요약이 부족합니다.';
-      const entryNote = item.entryNote ? compactText(item.entryNote, 300) || null : null;
+      const entryNote = capped.entryNote ? compactText(capped.entryNote, 300) || null : null;
       out.push({
-        ...item,
+        ...capped,
         summary,
-        pros: compactTextList(item.pros ?? [], 200).slice(0, 3),
+        pros: compactTextList(capped.pros ?? [], 200).slice(0, 3),
         cons,
         entryNote,
         name: poolEntry?.name ?? item.pdno,
@@ -419,6 +453,17 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
         news: newsByPdno.get(item.pdno) ?? [],
         conflicts: algo?.conflicts ?? [],
         indicatorReasons: algo?.indicatorReasons ?? [],
+        dataQuality: fact?.dataQuality ?? 'blocked',
+        dataQualityReason: fact?.dataQualityReason ?? '데이터 없음',
+        analysisConfidence: fact?.analysisConfidence ?? 'low',
+        evidenceRefs: buildSymbolEvidenceRefs(
+          fact,
+          newsEvidenceByPdno.get(item.pdno),
+          item.citedTools,
+          disclosureEvidenceRefs,
+        ),
+        globalRisks: fact?.globalRisks ?? [],
+        newsClusters: newsEvidenceByPdno.get(item.pdno)?.clusters ?? [],
       });
     }
     return out;
@@ -426,7 +471,9 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
 
   const recommendedRaw = buildRanked(result.parsed.recommended);
   // tier quota 적용 — top≤2 strong≤3 moderate≤2 watch≤1 avoid≤1.
-  const recommended = applyTierQuota(recommendedRaw).slice(0, input.topN ?? 8);
+  const recommended = applyTierQuota(
+    recommendedRaw.filter((item) => item.dataQuality !== 'blocked'),
+  ).slice(0, input.topN ?? 8);
   const userInputResults = buildRanked(result.parsed.userInputResults);
 
   input.logger.log({
@@ -450,10 +497,24 @@ export async function suggestSymbols(input: SuggestSymbolsInput): Promise<Sugges
     userInputResults,
     distribution: summarizeTiers(recommended),
     poolSize: pool.length,
-    emptyReason: recommended.length === 0 ? '추천할 만한 종목이 없습니다.' : null,
+    emptyReason:
+      recommended.length === 0 && userInputResults.length === 0
+        ? '추천할 만한 종목이 없습니다.'
+        : null,
     rejectedCount,
     durationMs: Date.now() - startedAt,
   };
+}
+
+function dedupeCandidates(items: ReadonlyArray<CandidateEntry>): CandidateEntry[] {
+  const out: CandidateEntry[] = [];
+  const seen = new Set<string>();
+  for (const item of items) {
+    if (seen.has(item.pdno)) continue;
+    seen.add(item.pdno);
+    out.push(item);
+  }
+  return out;
 }
 
 const SYSTEM_PROMPT = [
@@ -487,10 +548,20 @@ function buildPrompt(args: {
   stats: ReadonlyArray<SymbolStat>;
   algoByPdno: Map<string, AlgoSignals>;
   newsByPdno: Map<string, ReadonlyArray<NewsItem>>;
+  newsEvidenceByPdno: Map<string, NewsEvidencePack>;
   marketContext: MarketContextSnapshot | null;
   topN: number;
 }): string {
-  const { topCandidates, extras, stats, algoByPdno, newsByPdno, marketContext, topN } = args;
+  const {
+    topCandidates,
+    extras,
+    stats,
+    algoByPdno,
+    newsByPdno,
+    newsEvidenceByPdno,
+    marketContext,
+    topN,
+  } = args;
   const statsByPdno = new Map(stats.map((s) => [s.pdno, s]));
   const lines: string[] = [];
   lines.push(
@@ -518,13 +589,29 @@ function buildPrompt(args: {
   lines.push('');
   lines.push('=== recommended 풀 ===');
   for (const c of topCandidates) {
-    appendCandidateBlock(c, statsByPdno, algoByPdno, newsByPdno, marketContext, lines);
+    appendCandidateBlock(
+      c,
+      statsByPdno,
+      algoByPdno,
+      newsByPdno,
+      newsEvidenceByPdno,
+      marketContext,
+      lines,
+    );
   }
   if (extras.length > 0) {
     lines.push('');
     lines.push('=== user input ===');
     for (const c of extras) {
-      appendCandidateBlock(c, statsByPdno, algoByPdno, newsByPdno, marketContext, lines);
+      appendCandidateBlock(
+        c,
+        statsByPdno,
+        algoByPdno,
+        newsByPdno,
+        newsEvidenceByPdno,
+        marketContext,
+        lines,
+      );
     }
   }
   lines.push('');
@@ -534,6 +621,9 @@ function buildPrompt(args: {
   lines.push('- consensusCount 는 BB/RSI/MFI/momentum/Stoch/CCI 중 동의한 개수.');
   lines.push('- citedTools 는 호출한 도구 이름. 호출 안 했으면 빈 배열.');
   lines.push('- KRX/ECOS 값은 캐시 보조 사실이며 consensusCount 에 포함하지 마세요.');
+  lines.push(
+    '- 뉴스 evidence 는 중복 제거된 cluster 중심 보조 근거입니다. raw 기사 수가 많아도 cluster 근거 중심으로 판단하세요.',
+  );
   return lines.join('\n');
 }
 
@@ -542,6 +632,7 @@ function appendCandidateBlock(
   statsByPdno: Map<string, SymbolStat>,
   algoByPdno: Map<string, AlgoSignals>,
   newsByPdno: Map<string, ReadonlyArray<NewsItem>>,
+  newsEvidenceByPdno: Map<string, NewsEvidencePack>,
   marketContext: MarketContextSnapshot | null,
   lines: string[],
 ): void {
@@ -590,18 +681,22 @@ function appendCandidateBlock(
   if (marketBits) {
     lines.push(`    시장 컨텍스트(캐시): ${marketBits}`);
   }
-  const news = newsByPdno.get(c.pdno);
-  if (news && news.length > 0) {
-    lines.push(`    뉴스 ${news.length}건:`);
-    news.forEach((n, idx) => {
-      const summary = n.summary.length > 200 ? `${n.summary.slice(0, 200)}...` : n.summary;
-      lines.push(`    [${idx + 1}] ${n.publishedAt} | ${n.title}`);
-      if (summary) lines.push(`        ${summary}`);
-    });
+  const evidence = newsEvidenceByPdno.get(c.pdno);
+  if (!evidence) {
+    const news = newsByPdno.get(c.pdno);
+    if (news && news.length > 0) {
+      lines.push(`    뉴스 ${news.length}건:`);
+      news.forEach((n, idx) => {
+        const summary = n.summary.length > 200 ? `${n.summary.slice(0, 200)}...` : n.summary;
+        lines.push(`    [${idx + 1}] ${n.publishedAt} | ${n.title}`);
+        if (summary) lines.push(`        ${summary}`);
+      });
+    }
   }
+  if (evidence) lines.push(`    ${formatNewsEvidenceForPrompt(evidence, 1800)}`);
 }
 
-function buildRankedMarketContext(
+export function buildRankedMarketContext(
   pdno: string,
   snapshot: MarketContextSnapshot | null,
 ): RankedMarketContext | null {
@@ -797,13 +892,24 @@ function buildAlgoOnlyRanked(
   statsByPdno: Map<string, SymbolStat>,
   topN: number,
   marketContext: MarketContextSnapshot | null,
+  factsByPdno: Map<string, MagicSplitFacts>,
 ): RankedSymbol[] {
   const ranked = [...pool]
     .map((c) => {
       const algo = algoByPdno.get(c.pdno);
       const stat = statsByPdno.get(c.pdno);
-      const score = algo?.splitScore ?? 0;
-      const tier: Tier = scoreToTier(algo?.splitScore ?? null);
+      const fact = factsByPdno.get(c.pdno);
+      const capped = capSymbolByDataQuality(
+        {
+          score: algo?.splitScore ?? 0,
+          tier: scoreToTier(algo?.splitScore ?? null),
+          confidence: algo?.confidence ?? 'low',
+          cons: [...(algo?.conflicts ?? [])],
+        },
+        fact?.dataQuality ?? 'blocked',
+      );
+      const score = capped.score;
+      const tier = capped.tier as Tier;
       const volComp = algo?.components.volatility ?? null;
       const liqComp = algo?.components.liquidity ?? null;
       const volatilityFit: 'low' | 'mid' | 'high' =
@@ -812,7 +918,7 @@ function buildAlgoOnlyRanked(
         liqComp === null ? 'ok' : liqComp >= 75 ? 'good' : liqComp >= 50 ? 'ok' : 'poor';
       const labels = algo?.labels ?? [];
       const pros: string[] = [];
-      const cons: string[] = [...(algo?.conflicts ?? [])];
+      const cons: string[] = [...capped.cons];
       if ((algo?.components.volatility ?? 0) >= 75) pros.push('변동성 적정 — 차수 트리거 충분');
       if ((algo?.components.liquidity ?? 0) >= 75) pros.push('거래량 충분 — 슬리피지 위험 낮음');
       if ((algo?.components.range ?? 0) >= 75) pros.push('박스권 폭 적정');
@@ -837,7 +943,7 @@ function buildAlgoOnlyRanked(
         name: c.name,
         score,
         tier,
-        confidence: algo?.confidence ?? 'low',
+        confidence: capped.confidence as 'high' | 'med' | 'low',
         volatilityFit,
         liquidityFit,
         summary:
@@ -865,8 +971,101 @@ function buildAlgoOnlyRanked(
         news: [],
         conflicts: algo?.conflicts ?? [],
         indicatorReasons: algo?.indicatorReasons ?? [],
+        dataQuality: fact?.dataQuality ?? 'blocked',
+        dataQualityReason: fact?.dataQualityReason ?? '데이터 없음',
+        analysisConfidence: fact?.analysisConfidence ?? 'low',
+        evidenceRefs: buildSymbolEvidenceRefs(fact, undefined),
+        globalRisks: fact?.globalRisks ?? [],
+        newsClusters: [],
       } satisfies RankedSymbol;
     })
     .sort((a, b) => b.score - a.score);
   return applyTierQuota(ranked).slice(0, topN);
+}
+
+function buildSymbolEvidenceRefs(
+  facts: MagicSplitFacts | undefined,
+  newsEvidence: NewsEvidencePack | undefined,
+  citedTools: ReadonlyArray<string> = [],
+  disclosureEvidenceRefs: ReadonlyArray<EvidenceRef> = [],
+): MagicSplitFacts['evidenceRefs'] {
+  const refs: MagicSplitFacts['evidenceRefs'] = [];
+  if (facts) {
+    refs.push({
+      id: `data:${facts.dataQuality}`,
+      kind: 'dataQuality',
+      title:
+        facts.dataQuality === 'blocked'
+          ? '데이터 부족'
+          : facts.dataQuality === 'limited'
+            ? '제한 분석'
+            : '정상 분석',
+      detail: facts.dataQualityReason,
+    });
+    refs.push(...facts.evidenceRefs);
+  }
+  for (const cluster of newsEvidence?.clusters ?? []) {
+    refs.push({
+      id: cluster.id,
+      kind: 'news',
+      title: cluster.title,
+      detail: cluster.summary,
+    });
+  }
+  if (citedTools.includes('get_dart_disclosures')) {
+    refs.push(...disclosureEvidenceRefs);
+  }
+  return dedupeEvidenceRefs(refs).slice(0, 16);
+}
+
+function extractDisclosureEvidenceRefs(
+  toolCalls: ReadonlyArray<{ name: string; args: unknown; result: string }>,
+): EvidenceRef[] {
+  const refs: EvidenceRef[] = [];
+  for (const call of toolCalls) {
+    if (call.name !== 'get_dart_disclosures') continue;
+    const parsed = safeParseDisclosureToolResult(call.result);
+    parsed.slice(0, 6).forEach((item, index) => {
+      refs.push({
+        id: `disclosure:${item.date}:${index + 1}`,
+        kind: 'disclosure',
+        title: item.title,
+        detail: `${item.date} ${item.report}`,
+      });
+    });
+  }
+  return dedupeEvidenceRefs(refs).slice(0, 8);
+}
+
+function safeParseDisclosureToolResult(
+  value: string,
+): Array<{ date: string; title: string; report: string }> {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const record = item as Record<string, unknown>;
+        const date = typeof record.date === 'string' ? record.date : '';
+        const title = typeof record.title === 'string' ? record.title : '';
+        const report = typeof record.report === 'string' ? record.report : '';
+        if (!date || !title) return null;
+        return { date, title, report };
+      })
+      .filter((item): item is { date: string; title: string; report: string } => item !== null);
+  } catch {
+    return [];
+  }
+}
+
+function dedupeEvidenceRefs(refs: ReadonlyArray<EvidenceRef>): EvidenceRef[] {
+  const out: EvidenceRef[] = [];
+  const seen = new Set<string>();
+  for (const ref of refs) {
+    if (seen.has(ref.id)) continue;
+    seen.add(ref.id);
+    out.push(ref);
+  }
+  return out;
 }

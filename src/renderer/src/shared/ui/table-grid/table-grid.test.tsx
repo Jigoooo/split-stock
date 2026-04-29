@@ -193,7 +193,7 @@ describe('TableGrid', () => {
 
       expect(nowrap.className).toContain('table-grid-cell--ovf-nowrap');
       expect(nowrap.style.whiteSpace).toBe('nowrap');
-      expect(nowrap.style.overflow).toBe('hidden');
+      expect(nowrap.style.overflow).toBe('clip');
 
       expect(ellipsis.className).toContain('table-grid-cell--ovf-ellipsis');
       expect(ellipsis.style.textOverflow).toBe('ellipsis');

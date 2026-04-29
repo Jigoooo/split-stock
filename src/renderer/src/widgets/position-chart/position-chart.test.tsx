@@ -153,6 +153,9 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       getLatestTick: {
         useQuery: () => ({ data: null }),
       },
+      onTick: {
+        useSubscription: () => ({ data: null, status: 'success' }),
+      },
     },
   },
 }));

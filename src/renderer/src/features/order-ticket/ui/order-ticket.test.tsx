@@ -26,6 +26,11 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       },
       listActive: { invalidate: vi.fn() },
     },
+    auth: {
+      getEnv: {
+        useQuery: () => ({ data: { env: 'MOCK', accountId: 1 }, isPending: false }),
+      },
+    },
     account: {
       getActive: {
         useQuery: () => ({
@@ -77,6 +82,25 @@ vi.mock('@renderer/shared/api/trpc', () => ({
           isPending: false,
           error: null,
         }),
+      },
+    },
+    strategy: {
+      getEffectiveMetas: {
+        useQuery: () => ({ data: { strategiesByPdno: {} }, isPending: false, error: null }),
+      },
+    },
+    realtime: {
+      watch: {
+        useMutation: () => ({ mutate: vi.fn() }),
+      },
+      unwatch: {
+        useMutation: () => ({ mutate: vi.fn() }),
+      },
+      onTicks: {
+        useSubscription: () => ({ data: {}, status: 'success' }),
+      },
+      getLatestTicks: {
+        useQuery: () => ({ data: { ticks: {} }, isPending: false, error: null }),
       },
     },
     safety: {
@@ -159,7 +183,7 @@ describe('OrderTicket', () => {
       ),
     );
     fireEvent.click(screen.getByRole('button', { name: '매도 주문' }));
-    expect(screen.getByRole('dialog', { name: '주문 확인' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: '⚠ 실전(PROD) 매도 확인' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '취소' }));
     expect(placeMock).not.toHaveBeenCalled();
   });
@@ -242,7 +266,7 @@ describe('OrderTicket', () => {
       ),
     );
 
-    fireEvent.click(screen.getByText('구분'));
+    fireEvent.click(screen.getByText('구분', { selector: '.order-ticket-form__label' }));
 
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '주문 구분' })).toHaveAttribute(

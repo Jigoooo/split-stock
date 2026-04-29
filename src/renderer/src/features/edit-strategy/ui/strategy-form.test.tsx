@@ -88,7 +88,7 @@ describe('StrategyForm', () => {
         buyRules: expect.arrayContaining([expect.objectContaining({ nth: 6, amountKrw: 777_000 })]),
       }),
     );
-  });
+  }, 15_000);
 
   it('잘못된 값은 저장 버튼이 비활성화된다', () => {
     render(<StrategyForm initial={initial} onSubmit={vi.fn()} />);

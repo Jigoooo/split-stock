@@ -1,14 +1,25 @@
+import { useMediaQuery } from '@renderer/shared/lib/interaction';
 import { Button, TableGrid } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
-import type { CSSProperties, ReactElement } from 'react';
+import { type CSSProperties, type ReactElement, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface StrategyPreviewModalProps {
   open: boolean;
   profile: StrategyProfile | null;
   reasoning: string;
+  stageRationales?: ReadonlyArray<{
+    nth: number;
+    rationale: string;
+    evidenceRefs: ReadonlyArray<string>;
+  }>;
+  globalRisks?: ReadonlyArray<string>;
+  evidenceRefs?: ReadonlyArray<{ id: string; kind: string; title: string; detail: string }>;
+  analysisConfidence?: 'high' | 'med' | 'low';
+  dataQuality?: 'blocked' | 'limited' | 'normal';
+  dataQualityReason?: string | undefined;
   error?: string | null;
   isPending?: boolean;
   onApply: () => void;
@@ -24,6 +35,12 @@ export const StrategyPreviewModal = ({
   open,
   profile,
   reasoning,
+  stageRationales = [],
+  globalRisks = [],
+  evidenceRefs = [],
+  analysisConfidence = 'low',
+  dataQuality = 'blocked',
+  dataQualityReason,
   error = null,
   isPending = false,
   onApply,
@@ -31,11 +48,22 @@ export const StrategyPreviewModal = ({
   onRetry,
 }: StrategyPreviewModalProps): ReactElement => {
   const shouldRender = open && (profile !== null || error !== null || isPending);
+  const [selectedNth, setSelectedNth] = useState(1);
+  const isNarrow = useMediaQuery('(max-width: 860px)');
+  useEffect(() => {
+    if (profile) setSelectedNth((prev) => (prev <= profile.maxStages ? prev : 1));
+  }, [profile]);
   const title = isPending
     ? 'AI 추천 strategy 분석 중'
     : error
       ? 'AI 추천 strategy 실패'
       : `AI 추천 strategy 상세 (${profile?.maxStages ?? 0}차)`;
+  const stages = profile
+    ? Array.from({ length: profile.maxStages }, (_, index) => ({
+        id: `stage-${index + 1}`,
+        nth: index + 1,
+      }))
+    : [];
 
   return createPortal(
     <AnimatePresence>
@@ -65,7 +93,7 @@ export const StrategyPreviewModal = ({
             exit={{ opacity: 0, scale: 0.97, y: 6 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             style={{
-              width: '52rem',
+              width: 'min(92rem, calc(100vw - 3.2rem))',
               maxWidth: 'calc(100vw - 3.2rem)',
               maxHeight: 'calc(100vh - 3.2rem)',
               overflowY: 'auto',
@@ -153,68 +181,94 @@ export const StrategyPreviewModal = ({
                   <span style={{ color: '#D97757', fontWeight: 700 }}>추천 근거</span> · {reasoning}
                 </div>
 
-                <TableGrid.Root
-                  variant="hts"
-                  stickyHeader={false}
-                  overlayScrollbar={false}
-                  aria-label="차수별 매매 계획"
-                  style={{ height: 'auto', '--hts-row-height': '3rem' } as CSSProperties}
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: isNarrow ? '1fr' : 'minmax(14rem, 18rem) minmax(0, 1fr)',
+                    gap: '1rem',
+                  }}
                 >
-                  <TableGrid.Header>
-                    <TableGrid.Cell width={70} style={{ justifyContent: 'center' }}>
-                      차수
-                    </TableGrid.Cell>
-                    <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
-                      매수 트리거 (직전 대비)
-                    </TableGrid.Cell>
-                    <TableGrid.Cell flex={1} numeric>
-                      매수 금액
-                    </TableGrid.Cell>
-                    <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
-                      익절률
-                    </TableGrid.Cell>
-                  </TableGrid.Header>
-                  <TableGrid.Body>
-                    {Array.from({ length: profile.maxStages }, (_, i) => {
-                      const nth = i + 1;
-                      const buy = profile.buyRules[i];
-                      const sell = profile.sellRules[i];
+                  <div style={{ display: 'grid', gap: '0.5rem', alignContent: 'start' }}>
+                    {stages.map((stage) => {
+                      const nth = stage.nth;
+                      const buy = profile.buyRules[nth - 1];
+                      const sell = profile.sellRules[nth - 1];
                       return (
-                        <TableGrid.Row key={nth}>
-                          <TableGrid.Cell
-                            width={70}
-                            style={{ justifyContent: 'center', fontWeight: 700 }}
+                        <button
+                          key={stage.id}
+                          type="button"
+                          onClick={() => setSelectedNth(nth)}
+                          style={{
+                            textAlign: 'left',
+                            border:
+                              selectedNth === nth
+                                ? '0.15rem solid #D97757'
+                                : '0.1rem solid var(--border)',
+                            borderRadius: '0.55rem',
+                            background:
+                              selectedNth === nth ? 'rgba(217, 119, 87, 0.08)' : 'var(--bg)',
+                            padding: '0.7rem',
+                            cursor: 'pointer',
+                            color: 'var(--fg)',
+                          }}
+                        >
+                          <strong>{nth}차</strong>
+                          <div
+                            className="muted"
+                            style={{ fontSize: '0.95rem', marginTop: '0.2rem' }}
                           >
-                            {nth}차
-                          </TableGrid.Cell>
-                          <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
-                            {nth === 1 ? (
-                              <span className="muted">수동 진입</span>
-                            ) : buy && buy.triggerDropPct !== null ? (
-                              <span style={{ color: 'var(--down)' }}>
-                                -{(buy.triggerDropPct * 100).toFixed(2)}%
-                              </span>
-                            ) : (
-                              '—'
-                            )}
-                          </TableGrid.Cell>
-                          <TableGrid.Cell flex={1} numeric>
-                            {buy ? `${buy.amountKrw.toLocaleString()}원` : '—'}
-                          </TableGrid.Cell>
-                          <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
-                            {sell ? (
-                              <span style={{ color: 'var(--up)' }}>
-                                +{(sell.targetProfitPct * 100).toFixed(2)}%
-                              </span>
-                            ) : (
-                              '—'
-                            )}
-                          </TableGrid.Cell>
-                        </TableGrid.Row>
+                            {nth === 1
+                              ? '수동 진입'
+                              : buy?.triggerDropPct !== null && buy?.triggerDropPct !== undefined
+                                ? `-${(buy.triggerDropPct * 100).toFixed(2)}%`
+                                : '트리거 —'}
+                            {' · '}
+                            {sell ? `+${(sell.targetProfitPct * 100).toFixed(2)}%` : '익절 —'}
+                          </div>
+                        </button>
                       );
                     })}
-                  </TableGrid.Body>
-                </TableGrid.Root>
+                  </div>
+                  <div style={{ minWidth: 0, display: 'grid', gap: '1rem' }}>
+                    <StageDetail
+                      nth={selectedNth}
+                      profile={profile}
+                      rationale={stageRationales.find((item) => item.nth === selectedNth)}
+                      evidenceRefs={evidenceRefs}
+                      globalRisks={globalRisks}
+                      analysisConfidence={analysisConfidence}
+                      dataQuality={dataQuality}
+                      dataQualityReason={dataQualityReason}
+                    />
+                    <TableGrid.Root
+                      variant="hts"
+                      stickyHeader={false}
+                      overlayScrollbar={false}
+                      aria-label="차수별 매매 계획"
+                      style={{ height: 'auto', '--hts-row-height': '3rem' } as CSSProperties}
+                    >
+                      <TableGrid.Header>
+                        <TableGrid.Cell width={70} style={{ justifyContent: 'center' }}>
+                          차수
+                        </TableGrid.Cell>
+                        <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
+                          매수 트리거
+                        </TableGrid.Cell>
+                        <TableGrid.Cell flex={1} numeric>
+                          매수 금액
+                        </TableGrid.Cell>
+                        <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
+                          익절률
+                        </TableGrid.Cell>
+                      </TableGrid.Header>
+                      <TableGrid.Body>
+                        {stages.map((stage) => (
+                          <StageRow key={stage.id} nth={stage.nth} profile={profile} />
+                        ))}
+                      </TableGrid.Body>
+                    </TableGrid.Root>
+                  </div>
+                </div>
               </>
             ) : null}
 
@@ -276,3 +330,146 @@ export const StrategyPreviewModal = ({
     document.body,
   );
 };
+
+function StageRow({ nth, profile }: { nth: number; profile: StrategyProfile }): ReactElement {
+  const buy = profile.buyRules[nth - 1];
+  const sell = profile.sellRules[nth - 1];
+  return (
+    <TableGrid.Row>
+      <TableGrid.Cell width={70} style={{ justifyContent: 'center', fontWeight: 700 }}>
+        {nth}차
+      </TableGrid.Cell>
+      <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
+        {nth === 1 ? (
+          <span className="muted">수동 진입</span>
+        ) : buy && buy.triggerDropPct !== null ? (
+          <span style={{ color: 'var(--down)' }}>-{(buy.triggerDropPct * 100).toFixed(2)}%</span>
+        ) : (
+          '—'
+        )}
+      </TableGrid.Cell>
+      <TableGrid.Cell flex={1} numeric>
+        {buy ? `${buy.amountKrw.toLocaleString()}원` : '—'}
+      </TableGrid.Cell>
+      <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
+        {sell ? (
+          <span style={{ color: 'var(--up)' }}>+{(sell.targetProfitPct * 100).toFixed(2)}%</span>
+        ) : (
+          '—'
+        )}
+      </TableGrid.Cell>
+    </TableGrid.Row>
+  );
+}
+
+function StageDetail({
+  nth,
+  profile,
+  rationale,
+  evidenceRefs,
+  globalRisks,
+  analysisConfidence,
+  dataQuality,
+  dataQualityReason,
+}: {
+  nth: number;
+  profile: StrategyProfile;
+  rationale: { nth: number; rationale: string; evidenceRefs: ReadonlyArray<string> } | undefined;
+  evidenceRefs: ReadonlyArray<{ id: string; kind: string; title: string; detail: string }>;
+  globalRisks: ReadonlyArray<string>;
+  analysisConfidence: 'high' | 'med' | 'low';
+  dataQuality: 'blocked' | 'limited' | 'normal';
+  dataQualityReason?: string | undefined;
+}): ReactElement {
+  const buy = profile.buyRules[nth - 1];
+  const sell = profile.sellRules[nth - 1];
+  const usedRefs =
+    rationale && rationale.evidenceRefs.length > 0
+      ? evidenceRefs.filter((ref) => rationale.evidenceRefs.includes(ref.id))
+      : evidenceRefs.slice(0, 5);
+  return (
+    <section
+      style={{
+        border: '0.1rem solid var(--border)',
+        borderRadius: '0.7rem',
+        padding: '1rem',
+        background: 'var(--bg-2, rgba(0,0,0,0.02))',
+        display: 'grid',
+        gap: '0.75rem',
+      }}
+    >
+      <div
+        style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}
+      >
+        <h3 style={{ margin: 0, fontSize: '1.35rem', color: 'var(--fg)' }}>{nth}차 분석</h3>
+        <span className="chip">
+          {dataQuality} · {analysisConfidence}
+        </span>
+      </div>
+      <div className="muted" style={{ fontSize: '1rem' }}>
+        {dataQualityReason ?? '데이터 품질 정보 없음'}
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(9rem, 1fr))',
+          gap: '0.5rem',
+        }}
+      >
+        <Metric
+          label="트리거"
+          value={
+            nth === 1
+              ? '수동 진입'
+              : buy?.triggerDropPct
+                ? `-${(buy.triggerDropPct * 100).toFixed(2)}%`
+                : '—'
+          }
+        />
+        <Metric label="매수 금액" value={buy ? `${buy.amountKrw.toLocaleString()}원` : '—'} />
+        <Metric
+          label="익절률"
+          value={sell ? `+${(sell.targetProfitPct * 100).toFixed(2)}%` : '—'}
+        />
+      </div>
+      <div style={{ fontSize: '1.08rem', lineHeight: 1.55, color: 'var(--fg)' }}>
+        {rationale?.rationale ?? '차수별 세부 근거가 응답에 포함되지 않았습니다.'}
+      </div>
+      {usedRefs.length > 0 ? (
+        <ul style={{ margin: 0, paddingLeft: '1.2rem', display: 'grid', gap: '0.25rem' }}>
+          {usedRefs.map((ref) => (
+            <li
+              key={ref.id}
+              style={{ fontSize: '0.98rem', color: 'var(--fg-2)', lineHeight: 1.45 }}
+            >
+              <strong>{ref.title}</strong> · {ref.detail}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {globalRisks.length > 0 ? (
+        <div style={{ fontSize: '0.98rem', color: 'var(--down)', lineHeight: 1.45 }}>
+          리스크: {globalRisks.join(' / ')}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }): ReactElement {
+  return (
+    <div
+      style={{
+        border: '0.1rem solid var(--border)',
+        borderRadius: '0.45rem',
+        padding: '0.5rem 0.65rem',
+        background: 'var(--bg)',
+      }}
+    >
+      <div className="muted" style={{ fontSize: '0.9rem', marginBottom: '0.2rem' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--fg)' }}>{value}</div>
+    </div>
+  );
+}

@@ -2,9 +2,10 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { getAiRuntimeStatus, runWithAiRuntimeOperation } from '../../ai/ai-runtime-state';
 import { ensureDailyCandles } from '../../ai/ensure-candles';
+import { collectNewsEvidence, DEFAULT_MAX_SYMBOLS_PER_PASS } from '../../ai/news-evidence';
 import type { NewsItem } from '../../ai/news-fetcher';
 import { suggestStrategy } from '../../ai/suggest-strategy';
-import { suggestSymbols } from '../../ai/suggest-symbols';
+import { buildRankedMarketContext, suggestSymbols } from '../../ai/suggest-symbols';
 import type { Context } from '../context';
 import { publicProcedure, router } from '../trpc-core';
 
@@ -197,8 +198,20 @@ export const aiRouter = router({
       }
 
       try {
-        return await runWithAiRuntimeOperation('strategyRecommendation', async () =>
-          suggestStrategy({
+        return await runWithAiRuntimeOperation('strategyRecommendation', async () => {
+          const marketSnapshot = ctx.marketContextService
+            ? await ctx.marketContextService.getContextForPdnos([input.pdno])
+            : null;
+          const stockName = ctx.stockMasterRepo.find(input.pdno)?.name ?? input.pdno;
+          const newsFetcher = ctx.newsFetcher;
+          const newsEvidence = newsFetcher?.isAvailable()
+            ? await collectNewsEvidence({
+                pdno: input.pdno,
+                name: stockName,
+                search: (options) => newsFetcher.search(options),
+              })
+            : undefined;
+          return suggestStrategy({
             pdno: input.pdno,
             candlesRepo: ctx.candlesRepo,
             stockMasterRepo: ctx.stockMasterRepo,
@@ -209,8 +222,10 @@ export const aiRouter = router({
             ensureCandles: buildEnsureCandles(ctx),
             ...(input.desiredStages !== undefined ? { desiredStages: input.desiredStages } : {}),
             ...(resolvedCorpCode !== undefined ? { corpCode: resolvedCorpCode } : {}),
-          }),
-        );
+            ...(newsEvidence !== undefined ? { newsEvidence } : {}),
+            marketContext: buildRankedMarketContext(input.pdno, marketSnapshot),
+          });
+        });
       } catch (cause) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -347,6 +362,21 @@ export const aiRouter = router({
               return map;
             }
           : undefined;
+      const fetchNewsEvidence =
+        newsFetcher?.isAvailable() && input?.aiOff !== true
+          ? async (candidates: ReadonlyArray<{ pdno: string; name: string }>) => {
+              const map = new Map<string, Awaited<ReturnType<typeof collectNewsEvidence>>>();
+              for (const c of candidates.slice(0, DEFAULT_MAX_SYMBOLS_PER_PASS)) {
+                const evidence = await collectNewsEvidence({
+                  pdno: c.pdno,
+                  name: c.name,
+                  search: (options) => newsFetcher.search(options),
+                });
+                if (evidence.clusters.length > 0) map.set(c.pdno, evidence);
+              }
+              return map;
+            }
+          : undefined;
       // LLM tool: 추가 뉴스 검색 — 신뢰성 부족 시 능동 호출.
       const searchNewsTool =
         newsFetcher?.isAvailable() && input?.aiOff !== true
@@ -392,6 +422,7 @@ export const aiRouter = router({
               ? { includeAutoDiscovery: input.includeAutoDiscovery }
               : {}),
             ...(fetchNews ? { fetchNews } : {}),
+            ...(fetchNewsEvidence ? { fetchNewsEvidence } : {}),
             ...(searchNewsTool ? { searchNewsTool } : {}),
             ...(getDartDisclosuresTool ? { getDartDisclosuresTool } : {}),
             ...(getMarketContextForPdnos ? { getMarketContextForPdnos } : {}),

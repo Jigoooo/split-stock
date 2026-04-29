@@ -54,6 +54,22 @@ vi.mock('@renderer/shared/api/trpc', () => ({
         }),
       },
     },
+    safety: {
+      getState: {
+        useQuery: () => ({
+          data: {
+            master: true,
+            bySymbol: {},
+            errorLock: { active: false, reason: null, triggeredAt: null },
+            updatedAt: 0,
+          },
+          isPending: false,
+          error: null,
+        }),
+      },
+      setMaster: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      clearErrorLock: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
     strategy: {
       setAutoModeQuick: {
         useMutation: ({ onSuccess }: { onSuccess: () => Promise<void> | void }) => ({
@@ -87,6 +103,7 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       strategy: {
         getActive: { invalidate: vi.fn() },
         getEffectiveForEdit: { invalidate: vi.fn() },
+        getEffectiveMetas: { invalidate: vi.fn() },
       },
       display: {
         getSettings: { invalidate: vi.fn() },

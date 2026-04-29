@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { RecommendedItem } from '../model/use-symbol-recommendations';
-import { RecommendCard } from './recommend-card';
+import { RecommendCard, RecommendDetail } from './recommend-card';
 
 function baseItem(overrides: Partial<RecommendedItem> = {}): RecommendedItem {
   return {
@@ -38,19 +38,25 @@ function baseItem(overrides: Partial<RecommendedItem> = {}): RecommendedItem {
 }
 
 describe('RecommendCard market context', () => {
-  it('marketContext 가 없어도 consensusCount 3 표시와 상세 펼침이 유지된다', () => {
-    render(<RecommendCard item={baseItem({ marketContext: null })} onPick={vi.fn()} />);
-
-    expect(screen.getByText('합의 3')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /상세 보기/ }));
-
-    expect(screen.getByText('최근 종가')).toBeInTheDocument();
-    expect(screen.queryByText('KRX 종가')).not.toBeInTheDocument();
-  });
-
-  it('KRX/ECOS 캐시 컨텍스트를 별도 상세 정보로 표시한다', () => {
+  it('master 리스트 카드에서 consensusCount 를 표시하고 선택 콜백을 호출한다', () => {
+    const onSelect = vi.fn();
     render(
       <RecommendCard
+        item={baseItem({ marketContext: null })}
+        onPick={vi.fn()}
+        onSelect={onSelect}
+      />,
+    );
+
+    expect(screen.getByText('합의 3')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /삼성전자/ }));
+
+    expect(onSelect).toHaveBeenCalledWith('005930');
+  });
+
+  it('detail 패널에서 KRX/ECOS 캐시 컨텍스트를 별도 상세 정보로 표시한다', () => {
+    render(
+      <RecommendDetail
         item={baseItem({
           marketContext: {
             krx: {
@@ -72,8 +78,7 @@ describe('RecommendCard market context', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /상세 보기/ }));
-
+    expect(screen.getByText('최근 종가')).toBeInTheDocument();
     expect(screen.getByText('KRX 종가')).toBeInTheDocument();
     expect(screen.getByText('72,100원 (2026-04-28)')).toBeInTheDocument();
     expect(screen.getByText('KRX 시가총액')).toBeInTheDocument();

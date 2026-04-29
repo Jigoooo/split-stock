@@ -1,3 +1,5 @@
+import Bottleneck from 'bottleneck';
+import { decode } from 'html-entities';
 import type { EventLogger } from '../logging/event-logger';
 
 export interface NewsItem {
@@ -18,6 +20,16 @@ export interface NewsFetcherOptions {
 }
 
 const NAVER_NEWS_URL = 'https://openapi.naver.com/v1/search/news.json';
+export type NewsSort = 'date' | 'sim';
+
+export interface NewsSearchOptions {
+  query: string;
+  /** Naver display: 1~100. */
+  display?: number;
+  /** Naver start: 1~1000. */
+  start?: number;
+  sort?: NewsSort;
+}
 
 /**
  * Naver Open API 기반 뉴스 조회 — 사용자 BYO X, 빌드 임베드 키 사용.
@@ -27,13 +39,15 @@ const NAVER_NEWS_URL = 'https://openapi.naver.com/v1/search/news.json';
  *
  * 참고:
  *  - Naver 응답은 HTML entity / b 태그 포함 — 제거 후 반환.
- *  - 정렬 'date' 로 최신순. display max 5.
+ *  - display/start/sort 옵션을 열어 호출자가 evidence budget 을 제어.
  */
 export class NewsFetcher {
   private readonly fetchImpl: typeof fetch;
+  private readonly limiter: Bottleneck;
 
   constructor(private readonly opts: NewsFetcherOptions) {
     this.fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    this.limiter = new Bottleneck({ maxConcurrent: 1, minTime: 120 });
   }
 
   isAvailable(): boolean {
@@ -44,21 +58,37 @@ export class NewsFetcher {
    * 종목명 키워드로 최신 뉴스 max 건 조회. 실패 시 빈 배열 (graceful).
    */
   async searchByKeyword(keyword: string, max = 5): Promise<NewsItem[]> {
-    if (!this.isAvailable() || !keyword.trim()) return [];
-    const url = `${NAVER_NEWS_URL}?query=${encodeURIComponent(keyword)}&display=${max}&sort=date`;
+    return this.search({ query: keyword, display: max, sort: 'date' });
+  }
+
+  async search(options: NewsSearchOptions): Promise<NewsItem[]> {
+    const query = options.query.trim();
+    if (!this.isAvailable() || !query) return [];
+    const display = clampInt(options.display ?? 10, 1, 100);
+    const start = clampInt(options.start ?? 1, 1, 1000);
+    const sort = options.sort ?? 'date';
+    const params = new URLSearchParams({
+      query,
+      display: String(display),
+      start: String(start),
+      sort,
+    });
+    const url = `${NAVER_NEWS_URL}?${params.toString()}`;
     try {
-      const res = await this.fetchImpl(url, {
-        headers: {
-          'X-Naver-Client-Id': this.opts.naverClientId,
-          'X-Naver-Client-Secret': this.opts.naverClientSecret,
-        },
-      });
+      const res = await this.limiter.schedule(() =>
+        this.fetchImpl(url, {
+          headers: {
+            'X-Naver-Client-Id': this.opts.naverClientId,
+            'X-Naver-Client-Secret': this.opts.naverClientSecret,
+          },
+        }),
+      );
       if (!res.ok) {
         this.logFail('http', `${res.status}`);
         return [];
       }
       const json = (await res.json()) as { items?: NaverNewsRaw[] };
-      return (json.items ?? []).slice(0, max).map(toNewsItem);
+      return (json.items ?? []).slice(0, display).map(toNewsItem);
     } catch (cause) {
       this.logFail('exception', cause);
       return [];
@@ -93,14 +123,12 @@ function toNewsItem(raw: NaverNewsRaw): NewsItem {
 }
 
 function stripHtml(s: string): string {
-  return s
-    .replace(/<[^>]*>/g, '')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .trim();
+  return decode(s.replace(/<[^>]*>/g, '')).trim();
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
 }
 
 function parseRfcDate(s: string): string {

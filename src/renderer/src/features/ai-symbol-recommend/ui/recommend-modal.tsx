@@ -1,7 +1,16 @@
+import { useMediaQuery } from '@renderer/shared/lib/interaction';
 import { Button } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
-import { type MouseEvent, type PointerEvent, type ReactElement, useRef } from 'react';
+import {
+  type MouseEvent,
+  type PointerEvent,
+  type ReactElement,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import type {
   RecommendationProgressState,
@@ -9,7 +18,7 @@ import type {
   TierDistribution,
 } from '../model/use-symbol-recommendations';
 import { ExtraPdnoPicker } from './extra-pdno-picker';
-import { RecommendCard } from './recommend-card';
+import { RecommendCard, RecommendDetail } from './recommend-card';
 
 const TIER_LABELS: Record<keyof TierDistribution, string> = {
   top: 'TOP',
@@ -158,6 +167,7 @@ export const RecommendModal = ({
   onToggleAutoDiscovery,
   hasDefaultKey,
 }: RecommendModalProps): ReactElement => {
+  const isNarrow = useMediaQuery('(max-width: 860px)');
   const overlayPointerStartRef = useRef<{
     startedOnOverlay: boolean;
     x: number;
@@ -177,6 +187,22 @@ export const RecommendModal = ({
     elapsedMs: 0,
   };
   const controlsDisabled = view.isPending;
+  const allItems = useMemo(
+    () => [...view.ranked, ...view.userInputResults],
+    [view.ranked, view.userInputResults],
+  );
+  const [selectedPdno, setSelectedPdno] = useState<string | null>(null);
+  const selectedItem = allItems.find((item) => item.pdno === selectedPdno) ?? allItems[0] ?? null;
+
+  useEffect(() => {
+    if (allItems.length === 0) {
+      setSelectedPdno(null);
+      return;
+    }
+    setSelectedPdno((prev) =>
+      prev && allItems.some((item) => item.pdno === prev) ? prev : (allItems[0]?.pdno ?? null),
+    );
+  }, [allItems]);
 
   const handleOverlayPointerDown = (event: PointerEvent<HTMLDivElement>): void => {
     overlayPointerStartRef.current = {
@@ -229,15 +255,15 @@ export const RecommendModal = ({
             exit={{ opacity: 0, scale: 0.97, y: 6 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             style={{
-              width: '68rem',
+              width: 'min(96rem, calc(100vw - 3.2rem))',
               maxWidth: 'calc(100vw - 3.2rem)',
               maxHeight: 'calc(100vh - 3.2rem)',
-              overflowY: 'auto',
+              overflow: 'hidden',
               backgroundColor: 'var(--bg)',
               border: '0.1rem solid var(--border)',
               borderRadius: '1.2rem',
               boxShadow: '0 24px 64px rgba(0, 0, 0, 0.25)',
-              padding: '2rem',
+              padding: '1.6rem',
               boxSizing: 'border-box',
             }}
             onClick={(e) => e.stopPropagation()}
@@ -408,7 +434,7 @@ export const RecommendModal = ({
                   재시도
                 </Button>
               </div>
-            ) : view.emptyReason && view.ranked.length === 0 ? (
+            ) : view.emptyReason && allItems.length === 0 ? (
               <div
                 style={{
                   display: 'grid',
@@ -434,7 +460,7 @@ export const RecommendModal = ({
                   재시도
                 </Button>
               </div>
-            ) : view.ranked.length === 0 ? (
+            ) : allItems.length === 0 ? (
               <div
                 style={{
                   display: 'flex',
@@ -464,46 +490,31 @@ export const RecommendModal = ({
                 </Button>
               </div>
             ) : (
-              <div style={{ display: 'grid', gap: '1.4rem' }}>
-                <section style={{ display: 'grid', gap: '0.6rem' }}>
-                  <header
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: '0.5rem',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <h3
-                      style={{
-                        margin: 0,
-                        fontSize: '1.25rem',
-                        fontWeight: 700,
-                        color: 'var(--fg)',
-                      }}
-                    >
-                      AI 추천 ({view.ranked.length})
-                    </h3>
-                    {distributionTotal > 0 ? (
-                      <DistributionChips distribution={view.distribution} />
-                    ) : null}
-                  </header>
-                  <div style={{ display: 'grid', gap: '0.8rem' }}>
-                    {view.ranked.map((item) => (
-                      <RecommendCard key={item.pdno} item={item} onPick={onPick} />
-                    ))}
-                  </div>
-                </section>
-
-                {view.userInputResults.length > 0 ? (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: isNarrow ? '1fr' : 'minmax(18rem, 22rem) minmax(0, 1fr)',
+                  gap: '1rem',
+                  minHeight: '32rem',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: '1rem',
+                    alignContent: 'start',
+                    maxHeight: 'calc(100vh - 15rem)',
+                    overflowY: 'auto',
+                    paddingRight: '0.25rem',
+                  }}
+                >
                   <section style={{ display: 'grid', gap: '0.6rem' }}>
                     <header
                       style={{
                         display: 'flex',
                         alignItems: 'baseline',
                         gap: '0.5rem',
-                        paddingTop: '1rem',
-                        borderTop: '0.1rem dashed var(--border)',
+                        flexWrap: 'wrap',
                       }}
                     >
                       <h3
@@ -514,37 +525,84 @@ export const RecommendModal = ({
                           color: 'var(--fg)',
                         }}
                       >
-                        내 종목 검증 ({view.userInputResults.length})
+                        AI 추천 ({view.ranked.length})
                       </h3>
-                      <span className="muted" style={{ fontSize: '0.95rem' }}>
-                        직접 추가한 종목의 별도 평가 — 추천과 분리
-                      </span>
+                      {distributionTotal > 0 ? (
+                        <DistributionChips distribution={view.distribution} />
+                      ) : null}
                     </header>
                     <div style={{ display: 'grid', gap: '0.8rem' }}>
-                      {view.userInputResults.map((item) => (
-                        <RecommendCard key={`user-${item.pdno}`} item={item} onPick={onPick} />
+                      {view.ranked.map((item) => (
+                        <RecommendCard
+                          key={item.pdno}
+                          item={item}
+                          onPick={onPick}
+                          selected={selectedItem?.pdno === item.pdno}
+                          onSelect={setSelectedPdno}
+                        />
                       ))}
                     </div>
                   </section>
-                ) : null}
 
-                {view.rejectedCount > 0 ? (
-                  <div className="muted" style={{ fontSize: '1rem' }}>
-                    AI 응답 중 {view.rejectedCount}건은 후보 풀 외 종목이라 제외됨.
-                  </div>
-                ) : null}
+                  {view.userInputResults.length > 0 ? (
+                    <section style={{ display: 'grid', gap: '0.6rem' }}>
+                      <header
+                        style={{
+                          display: 'flex',
+                          alignItems: 'baseline',
+                          gap: '0.5rem',
+                          paddingTop: '1rem',
+                          borderTop: '0.1rem dashed var(--border)',
+                        }}
+                      >
+                        <h3
+                          style={{
+                            margin: 0,
+                            fontSize: '1.25rem',
+                            fontWeight: 700,
+                            color: 'var(--fg)',
+                          }}
+                        >
+                          내 종목 검증 ({view.userInputResults.length})
+                        </h3>
+                        <span className="muted" style={{ fontSize: '0.95rem' }}>
+                          직접 추가한 종목의 별도 평가 — 추천과 분리
+                        </span>
+                      </header>
+                      <div style={{ display: 'grid', gap: '0.8rem' }}>
+                        {view.userInputResults.map((item) => (
+                          <RecommendCard
+                            key={`user-${item.pdno}`}
+                            item={item}
+                            onPick={onPick}
+                            selected={selectedItem?.pdno === item.pdno}
+                            onSelect={setSelectedPdno}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
 
-                <div
+                  {view.rejectedCount > 0 ? (
+                    <div className="muted" style={{ fontSize: '1rem' }}>
+                      AI 응답 중 {view.rejectedCount}건은 후보 풀 외 종목이라 제외됨.
+                    </div>
+                  ) : null}
+                </div>
+                <section
                   style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    paddingTop: '1.4rem',
-                    marginTop: '0.4rem',
-                    borderTop: '0.1rem solid var(--border)',
+                    minWidth: 0,
+                    maxHeight: 'calc(100vh - 15rem)',
+                    overflowY: 'auto',
+                    border: '0.1rem solid var(--border)',
+                    borderRadius: '0.8rem',
+                    background: 'var(--bg-2, rgba(0,0,0,0.02))',
+                    padding: '1rem',
                   }}
                 >
+                  {selectedItem ? <RecommendDetail item={selectedItem} onPick={onPick} /> : null}
+                </section>
+                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center' }}>
                   <Button
                     variant="primary"
                     iconLeading={<RefreshCw size={14} />}
@@ -558,9 +616,6 @@ export const RecommendModal = ({
                   >
                     다시 분석
                   </Button>
-                  <span className="muted" style={{ fontSize: '0.95rem' }}>
-                    설정/관심 종목을 바꾼 뒤 새 결과를 받으려면 다시 분석을 누르세요.
-                  </span>
                 </div>
               </div>
             )}

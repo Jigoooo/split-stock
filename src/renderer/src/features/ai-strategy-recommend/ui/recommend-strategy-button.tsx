@@ -16,6 +16,16 @@ export interface RecommendStrategyButtonProps {
 interface SuggestedView {
   profile: StrategyProfile;
   reasoning: string;
+  stageRationales: ReadonlyArray<{
+    nth: number;
+    rationale: string;
+    evidenceRefs: ReadonlyArray<string>;
+  }>;
+  globalRisks: ReadonlyArray<string>;
+  evidenceRefs: ReadonlyArray<{ id: string; kind: string; title: string; detail: string }>;
+  analysisConfidence: 'high' | 'med' | 'low';
+  dataQuality: 'blocked' | 'limited' | 'normal';
+  dataQualityReason?: string | undefined;
 }
 
 export const RecommendStrategyButton = ({
@@ -39,7 +49,16 @@ export const RecommendStrategyButton = ({
       }
       const profile = mergeIntoProfile(res.suggestion);
       setError(null);
-      setSuggested({ profile, reasoning: res.suggestion.reasoning });
+      setSuggested({
+        profile,
+        reasoning: res.suggestion.reasoning,
+        stageRationales: res.suggestion.stageRationales ?? [],
+        globalRisks: res.suggestion.globalRisks ?? [],
+        evidenceRefs: res.suggestion.evidenceRefs ?? [],
+        analysisConfidence: res.suggestion.analysisConfidence ?? 'low',
+        dataQuality: res.suggestion.dataQuality ?? res.dataQuality ?? 'blocked',
+        dataQualityReason: res.dataQualityReason,
+      });
       setPreviewOpen(true);
     },
     onError: (err) => {
@@ -118,6 +137,12 @@ export const RecommendStrategyButton = ({
         open={previewOpen}
         profile={suggested?.profile ?? null}
         reasoning={suggested?.reasoning ?? ''}
+        stageRationales={suggested?.stageRationales ?? []}
+        globalRisks={suggested?.globalRisks ?? []}
+        evidenceRefs={suggested?.evidenceRefs ?? []}
+        analysisConfidence={suggested?.analysisConfidence ?? 'low'}
+        dataQuality={suggested?.dataQuality ?? 'blocked'}
+        dataQualityReason={suggested?.dataQualityReason}
         error={error}
         isPending={mut.isPending}
         onApply={handleApply}
@@ -136,6 +161,11 @@ function mergeIntoProfile(suggestion: {
   buyRules: ReadonlyArray<{ nth: number; triggerDropPct: number | null; amountKrw: number }>;
   sellRules: ReadonlyArray<{ nth: number; targetProfitPct: number }>;
   reasoning: string;
+  stageRationales?: unknown;
+  globalRisks?: unknown;
+  evidenceRefs?: unknown;
+  analysisConfidence?: unknown;
+  dataQuality?: unknown;
 }): StrategyProfile {
   return {
     ...DEFAULT_STRATEGY_PROFILE,

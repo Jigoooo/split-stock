@@ -28,7 +28,7 @@ describe('SafetySwitchHeader', () => {
 
     render(<SafetySwitchHeader />);
 
-    const switchControl = screen.getByRole('switch', { name: '주문 가능' });
+    const switchControl = screen.getByRole('switch', { name: /주문 가능/ });
     expect(switchControl).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(switchControl);
     expect(setMaster).toHaveBeenCalledWith(false);
@@ -50,7 +50,7 @@ describe('SafetySwitchHeader', () => {
 
     render(<SafetySwitchHeader />);
 
-    expect(screen.getByRole('switch', { name: '주문 차단' })).toHaveAttribute(
+    expect(screen.getByRole('switch', { name: /주문 차단/ })).toHaveAttribute(
       'aria-checked',
       'false',
     );

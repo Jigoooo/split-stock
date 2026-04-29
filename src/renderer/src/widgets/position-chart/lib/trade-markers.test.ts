@@ -48,7 +48,7 @@ describe('toTradeMarkers', () => {
       {
         time: '2026-04-10',
         position: 'belowBar',
-        color: '#d73333',
+        color: 'rgba(215, 51, 51, 1.00)',
         shape: 'arrowUp',
         text: 'B1',
       },
@@ -73,14 +73,14 @@ describe('toTradeMarkers', () => {
       {
         time: '2026-04-08',
         position: 'belowBar',
-        color: '#d73333',
+        color: 'rgba(215, 51, 51, 0.92)',
         shape: 'arrowUp',
         text: 'B2',
       },
       {
         time: '2026-04-11',
         position: 'aboveBar',
-        color: '#2d4fca',
+        color: 'rgba(45, 79, 202, 0.92)',
         shape: 'arrowDown',
         text: 'S2',
       },

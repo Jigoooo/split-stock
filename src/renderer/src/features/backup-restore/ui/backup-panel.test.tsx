@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
+import { alertDialog } from '@renderer/shared/ui';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const clearMessageMock = vi.fn();
@@ -53,24 +54,25 @@ describe('BackupPanel', () => {
     expect(exportDatabaseMock).toHaveBeenCalled();
   });
 
-  it('DB 복원은 confirm 통과 후에만 실행한다', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+  it('DB 복원은 confirm 통과 후에만 실행한다', async () => {
+    const confirmSpy = vi.spyOn(alertDialog, 'confirm').mockResolvedValue(true);
     render(<BackupPanel />);
 
     fireEvent.click(screen.getByRole('button', { name: 'DB 복원' }));
 
-    expect(confirmSpy).toHaveBeenCalled();
-    expect(clearMessageMock).toHaveBeenCalled();
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+    await waitFor(() => expect(clearMessageMock).toHaveBeenCalled());
     expect(importDatabaseMock).toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
 
-  it('DB 복원 confirm이 취소되면 실행하지 않는다', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('DB 복원 confirm이 취소되면 실행하지 않는다', async () => {
+    const confirmSpy = vi.spyOn(alertDialog, 'confirm').mockResolvedValue(false);
     render(<BackupPanel />);
 
     fireEvent.click(screen.getByRole('button', { name: 'DB 복원' }));
 
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
     expect(importDatabaseMock).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
   });
