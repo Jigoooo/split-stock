@@ -8,6 +8,7 @@ import type { EventLogger } from '../logging/event-logger';
 import { reconcileCancelledSellLot } from './partial-sell-lot-reconciliation';
 
 type OrderStatus = 'PENDING' | 'PARTIAL' | 'FILLED' | 'CANCELLED' | 'REJECTED';
+type OrderDivision = 'LIMIT' | 'MARKET';
 
 interface PendingOrderRow {
   id: number;
@@ -16,11 +17,18 @@ interface PendingOrderRow {
   odno: string;
   pdno: string;
   side: string;
+  division: string;
   qty: number;
   price: number;
   status: string;
   placedAt: Date | number | string;
   filledAt: Date | number | string | null;
+}
+
+export interface ManualOrderReconcilerTarget {
+  accountId?: number;
+  brokerOrderId?: string;
+  symbol?: string;
 }
 
 export interface ManualOrderReconcilerOptions {
@@ -60,6 +68,7 @@ export function resolveManualOrderDecision(input: {
   orderQty: number;
   localFilledQty: number;
   localPrice: number;
+  division?: OrderDivision;
   remote: DailyExecution;
 }): ReconcileDecision | null {
   const totalFilledQty = Math.min(input.orderQty, Math.max(0, input.remote.totalFilledQty));
@@ -68,12 +77,15 @@ export function resolveManualOrderDecision(input: {
     input.remote.remainingQty > 0
       ? input.remote.remainingQty
       : Math.max(0, input.orderQty - totalFilledQty);
-  const executionPrice =
-    input.remote.avgFillPrice > 0
-      ? input.remote.avgFillPrice
-      : input.remote.orderPrice > 0
-        ? input.remote.orderPrice
-        : input.localPrice;
+  const division = input.division ?? 'LIMIT';
+  const executionPrice = resolveExecutionPrice({
+    division,
+    localPrice: input.localPrice,
+    remoteOrderPrice: input.remote.orderPrice,
+    remoteAvgFillPrice: input.remote.avgFillPrice,
+    totalFilledQty,
+  });
+  if (executionPrice === null) return null;
 
   if (totalFilledQty > 0) {
     const nextStatus: OrderStatus = input.remote.cancelled
@@ -114,6 +126,8 @@ export function resolveServerPendingAbsenceDecision(input: {
   localFilledQty: number;
   orderQty: number;
   localPrice: number;
+  localExecutionPrice?: number;
+  division?: OrderDivision;
   context: PendingSnapshotContext;
 }): ReconcileDecision | null {
   if (input.context.serverPendingPresent) return null;
@@ -121,12 +135,27 @@ export function resolveServerPendingAbsenceDecision(input: {
     return null;
   }
 
+  const division = input.division ?? 'LIMIT';
+  const executionPrice =
+    input.localFilledQty > 0
+      ? division === 'MARKET'
+        ? input.localExecutionPrice && input.localExecutionPrice > 0
+          ? input.localExecutionPrice
+          : null
+        : input.localExecutionPrice && input.localExecutionPrice > 0
+          ? input.localExecutionPrice
+          : input.localPrice
+      : division === 'MARKET'
+        ? 0
+        : input.localPrice;
+  if (executionPrice === null) return null;
+
   return {
     nextStatus: input.localFilledQty >= input.orderQty ? 'FILLED' : 'CANCELLED',
     totalFilledQty: input.localFilledQty,
     deltaFilledQty: 0,
     remainingQty: Math.max(0, input.orderQty - input.localFilledQty),
-    executionPrice: input.localPrice,
+    executionPrice,
   };
 }
 
@@ -162,15 +191,24 @@ export class ManualOrderReconciler {
     this.stop();
   }
 
-  async poll(): Promise<void> {
+  async poll(target?: ManualOrderReconcilerTarget): Promise<void> {
     if (this.disposed || this.running) return;
     this.running = true;
     try {
-      const pending = this.opts.db
+      let pending = this.opts.db
         .select()
         .from(orders)
         .where(inArray(orders.status, ['PENDING', 'PARTIAL']))
         .all() as PendingOrderRow[];
+      if (target?.accountId !== undefined) {
+        pending = pending.filter((row) => row.accountId === target.accountId);
+      }
+      if (target?.brokerOrderId !== undefined) {
+        pending = pending.filter((row) => row.odno === target.brokerOrderId);
+      }
+      if (target?.symbol !== undefined) {
+        pending = pending.filter((row) => row.pdno === target.symbol);
+      }
       if (pending.length === 0) return;
       const pendingRowsByAccount = new Map<number, PendingOrderRow[]>();
       for (const row of pending) {
@@ -266,10 +304,13 @@ export class ManualOrderReconciler {
           .where(eq(trades.orderId, row.id))
           .all();
         const localFilledQty = localTrades.reduce((sum, trade) => sum + trade.qty, 0);
+        const localExecutionPrice = weightedAvgTradePrice(localTrades);
         const absenceDecision = resolveServerPendingAbsenceDecision({
           localFilledQty,
           orderQty: row.qty,
           localPrice: row.price,
+          localExecutionPrice,
+          division: row.division === 'MARKET' ? 'MARKET' : 'LIMIT',
           context: {
             serverPendingPresent: serverPendingSet?.has(row.odno) ?? true,
             now,
@@ -278,13 +319,20 @@ export class ManualOrderReconciler {
           },
         });
         const decision = remote
-          ? (resolveManualOrderDecision({
-              localStatus: row.status === 'PARTIAL' ? 'PARTIAL' : 'PENDING',
-              orderQty: row.qty,
+          ? resolveMarketFillWithoutPrice({
+              division: row.division,
               localFilledQty,
-              localPrice: row.price,
               remote,
-            }) ?? absenceDecision)
+            })
+            ? null
+            : (resolveManualOrderDecision({
+                localStatus: row.status === 'PARTIAL' ? 'PARTIAL' : 'PENDING',
+                orderQty: row.qty,
+                localFilledQty,
+                localPrice: row.price,
+                division: row.division === 'MARKET' ? 'MARKET' : 'LIMIT',
+                remote,
+              }) ?? absenceDecision)
           : absenceDecision;
         if (!decision) continue;
 
@@ -363,6 +411,40 @@ export class ManualOrderReconciler {
 
 function toDate(value: Date | number | string): Date {
   return value instanceof Date ? value : new Date(value);
+}
+
+function resolveExecutionPrice(input: {
+  division: OrderDivision;
+  localPrice: number;
+  remoteOrderPrice: number;
+  remoteAvgFillPrice: number;
+  totalFilledQty: number;
+}): number | null {
+  if (input.remoteAvgFillPrice > 0) return input.remoteAvgFillPrice;
+  if (input.division === 'MARKET') {
+    return input.totalFilledQty > 0 ? null : 0;
+  }
+  if (input.remoteOrderPrice > 0) return input.remoteOrderPrice;
+  return input.localPrice;
+}
+
+function resolveMarketFillWithoutPrice(input: {
+  division: string;
+  localFilledQty: number;
+  remote: DailyExecution;
+}): boolean {
+  return (
+    input.division === 'MARKET' &&
+    input.remote.totalFilledQty > input.localFilledQty &&
+    input.remote.avgFillPrice <= 0
+  );
+}
+
+function weightedAvgTradePrice(rows: Array<{ qty: number; price: number }>): number {
+  const totalQty = rows.reduce((sum, row) => sum + row.qty, 0);
+  if (totalQty <= 0) return 0;
+  const totalAmount = rows.reduce((sum, row) => sum + row.qty * row.price, 0);
+  return Math.round(totalAmount / totalQty);
 }
 
 function readLotNth(db: Db, lotId: number): number | null {

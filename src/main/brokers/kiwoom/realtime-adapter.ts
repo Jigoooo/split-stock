@@ -2,6 +2,8 @@ import type { BrokerError, RealtimeEvent, RealtimeKind, StockSymbol } from '@sha
 import { makeBrokerError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import type {
+  BrokerAccountRealtimeEvent,
+  BrokerAccountRealtimeHandler,
   ExecNoticeHandler,
   RealtimeHandler,
   RealtimePort,
@@ -31,6 +33,12 @@ function parseNum(s: string | undefined): number {
   if (!s) return 0;
   const n = Number(s.replace(/^\+/, ''));
   return Number.isFinite(n) ? n : 0;
+}
+
+function parseSymbol(s: string | undefined): StockSymbol | undefined {
+  if (!s) return undefined;
+  const normalized = s.replace(/^A/, '');
+  return /^\d{6}$/.test(normalized) ? normalized : undefined;
 }
 
 /**
@@ -101,6 +109,38 @@ function mapKiwoomRealToEvent(
   return null;
 }
 
+function mapKiwoomRealToAccountEvent(
+  data: KiwoomWsRealMessage['data'][number],
+): BrokerAccountRealtimeEvent | null {
+  const v = data.values ?? {};
+  if (data.type === KIWOOM_WS_TYPE.EXEC_NOTICE) {
+    const brokerOrderId = v['9203'] ?? v.ord_no ?? '';
+    if (!brokerOrderId) return null;
+    const symbol = parseSymbol(data.item) ?? parseSymbol(v['9001'] ?? v.stk_cd);
+    const filledQty = parseNum(v['911'] ?? v.cntr_qty);
+    const price = parseNum(v['910'] ?? v.cntr_pric);
+    const at = v['908'] ?? v.cntr_tm ?? new Date().toISOString();
+    const execution =
+      symbol && filledQty > 0 ? { brokerOrderId, symbol, filledQty, price, at } : undefined;
+    return {
+      kind: 'ORDER_DIRTY',
+      brokerOrderId,
+      ...(symbol !== undefined && { symbol }),
+      ...(execution !== undefined && { execution }),
+      at,
+    };
+  }
+  if (data.type === KIWOOM_WS_TYPE.BALANCE) {
+    const symbol = parseSymbol(data.item) ?? parseSymbol(v['9001'] ?? v.stk_cd);
+    return {
+      kind: 'BALANCE_DIRTY',
+      ...(symbol !== undefined && { symbol }),
+      at: v['908'] ?? v.cntr_tm ?? new Date().toISOString(),
+    };
+  }
+  return null;
+}
+
 /**
  * Kiwoom WS 클라이언트를 broker-agnostic RealtimePort 로 노출.
  *
@@ -117,6 +157,8 @@ export class KiwoomRealtimeAdapter implements RealtimePort {
     Set<RealtimeHandler>
   >();
   private readonly execHandlers = new Set<ExecNoticeHandler>();
+  private readonly accountHandlers = new Set<BrokerAccountRealtimeHandler>();
+  private readonly accountTypeRefs = new Map<string, number>();
   private msgUnsubscribe: (() => void) | null = null;
 
   constructor(private readonly socket: KiwoomSocketClient) {}
@@ -189,13 +231,30 @@ export class KiwoomRealtimeAdapter implements RealtimePort {
     this.execHandlers.add(handler);
     // 체결통보는 종목별이 아닌 계좌별 — '00' type 한 번만 구독
     if (this.execHandlers.size === 1) {
-      this.socket.subscribe('', KIWOOM_WS_TYPE.EXEC_NOTICE);
+      this.acquireAccountType(KIWOOM_WS_TYPE.EXEC_NOTICE);
     }
     return ok({
       unsubscribe: () => {
         this.execHandlers.delete(handler);
         if (this.execHandlers.size === 0) {
-          this.socket.unsubscribe('', KIWOOM_WS_TYPE.EXEC_NOTICE);
+          this.releaseAccountType(KIWOOM_WS_TYPE.EXEC_NOTICE);
+        }
+      },
+    });
+  }
+
+  subscribeAccountEvents(handler: BrokerAccountRealtimeHandler): Result<Subscription, BrokerError> {
+    this.accountHandlers.add(handler);
+    if (this.accountHandlers.size === 1) {
+      this.acquireAccountType(KIWOOM_WS_TYPE.EXEC_NOTICE);
+      this.acquireAccountType(KIWOOM_WS_TYPE.BALANCE);
+    }
+    return ok({
+      unsubscribe: () => {
+        this.accountHandlers.delete(handler);
+        if (this.accountHandlers.size === 0) {
+          this.releaseAccountType(KIWOOM_WS_TYPE.EXEC_NOTICE);
+          this.releaseAccountType(KIWOOM_WS_TYPE.BALANCE);
         }
       },
     });
@@ -204,15 +263,37 @@ export class KiwoomRealtimeAdapter implements RealtimePort {
   getStatus(): RealtimeStatus {
     return {
       phase: this.socket.getPhase(),
-      subscriptions: this.perKindHandlers.size + (this.execHandlers.size > 0 ? 1 : 0),
+      subscriptions: this.perKindHandlers.size + this.accountTypeRefs.size,
     };
+  }
+
+  private acquireAccountType(type: string): void {
+    const prev = this.accountTypeRefs.get(type) ?? 0;
+    this.accountTypeRefs.set(type, prev + 1);
+    if (prev === 0) this.socket.subscribe('', type);
+  }
+
+  private releaseAccountType(type: string): void {
+    const prev = this.accountTypeRefs.get(type) ?? 0;
+    if (prev <= 1) {
+      this.accountTypeRefs.delete(type);
+      this.socket.unsubscribe('', type);
+      return;
+    }
+    this.accountTypeRefs.set(type, prev - 1);
   }
 
   private handleReal(msg: KiwoomWsRealMessage): void {
     for (const data of msg.data) {
       this.seqCounter += 1;
+      const accountEvent = mapKiwoomRealToAccountEvent(data);
       const event = mapKiwoomRealToEvent(data, this.seqCounter);
-      if (!event) continue;
+      if (!event) {
+        if (accountEvent) {
+          for (const h of this.accountHandlers) h(accountEvent);
+        }
+        continue;
+      }
 
       if (event.kind === 'TICK') {
         const handlers = this.perKindHandlers.get(`${event.data.symbol}:TICK`);
@@ -226,6 +307,9 @@ export class KiwoomRealtimeAdapter implements RealtimePort {
       }
       if (event.kind === 'EXEC_NOTICE') {
         for (const h of this.execHandlers) h(event.data);
+      }
+      if (accountEvent) {
+        for (const h of this.accountHandlers) h(accountEvent);
       }
     }
   }

@@ -136,6 +136,62 @@ describe('resolveManualOrderDecision', () => {
     });
   });
 
+  it('시장가 체결은 broker 평균체결가가 없으면 0원 체결로 기록하지 않고 보류한다', () => {
+    const decision = resolveManualOrderDecision({
+      localStatus: 'PENDING',
+      orderQty: 10,
+      localFilledQty: 0,
+      localPrice: 0,
+      division: 'MARKET',
+      remote: {
+        brokerOrderId: '1',
+        symbol: '005930',
+        name: '삼성전자',
+        side: 'BUY',
+        orderQty: 10,
+        orderPrice: 0,
+        orderedAt: '093000',
+        totalFilledQty: 10,
+        remainingQty: 0,
+        avgFillPrice: 0,
+        cancelled: false,
+        rejectedQty: 0,
+      },
+    });
+
+    expect(decision).toBeNull();
+  });
+
+  it('시장가 체결은 broker 평균체결가가 있을 때만 해당 가격으로 확정한다', () => {
+    const decision = resolveManualOrderDecision({
+      localStatus: 'PENDING',
+      orderQty: 10,
+      localFilledQty: 0,
+      localPrice: 0,
+      division: 'MARKET',
+      remote: {
+        brokerOrderId: '1',
+        symbol: '005930',
+        name: '삼성전자',
+        side: 'BUY',
+        orderQty: 10,
+        orderPrice: 0,
+        orderedAt: '093000',
+        totalFilledQty: 10,
+        remainingQty: 0,
+        avgFillPrice: 70100,
+        cancelled: false,
+        rejectedQty: 0,
+      },
+    });
+
+    expect(decision).toMatchObject({
+      nextStatus: 'FILLED',
+      executionPrice: 70100,
+      totalFilledQty: 10,
+    });
+  });
+
   it('서버 미체결 목록에서 사라진 오래된 로컬 PENDING은 CANCELLED로 정리한다', () => {
     const decision = resolveServerPendingAbsenceDecision({
       localFilledQty: 0,
@@ -173,9 +229,88 @@ describe('resolveManualOrderDecision', () => {
 
     expect(decision).toBeNull();
   });
+
+  it('시장가 부분체결 로컬 기록만 있는 주문은 평균 체결가 없으면 부재 정리를 보류한다', () => {
+    const decision = resolveServerPendingAbsenceDecision({
+      localFilledQty: 2,
+      orderQty: 10,
+      localPrice: 0,
+      division: 'MARKET',
+      context: {
+        serverPendingPresent: false,
+        now: new Date('2026-04-22T09:00:20+09:00'),
+        placedAt: new Date('2026-04-22T09:00:00+09:00'),
+        graceMs: 10_000,
+      },
+    });
+
+    expect(decision).toBeNull();
+  });
 });
 
 describe('ManualOrderReconciler lot reconciliation', () => {
+  it('시장가 원격 체결에 평균가가 없으면 stale 부재 fallback으로 CANCELLED 처리하지 않는다', async () => {
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const now = new Date('2026-04-22T09:00:00+09:00');
+    const order = db
+      .insert(orders)
+      .values({
+        accountId: 1,
+        lotId: null,
+        odno: 'ORD-MARKET',
+        orgNo: 'ORG-1',
+        pdno: '005930',
+        side: 'BUY',
+        division: 'MARKET',
+        qty: 2,
+        price: 0,
+        status: 'PENDING',
+        placedAt: now,
+      })
+      .returning({ id: orders.id })
+      .get();
+
+    const broker = {
+      brokerId: 'KIS',
+      env: 'MOCK',
+      listDailyExecutions: async () => ({
+        isOk: () => true,
+        isErr: () => false,
+        value: [
+          {
+            brokerOrderId: 'ORD-MARKET',
+            symbol: '005930',
+            name: '삼성전자',
+            side: 'BUY',
+            orderQty: 2,
+            orderPrice: 0,
+            orderedAt: '090000',
+            totalFilledQty: 2,
+            remainingQty: 0,
+            avgFillPrice: 0,
+            cancelled: false,
+            rejectedQty: 0,
+          },
+        ],
+      }),
+    } as unknown as BrokerPort;
+    const reconciler = new ManualOrderReconciler({
+      db,
+      getBrokerForAccount: () => broker,
+      logger: { log: () => undefined } satisfies EventLogger,
+      onTradeExecution: () => undefined,
+      stalePendingGraceMs: 0,
+    });
+
+    await reconciler.poll();
+
+    expect(db.select().from(orders).where(eq(orders.id, order.id)).get()).toMatchObject({
+      status: 'PENDING',
+    });
+    expect(db.select().from(trades).where(eq(trades.orderId, order.id)).all()).toEqual([]);
+  });
+
   it('부분 매도 후 취소되면 남은 수량만 OPEN으로 복원한다', async () => {
     const db = createTestDb();
     bootstrapSchema(db);

@@ -1,9 +1,12 @@
+import { createCipheriv } from 'node:crypto';
 import { MockAgent, setGlobalDispatcher } from 'undici';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { EventLogger } from '../logging/event-logger';
 import { KIS_BASE_URL } from './endpoints';
 import { KisHttpClient } from './http-client';
 import {
+  type CniNotice,
+  decryptAes256CbcBase64,
   issueApprovalKey,
   KisWsClient,
   type RealtimeMessage,
@@ -173,6 +176,11 @@ class FakeTimer implements Timer {
   }
 }
 
+function encryptAes256CbcBase64(key: string, iv: string, plainText: string): string {
+  const cipher = createCipheriv('aes-256-cbc', Buffer.from(key, 'utf8'), Buffer.from(iv, 'utf8'));
+  return Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]).toString('base64');
+}
+
 describe('KisWsClient', () => {
   let agent: MockAgent;
   let approvalIntercepted = 0;
@@ -197,6 +205,7 @@ describe('KisWsClient', () => {
       reconnectBaseMs?: number;
       reconnectMaxMs?: number;
       onMessage?: (msg: RealtimeMessage) => void;
+      onCniNotice?: (notice: CniNotice) => void;
     } = {},
   ) {
     const logger = createFakeLogger();
@@ -219,6 +228,7 @@ describe('KisWsClient', () => {
       ...(opts.reconnectBaseMs !== undefined && { reconnectBaseMs: opts.reconnectBaseMs }),
       ...(opts.reconnectMaxMs !== undefined && { reconnectMaxMs: opts.reconnectMaxMs }),
       ...(opts.onMessage && { onMessage: opts.onMessage }),
+      ...(opts.onCniNotice && { onCniNotice: opts.onCniNotice }),
     });
     return { client, logger, timer, sockets };
   }
@@ -307,6 +317,35 @@ describe('KisWsClient', () => {
     expect(received).toHaveLength(2);
     expect(received[0]?.seq).toBe(42);
     expect(received[1]?.seq).toBe(43);
+  });
+
+  it('CNI ACK의 AES 파라미터로 체결통보 payload를 복호화하고 중복 수신을 제거한다', async () => {
+    const received: CniNotice[] = [];
+    const { client, sockets } = build({
+      heartbeatMs: 60_000,
+      onCniNotice: (notice) => received.push(notice),
+    });
+    await client.start('APPKEY', 'APPSECRET');
+    const s = sockets[0];
+    if (!s) throw new Error('no ws');
+    s.openNow();
+
+    const key = '12345678901234567890123456789012';
+    const iv = '1234567890123456';
+    const plain = '0^1^ORD-1^x^x^x^x^x^005930^3^70100^093001^x^2';
+    const encrypted = encryptAes256CbcBase64(key, iv, plain);
+    expect(decryptAes256CbcBase64(key, iv, encrypted)).toBe(plain);
+
+    s.remoteMessage(
+      JSON.stringify({
+        header: { tr_id: 'H0STCNI9', tr_key: 'HTS123' },
+        body: { rt_cd: '0', output: { iv, key } },
+      }),
+    );
+    s.remoteMessage(`1|H0STCNI9|001|${encrypted}`);
+    s.remoteMessage(`1|H0STCNI9|001|${encrypted}`);
+
+    expect(received).toEqual([{ tr: 'H0STCNI9', htsId: 'HTS123', seq: 1, raw: plain }]);
   });
 
   it('구독 상한 초과: 20을 초과하는 추가 구독은 VALIDATION 에러', async () => {

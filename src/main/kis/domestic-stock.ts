@@ -31,6 +31,7 @@ export interface BalanceResult {
 
 export interface DailyCcldOrder {
   odno: string;
+  orgNo?: string;
   pdno: string;
   name: string;
   side: 'BUY' | 'SELL';
@@ -233,6 +234,7 @@ export async function inquireDailyCcld(
   return ok(
     parsed.data.output1.map((row) => ({
       odno: row.odno,
+      ...(row.ord_orgno !== undefined && { orgNo: row.ord_orgno }),
       pdno: row.pdno,
       name: row.prdt_name?.trim() || row.pdno,
       side: row.sll_buy_dvsn_cd === '01' ? 'SELL' : 'BUY',

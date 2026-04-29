@@ -8,6 +8,8 @@ export type {
   OrderPort,
 } from './order-port';
 export type {
+  BrokerAccountRealtimeEvent,
+  BrokerAccountRealtimeHandler,
   ExecNoticeHandler,
   RealtimeHandler,
   RealtimePhase,

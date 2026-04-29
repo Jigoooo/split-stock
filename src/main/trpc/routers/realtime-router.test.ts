@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { OrderbookUpdate, TickUpdate } from '../../kis/ws-frame-parser';
 import { FeedBus } from '../../realtime/feed-bus';
 import type { Context } from '../context';
@@ -46,6 +46,34 @@ function createCtx(bus: FeedBus): Context {
 }
 
 describe('realtimeRouter subscriptions', () => {
+  it('start 성공 후 계좌 실시간 dirty subscription을 재연결한다', async () => {
+    const start = vi.fn(async () => ({ ok: true as const }));
+    const syncAccountRealtimeSubscription = vi.fn();
+    const caller = createCaller({
+      currentEnv: 'MOCK',
+      realtime: { start },
+      credentialsRepo: {
+        loadCredentialsByEnv: () => ({
+          isErr: () => false,
+          value: {
+            env: 'MOCK',
+            broker: 'KIS',
+            appKey: 'APPKEY_1234567890',
+            appSecret: 'APPSECRET_1234567890',
+            accountNo8: '12345678',
+            accountProdCd: '01',
+            htsId: 'HTS123',
+          },
+        }),
+      },
+      syncAccountRealtimeSubscription,
+    } as unknown as Context);
+
+    await expect(caller.start()).resolves.toEqual({ ok: true });
+    expect(start).toHaveBeenCalledWith('APPKEY_1234567890', 'APPSECRET_1234567890');
+    expect(syncAccountRealtimeSubscription).toHaveBeenCalledTimes(1);
+  });
+
   it('onTick streams the latest snapshot and subsequent ticks', async () => {
     const bus = new FeedBus();
     bus.emitTick(mkTick('005930', 70_000));

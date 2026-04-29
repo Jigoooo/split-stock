@@ -175,6 +175,8 @@ export type Candle = z.infer<typeof CandleSchema>;
  */
 export const DailyExecutionSchema = z.object({
   brokerOrderId: z.string(),
+  /** broker별 원주문 조직번호. KIS 취소에는 KRX_FWDG_ORD_ORGNO/ord_orgno가 필요하다. */
+  brokerOrgNo: z.string().optional(),
   symbol: StockSymbolSchema,
   name: z.string(),
   side: OrderSideSchema,

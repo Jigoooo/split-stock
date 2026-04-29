@@ -205,6 +205,7 @@ describe('executions mapper', () => {
   it('DailyCcldOrder → DailyExecution (odno → brokerOrderId, pdno → symbol)', () => {
     const o: DailyCcldOrder = {
       odno: '0001',
+      orgNo: '01790',
       pdno: '005930',
       name: '삼성전자',
       side: 'BUY',
@@ -219,6 +220,7 @@ describe('executions mapper', () => {
     };
     const r = toDailyExecution(o);
     expect(r.brokerOrderId).toBe('0001');
+    expect(r.brokerOrgNo).toBe('01790');
     expect(r.symbol).toBe('005930');
     expect(r.totalFilledQty).toBe(5);
     expect(r.remainingQty).toBe(5);

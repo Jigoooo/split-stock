@@ -20,6 +20,20 @@ export interface RealtimeStatus {
 
 export type RealtimeHandler = (event: RealtimeEvent) => void;
 export type ExecNoticeHandler = (event: ExecNoticeEvent) => void;
+export type BrokerAccountRealtimeEvent =
+  | {
+      kind: 'ORDER_DIRTY';
+      brokerOrderId?: string;
+      symbol?: StockSymbol;
+      execution?: ExecNoticeEvent;
+      at: string;
+    }
+  | {
+      kind: 'BALANCE_DIRTY';
+      symbol?: StockSymbol;
+      at: string;
+    };
+export type BrokerAccountRealtimeHandler = (event: BrokerAccountRealtimeEvent) => void;
 
 /**
  * 실시간 시세/체결통보 port.
@@ -43,6 +57,14 @@ export interface RealtimePort {
    * 체결통보 전용 구독. KIS=HTS_ID 기반 / Kiwoom=accountId 기반 — adapter 책임.
    */
   subscribeExecutions(handler: ExecNoticeHandler): Result<Subscription, BrokerError>;
+
+  /**
+   * 계좌 상태 dirty signal 구독.
+   *
+   * Realtime payload 자체는 장부 확정값이 아니며, 수신자는 반드시
+   * listDailyExecutions/inquireBalance 같은 broker REST 조회로 상태를 확정해야 한다.
+   */
+  subscribeAccountEvents(handler: BrokerAccountRealtimeHandler): Result<Subscription, BrokerError>;
 
   getStatus(): RealtimeStatus;
 }

@@ -9,6 +9,7 @@ import { makeBrokerError } from '@shared/contracts';
 import { correctLimitPrice } from '@shared/market-rules';
 import { hasActiveCycle } from '@shared/trading/next-nth';
 import { and, eq } from 'drizzle-orm';
+import { err } from 'neverthrow';
 import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
 import { lots, orders } from '../db/schema';
@@ -64,6 +65,14 @@ export interface StrategyOrderExecutionResult {
   brokerOrderId: string;
   reconciled: boolean;
 }
+
+interface PreparedOrderLot {
+  lotId: number;
+  nth: number | null;
+  side: 'BUY' | 'SELL';
+}
+
+type AutoOrderLocalSource = WatchOrder['source'] | 'STRATEGY';
 
 export class StrategyOrderError extends Error {
   readonly brokerError: BrokerError;
@@ -160,90 +169,62 @@ export async function executeWatchOrder(
     });
   }
 
-  const result = await broker.placeOrder({
-    side: order.side,
-    symbol: order.pdno,
-    qty,
-    price: division === 'LIMIT' ? limitPrice : 0,
-    kind: division,
-  });
-  if (result.isErr()) {
-    throw new Error(`주문 실패: ${result.error.kind} - ${result.error.msg}`);
-  }
-  if ((order.source === 'PREBUY' || order.source === 'CUSTOM') && order.side === 'BUY') {
-    const seeded = deps.strategyRepo.ensureSeededActive(order.accountId, order.pdno);
-    if (seeded.isErr()) {
-      deps.logger.log({
-        level: 'ERROR',
-        category: 'WATCH',
-        message: 'watch.first-entry.seed-failed',
-        payload: {
-          accountId: order.accountId,
-          pdno: order.pdno,
-          source: order.source,
-          reason: seeded.error.kind,
-        },
-      });
-    } else {
-      deps.logger.log({
-        level: 'INFO',
-        category: 'WATCH',
-        message: 'watch.first-entry.seeded',
-        payload: {
-          accountId: order.accountId,
-          pdno: order.pdno,
-          source: order.source,
-          templateSource: seeded.value.source,
-        },
-      });
-    }
-  }
-
   const now = new Date();
-  const linkedLot =
-    order.side === 'BUY'
-      ? createPendingBuyLot(
-          {
-            logger: deps.logger,
-            lotsRepo: deps.lotsRepo,
-          },
-          {
-            accountId: order.accountId,
-            pdno: order.pdno,
-            placedAt: now,
-            price: division === 'LIMIT' ? limitPrice : 0,
-            qty,
-            requestedNth: order.nth,
-            source: order.source,
-          },
-        )
-      : linkPendingSellLot(
-          {
-            logger: deps.logger,
-            lotsRepo: deps.lotsRepo,
-          },
-          {
-            accountId: order.accountId,
-            pdno: order.pdno,
-            requestedNth: order.nth,
-          },
-        );
-  deps.db
-    .insert(orders)
-    .values({
-      accountId: order.accountId,
-      lotId: linkedLot.lotId,
-      odno: result.value.brokerOrderId,
-      orgNo: result.value.brokerOrgNo ?? null,
-      pdno: order.pdno,
+  const linkedLot = prepareWatchOrderLot(deps, order, {
+    division,
+    limitPrice,
+    now,
+    qty,
+  });
+  let result: Awaited<ReturnType<BrokerPort['placeOrder']>>;
+  try {
+    result = await broker.placeOrder({
       side: order.side,
-      division,
+      symbol: order.pdno,
       qty,
       price: division === 'LIMIT' ? limitPrice : 0,
-      status: 'PENDING',
-      placedAt: now,
-    })
-    .run();
+      kind: division,
+    });
+  } catch (cause) {
+    rollbackPreparedOrderLot(deps, linkedLot);
+    throw cause;
+  }
+  if (result.isErr()) {
+    rollbackPreparedOrderLot(deps, linkedLot);
+    throw new Error(`주문 실패: ${result.error.kind} - ${result.error.msg}`);
+  }
+
+  try {
+    deps.db
+      .insert(orders)
+      .values({
+        accountId: order.accountId,
+        lotId: linkedLot.lotId,
+        odno: result.value.brokerOrderId,
+        orgNo: result.value.brokerOrgNo ?? null,
+        pdno: order.pdno,
+        side: order.side,
+        division,
+        qty,
+        price: division === 'LIMIT' ? limitPrice : 0,
+        status: 'PENDING',
+        placedAt: now,
+      })
+      .run();
+  } catch (cause) {
+    rollbackPreparedOrderLot(deps, linkedLot);
+    await cancelAcceptedBrokerOrderAfterLocalFailure(deps, broker, result.value, {
+      division,
+      pdno: order.pdno,
+    });
+    throw new Error(
+      `자동감시 주문 로컬 기록 실패 — broker 주문 취소를 요청했습니다: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+    );
+  }
+
+  seedFirstEntryStrategyIfNeeded(deps, order);
 
   deps.logger.log({
     level: 'INFO',
@@ -290,7 +271,20 @@ export async function executeStrategyOrder(
   if (input.reconcileOnly === true) {
     const recoverableAck = await findRecoverableStrategyOrderAck(deps, broker, input, attemptedAt);
     if (recoverableAck !== null) {
-      recordStrategyOrder(deps, input, recoverableAck, attemptedAt, { reconciled: true });
+      let preparedLot: PreparedOrderLot | null = null;
+      try {
+        preparedLot = prepareStrategyOrderLot(deps, input, attemptedAt);
+        recordStrategyOrder(deps, input, recoverableAck, attemptedAt, preparedLot, {
+          reconciled: true,
+        });
+      } catch (cause) {
+        if (preparedLot !== null) rollbackPreparedOrderLot(deps, preparedLot);
+        await cancelAcceptedBrokerOrderAfterLocalFailure(deps, broker, recoverableAck, {
+          division: input.division,
+          pdno: input.pdno,
+        });
+        throw cause;
+      }
       return { brokerOrderId: recoverableAck.brokerOrderId, reconciled: true };
     }
     throw new StrategyOrderError(
@@ -318,13 +312,20 @@ export async function executeStrategyOrder(
     });
   }
 
-  const result = await broker.placeOrder({
-    side: input.side,
-    symbol: input.pdno,
-    qty: input.qty,
-    price: input.division === 'LIMIT' ? input.price : 0,
-    kind: input.division,
-  });
+  const preparedLot = prepareStrategyOrderLot(deps, input, attemptedAt);
+  let result: Awaited<ReturnType<BrokerPort['placeOrder']>>;
+  try {
+    result = await broker.placeOrder({
+      side: input.side,
+      symbol: input.pdno,
+      qty: input.qty,
+      price: input.division === 'LIMIT' ? input.price : 0,
+      kind: input.division,
+    });
+  } catch (cause) {
+    rollbackPreparedOrderLot(deps, preparedLot);
+    throw cause;
+  }
   if (result.isErr()) {
     if (isUnknownSubmitResult(result.error.kind)) {
       const recoverableAck = await findRecoverableStrategyOrderAck(
@@ -334,14 +335,41 @@ export async function executeStrategyOrder(
         attemptedAt,
       );
       if (recoverableAck !== null) {
-        recordStrategyOrder(deps, input, recoverableAck, attemptedAt, { reconciled: true });
+        try {
+          recordStrategyOrder(deps, input, recoverableAck, attemptedAt, preparedLot, {
+            reconciled: true,
+          });
+        } catch (cause) {
+          rollbackPreparedOrderLot(deps, preparedLot);
+          await cancelAcceptedBrokerOrderAfterLocalFailure(deps, broker, recoverableAck, {
+            division: input.division,
+            pdno: input.pdno,
+          });
+          throw cause;
+        }
         return { brokerOrderId: recoverableAck.brokerOrderId, reconciled: true };
       }
     }
+    rollbackPreparedOrderLot(deps, preparedLot);
     throw new StrategyOrderError(input, result.error, attemptedAt);
   }
 
-  recordStrategyOrder(deps, input, result.value, attemptedAt, { reconciled: false });
+  try {
+    recordStrategyOrder(deps, input, result.value, attemptedAt, preparedLot, {
+      reconciled: false,
+    });
+  } catch (cause) {
+    rollbackPreparedOrderLot(deps, preparedLot);
+    await cancelAcceptedBrokerOrderAfterLocalFailure(deps, broker, result.value, {
+      division: input.division,
+      pdno: input.pdno,
+    });
+    throw new Error(
+      `전략 주문 로컬 기록 실패 — broker 주문 취소를 요청했습니다: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+    );
+  }
   return { brokerOrderId: result.value.brokerOrderId, reconciled: false };
 }
 
@@ -397,6 +425,7 @@ async function findRecoverableStrategyOrderAck(
 
   return {
     brokerOrderId: match.brokerOrderId,
+    ...(match.brokerOrgNo !== undefined && { brokerOrgNo: match.brokerOrgNo }),
     acceptedAt: match.orderedAt,
   };
 }
@@ -450,42 +479,221 @@ function isUnknownSubmitResult(kind: BrokerErrorKind): boolean {
   return kind === 'NETWORK' || kind === 'UNKNOWN';
 }
 
+function prepareWatchOrderLot(
+  deps: WatchOrderExecutorDeps,
+  order: WatchOrder,
+  input: {
+    division: 'LIMIT' | 'MARKET';
+    limitPrice: number;
+    now: Date;
+    qty: number;
+  },
+): PreparedOrderLot {
+  if (order.side === 'BUY') {
+    return createRequiredPendingBuyLot(deps, {
+      accountId: order.accountId,
+      pdno: order.pdno,
+      placedAt: input.now,
+      price: input.division === 'LIMIT' ? input.limitPrice : 0,
+      qty: input.qty,
+      requestedNth: order.nth,
+      source: order.source,
+    });
+  }
+  return linkRequiredPendingSellLot(deps, {
+    accountId: order.accountId,
+    pdno: order.pdno,
+    requestedNth: order.nth,
+  });
+}
+
+function prepareStrategyOrderLot(
+  deps: WatchOrderExecutorDeps,
+  input: StrategyOrderInput,
+  now: Date,
+): PreparedOrderLot {
+  if (input.side === 'BUY') {
+    return createRequiredPendingBuyLot(deps, {
+      accountId: input.accountId,
+      pdno: input.pdno,
+      placedAt: now,
+      price: input.division === 'LIMIT' ? input.price : 0,
+      qty: input.qty,
+      requestedNth: input.nth,
+      source: 'STRATEGY',
+    });
+  }
+  return linkRequiredPendingSellLot(deps, {
+    accountId: input.accountId,
+    pdno: input.pdno,
+    requestedNth: input.nth,
+  });
+}
+
+function createRequiredPendingBuyLot(
+  deps: WatchOrderExecutorDeps,
+  input: {
+    accountId: number;
+    pdno: string;
+    placedAt: Date;
+    price: number;
+    qty: number;
+    requestedNth: number | null;
+    source: AutoOrderLocalSource;
+  },
+): PreparedOrderLot {
+  const linked = createPendingBuyLot(
+    {
+      logger: deps.logger,
+      lotsRepo: deps.lotsRepo,
+    },
+    input,
+  );
+  if (linked.lotId === null) {
+    throw new Error('자동매수 차수 예약 실패: 로컬 BUYING 차수를 생성하지 못했습니다.');
+  }
+  return { lotId: linked.lotId, nth: linked.nth, side: 'BUY' };
+}
+
+function linkRequiredPendingSellLot(
+  deps: WatchOrderExecutorDeps,
+  input: {
+    accountId: number;
+    pdno: string;
+    requestedNth: number | null;
+  },
+): PreparedOrderLot {
+  const linked = linkPendingSellLot(
+    {
+      logger: deps.logger,
+      lotsRepo: deps.lotsRepo,
+    },
+    input,
+  );
+  if (linked.lotId === null) {
+    throw new Error(
+      '자동매도 차수 예약 실패: 매도 가능한 OPEN 차수를 SELLING으로 전환하지 못했습니다.',
+    );
+  }
+  return { lotId: linked.lotId, nth: linked.nth, side: 'SELL' };
+}
+
+function rollbackPreparedOrderLot(deps: WatchOrderExecutorDeps, linkedLot: PreparedOrderLot): void {
+  try {
+    if (linkedLot.side === 'BUY') {
+      deps.db.delete(lots).where(eq(lots.id, linkedLot.lotId)).run();
+      return;
+    }
+    deps.db
+      .update(lots)
+      .set({ status: 'OPEN', soldAt: null, sellPrice: null })
+      .where(eq(lots.id, linkedLot.lotId))
+      .run();
+  } catch (cause) {
+    deps.logger.log({
+      level: 'WARN',
+      category: 'ORDER',
+      message: 'order.local-reservation.rollback-failed',
+      payload: {
+        lotId: linkedLot.lotId,
+        reason: cause instanceof Error ? cause.message : String(cause),
+        side: linkedLot.side,
+      },
+    });
+  }
+}
+
+async function cancelAcceptedBrokerOrderAfterLocalFailure(
+  deps: WatchOrderExecutorDeps,
+  broker: BrokerPort,
+  ack: OrderAck,
+  input: {
+    division: 'LIMIT' | 'MARKET';
+    pdno: string;
+  },
+): Promise<void> {
+  if (!ack.brokerOrgNo && broker.brokerId === 'KIS') {
+    deps.logger.log({
+      level: 'WARN',
+      category: 'ORDER',
+      message: 'order.local-failure.cancel-skipped-orgno-missing',
+      payload: { odno: ack.brokerOrderId, pdno: input.pdno },
+    });
+    return;
+  }
+  const cancelResult = await broker
+    .cancelOrder({
+      brokerOrderId: ack.brokerOrderId,
+      ...(ack.brokerOrgNo !== undefined && { brokerOrgNo: ack.brokerOrgNo }),
+      qtyAllOrder: true,
+      all: true,
+      kind: input.division,
+      symbol: input.pdno,
+    })
+    .catch((cause) =>
+      err(
+        makeBrokerError({
+          brokerId: broker.brokerId,
+          kind: 'UNKNOWN',
+          msg: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+      ),
+    );
+  if (cancelResult.isErr()) {
+    deps.logger.log({
+      level: 'WARN',
+      category: 'ORDER',
+      message: 'order.local-failure.cancel-failed',
+      payload: {
+        kind: cancelResult.error.kind,
+        msg: cancelResult.error.msg,
+        odno: ack.brokerOrderId,
+        pdno: input.pdno,
+      },
+    });
+  }
+}
+
+function seedFirstEntryStrategyIfNeeded(deps: WatchOrderExecutorDeps, order: WatchOrder): void {
+  if ((order.source !== 'PREBUY' && order.source !== 'CUSTOM') || order.side !== 'BUY') return;
+
+  const seeded = deps.strategyRepo.ensureSeededActive(order.accountId, order.pdno);
+  if (seeded.isErr()) {
+    deps.logger.log({
+      level: 'ERROR',
+      category: 'WATCH',
+      message: 'watch.first-entry.seed-failed',
+      payload: {
+        accountId: order.accountId,
+        pdno: order.pdno,
+        source: order.source,
+        reason: seeded.error.kind,
+      },
+    });
+    return;
+  }
+  deps.logger.log({
+    level: 'INFO',
+    category: 'WATCH',
+    message: 'watch.first-entry.seeded',
+    payload: {
+      accountId: order.accountId,
+      pdno: order.pdno,
+      source: order.source,
+      templateSource: seeded.value.source,
+    },
+  });
+}
+
 function recordStrategyOrder(
   deps: WatchOrderExecutorDeps,
   input: StrategyOrderInput,
   ack: OrderAck,
   now: Date,
+  linkedLot: PreparedOrderLot,
   opts: { reconciled: boolean },
 ): void {
-  const linkedLot =
-    input.side === 'BUY'
-      ? createPendingBuyLot(
-          {
-            logger: deps.logger,
-            lotsRepo: deps.lotsRepo,
-          },
-          {
-            accountId: input.accountId,
-            pdno: input.pdno,
-            placedAt: now,
-            price: input.division === 'LIMIT' ? input.price : 0,
-            qty: input.qty,
-            requestedNth: input.nth,
-            source: 'STRATEGY',
-          },
-        )
-      : linkPendingSellLot(
-          {
-            logger: deps.logger,
-            lotsRepo: deps.lotsRepo,
-          },
-          {
-            accountId: input.accountId,
-            pdno: input.pdno,
-            requestedNth: input.nth,
-          },
-        );
-
   deps.db
     .insert(orders)
     .values({

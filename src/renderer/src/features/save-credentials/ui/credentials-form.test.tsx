@@ -36,6 +36,9 @@ describe('CredentialsForm', () => {
     fireEvent.change(screen.getByRole('textbox', { name: /상품코드/ }), {
       target: { value: '0199' },
     });
+    fireEvent.change(screen.getByRole('textbox', { name: 'HTS ID' }), {
+      target: { value: '  hts-user  ' },
+    });
 
     fireEvent.click(screen.getByRole('button', { name: '실전 자격증명 저장' }));
     const confirmDialog = screen.getByRole('dialog', { name: '실전(PROD) 자격증명 저장' });
@@ -55,6 +58,7 @@ describe('CredentialsForm', () => {
         appSecret: 'app-secret',
         accountNo8: '12345678',
         accountProdCd: '01',
+        htsId: 'hts-user',
       }),
     );
   });

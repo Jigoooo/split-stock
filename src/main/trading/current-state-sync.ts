@@ -1,3 +1,4 @@
+import { realTimer, type Timer } from '../brokers/core/types';
 import type { EventLogger } from '../logging/event-logger';
 import type { BalanceSync } from './balance-sync';
 import type { ManualOrderReconciler } from './manual-order-reconciler';
@@ -16,6 +17,21 @@ export interface CurrentStateSyncOptions {
   logger: EventLogger;
   manualOrderReconciler: Pick<ManualOrderReconciler, 'poll'>;
   onRefreshed?: (() => void) | undefined;
+  timer?: Timer;
+  brokerEventDebounceMs?: number;
+}
+
+export type CurrentStateSyncReason =
+  | 'startup'
+  | 'account-switch'
+  | 'env-switch'
+  | 'trade-event'
+  | 'manual';
+
+export interface CurrentStateSyncTarget {
+  accountId?: number;
+  brokerOrderId?: string;
+  symbol?: string;
 }
 
 export function buildLotSyncMismatches(input: {
@@ -57,23 +73,29 @@ export function buildLotSyncMismatches(input: {
  */
 export class CurrentStateSync {
   private running = false;
+  private readonly timer: Timer;
+  private readonly brokerEventDebounceMs: number;
+  private debounceHandle: { clear: () => void } | null = null;
+  private pendingBrokerTarget: CurrentStateSyncTarget | null = null;
 
-  constructor(private readonly opts: CurrentStateSyncOptions) {}
+  constructor(private readonly opts: CurrentStateSyncOptions) {
+    this.timer = opts.timer ?? realTimer;
+    this.brokerEventDebounceMs = opts.brokerEventDebounceMs ?? 500;
+  }
 
-  trigger(reason: 'startup' | 'account-switch' | 'env-switch' | 'trade-event' | 'manual'): {
-    started: boolean;
-  } {
+  trigger(reason: CurrentStateSyncReason, target?: CurrentStateSyncTarget): { started: boolean } {
     if (this.running) {
+      if (target) this.pendingBrokerTarget = mergeSyncTarget(this.pendingBrokerTarget, target);
       this.opts.logger.log({
         level: 'INFO',
         category: 'BALANCE',
         message: 'current-state-sync.skip-already-running',
-        payload: { reason },
+        payload: { reason, queued: target !== undefined },
       });
       return { started: false };
     }
 
-    void this.refresh(reason).catch((error: unknown) => {
+    void this.refresh(reason, target).catch((error: unknown) => {
       this.opts.logger.log({
         level: 'ERROR',
         category: 'BALANCE',
@@ -87,9 +109,18 @@ export class CurrentStateSync {
     return { started: true };
   }
 
-  async refresh(
-    reason: 'startup' | 'account-switch' | 'env-switch' | 'trade-event' | 'manual',
-  ): Promise<void> {
+  enqueueBrokerEvent(target: CurrentStateSyncTarget): { queued: boolean } {
+    this.pendingBrokerTarget = mergeSyncTarget(this.pendingBrokerTarget, target);
+    if (this.debounceHandle) return { queued: true };
+    this.debounceHandle = this.timer.setTimeout(() => {
+      this.debounceHandle = null;
+      const next = this.consumePendingTarget();
+      if (next) this.trigger('trade-event', next);
+    }, this.brokerEventDebounceMs);
+    return { queued: true };
+  }
+
+  async refresh(reason: CurrentStateSyncReason, target?: CurrentStateSyncTarget): Promise<void> {
     if (this.running) return;
     this.running = true;
     const startedAt = Date.now();
@@ -98,16 +129,17 @@ export class CurrentStateSync {
         level: 'INFO',
         category: 'BALANCE',
         message: 'current-state-sync.start',
-        payload: { reason },
+        payload: { reason, target },
       });
       const manualStartedAt = Date.now();
-      await this.opts.manualOrderReconciler.poll();
+      await this.opts.manualOrderReconciler.poll(target);
       this.opts.logger.log({
         level: 'INFO',
         category: 'BALANCE',
         message: 'current-state-sync.manual-orders.done',
         payload: {
           reason,
+          target,
           durationMs: Date.now() - manualStartedAt,
         },
       });
@@ -119,6 +151,7 @@ export class CurrentStateSync {
         message: 'current-state-sync.balance.done',
         payload: {
           reason,
+          target,
           durationMs: Date.now() - balanceStartedAt,
         },
       });
@@ -128,6 +161,7 @@ export class CurrentStateSync {
         message: 'current-state-sync.refreshed',
         payload: {
           reason,
+          target,
           durationMs: Date.now() - startedAt,
         },
       });
@@ -139,6 +173,7 @@ export class CurrentStateSync {
         message: 'current-state-sync.failed',
         payload: {
           reason,
+          target,
           durationMs: Date.now() - startedAt,
           error: error instanceof Error ? error.message : String(error),
         },
@@ -146,6 +181,42 @@ export class CurrentStateSync {
       throw error;
     } finally {
       this.running = false;
+      const next = this.consumePendingTarget();
+      if (next) {
+        void this.refresh('trade-event', next).catch((error: unknown) => {
+          this.opts.logger.log({
+            level: 'ERROR',
+            category: 'BALANCE',
+            message: 'current-state-sync.follow-up-failed',
+            payload: {
+              target: next,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+        });
+      }
     }
   }
+
+  private consumePendingTarget(): CurrentStateSyncTarget | null {
+    const target = this.pendingBrokerTarget;
+    this.pendingBrokerTarget = null;
+    return target;
+  }
+}
+
+function mergeSyncTarget(
+  prev: CurrentStateSyncTarget | null,
+  next: CurrentStateSyncTarget,
+): CurrentStateSyncTarget {
+  if (!prev) return next;
+  return {
+    ...(prev.accountId === next.accountId && prev.accountId !== undefined
+      ? { accountId: prev.accountId }
+      : {}),
+    ...(prev.brokerOrderId === next.brokerOrderId && prev.brokerOrderId !== undefined
+      ? { brokerOrderId: prev.brokerOrderId }
+      : {}),
+    ...(prev.symbol === next.symbol && prev.symbol !== undefined ? { symbol: prev.symbol } : {}),
+  };
 }

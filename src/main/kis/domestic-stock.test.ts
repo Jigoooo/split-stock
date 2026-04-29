@@ -258,6 +258,7 @@ describe('inquireDailyCcld', () => {
       output1: [
         {
           odno: '0001',
+          ord_orgno: '01790',
           pdno: '005930',
           prdt_name: '삼성전자',
           sll_buy_dvsn_cd: '02',
@@ -285,6 +286,7 @@ describe('inquireDailyCcld', () => {
       expect(r.value).toEqual([
         {
           odno: '0001',
+          orgNo: '01790',
           pdno: '005930',
           name: '삼성전자',
           side: 'BUY',

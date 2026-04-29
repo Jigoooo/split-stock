@@ -43,6 +43,7 @@ export const AddAccountPage = (): ReactElement => {
     ACCOUNT_PROD_CODE_OPTIONS[0]?.value ?? '01',
   );
   const [kiwoomAccountNo, setKiwoomAccountNo] = useState('');
+  const [htsId, setHtsId] = useState('');
   const [pendingProdValue, setPendingProdValue] = useState<
     (Credentials & { displayName?: string }) | null
   >(null);
@@ -74,6 +75,7 @@ export const AddAccountPage = (): ReactElement => {
       appSecret,
       accountNo8: acntNo8,
       accountProdCd: acntProdCd,
+      ...(broker === 'KIS' && htsId.trim().length > 0 ? { htsId: htsId.trim() } : {}),
       ...(trimmedName.length > 0 ? { displayName: trimmedName } : {}),
     };
     if (value.env === 'PROD') {
@@ -299,6 +301,18 @@ export const AddAccountPage = (): ReactElement => {
                       </span>
                     </Row>
                   )}
+
+                  <Row label="HTS ID" inputId="add-account-hts-id">
+                    <TextInput
+                      id="add-account-hts-id"
+                      value={htsId}
+                      onChange={(e) => setHtsId(e.target.value.trim().slice(0, 32))}
+                      autoComplete="off"
+                      spellCheck={false}
+                      dense
+                      style={{ width: '100%' }}
+                    />
+                  </Row>
                 </>
               ) : (
                 <Row label="계좌번호 (10자리)" inputId="add-account-kiwoom-no">

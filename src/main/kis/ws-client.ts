@@ -1,3 +1,4 @@
+import { createDecipheriv } from 'node:crypto';
 import type { AppEnv, CniNotice, KisError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import { z } from 'zod';
@@ -170,9 +171,11 @@ export class KisWsClient {
   private readonly reconnectBaseMs: number;
   private readonly reconnectMaxMs: number;
   private readonly onMessage?: (msg: RealtimeMessage) => void;
+  private readonly onCniNotice?: (notice: CniNotice) => void;
 
   private approvalKey: string | null = null;
   private readonly subscriptions = new Map<string, SubscriptionKey>();
+  private readonly cniCryptoByTr = new Map<string, CniCryptoParams & { htsId: string }>();
   private phase: WsPhase = 'idle';
   private current: ConnectedState | null = null;
   private reconnectAttempt = 0;
@@ -180,6 +183,7 @@ export class KisWsClient {
   private seenKeys = new Set<string>();
   private readonly seenLimit = 2048;
   private seenOrder: string[] = [];
+  private cniSeq = 0;
 
   constructor(opts: KisWsClientOptions) {
     this.env = opts.env;
@@ -192,6 +196,7 @@ export class KisWsClient {
     this.reconnectBaseMs = opts.reconnectBaseMs ?? 1_000;
     this.reconnectMaxMs = opts.reconnectMaxMs ?? 30_000;
     if (opts.onMessage) this.onMessage = opts.onMessage;
+    if (opts.onCniNotice) this.onCniNotice = opts.onCniNotice;
   }
 
   getPhase(): WsPhase {
@@ -364,20 +369,17 @@ export class KisWsClient {
   private handleFrame(raw: string): void {
     // 제어 응답 프레임은 보통 JSON. 체결/호가 실시간 프레임은 pipe-delimited 문자열.
     if (raw.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(raw) as { header?: { tr_id?: string } };
-        if (parsed.header?.tr_id === 'PINGPONG') {
-          return; // heartbeat ack — 로깅 생략
-        }
-      } catch {
-        // fall through: treat as non-JSON frame
-      }
+      this.handleControlFrame(raw);
       return;
     }
     const parts = raw.split('|');
     if (parts.length < 4) return;
-    const [, trId, , payload] = parts;
+    const [encryptFlag, trId, , payload] = parts;
     if (!trId || !payload) return;
+    if (trId === 'H0STCNI0' || trId === 'H0STCNI9') {
+      this.handleCniPayload(trId, payload, encryptFlag === '1' || encryptFlag === 'Y');
+      return;
+    }
     const firstRecord = payload.split('^');
     const code = firstRecord[0] ?? '';
     const seqRaw = firstRecord[1] ?? '';
@@ -395,4 +397,91 @@ export class KisWsClient {
       this.onMessage({ tr: trId, code, seq, raw });
     }
   }
+
+  private handleControlFrame(raw: string): void {
+    try {
+      const parsed = JSON.parse(raw) as {
+        header?: { tr_id?: string; tr_key?: string; encrypt?: string };
+        body?: { rt_cd?: string; output?: { iv?: string; key?: string } };
+      };
+      const trId = parsed.header?.tr_id;
+      if (trId === 'PINGPONG') return; // heartbeat ack — 로깅 생략
+      if (
+        (trId === 'H0STCNI0' || trId === 'H0STCNI9') &&
+        parsed.body?.rt_cd === '0' &&
+        parsed.body.output?.iv &&
+        parsed.body.output.key
+      ) {
+        this.cniCryptoByTr.set(trId, {
+          iv: parsed.body.output.iv,
+          key: parsed.body.output.key,
+          htsId: parsed.header?.tr_key ?? '',
+        });
+      }
+    } catch (cause) {
+      this.logger.log({
+        level: 'WARN',
+        category: 'WS',
+        message: 'ws.control.parse_failed',
+        payload: { cause: cause instanceof Error ? cause.message : String(cause) },
+      });
+    }
+  }
+
+  private handleCniPayload(tr: 'H0STCNI0' | 'H0STCNI9', payload: string, encrypted: boolean): void {
+    const crypto = this.cniCryptoByTr.get(tr);
+    let decrypted = payload;
+    if (encrypted || crypto) {
+      if (!crypto) {
+        this.logger.log({
+          level: 'WARN',
+          category: 'WS',
+          message: 'ws.cni.crypto_missing',
+          payload: { tr },
+        });
+        return;
+      }
+      try {
+        decrypted = decryptAes256CbcBase64(crypto.key, crypto.iv, payload);
+      } catch (cause) {
+        this.logger.log({
+          level: 'WARN',
+          category: 'WS',
+          message: 'ws.cni.decrypt_failed',
+          payload: { tr, cause: cause instanceof Error ? cause.message : String(cause) },
+        });
+        return;
+      }
+    }
+
+    const dedupKey = `${tr}:${decrypted}`;
+    if (this.seenKeys.has(dedupKey)) return;
+    this.seenKeys.add(dedupKey);
+    this.seenOrder.push(dedupKey);
+    if (this.seenOrder.length > this.seenLimit) {
+      const evicted = this.seenOrder.shift();
+      if (evicted) this.seenKeys.delete(evicted);
+    }
+
+    this.cniSeq += 1;
+    this.onCniNotice?.({
+      tr,
+      htsId: crypto?.htsId ?? '',
+      seq: this.cniSeq,
+      raw: decrypted,
+    });
+  }
+}
+
+export function decryptAes256CbcBase64(key: string, iv: string, cipherText: string): string {
+  const decipher = createDecipheriv(
+    'aes-256-cbc',
+    Buffer.from(key, 'utf8'),
+    Buffer.from(iv, 'utf8'),
+  );
+  const decrypted = Buffer.concat([
+    decipher.update(Buffer.from(cipherText, 'base64')),
+    decipher.final(),
+  ]);
+  return decrypted.toString('utf8');
 }

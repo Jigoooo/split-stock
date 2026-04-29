@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { FakeTimer } from '../testing/fake-timer';
 import { buildLotSyncMismatches, CurrentStateSync } from './current-state-sync';
 
 describe('buildLotSyncMismatches', () => {
@@ -71,6 +72,46 @@ describe('CurrentStateSync', () => {
 
     await sync.refresh('startup');
 
+    expect(callOrder).toEqual(['reconciler', 'balance']);
+  });
+
+  it('broker 이벤트를 debounce 한 뒤 대상 주문부터 reconciler에 전달한다', async () => {
+    const timer = new FakeTimer();
+    const pollTargets: unknown[] = [];
+    const callOrder: string[] = [];
+    const sync = new CurrentStateSync({
+      manualOrderReconciler: {
+        poll: async (target) => {
+          pollTargets.push(target);
+          callOrder.push('reconciler');
+        },
+      },
+      balanceSync: {
+        refresh: async () => {
+          callOrder.push('balance');
+        },
+      },
+      logger: { log: vi.fn() } as never,
+      timer,
+      brokerEventDebounceMs: 100,
+    });
+
+    expect(sync.enqueueBrokerEvent({ accountId: 1, brokerOrderId: 'A', symbol: '005930' })).toEqual(
+      { queued: true },
+    );
+    expect(sync.enqueueBrokerEvent({ accountId: 1, brokerOrderId: 'B', symbol: '005930' })).toEqual(
+      { queued: true },
+    );
+
+    timer.advance(99);
+    await Promise.resolve();
+    expect(callOrder).toEqual([]);
+
+    timer.advance(1);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(pollTargets).toEqual([{ accountId: 1, symbol: '005930' }]);
     expect(callOrder).toEqual(['reconciler', 'balance']);
   });
 });

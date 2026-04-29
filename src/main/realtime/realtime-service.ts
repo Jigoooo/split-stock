@@ -1,6 +1,7 @@
 import type { AppEnv } from '@shared/contracts';
 import type { KisHttpClient } from '../kis/http-client';
 import {
+  type CniNotice,
   KisWsClient,
   type RealtimeTr,
   realTimer,
@@ -92,6 +93,7 @@ export class RealtimeService {
   private client: KisWsClient | null = null;
   private pool: WsPoolManager | null = null;
   private started = false;
+  private readonly cniHandlers = new Map<string, Set<(notice: CniNotice) => void>>();
 
   constructor(deps: RealtimeServiceDeps) {
     this.deps = deps;
@@ -110,6 +112,7 @@ export class RealtimeService {
         maxSubscriptions: this.deps.maxSubscriptions,
       }),
       onMessage: (msg) => this.dispatchFrame(msg),
+      onCniNotice: (notice) => this.dispatchCniNotice(notice),
     });
     const r = await client.start(appKey, appSecret);
     if (r.isErr()) {
@@ -135,6 +138,10 @@ export class RealtimeService {
     this.started = true;
     // 기존 watch 복원 — 재시작 시 우선순위 기반 재배치
     for (const [, entry] of this.watches) this.republishToPool(entry);
+    for (const key of this.cniHandlers.keys()) {
+      const subscription = parseCniSubscriptionKey(key);
+      if (subscription) this.subscribeRaw(subscription.htsId, subscription.tr);
+    }
     this.deps.logger.log({ level: 'INFO', category: 'WS', message: 'realtime.started' });
     return { ok: true };
   }
@@ -222,6 +229,36 @@ export class RealtimeService {
     return this.pool.getCapacity(this.getAccountIdOrZero());
   }
 
+  subscribeCniNotices(
+    htsId: string,
+    handler: (notice: CniNotice) => void,
+  ): { ok: true; unsubscribe: () => void } | { ok: false; reason: string } {
+    const tr: RealtimeTr = this.deps.env === 'PROD' ? 'H0STCNI0' : 'H0STCNI9';
+    const key = `${tr}:${htsId}`;
+    let handlers = this.cniHandlers.get(key);
+    if (!handlers) {
+      handlers = new Set();
+      this.cniHandlers.set(key, handlers);
+      const subscribed = this.subscribeRaw(htsId, tr);
+      if (!subscribed.ok) {
+        this.cniHandlers.delete(key);
+        return { ok: false, reason: subscribed.reason };
+      }
+    }
+    handlers.add(handler);
+    const handlersRef = handlers;
+    return {
+      ok: true,
+      unsubscribe: () => {
+        handlersRef.delete(handler);
+        if (handlersRef.size === 0) {
+          this.cniHandlers.delete(key);
+          this.unsubscribeRaw(htsId, tr);
+        }
+      },
+    };
+  }
+
   /** [BC] tick/orderbook refcount 스냅샷. */
   getWatched(): Array<{ pdno: string; tick: number; orderbook: number }> {
     return Array.from(this.watches.values()).map((e) => ({ ...e }));
@@ -268,8 +305,8 @@ export class RealtimeService {
     };
   }
 
-  private subscribeRaw(pdno: string, tr: RealtimeTr): void {
-    if (!this.client) return;
+  private subscribeRaw(pdno: string, tr: RealtimeTr): { ok: true } | { ok: false; reason: string } {
+    if (!this.client) return { ok: true };
     const key: SubscriptionKey = { tr, code: pdno };
     const r = this.client.subscribe(key);
     if (r.isErr()) {
@@ -279,7 +316,9 @@ export class RealtimeService {
         message: 'realtime.subscribe_failed',
         payload: { tr, pdno, kind: r.error.kind, msg: r.error.msg },
       });
+      return { ok: false, reason: r.error.msg };
     }
+    return { ok: true };
   }
 
   private unsubscribeRaw(pdno: string, tr: RealtimeTr): void {
@@ -294,6 +333,13 @@ export class RealtimeService {
       for (const o of parseH0STASP0(msg.raw)) this.deps.bus.emitOrderbook(o);
     }
   }
+
+  private dispatchCniNotice(notice: CniNotice): void {
+    const key = `${notice.tr}:${notice.htsId}`;
+    const handlers = this.cniHandlers.get(key);
+    if (!handlers) return;
+    for (const handler of handlers) handler(notice);
+  }
 }
 
 function createNoopRestAdapter(): RestFallbackAdapter {
@@ -301,6 +347,14 @@ function createNoopRestAdapter(): RestFallbackAdapter {
     subscribe: () => undefined,
     unsubscribe: () => undefined,
   };
+}
+
+function parseCniSubscriptionKey(key: string): { tr: RealtimeTr; htsId: string } | null {
+  const separator = key.indexOf(':');
+  if (separator <= 0) return null;
+  const tr = key.slice(0, separator);
+  if (tr !== 'H0STCNI0' && tr !== 'H0STCNI9') return null;
+  return { tr, htsId: key.slice(separator + 1) };
 }
 
 // Re-export types used by callers

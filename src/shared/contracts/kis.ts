@@ -65,6 +65,7 @@ export type KisBalanceResponse = z.infer<typeof KisBalanceResponseSchema>;
  */
 export const KisDailyCcldItemSchema = z.object({
   odno: z.string(),
+  ord_orgno: z.string().optional(),
   pdno: z.string(),
   prdt_name: z.string().optional(),
   sll_buy_dvsn_cd: z.string().optional(),

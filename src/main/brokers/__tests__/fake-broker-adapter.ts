@@ -19,6 +19,8 @@ import type {
 import { makeBrokerError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import type {
+  BrokerAccountRealtimeEvent,
+  BrokerAccountRealtimeHandler,
   CancelOrderInput,
   ExecNoticeHandler,
   GetDailyOhlcvParams,
@@ -254,6 +256,7 @@ export class FakeRealtimePort implements RealtimePort {
     handler: RealtimeHandler;
   }> = [];
   private readonly execHandlers: ExecNoticeHandler[] = [];
+  private readonly accountHandlers: BrokerAccountRealtimeHandler[] = [];
   private phase: RealtimeStatus['phase'] = 'idle';
 
   async start(): Promise<Result<void, BrokerError>> {
@@ -290,8 +293,21 @@ export class FakeRealtimePort implements RealtimePort {
     });
   }
 
+  subscribeAccountEvents(handler: BrokerAccountRealtimeHandler): Result<Subscription, BrokerError> {
+    this.accountHandlers.push(handler);
+    return ok({
+      unsubscribe: () => {
+        const idx = this.accountHandlers.indexOf(handler);
+        if (idx >= 0) this.accountHandlers.splice(idx, 1);
+      },
+    });
+  }
+
   getStatus(): RealtimeStatus {
-    return { phase: this.phase, subscriptions: this.subs.length };
+    return {
+      phase: this.phase,
+      subscriptions: this.subs.length + this.execHandlers.length + this.accountHandlers.length,
+    };
   }
 
   /** 테스트가 이벤트를 fire 할 때 사용. */
@@ -313,5 +329,9 @@ export class FakeRealtimePort implements RealtimePort {
 
   emitExec(event: ExecNoticeEvent): void {
     for (const handler of this.execHandlers) handler(event);
+  }
+
+  emitAccount(event: BrokerAccountRealtimeEvent): void {
+    for (const handler of this.accountHandlers) handler(event);
   }
 }

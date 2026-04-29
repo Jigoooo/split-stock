@@ -1,14 +1,21 @@
 import type { OrderAck } from '@shared/contracts';
-import { KisOrderAmendRequestSchema, KisOrderRequestSchema } from '@shared/contracts';
+import {
+  KisOrderAmendRequestSchema,
+  KisOrderRequestSchema,
+  makeBrokerError,
+} from '@shared/contracts';
 import { correctLimitPrice } from '@shared/market-rules';
 import { TRPCError } from '@trpc/server';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { err } from 'neverthrow';
 import { z } from 'zod';
 import type { BrokerPort } from '../../brokers/ports/broker-port';
 import type { Db } from '../../db/client';
 import { lots, orders, trades } from '../../db/schema';
 import { readPendingCancelConfig, readPriceCorrectionConfig } from '../../db/settings-repo';
-import { createPendingBuyLot, linkHighestPendingSellLot } from '../../trading/order-lot-link';
+import type { EventLogger } from '../../logging/event-logger';
+import type { LotsRepo } from '../../trading/lots-repo';
+import { createPendingBuyLot } from '../../trading/order-lot-link';
 import { reconcileCancelledSellLot } from '../../trading/partial-sell-lot-reconciliation';
 import { requireAccountId, resolveAccountId } from '../router-helpers';
 import { authedProcedure, router } from '../trpc-core';
@@ -103,6 +110,147 @@ function buildActiveOrderViews<
     .filter((row) => row.remainingQty > 0);
 }
 
+function reserveManualBuyLot(
+  ctx: { logger: EventLogger; lotsRepo: LotsRepo },
+  input: {
+    accountId: number;
+    pdno: string;
+    placedAt: Date;
+    price: number;
+    qty: number;
+  },
+): { lotId: number; nth: number } {
+  const linked = createPendingBuyLot(
+    {
+      logger: ctx.logger,
+      lotsRepo: ctx.lotsRepo,
+    },
+    {
+      accountId: input.accountId,
+      pdno: input.pdno,
+      placedAt: input.placedAt,
+      price: input.price,
+      qty: input.qty,
+      source: 'MANUAL',
+    },
+  );
+  if (linked.lotId === null) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: '매수 차수 예약 실패: 로컬 BUYING 차수를 생성하지 못했습니다.',
+    });
+  }
+  return { lotId: linked.lotId, nth: linked.nth };
+}
+
+function reserveManualSellLot(
+  ctx: { db: Db; lotsRepo: Pick<LotsRepo, 'listRows'> },
+  input: { accountId: number; pdno: string; qty: number },
+): { lotId: number; nth: number } {
+  const rows = ctx.lotsRepo.listRows(input.accountId, input.pdno);
+  if (rows.isErr()) {
+    throw new TRPCError({
+      code: 'INTERNAL_SERVER_ERROR',
+      message: '매도 차수 조회 실패',
+    });
+  }
+  const target = rows.value.filter((lot) => lot.status === 'OPEN').sort((a, b) => b.nth - a.nth)[0];
+  if (!target || input.qty > target.qty) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message:
+        '매도 가능한 단일 OPEN 차수가 없습니다. 여러 차수 합산 매도는 아직 지원하지 않습니다.',
+    });
+  }
+  const reserved = ctx.db
+    .update(lots)
+    .set({ status: 'SELLING' })
+    .where(and(eq(lots.id, target.id), eq(lots.status, 'OPEN')))
+    .run();
+  if (reserved.changes === 0) {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message: '선택된 차수가 이미 매도 진행 중입니다. 최신 상태를 다시 확인해주세요.',
+    });
+  }
+  return { lotId: target.id, nth: target.nth };
+}
+
+function rollbackManualOrderLot(
+  ctx: { db: Db; logger: Pick<EventLogger, 'log'>; lotsRepo: Pick<LotsRepo, 'updateLotStatus'> },
+  linkedLot: { lotId: number; side: 'BUY' | 'SELL' },
+): void {
+  try {
+    if (linkedLot.side === 'SELL') {
+      ctx.lotsRepo.updateLotStatus({ lotId: linkedLot.lotId, status: 'OPEN' });
+      return;
+    }
+    ctx.db.delete(lots).where(eq(lots.id, linkedLot.lotId)).run();
+  } catch (cause) {
+    ctx.logger.log({
+      level: 'WARN',
+      category: 'ORDER',
+      message: 'order.local-reservation.rollback-failed',
+      payload: {
+        lotId: linkedLot.lotId,
+        reason: cause instanceof Error ? cause.message : String(cause),
+        side: linkedLot.side,
+      },
+    });
+  }
+}
+
+async function cancelAcceptedOrderAfterLocalFailure(
+  broker: BrokerPort,
+  ack: { odno: string; orgNo?: string },
+  opts: {
+    pdno: string;
+    division: 'LIMIT' | 'MARKET';
+    logger: Pick<EventLogger, 'log'>;
+  },
+): Promise<void> {
+  if (!ack.orgNo && broker.brokerId === 'KIS') {
+    opts.logger.log({
+      level: 'WARN',
+      category: 'ORDER',
+      message: 'order.local-failure.cancel-skipped-orgno-missing',
+      payload: { odno: ack.odno, pdno: opts.pdno },
+    });
+    return;
+  }
+  const cancelR = await brokerCancel(broker, {
+    orgOrgNo: ack.orgNo ?? '',
+    orgOdno: ack.odno,
+    qty: 0,
+    price: 0,
+    division: opts.division,
+    qtyAllOrder: true,
+    symbol: opts.pdno,
+  }).catch((cause) =>
+    err(
+      makeBrokerError({
+        brokerId: broker.brokerId,
+        kind: 'UNKNOWN',
+        msg: cause instanceof Error ? cause.message : String(cause),
+        cause,
+      }),
+    ),
+  );
+  if (cancelR.isErr()) {
+    opts.logger.log({
+      level: 'WARN',
+      category: 'ORDER',
+      message: 'order.local-failure.cancel-failed',
+      payload: {
+        odno: ack.odno,
+        pdno: opts.pdno,
+        kind: cancelR.error.kind,
+        msg: cancelR.error.msg,
+      },
+    });
+  }
+}
+
 export const orderRouter = router({
   /**
    * 즉시 매수/매도 주문 — 매직스플릿의 수동(직접) 주문 경로.
@@ -141,61 +289,62 @@ export const orderRouter = router({
               side: input.side,
               strategy: input.side === 'BUY' ? priceCorrectionCfg.buy : priceCorrectionCfg.sell,
             })
-          : input.price;
+          : 0;
       const correctedInput = { ...input, price: correctedPrice };
 
-      const placeR = await broker.placeOrder({
-        side: correctedInput.side,
-        symbol: correctedInput.pdno,
-        qty: correctedInput.qty,
-        price: correctedInput.price,
-        kind: correctedInput.division,
-      });
+      const now = new Date();
+      const linkedLot =
+        input.side === 'BUY'
+          ? {
+              ...reserveManualBuyLot(ctx, {
+                accountId,
+                pdno: input.pdno,
+                placedAt: now,
+                price: correctedPrice,
+                qty: input.qty,
+              }),
+              side: 'BUY' as const,
+            }
+          : {
+              ...reserveManualSellLot(ctx, {
+                accountId,
+                pdno: input.pdno,
+                qty: input.qty,
+              }),
+              side: 'SELL' as const,
+            };
+
+      let placeR: Awaited<ReturnType<BrokerPort['placeOrder']>>;
+      try {
+        placeR = await broker.placeOrder({
+          side: correctedInput.side,
+          symbol: correctedInput.pdno,
+          qty: correctedInput.qty,
+          price: correctedInput.price,
+          kind: correctedInput.division,
+        });
+      } catch (cause) {
+        rollbackManualOrderLot(ctx, linkedLot);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `주문 실패: ${cause instanceof Error ? cause.message : String(cause)}`,
+        });
+      }
       if (placeR.isErr()) {
+        rollbackManualOrderLot(ctx, linkedLot);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: `주문 실패: ${placeR.error.kind} - ${placeR.error.msg}`,
         });
       }
       const result = { value: toLegacyAck(placeR.value) };
-      // PENDING 기록 — orgNo는 정정/취소 시 필수이므로 KIS 응답값을 저장.
-      // lot 링크 + orders insert 를 단일 트랜잭션으로 묶어 부분 실패 시 dangling state
-      // (KIS 에는 주문이 있지만 lot/orders 가 inconsistent) 방지.
-      const now = new Date();
-      const linkedLot = ctx.db.transaction((tx) => {
-        void tx;
-        const lot =
-          input.side === 'BUY'
-            ? createPendingBuyLot(
-                {
-                  logger: ctx.logger,
-                  lotsRepo: ctx.lotsRepo,
-                },
-                {
-                  accountId,
-                  pdno: input.pdno,
-                  placedAt: now,
-                  price: input.division === 'LIMIT' ? correctedPrice : 0,
-                  qty: input.qty,
-                  source: 'MANUAL',
-                },
-              )
-            : linkHighestPendingSellLot(
-                {
-                  logger: ctx.logger,
-                  lotsRepo: ctx.lotsRepo,
-                },
-                {
-                  accountId,
-                  pdno: input.pdno,
-                  qty: input.qty,
-                },
-              );
+
+      try {
         ctx.db
           .insert(orders)
           .values({
             accountId,
-            lotId: lot.lotId,
+            lotId: linkedLot.lotId,
             odno: result.value.odno,
             orgNo: result.value.orgNo ?? null,
             pdno: input.pdno,
@@ -207,8 +356,20 @@ export const orderRouter = router({
             placedAt: now,
           })
           .run();
-        return lot;
-      });
+      } catch (cause) {
+        rollbackManualOrderLot(ctx, linkedLot);
+        await cancelAcceptedOrderAfterLocalFailure(broker, result.value, {
+          pdno: input.pdno,
+          division: input.division,
+          logger: ctx.logger,
+        });
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `주문 로컬 기록 실패 — broker 주문 취소를 요청했습니다: ${
+            cause instanceof Error ? cause.message : String(cause)
+          }`,
+        });
+      }
 
       // NM-001: 미체결 자동취소 감시 등록.
       // - 설정 enabled=false이면 스킵.
@@ -234,9 +395,13 @@ export const orderRouter = router({
         });
       }
 
-      // B4: 즉시주문 직후 잔고 즉시 갱신 트리거 — 30초 폴링 사이클 stale 윈도우에서
-      // 가용 현금 초과 매수가 일어나는 것을 줄임. 응답 대기는 안 함 (fire-and-forget).
-      void ctx.balanceSync?.refresh();
+      // 즉시주문 직후 주문 상태 보정 → 잔고 갱신 순서로 수렴시킨다.
+      // 체결통보가 없는 환경에서도 stale 윈도우를 줄이되, broker REST 조회가 source of truth다.
+      void ctx.currentStateSync?.trigger('trade-event', {
+        accountId,
+        brokerOrderId: result.value.odno,
+        symbol: input.pdno,
+      });
 
       // B1: 보정 적용 시 사용자에게 명시적 안내가 가도록 응답에 priceCorrection 메타 포함.
       const priceCorrection =

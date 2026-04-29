@@ -79,6 +79,7 @@ export const realtimeRouter = router({
         message: `실시간 시작 실패: ${r.reason ?? ''}`,
       });
     }
+    ctx.syncAccountRealtimeSubscription();
     return { ok: true as const };
   }),
 

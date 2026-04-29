@@ -309,6 +309,8 @@ export class KiwoomAdapter implements BrokerPort {
   }
 
   dispose(): void {
+    this.realtimeAdapter?.stop();
+    this.realtimeAdapter = null;
     this.cachedToken = null;
   }
 

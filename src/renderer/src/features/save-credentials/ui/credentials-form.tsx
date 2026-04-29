@@ -24,6 +24,7 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
   const [showSecret, setShowSecret] = useState(false);
   const [accountNo8, setAccountNo8] = useState('');
   const [accountProdCd, setAccountProdCd] = useState<AccountProdCode>('01');
+  const [htsId, setHtsId] = useState('');
   const [pendingProdValue, setPendingProdValue] = useState<Credentials | null>(null);
   const canSubmit =
     appKey.length > 0 && appSecret.length > 0 && accountNo8.length === 8 && !isPending;
@@ -63,6 +64,7 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
       appSecret,
       accountNo8,
       accountProdCd,
+      ...(htsId.trim().length > 0 ? { htsId: htsId.trim() } : {}),
     };
     if (value.env === 'PROD') {
       setPendingProdValue(value);
@@ -179,6 +181,18 @@ export const CredentialsForm = ({ onSaved }: CredentialsFormProps = {}): ReactEl
             dense
             className="num"
             style={{ width: '8rem' }}
+          />
+        </Row>
+
+        <Row label="HTS ID" inputId="credentials-hts-id">
+          <TextInput
+            id="credentials-hts-id"
+            value={htsId}
+            onChange={(e) => setHtsId(e.target.value.trim().slice(0, 32))}
+            autoComplete="off"
+            spellCheck={false}
+            dense
+            style={{ width: '16rem' }}
           />
         </Row>
       </FormSection>

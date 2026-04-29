@@ -85,7 +85,7 @@ import { KIS_BASE_URL } from './kis/endpoints';
 import { KisHttpClient } from './kis/http-client';
 import { cancelOrRevise } from './kis/order';
 import { TokenStore } from './kis/token-store';
-import { realTimer, type WsLike } from './kis/ws-client';
+import { realTimer, type WsFactory, type WsLike } from './kis/ws-client';
 import {
   cleanupOldEventLogs,
   createApiFailureLogger,
@@ -197,9 +197,7 @@ function bootstrapDeps(userDataDir: string) {
   };
   const kiwoomTokenStore = new KiwoomTokenStore(db);
   // Kiwoom WS factory — 실제 WebSocket 연결. 라이브 검증 시 socket-client 가 사용.
-  const kiwoomWsFactory = ((url: string) => new WebSocket(url)) as unknown as (
-    env: AppEnv,
-  ) => unknown;
+  const kiwoomWsFactory: WsFactory = (url) => new WebSocket(url) as unknown as WsLike;
   // per-account SafetyState 격리 registry. 각 계좌는 자체 master/symbol/errorLock 슬롯.
   const settingsRepo = new SettingsRepo(db);
   // 안전 스위치 master 영속화 hooks 주입 — 부팅 시 settings 에서 복원, setMaster 시 자동 저장.

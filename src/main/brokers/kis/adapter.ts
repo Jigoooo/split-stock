@@ -58,6 +58,7 @@ export interface KisAdapterDeps {
     appSecret: string;
     accountNo8: string;
     accountProdCd: string;
+    htsId?: string;
   };
   logger: EventLogger;
   /** MOCK 환경 rate-limit 재시도 대기. 테스트에서 단축 가능. */

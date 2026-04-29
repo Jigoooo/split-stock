@@ -150,6 +150,23 @@ describe('FakeBrokerAdapter — BrokerPort conformance', () => {
     expect(events).toHaveLength(1);
   });
 
+  it('FakeRealtimePort — account dirty signal 구독/해제', async () => {
+    const fake = new FakeBrokerAdapter();
+    const rt = fake.realtime();
+    const events: Array<{ kind: string }> = [];
+    const sub = rt.subscribeAccountEvents((e) => events.push(e));
+    expect(sub.isOk()).toBe(true);
+    if ('emitAccount' in rt && typeof rt.emitAccount === 'function') {
+      rt.emitAccount({ kind: 'BALANCE_DIRTY', symbol: '005930', at: '093000' });
+    }
+    expect(events).toEqual([{ kind: 'BALANCE_DIRTY', symbol: '005930', at: '093000' }]);
+    if (sub.isOk()) sub.value.unsubscribe();
+    if ('emitAccount' in rt && typeof rt.emitAccount === 'function') {
+      rt.emitAccount({ kind: 'BALANCE_DIRTY', symbol: '005930', at: '093001' });
+    }
+    expect(events).toHaveLength(1);
+  });
+
   it('ensureSession + invalidateSession — 상태 추적 가능', async () => {
     const fake = new FakeBrokerAdapter();
     const r = await fake.ensureSession();

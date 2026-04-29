@@ -8,12 +8,13 @@ import type { MarketContextService } from '../ai/market-context-service';
 import type { NaverDatalabClient } from '../ai/naver-datalab-client';
 import type { NewsFetcher } from '../ai/news-fetcher';
 import type { BackupScheduler } from '../backup/scheduler';
+import type { WsFactory } from '../brokers/core/types';
 import { createBrokerPort } from '../brokers/factory';
 import { KisRealtimeAdapter } from '../brokers/kis/realtime-adapter';
 import { KiwoomAuth } from '../brokers/kiwoom/auth';
 import type { KiwoomHttpClient } from '../brokers/kiwoom/http-client';
 import { KiwoomSocketClient } from '../brokers/kiwoom/socket-client';
-import type { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
+import { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
 import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
 import type { SettingsRepo } from '../db/settings-repo';
@@ -52,7 +53,7 @@ export interface Context {
   kiwoomTokenStore: KiwoomTokenStore;
   /** Kiwoom WS 인스턴스 빌더 — 동일 (env, account) 에서는 1개 인스턴스 재사용.
    *  KiwoomAdapter 가 RealtimePort 구현 시 사용. Stage 6.5 라이브 검증 시 주입. */
-  kiwoomWsFactory: ((env: AppEnv) => unknown) | null;
+  kiwoomWsFactory: WsFactory | null;
   /**
    * 활성 계좌의 SafetyState — registry.get(activeAccountId).
    * 라우터에서 명시적으로 다른 계좌를 다룰 때는 `safetyRegistry.get(otherId)` 사용.
@@ -110,6 +111,8 @@ export interface Context {
    * PROD URL 로 MOCK 자격증명을 보내는 등 AUTH_FAILED 가 발생하는 레이스를 방지.
    */
   setEnvAndAccount: (next: { env: AppEnv | null; accountId: number | null }) => void;
+  /** 활성 계좌 broker 계좌 실시간 이벤트를 CurrentStateSync dirty trigger 로 연결/재연결. */
+  syncAccountRealtimeSubscription: () => void;
   /**
    * 활성/특정 계좌의 BrokerPort 인스턴스를 반환.
    *
@@ -133,6 +136,7 @@ export interface ContextFactoryOptions
     | 'activeAccountId'
     | 'setActiveAccountId'
     | 'setEnvAndAccount'
+    | 'syncAccountRealtimeSubscription'
     | 'backupScheduler'
     | 'balanceSync'
     | 'currentStateSync'
@@ -143,6 +147,10 @@ export interface ContextFactoryOptions
   /** 부팅 시 ensureActive 결과로 채울 초기 활성 계좌 ID. */
   initialActiveAccountId?: number | null;
 }
+
+const missingKiwoomWsFactory: WsFactory = (url) => {
+  throw new Error(`Kiwoom WS factory not wired (url=${url})`);
+};
 
 export function createContextFactory(opts: ContextFactoryOptions): {
   create: () => Context;
@@ -176,6 +184,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   let backupScheduler: BackupScheduler | null = null;
   let balanceSync: BalanceSync | null = null;
   let currentStateSync: CurrentStateSync | null = null;
+  let accountRealtimeSub: { unsubscribe(): void } | null = null;
 
   /**
    * Broker adapter 캐시 — key = `${env}:${accountId}`.
@@ -197,6 +206,12 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     kisRealtimeAdapter = new KisRealtimeAdapter({
       getService: () => realtime,
       bus: deps.bus,
+      getHtsId: () => {
+        if (activeAccountId === null) return null;
+        const cred = deps.credentialsRepo.loadCredentials(activeAccountId);
+        if (cred.isErr() || !cred.value || cred.value.env !== currentEnv) return null;
+        return cred.value.htsId?.trim() || null;
+      },
     });
     return kisRealtimeAdapter;
   };
@@ -221,12 +236,13 @@ export function createContextFactory(opts: ContextFactoryOptions): {
       });
       const socket = new KiwoomSocketClient({
         env: currentEnv,
-        getToken: () => null, // Stage 6.5 라이브 시 cachedToken 노출 hook 추가 가능
-        // realtimeFactory ws (deps.kiwoomWsFactory) 가 없으면 socket 미작동.
-        // 라이브 라이트 검증 시 main/index.ts 에서 wsFactory 주입 (Stage 6.5)
-        factory: ((url: string) => {
-          throw new Error(`Kiwoom WS factory not wired (env=${currentEnv}, url=${url})`);
-        }) as never,
+        getToken: () => {
+          if (!currentEnv) return null;
+          const token = deps.kiwoomTokenStore.load(currentEnv);
+          if (token.isErr() || !token.value) return null;
+          return KiwoomTokenStore.isReusable(token.value, Date.now()) ? token.value.token : null;
+        },
+        factory: deps.kiwoomWsFactory ?? missingKiwoomWsFactory,
       });
       port = createBrokerPort({
         brokerId: 'KIWOOM',
@@ -256,6 +272,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
             appSecret: cred.appSecret,
             accountNo8: cred.accountNo8,
             accountProdCd: cred.accountProdCd,
+            ...(cred.htsId !== undefined && { htsId: cred.htsId }),
           },
           logger: deps.logger,
           ...(realtimeAdapter !== undefined && { realtime: realtimeAdapter }),
@@ -276,18 +293,136 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     }
   };
 
+  const clearAccountRealtimeSubscription = (): void => {
+    if (!accountRealtimeSub) return;
+    try {
+      accountRealtimeSub.unsubscribe();
+    } catch (cause) {
+      deps.logger.log({
+        level: 'WARN',
+        category: 'WS',
+        message: 'account-realtime.unsubscribe-failed',
+        payload: { cause: cause instanceof Error ? cause.message : String(cause) },
+      });
+    }
+    accountRealtimeSub = null;
+  };
+
+  const syncAccountRealtimeSubscription = (): void => {
+    clearAccountRealtimeSubscription();
+    if (!currentStateSync || activeAccountId === null || !currentEnv) return;
+    const subscribedAccountId = activeAccountId;
+    const broker = brokerForAccount(subscribedAccountId);
+    if (!broker) return;
+
+    let realtimePort: ReturnType<BrokerPort['realtime']>;
+    try {
+      realtimePort = broker.realtime();
+    } catch (cause) {
+      deps.logger.log({
+        level: 'WARN',
+        category: 'WS',
+        message: 'account-realtime.port-unavailable',
+        payload: {
+          accountId: subscribedAccountId,
+          brokerId: broker.brokerId,
+          cause: cause instanceof Error ? cause.message : String(cause),
+        },
+      });
+      return;
+    }
+
+    const subscribed = realtimePort.subscribeAccountEvents((event) => {
+      currentStateSync?.enqueueBrokerEvent({
+        accountId: subscribedAccountId,
+        ...(event.kind === 'ORDER_DIRTY' && event.brokerOrderId
+          ? { brokerOrderId: event.brokerOrderId }
+          : {}),
+        ...(event.symbol !== undefined ? { symbol: event.symbol } : {}),
+      });
+    });
+
+    if (subscribed.isOk()) {
+      accountRealtimeSub = subscribed.value;
+      deps.logger.log({
+        level: 'INFO',
+        category: 'WS',
+        message: 'account-realtime.subscribed',
+        payload: { accountId: subscribedAccountId, brokerId: broker.brokerId },
+      });
+      if (broker.brokerId === 'KIWOOM') {
+        void startKiwoomAccountRealtime(broker, realtimePort, subscribedAccountId);
+      }
+      return;
+    }
+
+    deps.logger.log({
+      level: 'WARN',
+      category: 'WS',
+      message: 'account-realtime.subscribe-failed',
+      payload: {
+        accountId: subscribedAccountId,
+        brokerId: broker.brokerId,
+        kind: subscribed.error.kind,
+        msg: subscribed.error.msg,
+      },
+    });
+  };
+
+  const startKiwoomAccountRealtime = async (
+    broker: BrokerPort,
+    realtimePort: ReturnType<BrokerPort['realtime']>,
+    accountId: number,
+  ): Promise<void> => {
+    const session = await broker.ensureSession();
+    if (session.isErr()) {
+      deps.logger.log({
+        level: 'WARN',
+        category: 'WS',
+        message: 'account-realtime.start-session-failed',
+        payload: {
+          accountId,
+          brokerId: broker.brokerId,
+          kind: session.error.kind,
+          msg: session.error.msg,
+        },
+      });
+      return;
+    }
+
+    const started = await realtimePort.start();
+    if (started.isErr()) {
+      deps.logger.log({
+        level: 'WARN',
+        category: 'WS',
+        message: 'account-realtime.start-failed',
+        payload: {
+          accountId,
+          brokerId: broker.brokerId,
+          kind: started.error.kind,
+          msg: started.error.msg,
+        },
+      });
+    }
+  };
+
   const setCurrentEnv = (env: AppEnv | null): void => {
+    clearAccountRealtimeSubscription();
     currentEnv = env;
     clearBrokerCache();
     if (realtimeFactory) {
       realtime = realtimeFactory(env);
     }
+    syncAccountRealtimeSubscription();
   };
   const setActiveAccountId = (id: number | null): void => {
+    clearAccountRealtimeSubscription();
     activeAccountId = id;
     syncWatchEngine(id);
+    syncAccountRealtimeSubscription();
   };
   const setEnvAndAccount = (next: { env: AppEnv | null; accountId: number | null }): void => {
+    clearAccountRealtimeSubscription();
     // JS single-threaded 이므로 동일 tick 내 두 closure var 업데이트는 외부에서 관측 시 원자.
     // accountId 를 먼저 세팅해 "새 env + 이전 accountId" 조합 윈도우 자체를 없앤다.
     activeAccountId = next.accountId;
@@ -297,6 +432,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     if (realtimeFactory) {
       realtime = realtimeFactory(next.env);
     }
+    syncAccountRealtimeSubscription();
   };
   const setBackupScheduler = (scheduler: BackupScheduler | null): void => {
     backupScheduler = scheduler;
@@ -305,7 +441,9 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     balanceSync = sync;
   };
   const setCurrentStateSync = (sync: CurrentStateSync | null): void => {
+    clearAccountRealtimeSubscription();
     currentStateSync = sync;
+    syncAccountRealtimeSubscription();
   };
 
   syncWatchEngine(activeAccountId);
@@ -338,6 +476,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
       setCurrentEnv,
       setActiveAccountId,
       setEnvAndAccount,
+      syncAccountRealtimeSubscription,
       brokerForAccount,
     }),
     setEnv: setCurrentEnv,
