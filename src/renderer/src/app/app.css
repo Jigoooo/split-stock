@@ -1867,6 +1867,474 @@ body {
   padding: 0.8rem;
 }
 
+/* ===== 공통 화면 패턴 ===== */
+.ui-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+  padding: 0.2rem 0 0.4rem;
+}
+
+.ui-page-header--dense {
+  padding-bottom: 0.2rem;
+}
+
+.ui-page-header__copy {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.ui-page-header__title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ui-page-header__title {
+  margin: 0;
+  color: var(--fg);
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.ui-page-header--dense .ui-page-header__title {
+  font-size: 1.25rem;
+}
+
+.ui-page-header__description {
+  margin: 0;
+  color: var(--fg-2);
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+
+.ui-page-header__meta,
+.ui-page-header__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ui-page-header__actions {
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+
+.ui-filter-bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.8rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex-wrap: wrap;
+}
+
+.ui-filter-bar--dense {
+  gap: 0.55rem;
+}
+
+.ui-filter-bar__controls,
+.ui-filter-bar__actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.8rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ui-filter-bar--dense .ui-filter-bar__controls,
+.ui-filter-bar--dense .ui-filter-bar__actions {
+  gap: 0.5rem;
+}
+
+.ui-filter-bar__actions {
+  margin-left: auto;
+}
+
+.ui-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.6rem, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.ui-kpi-strip--dense {
+  grid-template-columns: repeat(auto-fit, minmax(8.8rem, 1fr));
+  gap: 0.45rem;
+}
+
+.ui-kpi-strip__item {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.55rem 0.7rem;
+  border: 0.1rem solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+}
+
+.ui-kpi-strip--dense .ui-kpi-strip__item {
+  padding: 0.4rem 0.55rem;
+}
+
+.ui-kpi-strip__label {
+  color: var(--fg-2);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.ui-kpi-strip__value {
+  margin: 0;
+  color: var(--fg);
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.ui-kpi-strip__item--up .ui-kpi-strip__value {
+  color: var(--up);
+}
+
+.ui-kpi-strip__item--down .ui-kpi-strip__value {
+  color: var(--down);
+}
+
+.ui-kpi-strip__item--muted .ui-kpi-strip__value {
+  color: var(--fg-2);
+}
+
+.ui-empty-state {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  justify-items: center;
+  gap: 0.8rem;
+  min-height: 10rem;
+  min-width: 0;
+  padding: 1.4rem;
+  color: var(--fg);
+  text-align: center;
+}
+
+.ui-empty-state--dense {
+  min-height: 6rem;
+  padding: 0.8rem;
+}
+
+.ui-empty-state__copy {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 48rem;
+  min-width: 0;
+}
+
+.ui-empty-state__title {
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+.ui-empty-state__description {
+  font-size: 1.05rem;
+  line-height: 1.5;
+}
+
+.ui-empty-state__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ===== 수익률 계산기 ===== */
+.profit-calculator-page {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 0.8rem;
+  height: 100vh;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 1.1rem;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(2, 132, 199, 0.06), transparent 19rem), var(--bg-2);
+}
+
+.profit-calculator-page .ui-page-header {
+  align-items: center;
+  padding-bottom: 0;
+}
+
+.profit-calculator__summary-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.4rem;
+  max-width: 100%;
+  padding: 0.25rem 0.65rem;
+  border: 0.1rem solid var(--border);
+  border-radius: 999rem;
+  background: var(--bg);
+  color: var(--fg-2);
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profit-calculator__tabs {
+  display: flex;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.profit-calculator__content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.profit-calculator__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(22rem, 0.9fr);
+  gap: 0.9rem;
+  min-width: 0;
+  align-items: start;
+}
+
+.profit-calculator__panel {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 0.1rem solid var(--border);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0.7rem 2rem rgba(15, 23, 42, 0.06);
+}
+
+.profit-calculator__result-panel {
+  align-content: start;
+}
+
+.profit-calculator__section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.profit-calculator__section-title {
+  color: var(--fg);
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.profit-calculator__section-desc {
+  margin-top: 0.2rem;
+  color: var(--fg-2);
+  font-size: 1.03rem;
+  line-height: 1.4;
+}
+
+.profit-calculator__field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.profit-calculator__field {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.profit-calculator__label {
+  color: var(--fg);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.profit-calculator__preset-stack {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 0.1rem solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--bg-2);
+}
+
+.profit-calculator__preset-row {
+  display: grid;
+  grid-template-columns: 8.8rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.profit-calculator__preset-label {
+  color: var(--fg-2);
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.profit-calculator__preset-options {
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.profit-calculator__preset-button {
+  min-height: 2.7rem;
+  padding: 0.25rem 0.65rem;
+  border: 0.1rem solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.profit-calculator__preset-button:hover {
+  border-color: var(--accent);
+  background: var(--accent-tint-8);
+  color: var(--accent-active);
+  box-shadow: 0 0.35rem 1rem rgba(2, 132, 199, 0.1);
+}
+
+.profit-calculator__hero-result {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 0.1rem solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 0.35rem var(--bg-2);
+}
+
+.profit-calculator__hero-label {
+  color: var(--fg-2);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.profit-calculator__hero-value {
+  color: var(--fg);
+  font-size: 3rem;
+  font-weight: 900;
+  line-height: 1.05;
+  word-break: break-word;
+}
+
+.profit-calculator__hero-meta {
+  color: var(--fg-2);
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.profit-calculator__tone--up .profit-calculator__hero-value,
+.profit-calculator__summary-chip.profit-calculator__tone--up {
+  color: var(--up);
+}
+
+.profit-calculator__tone--down .profit-calculator__hero-value,
+.profit-calculator__summary-chip.profit-calculator__tone--down {
+  color: var(--down);
+}
+
+.profit-calculator__fee-box {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 0.1rem solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--bg-2);
+}
+
+.profit-calculator__fee-list {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.profit-calculator__fee-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  min-width: 0;
+  color: var(--fg-2);
+  font-size: 1.05rem;
+}
+
+.profit-calculator__fee-row dt,
+.profit-calculator__fee-row dd {
+  margin: 0;
+}
+
+.profit-calculator__fee-row dd {
+  color: var(--fg);
+  font-weight: 800;
+}
+
+@media (max-width: 680px) {
+  .profit-calculator-page {
+    padding: 0.85rem;
+  }
+
+  .profit-calculator__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .profit-calculator-page .ui-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .profit-calculator__field-grid,
+  .profit-calculator__preset-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profit-calculator__preset-label {
+    font-size: 1rem;
+  }
+
+  .profit-calculator__hero-value {
+    font-size: 2.4rem;
+  }
+}
+
 @keyframes hts-choice-dot-in {
   0% {
     opacity: 0;
@@ -2098,6 +2566,64 @@ body {
 .resize-separator:hover::after,
 .resize-separator[data-resize-handle-active]::after {
   opacity: 0.85;
+}
+
+/* ===== 종목 중심 차트/주문 작업 영역 ===== */
+.main-bottom-section {
+  height: 100%;
+  padding: 0.8rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-width: 0;
+  min-height: 0;
+}
+
+.main-bottom-section__empty {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+}
+
+.trade-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(680px, 1.05fr);
+  gap: 1.2rem;
+  min-width: 0;
+}
+
+.main-bottom-section__content {
+  flex: 1;
+  min-height: 0;
+}
+
+.trading-panel__grid {
+  display: grid;
+  grid-template-columns:
+    var(--orderbook-panel-min-width) minmax(180px, 210px)
+    minmax(var(--trade-feed-panel-min-width), 1fr);
+  gap: 0.6rem;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .trade-workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 980px) {
+  .trading-panel__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .order-ticket-form__content {
+    max-width: none;
+  }
 }
 
 /* ===== 즉시주문 폼 — 세로 공간이 부족하면 내부 스크롤 ===== */

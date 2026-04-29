@@ -29,14 +29,20 @@ export {
   dialog,
   useDialogStore,
 } from './dialog';
+export type { EmptyStateProps } from './empty-state';
+export { EmptyState } from './empty-state';
 export type { EnvironmentRadioGroupProps } from './environment-radio-group';
 export { EnvironmentRadioGroup } from './environment-radio-group';
 export type { ErrorBoundaryProps } from './error-boundary';
 export { ErrorBoundary, withSectionBoundary } from './error-boundary';
+export type { FilterBarProps } from './filter-bar';
+export { FilterBar } from './filter-bar';
 export type { FormSectionProps } from './form-section';
 export { FormSection } from './form-section';
 export type { HtsTabItem, HtsTabsProps } from './hts-tabs';
 export { HtsTabs } from './hts-tabs';
+export type { KpiStripItem, KpiStripProps, KpiTone } from './kpi-strip';
+export { KpiStrip } from './kpi-strip';
 export type { NumberInputProps } from './number-input';
 export { NumberInput } from './number-input';
 export type { OverlayScrollbarProps } from './overlay-scrollbar';
@@ -49,6 +55,8 @@ export {
   pushOverlayHistoryState,
   useOverlayStackStore,
 } from './overlay-stack';
+export type { PageHeaderProps } from './page-header';
+export { PageHeader } from './page-header';
 export {
   type PhraseGateState,
   PROD_CONFIRM_PHRASE,

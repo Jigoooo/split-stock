@@ -1,3 +1,4 @@
+import { Z_INDEX } from '@renderer/shared/config';
 import { useMediaQuery } from '@renderer/shared/lib/interaction';
 import { AnimatedProgress, Button, TableGrid } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
@@ -85,7 +86,7 @@ export const StrategyPreviewModal = ({
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 1000,
+            zIndex: Z_INDEX.MODAL_BACKDROP,
             backgroundColor: 'rgba(0, 0, 0, 0.45)',
             backdropFilter: 'blur(2px)',
             WebkitBackdropFilter: 'blur(2px)',

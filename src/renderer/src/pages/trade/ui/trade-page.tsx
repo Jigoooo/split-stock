@@ -42,15 +42,7 @@ export const TradePage = ({
       />
 
       {selected ? (
-        <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            display: 'grid',
-            gridTemplateColumns: 'minmax(320px, 0.95fr) minmax(680px, 1.05fr)',
-            gap: '1.2rem',
-          }}
-        >
+        <div className="trade-workspace-grid" style={{ flex: 1, minHeight: 0 }}>
           <div style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <PositionChart
               pdno={selected.pdno}

@@ -1,6 +1,13 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { Button, DateInput } from '@renderer/shared/ui';
+import {
+  Button,
+  DateInput,
+  EmptyState,
+  FilterBar,
+  KpiStrip,
+  PageHeader,
+} from '@renderer/shared/ui';
 import { Download } from 'lucide-react';
 import { type ReactElement, useMemo } from 'react';
 import { useReports } from '../model/use-reports';
@@ -64,16 +71,29 @@ export const ReportsPage = (): ReactElement => {
 
   return (
     <div style={{ display: 'grid', gap: '1.2rem' }}>
+      <PageHeader
+        title="리포트"
+        description="실현손익, 차수별 성과, 운영 이벤트를 기간 기준으로 확인합니다."
+        dense
+      />
+
       <div className="panel">
         <div className="panel__title">오늘의 운영 요약</div>
         <div className="panel__body">
           {opsQuery.isPending ? (
-            <span className="muted">집계 중…</span>
+            <EmptyState dense title="운영 요약 집계 중…" />
           ) : opsQuery.error ? (
-            <span className="chip chip--down">{opsQuery.error.message}</span>
+            <EmptyState
+              dense
+              role="alert"
+              title="운영 요약 조회 실패"
+              description={opsQuery.error.message}
+            />
           ) : opsQuery.data ? (
             <DailyOpsSummary data={opsQuery.data} realtimeStats={realtimeStatsQuery.data ?? null} />
-          ) : null}
+          ) : (
+            <EmptyState dense title="오늘의 운영 데이터가 없습니다" />
+          )}
         </div>
       </div>
 
@@ -81,7 +101,7 @@ export const ReportsPage = (): ReactElement => {
         <div className="panel__title">기간</div>
         <div className="panel__body" style={{ display: 'grid', gap: '0.8rem' }}>
           <RangePresetButtons fromStr={fromStr} toStr={toStr} onChange={applyPreset} />
-          <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <FilterBar ariaLabel="리포트 기간 필터" dense>
             <label htmlFor="reports-from" style={{ display: 'grid', gap: '0.25rem' }}>
               <span className="muted">시작</span>
               <DateInput
@@ -102,37 +122,46 @@ export const ReportsPage = (): ReactElement => {
                 dense
               />
             </label>
-          </div>
+          </FilterBar>
         </div>
       </div>
 
       <div className="panel">
         <div className="panel__title">KPI 요약</div>
-        <div className="panel__body" style={{ display: 'flex', gap: '2.4rem', flexWrap: 'wrap' }}>
+        <div className="panel__body">
           {summaryPending ? (
-            <span className="muted">집계 중…</span>
+            <EmptyState dense title="KPI 집계 중…" />
           ) : summaryError ? (
-            <span className="chip chip--down">{summaryError.message}</span>
+            <EmptyState
+              dense
+              role="alert"
+              title="KPI 조회 실패"
+              description={summaryError.message}
+            />
           ) : summary ? (
-            <>
-              <Kpi
-                label="실현손익"
-                value={formatKrwSigned(summary.realizedPnlKrw)}
-                signOf={summary.realizedPnlKrw}
-              />
-              <Kpi label="승률" value={`${(summary.winRate * 100).toFixed(1)}%`} />
-              <Kpi
-                label="최대 Drawdown"
-                value={
-                  summary.maxDrawdownKrw === 0 ? '0원' : formatKrwSigned(-summary.maxDrawdownKrw)
-                }
-                signOf={summary.maxDrawdownKrw === 0 ? 0 : -1}
-              />
-              <Kpi label="청산 차수" value={`${thousandSeparator(summary.soldLots)}건`} />
-              <Kpi label="체결 건수" value={`${thousandSeparator(summary.totalTrades)}건`} />
-              <Kpi label="평균 보유일" value={`${summary.avgHoldingDays.toFixed(1)}일`} />
-            </>
-          ) : null}
+            <KpiStrip
+              ariaLabel="KPI 요약"
+              items={[
+                {
+                  label: '실현손익',
+                  value: formatKrwSigned(summary.realizedPnlKrw),
+                  tone: toneForSignedValue(summary.realizedPnlKrw),
+                },
+                { label: '승률', value: `${(summary.winRate * 100).toFixed(1)}%` },
+                {
+                  label: '최대 Drawdown',
+                  value:
+                    summary.maxDrawdownKrw === 0 ? '0원' : formatKrwSigned(-summary.maxDrawdownKrw),
+                  tone: summary.maxDrawdownKrw === 0 ? 'default' : 'down',
+                },
+                { label: '청산 차수', value: `${thousandSeparator(summary.soldLots)}건` },
+                { label: '체결 건수', value: `${thousandSeparator(summary.totalTrades)}건` },
+                { label: '평균 보유일', value: `${summary.avgHoldingDays.toFixed(1)}일` },
+              ]}
+            />
+          ) : (
+            <EmptyState dense title="기간 내 KPI 데이터가 없습니다" />
+          )}
         </div>
       </div>
 
@@ -238,56 +267,25 @@ const ChartStatus = ({
   message: string;
   tone?: 'muted' | 'error';
 }): ReactElement => (
-  <div
-    className={tone === 'error' ? 'chip chip--down' : 'muted'}
-    role={tone === 'error' ? 'alert' : 'status'}
-    style={{
-      alignItems: 'center',
-      display: 'flex',
-      height,
-      justifyContent: 'center',
-      textAlign: 'center',
-    }}
-  >
-    {message}
+  <div style={{ height }}>
+    <EmptyState
+      dense
+      role={tone === 'error' ? 'alert' : 'status'}
+      title={tone === 'error' ? '차트 조회 실패' : message}
+      description={tone === 'error' ? message : undefined}
+    />
   </div>
 );
-
-const Kpi = ({
-  label,
-  value,
-  signOf,
-}: {
-  label: string;
-  value: string;
-  signOf?: number;
-}): ReactElement => {
-  const color =
-    signOf === undefined
-      ? undefined
-      : signOf > 0
-        ? 'var(--up)'
-        : signOf < 0
-          ? 'var(--down)'
-          : 'var(--fg)';
-  return (
-    <div>
-      <div className="muted" style={{ fontSize: '1.1rem' }}>
-        {label}
-      </div>
-      <div
-        className="num"
-        style={{ fontSize: '1.6rem', fontWeight: 600, ...(color ? { color } : {}) }}
-      >
-        {value}
-      </div>
-    </div>
-  );
-};
 
 function formatKrwSigned(v: number): string {
   const sign = v > 0 ? '+' : v < 0 ? '-' : '';
   return `${sign}${thousandSeparator(Math.abs(v))}원`;
+}
+
+function toneForSignedValue(v: number): 'default' | 'up' | 'down' {
+  if (v > 0) return 'up';
+  if (v < 0) return 'down';
+  return 'default';
 }
 
 interface DailyOpsSummaryData {
@@ -328,29 +326,47 @@ const DailyOpsSummary = ({
     data.autoBuy.blockedProtection + data.autoBuy.blockedTimeWindow + data.autoBuy.blockedRateGuard;
   return (
     <div style={{ display: 'grid', gap: '1.2rem' }}>
-      <div style={{ display: 'flex', gap: '2.4rem', flexWrap: 'wrap' }}>
-        <Kpi label="자동매매 시도" value={`${thousandSeparator(data.autoBuy.executed)}건`} />
-        <Kpi label="자동감시 실행" value={`${thousandSeparator(data.autoBuy.watchExecuted)}건`} />
-        <Kpi label="자동감시 실패" value={`${thousandSeparator(data.autoBuy.watchFailed)}건`} />
-        <Kpi label="자동매수 차단" value={`${thousandSeparator(totalBlocked)}건`} />
-        <Kpi label="미체결 자동취소" value={`${thousandSeparator(data.pendingCancel.success)}건`} />
-        <Kpi label="자동취소 실패" value={`${thousandSeparator(data.pendingCancel.failed)}건`} />
-        <Kpi label="호가 자동보정" value={`${thousandSeparator(data.priceCorrection.applied)}건`} />
-        <Kpi
-          label="시세 cooldown"
-          value={`${thousandSeparator(data.quoteFeed.cooldownPdnos.length)}종목`}
-        />
-        {realtimeStats && realtimeStats.capacity > 0 ? (
-          <Kpi
-            label="WS 슬롯"
-            value={`${realtimeStats.wsCount}/${realtimeStats.capacity}${
-              realtimeStats.restFallbackCount > 0
-                ? ` (REST ${realtimeStats.restFallbackCount})`
-                : ''
-            }`}
-          />
-        ) : null}
-      </div>
+      <KpiStrip
+        dense
+        ariaLabel="오늘의 운영 요약"
+        items={[
+          { label: '자동매매 시도', value: `${thousandSeparator(data.autoBuy.executed)}건` },
+          { label: '자동감시 실행', value: `${thousandSeparator(data.autoBuy.watchExecuted)}건` },
+          {
+            label: '자동감시 실패',
+            value: `${thousandSeparator(data.autoBuy.watchFailed)}건`,
+            tone: data.autoBuy.watchFailed > 0 ? 'down' : 'default',
+          },
+          {
+            label: '자동매수 차단',
+            value: `${thousandSeparator(totalBlocked)}건`,
+            tone: totalBlocked > 0 ? 'down' : 'default',
+          },
+          { label: '미체결 자동취소', value: `${thousandSeparator(data.pendingCancel.success)}건` },
+          {
+            label: '자동취소 실패',
+            value: `${thousandSeparator(data.pendingCancel.failed)}건`,
+            tone: data.pendingCancel.failed > 0 ? 'down' : 'default',
+          },
+          { label: '호가 자동보정', value: `${thousandSeparator(data.priceCorrection.applied)}건` },
+          {
+            label: '시세 cooldown',
+            value: `${thousandSeparator(data.quoteFeed.cooldownPdnos.length)}종목`,
+          },
+          ...(realtimeStats && realtimeStats.capacity > 0
+            ? [
+                {
+                  label: 'WS 슬롯',
+                  value: `${realtimeStats.wsCount}/${realtimeStats.capacity}${
+                    realtimeStats.restFallbackCount > 0
+                      ? ` (REST ${realtimeStats.restFallbackCount})`
+                      : ''
+                  }`,
+                },
+              ]
+            : []),
+        ]}
+      />
       {totalBlocked > 0 ? (
         <div className="muted" style={{ fontSize: '1rem' }}>
           차단 내역: 보호한도 {data.autoBuy.blockedProtection} · 시간대{' '}

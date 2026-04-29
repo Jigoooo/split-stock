@@ -1,4 +1,5 @@
 import { useGetFeeSettings } from '@renderer/entities/fee-settings';
+import { Checkbox, PageHeader } from '@renderer/shared/ui';
 import { type ReactElement, useState } from 'react';
 import type {
   ProfitAmountState,
@@ -12,7 +13,7 @@ import {
   type ProfitRateInput,
 } from '../model/use-profit-calc';
 import { ProfitAmountForm } from './profit-amount-form';
-import { profitCalculatorStyles as styles } from './profit-calculator-styles';
+import { formatKrw, formatPercent, profitToneClass } from './profit-calculator-styles';
 import { ProfitCalculatorTabs } from './profit-calculator-tabs';
 import { ProfitRateForm } from './profit-rate-form';
 
@@ -48,6 +49,16 @@ export const ProfitCalculatorPage = (): ReactElement => {
     includeFees: rateInput.includeFees,
     ...feeRates,
   };
+  const profitResult = calculateProfitAmount(profitCalcInput);
+  const rateResult = calculateProfitRate(rateCalcInput);
+  const activeDelta =
+    activeTab === 'profit'
+      ? profitResult.resultAmount - profitInput.buyAmount
+      : rateResult.netProfit;
+  const activeMeta =
+    activeTab === 'profit'
+      ? `${formatKrw(profitInput.buyAmount)} 기준 ${formatPercent(profitInput.profitRate)}`
+      : `${formatKrw(rateInput.buyAmount)} -> ${formatKrw(rateInput.sellAmount)}`;
 
   const handleAlwaysOnTop = async (value: boolean): Promise<void> => {
     setAlwaysOnTop(value);
@@ -57,32 +68,41 @@ export const ProfitCalculatorPage = (): ReactElement => {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.toolbar}>
-        <label style={styles.alwaysOnTopLabel}>
-          <input
-            type="checkbox"
+    <div className="profit-calculator-page">
+      <PageHeader
+        title="수익률 계산기"
+        description="목표 수익률과 매도금액 기준을 빠르게 전환해 예상 결과를 비교합니다."
+        dense
+        meta={
+          <span className={`profit-calculator__summary-chip ${profitToneClass(activeDelta)}`}>
+            {activeMeta}
+          </span>
+        }
+        actions={
+          <Checkbox
+            dense
             checked={alwaysOnTop}
-            onChange={(event) => handleAlwaysOnTop(event.target.checked)}
-            style={styles.checkbox}
+            onChange={(event) => {
+              void handleAlwaysOnTop(event.target.checked);
+            }}
+            label="항상 위"
           />
-          창 항상 위로
-        </label>
-      </div>
+        }
+      />
       <ProfitCalculatorTabs activeTab={activeTab} onChange={setActiveTab} />
-      <div style={styles.content}>
+      <div className="profit-calculator__content">
         {activeTab === 'profit' ? (
           <ProfitAmountForm
             input={profitInput}
             onInputChange={setProfitInput}
-            result={calculateProfitAmount(profitCalcInput)}
+            result={profitResult}
             {...feeRates}
           />
         ) : (
           <ProfitRateForm
             input={rateInput}
             onInputChange={setRateInput}
-            result={calculateProfitRate(rateCalcInput)}
+            result={rateResult}
             {...feeRates}
           />
         )}

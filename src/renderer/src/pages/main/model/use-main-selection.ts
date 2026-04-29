@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export interface MainSelectedStock {
   pdno: string;
@@ -75,6 +75,16 @@ export function useMainSelection(): UseMainSelectionResult {
     persistSelection(next);
     setSelectedStockRaw(next);
   };
+
+  useEffect(() => {
+    const shell = window.appShell;
+    if (!shell) return;
+    return shell.onStockAssigned((pdno, name) => {
+      const next = { pdno, name };
+      persistSelection(next);
+      setSelectedStockRaw(next);
+    });
+  }, []);
 
   return {
     selectedStock,

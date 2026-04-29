@@ -232,6 +232,25 @@ describe('OrderTicket', () => {
     expect(screen.queryByText(/현재 선택: BUY/)).toBeNull();
   });
 
+  it('매수 가능한 주문에서 매도가능 수량 초과는 수량 입력 보정 CTA로 노출하지 않는다', () => {
+    render(
+      wrap(
+        <OrderTicket
+          selection={{ pdno: '000000', name: '신규종목', suggestedPrice: 70000 }}
+          isProd={false}
+          oneClick={false}
+        />,
+      ),
+    );
+
+    fireEvent.change(screen.getByLabelText('주문 수량'), { target: { value: '10' } });
+
+    expect(screen.getByRole('button', { name: '매수 주문' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: '매도 주문' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /주로 조정/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/매도 시 보유 수량 초과/)).toBeInTheDocument();
+  });
+
   it('시장가 선택 시 가격 입력 disabled', () => {
     render(
       wrap(

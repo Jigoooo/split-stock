@@ -18,5 +18,10 @@ export interface PanelWorkspaceProps {
  * 기존 3-panel(대시보드/이벤트로그/주문) 구조는 popout 전용으로 보존되며 PopoutPage 에서만 마운트.
  */
 export const PanelWorkspace = ({ popout }: PanelWorkspaceProps): ReactElement => {
-  return <MainPage onOpenStrategySettings={() => popout.popout('settings')} />;
+  return (
+    <MainPage
+      onOpenStockPicker={() => popout.popout('stock-picker')}
+      onOpenStrategySettings={() => popout.popout('settings')}
+    />
+  );
 };

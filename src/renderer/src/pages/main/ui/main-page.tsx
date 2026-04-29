@@ -44,6 +44,7 @@ const RESIZE_HIT_AREA = { coarse: 8, fine: 6 } as const;
 
 export interface MainPageProps {
   onOpenStrategySettings?: (() => void) | undefined;
+  onOpenStockPicker?: (() => Promise<void> | void) | undefined;
 }
 
 /**
@@ -55,7 +56,10 @@ export interface MainPageProps {
  * - 하단 30% (min 25%) : 선택 종목 기준 차트 + 주문 패널
  * - activeAccountId 없으면 안내 패널만 표시 (login 화면을 따로 두지 않고 shell 레벨).
  */
-export const MainPage = ({ onOpenStrategySettings }: MainPageProps): ReactElement => {
+export const MainPage = ({
+  onOpenStockPicker,
+  onOpenStrategySettings,
+}: MainPageProps): ReactElement => {
   useMainRealtime();
 
   const { accountId, isPending: isAccountPending } = useActiveAccountId();
@@ -126,6 +130,7 @@ export const MainPage = ({ onOpenStrategySettings }: MainPageProps): ReactElemen
         <Panel id="main-bottom" defaultSize={30} minSize={20} style={panelStyle}>
           <MainBottomSection
             isProd={isProd}
+            onOpenStockPicker={onOpenStockPicker}
             overlayLines={overlayLines}
             selectedEntry={selectedEntry}
             onSelectStock={(entry) => setSelectedStock({ pdno: entry.pdno, name: entry.name })}

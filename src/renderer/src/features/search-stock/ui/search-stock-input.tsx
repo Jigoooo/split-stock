@@ -1,5 +1,8 @@
+import { Z_INDEX } from '@renderer/shared/config';
+import { EmptyState, TextInput } from '@renderer/shared/ui';
+import { Search } from 'lucide-react';
 import type { CompositionEvent, KeyboardEvent, ReactElement } from 'react';
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { StockHit } from '../model/use-stock-search';
 import { useStockSearch } from '../model/use-stock-search';
 
@@ -18,23 +21,28 @@ export interface SearchStockInputProps {
  */
 export const SearchStockInput = (props: SearchStockInputProps): ReactElement => {
   const { placeholder = '종목명 또는 코드 검색', limit = 20, onSelect } = props;
+  const listboxId = useId();
   const [term, setTerm] = useState('');
   // 검색에 실제 사용되는 query — IME 조합 중에는 직전 commit 값을 유지해
   // 자모 한 글자마다 backend 쿼리가 발생하지 않도록 한다.
   const [committedTerm, setCommittedTerm] = useState('');
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
   const composingRef = useRef(false);
+  const pendingEnterSelectionRef = useRef<StockHit | null>(null);
   const search = useStockSearch(committedTerm, { limit });
 
   const open = focused && committedTerm.trim().length > 0;
   const list = search.results;
 
   const commit = (hit: StockHit): void => {
+    pendingEnterSelectionRef.current = null;
     onSelect(hit);
     setTerm('');
     setCommittedTerm('');
     setActiveIndex(0);
+    setFocused(false);
   };
 
   const handleChange = (value: string): void => {
@@ -51,9 +59,15 @@ export const SearchStockInput = (props: SearchStockInputProps): ReactElement => 
   const handleCompositionEnd = (e: CompositionEvent<HTMLInputElement>): void => {
     composingRef.current = false;
     setCommittedTerm(e.currentTarget.value);
+    const pendingEntry = pendingEnterSelectionRef.current;
+    if (pendingEntry) commit(pendingEntry);
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>): void => {
+    if (e.key === 'Escape') {
+      setFocused(false);
+      return;
+    }
     if (!open || list.length === 0) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -62,31 +76,53 @@ export const SearchStockInput = (props: SearchStockInputProps): ReactElement => 
       e.preventDefault();
       setActiveIndex((i) => Math.max(0, i - 1));
     } else if (e.key === 'Enter') {
+      const nativeEvent = e.nativeEvent as KeyboardEvent<HTMLInputElement>['nativeEvent'] & {
+        isComposing?: boolean;
+        keyCode?: number;
+      };
+      if (composingRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) {
+        e.preventDefault();
+        pendingEnterSelectionRef.current = list[activeIndex] ?? null;
+        return;
+      }
       e.preventDefault();
       const hit = list[activeIndex];
       if (hit) commit(hit);
-    } else if (e.key === 'Escape') {
-      setFocused(false);
     }
   };
 
   return (
-    <div style={{ position: 'relative' }}>
-      <input
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <TextInput
         type="text"
         value={term}
         onChange={(e) => handleChange(e.target.value)}
         onCompositionStart={handleCompositionStart}
         onCompositionEnd={handleCompositionEnd}
         onFocus={() => setFocused(true)}
-        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        onBlur={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (nextTarget instanceof Node && containerRef.current?.contains(nextTarget)) return;
+          setFocused(false);
+        }}
         onKeyDown={onKey}
         placeholder={placeholder}
         aria-label="종목 검색 입력"
+        aria-autocomplete="list"
+        aria-controls={open ? listboxId : undefined}
+        aria-expanded={open}
+        aria-activedescendant={
+          open && list[activeIndex] ? `${listboxId}-${activeIndex}` : undefined
+        }
+        role="combobox"
+        autoComplete="off"
+        iconLeading={<Search size={14} />}
+        dense
         style={{ width: '100%' }}
       />
       {open ? (
         <div
+          id={listboxId}
           role="listbox"
           aria-label="종목 검색 결과"
           className="panel"
@@ -96,35 +132,23 @@ export const SearchStockInput = (props: SearchStockInputProps): ReactElement => 
             left: 0,
             right: 0,
             marginTop: '0.3rem',
-            zIndex: 10,
+            zIndex: Z_INDEX.CONTROL_POPUP,
             maxHeight: '28rem',
             overflowY: 'auto',
           }}
         >
           {search.isLoading ? (
-            <div
-              className="panel__body muted"
-              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-            >
-              {/* Button 과 동일한 스피너 토큰 재사용 — 일관된 진행 표시. */}
-              <span
-                className="hts-btn__spinner"
-                aria-hidden
-                style={{ color: 'var(--accent)', margin: 0 }}
-              />
-              <span>검색 중…</span>
-            </div>
+            <EmptyState dense title="검색 중…" />
           ) : search.error ? (
-            <div className="panel__body">
-              <span className="chip chip--down">{search.error.message}</span>
-            </div>
+            <EmptyState dense role="alert" title="검색 실패" description={search.error.message} />
           ) : list.length === 0 ? (
-            <div className="panel__body muted">결과 없음</div>
+            <EmptyState dense title="결과 없음" />
           ) : (
             list.map((hit, idx) => (
               <button
                 type="button"
                 key={hit.pdno}
+                id={`${listboxId}-${idx}`}
                 role="option"
                 aria-selected={idx === activeIndex}
                 className={idx === activeIndex ? 'hts-btn hts-btn--primary' : 'hts-btn'}

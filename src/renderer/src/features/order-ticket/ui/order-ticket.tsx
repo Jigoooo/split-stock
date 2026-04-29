@@ -167,7 +167,6 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
           maxBuyQty={maxBuyQty}
           nextNth={nextNth}
           overBuyCap={overBuyCap}
-          overSellCap={overSellCap}
           priceStr={priceStr}
           qtyStr={qtyStr}
           setDivision={setDivision}

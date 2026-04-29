@@ -137,6 +137,7 @@ describe('MainPage', () => {
 
     expect(screen.getByTestId('main-positions-pane')).toBeInTheDocument();
     expect(screen.getByTestId('main-trade-history-pane')).toBeInTheDocument();
+    expect(screen.getByText('주문할 종목을 선택하세요')).toBeInTheDocument();
   });
 
   it('selectedPdno 변경 시 우측 pane 의 data-selected-pdno 업데이트', () => {

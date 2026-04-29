@@ -1,6 +1,6 @@
 import { usePendingCancelActive } from '@renderer/entities/pending-cancel';
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button } from '@renderer/shared/ui';
+import { Button, EmptyState, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
 const SIDE_LABEL: Record<'BUY' | 'SELL', string> = {
@@ -22,7 +22,9 @@ export const ActivePendingList = (): ReactElement => {
   if (isPending) {
     return (
       <div className="panel">
-        <div className="panel__body muted">감시 목록 로드 중…</div>
+        <div className="panel__body">
+          <EmptyState dense title="감시 목록 로드 중…" />
+        </div>
       </div>
     );
   }
@@ -31,7 +33,7 @@ export const ActivePendingList = (): ReactElement => {
     return (
       <div className="panel">
         <div className="panel__body">
-          <span className="chip chip--down">{error.message}</span>
+          <EmptyState dense role="alert" title="감시 목록 조회 실패" description={error.message} />
         </div>
       </div>
     );
@@ -42,32 +44,44 @@ export const ActivePendingList = (): ReactElement => {
       <div className="panel__title">감시 중인 미체결 주문</div>
       <div className="panel__body">
         {items.length === 0 ? (
-          <span className="muted">감시 중인 미체결 주문이 없습니다.</span>
+          <EmptyState dense title="감시 중인 미체결 주문이 없습니다" />
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '1.2rem' }}>
-            <thead>
-              <tr style={{ textAlign: 'left' }}>
-                <th style={{ padding: '0.3rem 0.6rem' }}>종목</th>
-                <th style={{ padding: '0.3rem 0.6rem' }}>구분</th>
-                <th style={{ padding: '0.3rem 0.6rem' }}>차수</th>
-                <th style={{ padding: '0.3rem 0.6rem' }}>주문번호</th>
-                <th style={{ padding: '0.3rem 0.6rem' }}>시도</th>
-                <th style={{ padding: '0.3rem 0.6rem' }} />
-              </tr>
-            </thead>
-            <tbody>
+          <TableGrid.Root
+            variant="hts"
+            horizontalScroll
+            overlayScrollbar={false}
+            aria-label="감시 중인 미체결 주문"
+            style={{ height: 'auto' }}
+          >
+            <TableGrid.Header>
+              <TableGrid.Cell width={90}>종목</TableGrid.Cell>
+              <TableGrid.Cell width={80}>구분</TableGrid.Cell>
+              <TableGrid.Cell width={70}>차수</TableGrid.Cell>
+              <TableGrid.Cell flex={1} minWidth={120}>
+                주문번호
+              </TableGrid.Cell>
+              <TableGrid.Cell width={70}>시도</TableGrid.Cell>
+              <TableGrid.Cell width={72} align="right" resizable={false}>
+                액션
+              </TableGrid.Cell>
+            </TableGrid.Header>
+            <TableGrid.Body>
               {items.map((item) => (
-                <tr key={`${item.pdno}:${item.side}:${item.nth}`}>
-                  <td style={{ padding: '0.3rem 0.6rem' }}>{item.pdno}</td>
-                  <td style={{ padding: '0.3rem 0.6rem' }}>
+                <TableGrid.Row key={`${item.pdno}:${item.side}:${item.nth}`}>
+                  <TableGrid.Cell width={90} numeric>
+                    {item.pdno}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={80}>
                     <span className={item.side === 'BUY' ? 'chip chip--up' : 'chip chip--down'}>
                       {SIDE_LABEL[item.side]}
                     </span>
-                  </td>
-                  <td style={{ padding: '0.3rem 0.6rem' }}>{item.nth}차</td>
-                  <td style={{ padding: '0.3rem 0.6rem', fontFamily: 'monospace' }}>{item.odno}</td>
-                  <td style={{ padding: '0.3rem 0.6rem' }}>{item.attempts}회</td>
-                  <td style={{ padding: '0.3rem 0.6rem' }}>
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={70}>{item.nth}차</TableGrid.Cell>
+                  <TableGrid.Cell flex={1} minWidth={120} className="num" overflow="ellipsis">
+                    {item.odno}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={70}>{item.attempts}회</TableGrid.Cell>
+                  <TableGrid.Cell width={72} align="right" resizable={false}>
                     <Button
                       dense
                       variant="danger"
@@ -85,11 +99,11 @@ export const ActivePendingList = (): ReactElement => {
                     >
                       해제
                     </Button>
-                  </td>
-                </tr>
+                  </TableGrid.Cell>
+                </TableGrid.Row>
               ))}
-            </tbody>
-          </table>
+            </TableGrid.Body>
+          </TableGrid.Root>
         )}
       </div>
     </div>

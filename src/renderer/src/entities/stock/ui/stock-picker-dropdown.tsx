@@ -1,3 +1,4 @@
+import { Z_INDEX } from '@renderer/shared/config';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { highlightMatches } from '@renderer/shared/lib/search';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -61,7 +62,7 @@ export const StockPickerDropdown = ({
             left: 0,
             right: 0,
             marginTop: '0.3rem',
-            zIndex: 10,
+            zIndex: Z_INDEX.CONTROL_POPUP,
             maxHeight: alwaysOpen ? undefined : '28rem',
             height: alwaysOpen ? '100%' : undefined,
             overflowY: 'auto',

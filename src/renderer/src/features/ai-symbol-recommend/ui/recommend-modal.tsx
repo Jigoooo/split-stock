@@ -1,3 +1,4 @@
+import { Z_INDEX } from '@renderer/shared/config';
 import { useMediaQuery } from '@renderer/shared/lib/interaction';
 import { AnimatedProgress, Button } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -291,7 +292,7 @@ export const RecommendModal = ({
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 1000,
+            zIndex: Z_INDEX.MODAL_BACKDROP,
             backgroundColor: 'rgba(0, 0, 0, 0.45)',
             backdropFilter: 'blur(2px)',
             WebkitBackdropFilter: 'blur(2px)',

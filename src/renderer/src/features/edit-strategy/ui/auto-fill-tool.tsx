@@ -1,4 +1,4 @@
-import { NumberInput } from '@renderer/shared/ui';
+import { NumberInput, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import type { AutoFillParams, DropBaseline } from '../model/use-stage-grid';
@@ -135,73 +135,71 @@ const PreviewTable = ({ rows, baseline }: PreviewTableProps): ReactElement => {
   const showGap = rows.length > 6;
 
   return (
-    <figure aria-label="자동채우기 미리보기" style={{ overflowX: 'auto', margin: 0 }}>
-      <table
+    <figure style={{ overflowX: 'auto', margin: 0 }}>
+      <figcaption
         style={{
+          textAlign: 'left',
+          fontSize: '1rem',
+          marginBottom: '0.25rem',
+          opacity: 0.7,
+        }}
+      >
+        미리보기 ({baselineLabel}, 1차 100,000원 가정)
+      </figcaption>
+      <TableGrid.Root
+        aria-label="자동채우기 미리보기"
+        variant="plain"
+        resizable={false}
+        horizontalScroll
+        overlayScrollbar={false}
+        style={{
+          height: 'auto',
           fontSize: '1.05rem',
-          borderCollapse: 'collapse',
           width: '100%',
           maxWidth: 360,
         }}
       >
-        <caption
-          style={{ textAlign: 'left', fontSize: '1rem', marginBottom: '0.25rem', opacity: 0.7 }}
-        >
-          미리보기 ({baselineLabel}, 1차 100,000원 가정)
-        </caption>
-        <thead>
-          <tr>
-            <Th>차수</Th>
-            <Th>하향 감지%</Th>
-            <Th>예상 매수가</Th>
-          </tr>
-        </thead>
-        <tbody>
+        <TableGrid.Header>
+          <TableGrid.Cell width={72}>차수</TableGrid.Cell>
+          <TableGrid.Cell width={100} numeric>
+            하향 감지%
+          </TableGrid.Cell>
+          <TableGrid.Cell width={120} numeric>
+            예상 매수가
+          </TableGrid.Cell>
+        </TableGrid.Header>
+        <TableGrid.Body>
           {showGap ? (
             <>
               {headRows.map((row) => (
-                <tr key={row.stage}>
-                  <Td>{row.stage}차</Td>
-                  <Td>{row.dropPct.toFixed(2)}%</Td>
-                  <Td>{Math.round(row.examplePrice).toLocaleString()}원</Td>
-                </tr>
+                <PreviewGridRow key={row.stage} row={row} />
               ))}
-              <tr key="gap">
-                <td colSpan={3} style={{ textAlign: 'center', opacity: 0.5, padding: '2px 4px' }}>
+              <TableGrid.Row key="gap">
+                <TableGrid.Cell flex={1} align="center" style={{ opacity: 0.5 }}>
                   ···
-                </td>
-              </tr>
-              {lastRow !== undefined ? (
-                <tr key={lastRow.stage}>
-                  <Td>{lastRow.stage}차</Td>
-                  <Td>{lastRow.dropPct.toFixed(2)}%</Td>
-                  <Td>{Math.round(lastRow.examplePrice).toLocaleString()}원</Td>
-                </tr>
-              ) : null}
+                </TableGrid.Cell>
+              </TableGrid.Row>
+              {lastRow !== undefined ? <PreviewGridRow key={lastRow.stage} row={lastRow} /> : null}
             </>
           ) : (
-            allRows.map((row) => (
-              <tr key={row.stage}>
-                <Td>{row.stage}차</Td>
-                <Td>{row.dropPct.toFixed(2)}%</Td>
-                <Td>{Math.round(row.examplePrice).toLocaleString()}원</Td>
-              </tr>
-            ))
+            allRows.map((row) => <PreviewGridRow key={row.stage} row={row} />)
           )}
-        </tbody>
-      </table>
+        </TableGrid.Body>
+      </TableGrid.Root>
     </figure>
   );
 };
 
-const Th = ({ children }: { children: React.ReactNode }): ReactElement => (
-  <th style={{ textAlign: 'left', padding: '2px 8px 2px 0', opacity: 0.7, fontWeight: 500 }}>
-    {children}
-  </th>
-);
-
-const Td = ({ children }: { children: React.ReactNode }): ReactElement => (
-  <td style={{ padding: '2px 8px 2px 0' }}>{children}</td>
+const PreviewGridRow = ({ row }: { row: PreviewRow }): ReactElement => (
+  <TableGrid.Row>
+    <TableGrid.Cell width={72}>{row.stage}차</TableGrid.Cell>
+    <TableGrid.Cell width={100} numeric>
+      {row.dropPct.toFixed(2)}%
+    </TableGrid.Cell>
+    <TableGrid.Cell width={120} numeric>
+      {Math.round(row.examplePrice).toLocaleString()}원
+    </TableGrid.Cell>
+  </TableGrid.Row>
 );
 
 /* ── 미리보기 계산 ── */

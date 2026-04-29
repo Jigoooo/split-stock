@@ -1,5 +1,12 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { alertDialog, Button, DialogType, NumberInput } from '@renderer/shared/ui';
+import {
+  alertDialog,
+  Button,
+  DialogType,
+  EmptyState,
+  NumberInput,
+  TableGrid,
+} from '@renderer/shared/ui';
 import { AlertTriangle } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { type LotRowDraft, LotRowFormModal } from './lot-row-form-modal';
@@ -202,68 +209,72 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
           + 차수 추가
         </Button>
       </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--color-border, #ccc)' }}>
-            <th style={{ textAlign: 'left', padding: '0.4rem' }}>차수</th>
-            <th style={{ textAlign: 'left', padding: '0.4rem' }}>상태</th>
-            <th style={{ textAlign: 'right', padding: '0.4rem' }}>매입가</th>
-            <th style={{ textAlign: 'right', padding: '0.4rem' }}>수량</th>
-            <th style={{ textAlign: 'right', padding: '0.4rem' }}>금액</th>
-            <th style={{ textAlign: 'left', padding: '0.4rem' }}>매수일</th>
-            <th style={{ textAlign: 'right', padding: '0.4rem' }}>액션</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={7} className="muted" style={{ padding: '0.6rem', textAlign: 'center' }}>
-                {openLotsQuery.isPending ? '로드 중…' : 'OPEN 차수 없음'}
-              </td>
-            </tr>
-          ) : (
-            rows.map((r) => (
-              <tr key={r.id} style={{ borderBottom: '1px solid var(--color-border, #eee)' }}>
-                <td style={{ padding: '0.4rem' }}>{r.nth}차</td>
-                <td style={{ padding: '0.4rem' }}>{r.status}</td>
-                <td style={{ padding: '0.4rem', textAlign: 'right' }}>
+      {openLotsQuery.isPending || rows.length === 0 ? (
+        <EmptyState dense title={openLotsQuery.isPending ? '로드 중…' : 'OPEN 차수 없음'} />
+      ) : (
+        <TableGrid.Root
+          aria-label="수동편집 OPEN 차수"
+          variant="hts"
+          horizontalScroll
+          style={{ height: 'auto', fontSize: '0.95rem' }}
+        >
+          <TableGrid.Header>
+            <TableGrid.Cell width={64}>차수</TableGrid.Cell>
+            <TableGrid.Cell width={76}>상태</TableGrid.Cell>
+            <TableGrid.Cell width={104} numeric>
+              매입가
+            </TableGrid.Cell>
+            <TableGrid.Cell width={86} numeric>
+              수량
+            </TableGrid.Cell>
+            <TableGrid.Cell width={110} numeric>
+              금액
+            </TableGrid.Cell>
+            <TableGrid.Cell width={108}>매수일</TableGrid.Cell>
+            <TableGrid.Cell width={156} align="right" sticky="right">
+              액션
+            </TableGrid.Cell>
+          </TableGrid.Header>
+          <TableGrid.Body>
+            {rows.map((r) => (
+              <TableGrid.Row key={r.id}>
+                <TableGrid.Cell width={64}>{r.nth}차</TableGrid.Cell>
+                <TableGrid.Cell width={76}>{r.status}</TableGrid.Cell>
+                <TableGrid.Cell width={104} numeric>
                   {r.buyPrice.toLocaleString()}
-                </td>
-                <td style={{ padding: '0.4rem', textAlign: 'right' }}>{r.qty.toLocaleString()}</td>
-                <td style={{ padding: '0.4rem', textAlign: 'right' }}>
+                </TableGrid.Cell>
+                <TableGrid.Cell width={86} numeric>
+                  {r.qty.toLocaleString()}
+                </TableGrid.Cell>
+                <TableGrid.Cell width={110} numeric>
                   {r.amountKrw.toLocaleString()}
-                </td>
-                <td style={{ padding: '0.4rem' }}>
+                </TableGrid.Cell>
+                <TableGrid.Cell width={108}>
                   {new Date(r.boughtAtMs).toISOString().slice(0, 10)}
-                </td>
-                <td
-                  style={{
-                    padding: '0.4rem',
-                    display: 'flex',
-                    gap: '0.3rem',
-                    justifyContent: 'flex-end',
-                  }}
-                >
-                  <Button onClick={() => setModal({ kind: 'edit', row: r })} dense>
-                    수정
-                  </Button>
-                  <Button onClick={() => setModal({ kind: 'move', row: r })} dense>
-                    이동
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      void onConfirmDelete(r);
-                    }}
-                    dense
-                  >
-                    삭제
-                  </Button>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+                </TableGrid.Cell>
+                <TableGrid.Cell width={156} sticky="right">
+                  <div style={{ display: 'flex', gap: '0.3rem', justifyContent: 'flex-end' }}>
+                    <Button onClick={() => setModal({ kind: 'edit', row: r })} dense>
+                      수정
+                    </Button>
+                    <Button onClick={() => setModal({ kind: 'move', row: r })} dense>
+                      이동
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        void onConfirmDelete(r);
+                      }}
+                      dense
+                    >
+                      삭제
+                    </Button>
+                  </div>
+                </TableGrid.Cell>
+              </TableGrid.Row>
+            ))}
+          </TableGrid.Body>
+        </TableGrid.Root>
+      )}
       {modal.kind === 'add' && (
         <LotRowFormModal
           mode="add"

@@ -10,7 +10,6 @@ interface OrderTicketFieldsProps {
   maxBuyQty: number | null;
   nextNth: number;
   overBuyCap: boolean;
-  overSellCap: boolean;
   priceStr: string;
   qtyStr: string;
   setDivision: (division: Division) => void;
@@ -25,7 +24,6 @@ export const OrderTicketFields = ({
   maxBuyQty,
   nextNth,
   overBuyCap,
-  overSellCap,
   priceStr,
   qtyStr,
   setDivision,
@@ -58,7 +56,7 @@ export const OrderTicketFields = ({
         onValueChange={setQtyStr}
         aria-label="주문 수량"
         dense
-        aria-invalid={overBuyCap || overSellCap}
+        aria-invalid={overBuyCap}
       />
       <span className="muted order-ticket-form__hint">
         <span>
@@ -91,28 +89,7 @@ export const OrderTicketFields = ({
           ) : null}
         </span>
         <span>
-          보유{' '}
-          {overSellCap ? (
-            <button
-              type="button"
-              onClick={() => setQtyStr(String(holdingQty))}
-              title="수량을 보유 수량으로 자동 조정"
-              style={{
-                padding: '0.05rem 0.4rem',
-                border: '1px solid var(--up)',
-                borderRadius: '0.2rem',
-                background: 'var(--up-soft)',
-                color: 'var(--up)',
-                cursor: 'pointer',
-                font: 'inherit',
-                fontWeight: 600,
-              }}
-            >
-              {thousandSeparator(holdingQty)}주로 조정
-            </button>
-          ) : (
-            <span className="num">{thousandSeparator(holdingQty)}주</span>
-          )}
+          매도가능 <span className="num">{thousandSeparator(holdingQty)}주</span>
         </span>
       </span>
     </label>

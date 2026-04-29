@@ -32,12 +32,12 @@ export const OrderTicketSummary = ({
     {oneClick && !isProd ? ' · 원터치 ON' : ''}
     {overBuyCap ? (
       <div className="order-ticket-form__summary-alert num-down">
-        매수 불가 — 예수금 부족 (최대 {maxBuyQty === null ? '—' : thousandSeparator(maxBuyQty)}주)
+        매수 시 예수금 부족 — 최대 {maxBuyQty === null ? '—' : thousandSeparator(maxBuyQty)}주
       </div>
     ) : null}
     {overSellCap ? (
       <div className="order-ticket-form__summary-alert num-down">
-        매도 불가 — 보유 수량 초과 (보유 {thousandSeparator(holdingQty)}주)
+        매도 시 보유 수량 초과 — 보유 {thousandSeparator(holdingQty)}주
       </div>
     ) : null}
   </div>

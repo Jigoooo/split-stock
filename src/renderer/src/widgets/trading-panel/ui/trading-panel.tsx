@@ -2,7 +2,7 @@ import { useRealtimeStatus } from '@renderer/entities/realtime';
 import { OrderTicket, type OrderTicketSelection } from '@renderer/features/order-ticket';
 import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import {
   useFocusedSubscription,
@@ -201,14 +201,13 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
         orderbookTime={orderbook?.time ?? null}
       />
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `${ORDERBOOK_PANEL_MIN_WIDTH} minmax(180px, 210px) minmax(${FEED_PANEL_MIN_WIDTH}px, 1fr)`,
-          gap: '0.6rem',
-          alignItems: 'stretch',
-          flex: 1,
-          minHeight: 0,
-        }}
+        className="trading-panel__grid"
+        style={
+          {
+            '--orderbook-panel-min-width': ORDERBOOK_PANEL_MIN_WIDTH,
+            '--trade-feed-panel-min-width': `${FEED_PANEL_MIN_WIDTH}px`,
+          } as CSSProperties
+        }
       >
         <OrderbookPanel
           orderbook={orderbook}

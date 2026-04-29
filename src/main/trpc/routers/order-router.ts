@@ -9,6 +9,7 @@ import type { Db } from '../../db/client';
 import { lots, orders, trades } from '../../db/schema';
 import { readPendingCancelConfig, readPriceCorrectionConfig } from '../../db/settings-repo';
 import { createPendingBuyLot, linkHighestPendingSellLot } from '../../trading/order-lot-link';
+import { reconcileCancelledSellLot } from '../../trading/partial-sell-lot-reconciliation';
 import { requireAccountId, resolveAccountId } from '../router-helpers';
 import { authedProcedure, router } from '../trpc-core';
 
@@ -479,12 +480,13 @@ export const orderRouter = router({
                   .where(eq(lots.id, row.lotId))
                   .run();
               }
-            } else if (row.side === 'SELL' && filledQty === 0) {
-              ctx.db
-                .update(lots)
-                .set({ status: 'OPEN', soldAt: null, sellPrice: null })
-                .where(eq(lots.id, row.lotId))
-                .run();
+            } else if (row.side === 'SELL') {
+              reconcileCancelledSellLot(ctx.db, {
+                lotId: row.lotId,
+                filledQty,
+                executionPrice: row.price,
+                now: new Date(),
+              });
             }
           }
           // NM-001: 수동 일괄 취소된 주문은 자동취소 감시에서도 제거.

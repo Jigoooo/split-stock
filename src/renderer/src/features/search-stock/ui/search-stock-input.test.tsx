@@ -39,7 +39,7 @@ function wrap(ui: ReactElement): ReactElement {
 describe('SearchStockInput', () => {
   it('빈 입력: 드롭다운 미표시', () => {
     render(wrap(<SearchStockInput onSelect={vi.fn()} />));
-    fireEvent.focus(screen.getByRole('textbox', { name: '종목 검색 입력' }));
+    fireEvent.focus(screen.getByRole('combobox', { name: '종목 검색 입력' }));
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
@@ -48,7 +48,7 @@ describe('SearchStockInput', () => {
     searchMock.mockClear();
 
     render(wrap(<SearchStockInput onSelect={vi.fn()} />));
-    const input = screen.getByRole('textbox', { name: '종목 검색 입력' });
+    const input = screen.getByRole('combobox', { name: '종목 검색 입력' });
     fireEvent.focus(input);
     // 연속 입력 3회
     fireEvent.change(input, { target: { value: '삼' } });
@@ -78,7 +78,7 @@ describe('SearchStockInput', () => {
     });
     const onSelect = vi.fn();
     render(wrap(<SearchStockInput onSelect={onSelect} />));
-    const input = screen.getByRole('textbox', { name: '종목 검색 입력' });
+    const input = screen.getByRole('combobox', { name: '종목 검색 입력' });
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: '삼성' } });
 
@@ -101,7 +101,7 @@ describe('SearchStockInput', () => {
     });
     const onSelect = vi.fn();
     render(wrap(<SearchStockInput onSelect={onSelect} />));
-    const input = screen.getByRole('textbox', { name: '종목 검색 입력' });
+    const input = screen.getByRole('combobox', { name: '종목 검색 입력' });
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: '하이' } });
 
@@ -120,10 +120,27 @@ describe('SearchStockInput', () => {
   it('결과 0건: "결과 없음" 표시', async () => {
     searchMock.mockReturnValue({ entries: [] });
     render(wrap(<SearchStockInput onSelect={vi.fn()} />));
-    const input = screen.getByRole('textbox', { name: '종목 검색 입력' });
+    const input = screen.getByRole('combobox', { name: '종목 검색 입력' });
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: '존재없' } });
 
     await screen.findByText('결과 없음', undefined, { timeout: 2000 });
+  });
+
+  it('Escape 입력 시 목록을 닫는다', async () => {
+    searchMock.mockReturnValue({
+      entries: [{ pdno: '005930', name: '삼성전자', sector: null }],
+    });
+    render(wrap(<SearchStockInput onSelect={vi.fn()} />));
+    const input = screen.getByRole('combobox', { name: '종목 검색 입력' });
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: '삼성' } });
+
+    await screen.findByRole('listbox', undefined, { timeout: 2000 });
+    fireEvent.keyDown(input, { key: 'Escape' });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('listbox')).toBeNull();
+    });
   });
 });

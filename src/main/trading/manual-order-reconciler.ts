@@ -5,6 +5,7 @@ import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
 import { lots, orders, trades } from '../db/schema';
 import type { EventLogger } from '../logging/event-logger';
+import { reconcileCancelledSellLot } from './partial-sell-lot-reconciliation';
 
 type OrderStatus = 'PENDING' | 'PARTIAL' | 'FILLED' | 'CANCELLED' | 'REJECTED';
 
@@ -75,7 +76,13 @@ export function resolveManualOrderDecision(input: {
         : input.localPrice;
 
   if (totalFilledQty > 0) {
-    const nextStatus: OrderStatus = remainingQty > 0 ? 'PARTIAL' : 'FILLED';
+    const nextStatus: OrderStatus = input.remote.cancelled
+      ? remainingQty > 0
+        ? 'CANCELLED'
+        : 'FILLED'
+      : remainingQty > 0
+        ? 'PARTIAL'
+        : 'FILLED';
     if (deltaFilledQty === 0 && nextStatus === input.localStatus) return null;
     return { nextStatus, totalFilledQty, deltaFilledQty, remainingQty, executionPrice };
   }
@@ -403,13 +410,11 @@ function reconcileLinkedLot(
   }
 
   if (input.decision.nextStatus === 'CANCELLED') {
-    db.update(lots)
-      .set({
-        status: 'OPEN',
-        soldAt: null,
-        sellPrice: null,
-      })
-      .where(eq(lots.id, input.lotId))
-      .run();
+    reconcileCancelledSellLot(db, {
+      lotId: input.lotId,
+      filledQty: input.decision.totalFilledQty,
+      executionPrice: input.decision.executionPrice,
+      now: input.now,
+    });
   }
 }
