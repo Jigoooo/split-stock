@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import type { OrderbookUpdate, TickUpdate } from '../../kis/ws-frame-parser';
-import { authedProcedure, router } from '../trpc-core';
+import { router, runtimeProcedure } from '../trpc-core';
 
 const PdnoSchema = z.object({ pdno: z.string().regex(/^\d{6}$/) });
 const PdnosSchema = z.object({
@@ -58,7 +58,7 @@ function createPushStream<T>(
 async function* emptyStream<T>(): AsyncIterable<T> {}
 
 export const realtimeRouter = router({
-  start: authedProcedure.mutation(async ({ ctx }) => {
+  start: runtimeProcedure.mutation(async ({ ctx }) => {
     const env = ctx.currentEnv;
     if (!env) throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
     if (!ctx.realtime) {
@@ -83,32 +83,32 @@ export const realtimeRouter = router({
     return { ok: true as const };
   }),
 
-  stop: authedProcedure.mutation(({ ctx }) => {
+  stop: runtimeProcedure.mutation(({ ctx }) => {
     ctx.realtime?.stop();
     return { ok: true as const };
   }),
 
-  status: authedProcedure.query(({ ctx }) => ({
+  status: runtimeProcedure.query(({ ctx }) => ({
     started: ctx.realtime?.isStarted() ?? false,
     watched: ctx.realtime?.getWatched() ?? [],
   })),
 
-  watch: authedProcedure.input(TopicSchema).mutation(({ ctx, input }) => {
+  watch: runtimeProcedure.input(TopicSchema).mutation(({ ctx, input }) => {
     if (!ctx.realtime) return { ok: false as const };
     ctx.realtime.watch(input.pdno, input.topic);
     return { ok: true as const };
   }),
 
-  unwatch: authedProcedure.input(TopicSchema).mutation(({ ctx, input }) => {
+  unwatch: runtimeProcedure.input(TopicSchema).mutation(({ ctx, input }) => {
     ctx.realtime?.unwatch(input.pdno, input.topic);
     return { ok: true as const };
   }),
 
-  getLatestTick: authedProcedure.input(PdnoSchema).query(({ ctx, input }) => ({
+  getLatestTick: runtimeProcedure.input(PdnoSchema).query(({ ctx, input }) => ({
     tick: ctx.bus?.getLatestTick(input.pdno) ?? null,
   })),
 
-  getLatestTicks: authedProcedure.input(PdnosSchema).query(({ ctx, input }) => {
+  getLatestTicks: runtimeProcedure.input(PdnosSchema).query(({ ctx, input }) => {
     const ticks: Record<string, ReturnType<NonNullable<typeof ctx.bus>['getLatestTick']>> = {};
     for (const pdno of Array.from(new Set(input.pdnos))) {
       ticks[pdno] = ctx.bus?.getLatestTick(pdno) ?? null;
@@ -116,11 +116,11 @@ export const realtimeRouter = router({
     return { ticks };
   }),
 
-  getLatestOrderbook: authedProcedure.input(PdnoSchema).query(({ ctx, input }) => ({
+  getLatestOrderbook: runtimeProcedure.input(PdnoSchema).query(({ ctx, input }) => ({
     orderbook: ctx.bus?.getLatestOrderbook(input.pdno) ?? null,
   })),
 
-  onTick: authedProcedure.input(PdnoSchema).subscription(({ ctx, input, signal }) => {
+  onTick: runtimeProcedure.input(PdnoSchema).subscription(({ ctx, input, signal }) => {
     const bus = ctx.bus;
     if (!bus) return emptyStream<TickUpdate>();
     return createPushStream<TickUpdate>(signal, (push) =>
@@ -128,7 +128,7 @@ export const realtimeRouter = router({
     );
   }),
 
-  onTicks: authedProcedure.input(PdnosSchema).subscription(({ ctx, input, signal }) => {
+  onTicks: runtimeProcedure.input(PdnosSchema).subscription(({ ctx, input, signal }) => {
     const bus = ctx.bus;
     if (!bus) return emptyStream<Record<string, TickUpdate | null>>();
 
@@ -161,7 +161,7 @@ export const realtimeRouter = router({
     });
   }),
 
-  onOrderbook: authedProcedure.input(PdnoSchema).subscription(({ ctx, input, signal }) => {
+  onOrderbook: runtimeProcedure.input(PdnoSchema).subscription(({ ctx, input, signal }) => {
     const bus = ctx.bus;
     if (!bus) return emptyStream<OrderbookUpdate>();
     return createPushStream<OrderbookUpdate>(signal, (push) =>
@@ -170,13 +170,13 @@ export const realtimeRouter = router({
   }),
 
   /** 사용자가 보고 있는 종목을 priority=100 으로 끌어올려 WS 슬롯 우선 배정. */
-  focus: authedProcedure.input(PdnoSchema).mutation(({ ctx, input }) => {
+  focus: runtimeProcedure.input(PdnoSchema).mutation(({ ctx, input }) => {
     if (!ctx.realtime) return { ok: false as const };
     ctx.realtime.focus(input.pdno);
     return { ok: true as const };
   }),
 
-  blur: authedProcedure.input(PdnoSchema).mutation(({ ctx, input }) => {
+  blur: runtimeProcedure.input(PdnoSchema).mutation(({ ctx, input }) => {
     ctx.realtime?.blur(input.pdno);
     return { ok: true as const };
   }),
@@ -185,7 +185,7 @@ export const realtimeRouter = router({
    * WS/REST 라우팅 결과 — 호가창 등 UI 인디케이터에서 종목별 폴링/실시간 모드 표시용.
    * pdno 미지정 시 활성 계좌 전체 반환.
    */
-  getRoutingStatus: authedProcedure.input(PdnoSchema.partial()).query(({ ctx, input }) => {
+  getRoutingStatus: runtimeProcedure.input(PdnoSchema.partial()).query(({ ctx, input }) => {
     if (!ctx.realtime) return { subscriptions: [] };
     const all = ctx.realtime.getActiveSubscriptions();
     if (!input.pdno) return { subscriptions: all };

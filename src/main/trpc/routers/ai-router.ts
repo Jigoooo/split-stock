@@ -5,7 +5,7 @@ import {
   suggestStrategyHandler,
   suggestSymbolsHandler,
 } from '../handlers/ai-recommendation-handlers';
-import { publicProcedure, router } from '../trpc-core';
+import { publicProcedure, router, runtimeReadyProcedure } from '../trpc-core';
 
 const AI_CONFIG_LOCKED_MESSAGE =
   'AI 추천 분석이 진행 중입니다. 분석이 끝난 뒤 AI 키 설정을 변경하세요.';
@@ -118,7 +118,7 @@ export const aiRouter = router({
       }
     }),
 
-  testConnection: publicProcedure
+  testConnection: runtimeReadyProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(async ({ ctx, input }) => {
       if (!ctx.aiCredentialsRepo || !ctx.llmClient) {
@@ -139,7 +139,7 @@ export const aiRouter = router({
       }
     }),
 
-  suggestStrategy: publicProcedure
+  suggestStrategy: runtimeReadyProcedure
     .input(
       z.object({
         pdno: z.string().regex(/^\d{6}$/, 'pdno 는 6자리 숫자'),
@@ -149,7 +149,7 @@ export const aiRouter = router({
     )
     .mutation(({ ctx, input }) => suggestStrategyHandler(ctx, input)),
 
-  syncDartCorpCodes: publicProcedure.mutation(async ({ ctx }) => {
+  syncDartCorpCodes: runtimeReadyProcedure.mutation(async ({ ctx }) => {
     if (!ctx.dartCorpCodeRepo) {
       throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DART 모듈 미초기화' });
     }
@@ -180,7 +180,7 @@ export const aiRouter = router({
     return ctx.marketContextService.getStatus();
   }),
 
-  refreshMarketContext: publicProcedure
+  refreshMarketContext: runtimeReadyProcedure
     .input(
       z
         .object({
@@ -213,7 +213,7 @@ export const aiRouter = router({
       };
     }),
 
-  suggestSymbols: publicProcedure
+  suggestSymbols: runtimeReadyProcedure
     .input(
       z
         .object({

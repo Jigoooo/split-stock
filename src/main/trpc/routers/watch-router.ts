@@ -10,7 +10,7 @@ import {
   setWatchGlobalEnabled,
   updateReservationBuyWatchOrder,
 } from '../handlers/watch-handlers';
-import { authedProcedure, router } from '../trpc-core';
+import { router, runtimeProcedure } from '../trpc-core';
 
 const ListInputSchema = z.object({
   status: z.enum(['WATCHING', 'PAUSED', 'EXECUTED', 'FAILED', 'EXPIRED', 'CANCELLED']).optional(),
@@ -84,39 +84,39 @@ const ReservationBuyUpdateInputSchema = z
  * - create/update: 예약매수 전용 공개 입력 — 활성 계좌 한정
  */
 export const watchRouter = router({
-  list: authedProcedure
+  list: runtimeProcedure
     .input(ListInputSchema)
     .query(({ ctx, input }) => listWatchOrders(ctx, input)),
 
-  getControlState: authedProcedure
+  getControlState: runtimeProcedure
     .input(z.object({ accountId: z.number().int().positive().optional() }).optional())
     .query(({ ctx, input }) => getWatchControlState(ctx, input)),
 
-  setGlobalEnabled: authedProcedure
+  setGlobalEnabled: runtimeProcedure
     .input(z.object({ enabled: z.boolean(), accountId: z.number().int().positive().optional() }))
     .mutation(({ ctx, input }) => setWatchGlobalEnabled(ctx, input)),
 
-  pause: authedProcedure
+  pause: runtimeProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(({ ctx, input }) => pauseWatchOrder(ctx, input)),
 
-  resume: authedProcedure
+  resume: runtimeProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(({ ctx, input }) => resumeWatchOrder(ctx, input)),
 
-  cancel: authedProcedure
+  cancel: runtimeProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(({ ctx, input }) => cancelWatchOrder(ctx, input)),
 
-  create: authedProcedure
+  create: runtimeProcedure
     .input(ReservationBuyCreateInputSchema)
     .mutation(({ ctx, input }) => createReservationBuyWatchOrder(ctx, input)),
 
-  update: authedProcedure
+  update: runtimeProcedure
     .input(ReservationBuyUpdateInputSchema)
     .mutation(({ ctx, input }) => updateReservationBuyWatchOrder(ctx, input)),
 
-  history: authedProcedure
+  history: runtimeProcedure
     .input(z.object({ limit: z.number().int().min(1).max(500).default(200) }).optional())
     .output(z.object({ items: z.array(HistoryItemSchema) }))
     .query(({ ctx, input }) => listWatchHistory(ctx, input)),

@@ -1,7 +1,12 @@
 import { POPOUT_ROUTES, type PopoutRoute } from '@shared/popout';
 import type { BrowserWindow as BrowserWindowType } from 'electron';
 import { BrowserWindow, ipcMain } from '../electron-runtime';
-import { createMainWindow, fitWindowHeightToContent } from '../windows/main-window';
+import { markStartup } from '../perf/startup-perf';
+import {
+  constructMainWindow,
+  fitWindowHeightToContent,
+  loadMainWindow,
+} from '../windows/main-window';
 
 interface TrpcWindowHandler {
   attachWindow: (window: BrowserWindowType) => void;
@@ -41,21 +46,34 @@ export function registerAppShellIpc(input: {
       return { ok: false };
     }
     const popoutRoute = route as PopoutRoute;
+    markStartup('popout.request', { route: popoutRoute });
     const existing = popouts.get(popoutRoute);
     if (existing && !existing.isDestroyed()) {
       if (existing.isMinimized()) existing.restore();
       existing.focus();
+      markStartup('popout.focus-existing', { route: popoutRoute, id: existing.id });
       return { ok: true };
     }
     // 팝아웃은 호출한 창(부모)이 있는 모니터에 열리도록 parent 전달.
     const sender = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
-    const popout = createMainWindow({ popoutRoute, parent: sender });
+    const popoutRef = constructMainWindow({
+      popoutRoute,
+      parent: sender,
+      showPolicy: 'immediate-with-background',
+    });
+    const popout = popoutRef.window;
     popouts.set(popoutRoute, popout);
     ipcHandler.attachWindow(popout);
+    markStartup('window.trpc-attached', {
+      kind: popoutRef.kind,
+      route: popoutRoute,
+      id: popout.id,
+    });
     popout.on('closed', () => {
       popouts.delete(popoutRoute);
       broadcastToAllWindows('appShell:popout-closed', popoutRoute);
     });
+    loadMainWindow(popoutRef);
     return { ok: true };
   });
 
@@ -102,5 +120,13 @@ export function registerAppShellIpc(input: {
     const target = BrowserWindow.fromWebContents(event.sender);
     if (!target || target.isDestroyed()) return;
     fitWindowHeightToContent(target, height);
+  });
+
+  ipcMain.on('appShell:route-ready', (event, route: unknown) => {
+    const target = BrowserWindow.fromWebContents(event.sender);
+    markStartup('renderer.route-ready', {
+      id: target?.id ?? null,
+      route: typeof route === 'string' ? route : null,
+    });
   });
 }

@@ -8,6 +8,7 @@ import type { MarketContextService } from '../ai/market-context-service';
 import type { NaverDatalabClient } from '../ai/naver-datalab-client';
 import type { NewsFetcher } from '../ai/news-fetcher';
 import type { BackupScheduler } from '../backup/scheduler';
+import type { BootStatusService } from '../boot/boot-status';
 import type { WsFactory } from '../brokers/core/types';
 import type { KiwoomHttpClient } from '../brokers/kiwoom/http-client';
 import type { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
@@ -40,6 +41,7 @@ import type { WatchEngine } from '../trading/watch-engine';
 import { createContextBrokerResolver } from './context-broker-resolver';
 
 export interface Context {
+  bootStatus: BootStatusService;
   db: Db;
   credentialsRepo: CredentialsRepo;
   settingsRepo: SettingsRepo;

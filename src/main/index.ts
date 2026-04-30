@@ -5,9 +5,10 @@ import { BackupScheduler } from './backup/scheduler';
 import { bootstrapDeps } from './bootstrap/bootstrap-deps';
 import { app, BrowserWindow, isDev, nativeTheme, session } from './electron-runtime';
 import { registerAppShellIpc } from './ipc/app-shell-ipc';
+import { markStartup } from './perf/startup-perf';
 import { appRouter } from './trpc/app-router';
 import { initAutoUpdater } from './updater';
-import { createMainWindow } from './windows/main-window';
+import { constructMainWindow, loadMainWindow } from './windows/main-window';
 
 // 앱 전반을 라이트 테마로 고정 — 시스템 다크모드 무시.
 // macOS 타이틀바, 네이티브 메뉴, 렌더러 color-scheme 모두 light 기반.
@@ -19,6 +20,16 @@ if (!app.isPackaged) {
 }
 
 void app.whenReady().then(async () => {
+  const createAttachedMainWindow = (
+    ipcHandler: ReturnType<typeof createIPCHandler>,
+  ): Electron.BrowserWindow => {
+    const ref = constructMainWindow();
+    ipcHandler.attachWindow(ref.window);
+    markStartup('window.trpc-attached', { kind: ref.kind, id: ref.window.id });
+    loadMainWindow(ref);
+    return ref.window;
+  };
+
   // CSP — dev 빌드에서만 Vite HMR/소스맵의 eval 허용.
   // index.html <meta CSP>는 제거하고 HTTP 헤더로 일원화.
   session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
@@ -42,6 +53,7 @@ void app.whenReady().then(async () => {
     prebuyWatchers,
     balanceSync,
     dbPath,
+    bootStatus,
   } = bootstrapDeps(userDataDir);
 
   const backupScheduler = new BackupScheduler({
@@ -50,7 +62,6 @@ void app.whenReady().then(async () => {
     logger: eventLogger,
     settingsRepo,
   });
-  backupScheduler.start();
   // 차수 수동편집(A7) 라우터에서 변경 후 즉시 백업 트리거에 사용.
   factory.setBackupScheduler(backupScheduler);
 
@@ -64,13 +75,20 @@ void app.whenReady().then(async () => {
   //   isPackaged: app.isPackaged,
   // });
 
-  const win = createMainWindow();
+  const mainRef = constructMainWindow();
   const ipcHandler = createIPCHandler({
     router: appRouter,
-    windows: [win],
+    windows: [mainRef.window],
     createContext: async () => factory.create(),
   });
-  registerAppShellIpc({ mainWindow: win, ipcHandler });
+  markStartup('window.trpc-attached', { kind: mainRef.kind, id: mainRef.window.id });
+  registerAppShellIpc({ mainWindow: mainRef.window, ipcHandler });
+  loadMainWindow(mainRef);
+  bootStatus.markShellReady('main window load started');
+  setTimeout(() => {
+    backupScheduler.start();
+    bootStatus.setFlags({ backupReady: true });
+  }, 0);
 
   void import('electron').then(({ globalShortcut }) => {
     const acc = 'CommandOrControl+Shift+K';
@@ -93,7 +111,9 @@ void app.whenReady().then(async () => {
   });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createAttachedMainWindow(ipcHandler);
+    }
   });
 });
 

@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { readPendingCancelConfig, SETTING_KEYS } from '../../db/settings-repo';
 import { resolveAccountId } from '../router-helpers';
-import { authedProcedure, publicProcedure, router } from '../trpc-core';
+import { authedProcedure, publicProcedure, router, runtimeProcedure } from '../trpc-core';
 
 const PendingCancelSettingsSchema = z.object({
   enabled: z.boolean(),
@@ -54,7 +54,7 @@ export const pendingCancelRouter = router({
   /**
    * 현재 감시 중인 미체결 주문 목록 — activeAccountId 기준.
    */
-  listActive: authedProcedure
+  listActive: runtimeProcedure
     .input(z.object({ accountId: z.number().int().positive().optional() }).optional())
     .query(({ ctx, input }) => {
       if (!ctx.pendingOrderWatcher) {
@@ -72,7 +72,7 @@ export const pendingCancelRouter = router({
   /**
    * 특정 감시 항목 해제 — accountId 명시 필수, 본인 계좌 항목만 해제 가능.
    */
-  unregister: authedProcedure
+  unregister: runtimeProcedure
     .input(
       z.object({
         pdno: z.string().regex(/^\d{6}$/),

@@ -2,15 +2,11 @@ import { StrategyRecommendationProvider } from '@renderer/features/ai-strategy-r
 import { SymbolRecommendationProvider } from '@renderer/features/ai-symbol-recommend';
 import { CredentialsReentryBanner } from '@renderer/features/backup-restore';
 import { SwitchEnvDialog } from '@renderer/features/switch-env';
-import {
-  useTradeNotifications,
-  useWatchEventNotifications,
-} from '@renderer/features/trade-notifications';
 import { LoginPage } from '@renderer/pages/login';
 import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
 import { Navigate, Outlet } from '@tanstack/react-router';
 import { LoaderCircle } from 'lucide-react';
-import { lazy, type ReactElement, type ReactNode, Suspense } from 'react';
+import { lazy, type ReactElement, type ReactNode, Suspense, useEffect } from 'react';
 import { isPopoutRoute, type PopoutRoute } from './model/popout-route';
 import { useAppShell } from './model/use-app-shell';
 import { type PopoutApi, usePopoutState } from './model/use-popout-state';
@@ -31,12 +27,6 @@ interface AppShellFrameProps {
   popout?: PopoutApi | undefined;
   shell: ReturnType<typeof useAppShell>;
 }
-
-const AppNotifications = (): null => {
-  useWatchEventNotifications();
-  useTradeNotifications();
-  return null;
-};
 
 interface ShellLoadingProps {
   detail?: string | undefined;
@@ -135,12 +125,7 @@ const AppShellFrame = ({
 };
 
 export const RootRouteLayout = (): ReactElement => {
-  return (
-    <>
-      <AppNotifications />
-      <Outlet />
-    </>
-  );
+  return <Outlet />;
 };
 
 export const IndexRoutePage = (): ReactElement => {
@@ -175,6 +160,10 @@ export const MainRoutePage = (): ReactElement => {
   const shell = useAppShell();
   const popout = usePopoutState();
 
+  useEffect(() => {
+    window.appShell?.markRouteReady?.('main');
+  }, []);
+
   if (shell.isInitializing) {
     return <FullScreenShellLoading shell={shell} popout={popout} />;
   }
@@ -208,6 +197,10 @@ export const MainRoutePage = (): ReactElement => {
 
 export const PopoutRoutePage = ({ route }: { route: string }): ReactElement => {
   const popout = usePopoutState();
+
+  useEffect(() => {
+    if (isPopoutRoute(route)) window.appShell?.markRouteReady?.(`popout:${route}`);
+  }, [route]);
 
   if (!isPopoutRoute(route)) {
     return <Navigate to="/" replace />;

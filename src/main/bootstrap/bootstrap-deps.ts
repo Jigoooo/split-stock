@@ -13,6 +13,7 @@ import { MarketContextRepo } from '../ai/market-context-repo';
 import { MarketContextService } from '../ai/market-context-service';
 import { NaverDatalabClient } from '../ai/naver-datalab-client';
 import { NewsFetcher } from '../ai/news-fetcher';
+import { BootStatusService } from '../boot/boot-status';
 import { KiwoomHttpClient } from '../brokers/kiwoom/http-client';
 import { KIWOOM_BASE_URL } from '../brokers/kiwoom/metadata/endpoints';
 import { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
@@ -46,6 +47,7 @@ import { createFileLogger } from '../logging/file-logger';
 // Sentry 일시 비활성화 — 향후 빌드 환경변수 방식으로 재활성화 예정.
 // import { initSentryFromSettings } from '../monitoring/sentry';
 import { notifyTrade, notifyWatchOutcome } from '../notification/trade-notifier';
+import { configureStartupPerf, markStartup } from '../perf/startup-perf';
 import { createAccountSyncRuntime } from '../runtime/account-sync-runtime';
 import { createTradingRuntime } from '../runtime/trading-runtime';
 import { createWatchEventDispatchers } from '../runtime/watch-events';
@@ -72,12 +74,21 @@ function resolveMigrationsDir(): string {
 }
 
 export function bootstrapDeps(userDataDir: string) {
+  markStartup('bootstrap.start');
+  const bootStatus = new BootStatusService();
+  markStartup('db.open.start');
   const db = openDb(defaultDbPath(userDataDir));
+  markStartup('db.open.end');
+  markStartup('db.migrate.start');
   migrate(db, resolveMigrationsDir());
+  markStartup('db.migrate.end');
+  markStartup('db.runtime-repair.start');
   repairAccountsRuntimeSchema(db);
   repairMarketContextRuntimeSchema(db);
   repairTradingCalendarRuntimeSchema(db);
+  markStartup('db.runtime-repair.end');
 
+  markStartup('bootstrap.repos.start');
   const credentialsRepo = new CredentialsRepo(db, {
     isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
     encryptString: (plain) => safeStorage.encryptString(plain),
@@ -96,18 +107,22 @@ export function bootstrapDeps(userDataDir: string) {
     dir: join(logsRoot, 'api-errors'),
     retentionDays: 40,
   });
-  // 부팅 시 1회 로테이션 — 40일 경과 파일 정리
-  fileLogger.rotate();
-  errorFileLogger.rotate();
-  apiErrorFileLogger.rotate();
-  // event_logs 테이블 retention — 30일 초과 row 삭제. 장기 운영 시 디스크/DB 비대 방지.
-  // 콘솔에 정리 결과를 한 줄 노출 (event_logger 자체에는 기록 안 함 — 자기참조 회피).
-  const removedLogs = cleanupOldEventLogs(db, 30);
-  if (removedLogs > 0) {
-    console.info(`[event-logger] cleaned up ${removedLogs} rows older than 30 days`);
-  }
   const eventLogger = teeLoggers(dbLogger, splitErrorLogger(fileLogger, errorFileLogger));
+  configureStartupPerf({ logger: eventLogger });
+  markStartup('bootstrap.logger.ready');
+  setTimeout(() => {
+    markStartup('logs.maintenance.start');
+    fileLogger.rotate();
+    errorFileLogger.rotate();
+    apiErrorFileLogger.rotate();
+    const removedLogs = cleanupOldEventLogs(db, 30);
+    if (removedLogs > 0) {
+      console.info(`[event-logger] cleaned up ${removedLogs} rows older than 30 days`);
+    }
+    markStartup('logs.maintenance.end', { removedLogs });
+  }, 0);
   const apiFailureLogger = createApiFailureLogger(eventLogger, apiErrorFileLogger);
+  bootStatus.markRuntimeStarting('main dependencies are being initialized');
   // KIS 공식 RPS 한도: 실전 20 req/s, 모의 5 req/s. 20% margin 확보해 실전 18/모의 4로 운영.
   // 모의에서 15 RPS 디폴트 유지 시 watchEngine/quote-feed 와 balance polling 동시 발생 시
   // KIS 가 유량초과로 5xx 반환 → "잔고 서버에 일시적인 문제" 메시지로 변환되던 원인.
@@ -151,6 +166,7 @@ export function bootstrapDeps(userDataDir: string) {
   const stockMasterSync = new StockMasterSyncService(stockMasterRepo, settingsRepo);
   const candlesRepo = new DailyCandlesRepo(db);
   const tradingCalendar = new TradingCalendarService({ db, logger: eventLogger });
+  markStartup('trading-calendar.seed.start');
   try {
     tradingCalendar.seedBundled();
   } catch (cause) {
@@ -161,6 +177,7 @@ export function bootstrapDeps(userDataDir: string) {
       payload: { cause: cause instanceof Error ? cause.message : String(cause) },
     });
   }
+  markStartup('trading-calendar.seed.end');
   const prebuyRepo = new PrebuyRepo(db);
   // stockMasterRepo 주입 — cyclesByPdno 의 종목명(name) 필드를 stock_master 에서 lookup.
   const lotsRepo = new LotsRepo(db, stockMasterRepo);
@@ -218,6 +235,7 @@ export function bootstrapDeps(userDataDir: string) {
     logger: apiFailureLogger,
   });
   const protectionGuard = new ProtectionGuard(db, protectionLimitsRepo);
+  markStartup('bootstrap.repos.end');
   // 활성 계좌 보장 — 계좌 0개면 null. 자격증명 저장 시 자동 시드.
   const ensured = activeAccounts.ensureActive();
   const initialActiveAccountId = ensured.isOk() ? ensured.value : null;
@@ -226,6 +244,7 @@ export function bootstrapDeps(userDataDir: string) {
     strategyRepo.migrateLegacyKeys(ensured.value);
   }
   const strategyMigration = strategyRepo.upgradeStoredProfiles();
+  markStartup('strategy.migration.end', { recovered: strategyMigration.recovered });
   const backfillStrategiesForAccount = (accountId: number): void => {
     const rows = lotsRepo.listRows(accountId);
     if (rows.isErr()) {
@@ -243,6 +262,7 @@ export function bootstrapDeps(userDataDir: string) {
   for (const account of activeAccounts.list()) {
     backfillStrategiesForAccount(account.id);
   }
+  markStartup('strategy.backfill.end');
   if (strategyMigration.recovered > 0) {
     void app.whenReady().then(async () => {
       await dialog.showMessageBox({
@@ -262,6 +282,7 @@ export function bootstrapDeps(userDataDir: string) {
     notifyTrade,
   });
   const factoryRef: { factory: ReturnType<typeof createContextFactory> | null } = { factory: null };
+  markStartup('trading-runtime.create.start');
   const tradingRuntime = createTradingRuntime({
     db,
     settingsRepo,
@@ -282,8 +303,11 @@ export function bootstrapDeps(userDataDir: string) {
     broadcastToAllWindows,
   });
   const { bus, watchEngine, strategyEngine, pendingOrderWatcher, prebuyWatchers } = tradingRuntime;
+  markStartup('trading-runtime.create.end');
 
+  markStartup('context-factory.create.start');
   const factory = createContextFactory({
+    bootStatus,
     db,
     credentialsRepo,
     settingsRepo,
@@ -320,6 +344,7 @@ export function bootstrapDeps(userDataDir: string) {
     realtimeFactory: tradingRuntime.realtimeFactory,
   });
   factoryRef.factory = factory;
+  markStartup('context-factory.create.end');
 
   eventLogger.log({
     level: 'INFO',
@@ -367,9 +392,14 @@ export function bootstrapDeps(userDataDir: string) {
     broadcastTradeExecution: watchEvents.broadcastTradeExecution,
   });
   const { balanceSync, currentStateSync, manualOrderReconciler } = accountSyncRuntime;
+  markStartup('account-sync-runtime.create.end');
+  bootStatus.markRuntimeReady('runtime initialized');
+  bootStatus.setFlags({ backupReady: false });
+  markStartup('bootstrap.end');
 
   return {
     factory,
+    bootStatus,
     currentStateSync,
     safetyRegistry,
     eventLogger,

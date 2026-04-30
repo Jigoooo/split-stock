@@ -92,6 +92,9 @@ contextBridge.exposeInMainWorld('appShell', {
   setAlwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('appShell:setAlwaysOnTop', on),
   fitContentHeight: (height: number): Promise<void> =>
     ipcRenderer.invoke('appShell:fitContentHeight', height),
+  markRouteReady: (route: string): void => {
+    ipcRenderer.send('appShell:route-ready', route);
+  },
 });
 
 export type AppEnvBridge = {
@@ -118,4 +121,5 @@ export type AppShellBridge = {
   ) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;
   fitContentHeight: (height: number) => Promise<void>;
+  markRouteReady?: (route: string) => void;
 };

@@ -3,6 +3,7 @@ import { accountRouter } from './routers/account-router';
 import { aiRouter } from './routers/ai-router';
 import { authRouter } from './routers/auth-router';
 import { backupRouter } from './routers/backup-router';
+import { bootRouter } from './routers/boot-router';
 import { displayRouter } from './routers/display-router';
 import { feesRouter } from './routers/fees-router';
 import { logsRouter } from './routers/logs-router';
@@ -26,6 +27,7 @@ import { watchRouter } from './routers/watch-router';
 import { router } from './trpc-core';
 
 export const appRouter = router({
+  boot: bootRouter,
   auth: authRouter,
   account: accountRouter,
   ai: aiRouter,

@@ -1,4 +1,8 @@
 import { useGetDisplaySettings } from '@renderer/entities/display-settings';
+import {
+  useTradeNotifications,
+  useWatchEventNotifications,
+} from '@renderer/features/trade-notifications';
 import { createQueryClient } from '@renderer/shared/api/query-client';
 import { trpc } from '@renderer/shared/api/trpc';
 import { DialogProvider } from '@renderer/shared/ui';
@@ -23,6 +27,8 @@ const DisplaySettingsRuntime = (): null => {
 
   return null;
 };
+
+export type AppWindowKind = 'main' | 'popout';
 
 /**
  * 다른 창에서 발생한 설정 변경(매매/보호/시간대/자동감시/안전/백업 등)을 받아 query invalidate.
@@ -55,10 +61,16 @@ const autoRefreshKeys = {
   dart: '',
 };
 
-const AiDataAutoRefreshRuntime = (): null => {
+const AiDataAutoRefreshRuntime = ({ enabled }: { enabled: boolean }): null => {
   const utils = trpc.useUtils();
-  const marketStatus = trpc.ai.getMarketContextStatus.useQuery(undefined, { staleTime: 30_000 });
-  const dartStatus = trpc.ai.getDartCorpCodeStatus.useQuery(undefined, { staleTime: 30_000 });
+  const marketStatus = trpc.ai.getMarketContextStatus.useQuery(undefined, {
+    enabled,
+    staleTime: 30_000,
+  });
+  const dartStatus = trpc.ai.getDartCorpCodeStatus.useQuery(undefined, {
+    enabled,
+    staleTime: 30_000,
+  });
   const marketHadPreviousErrorRef = useRef(false);
 
   const marketRefresh = trpc.ai.refreshMarketContext.useMutation({
@@ -88,6 +100,7 @@ const AiDataAutoRefreshRuntime = (): null => {
   useEffect(() => {
     const krx = marketStatus.data?.krx;
     const ecos = marketStatus.data?.ecos;
+    if (!enabled) return;
     if (!krx && !ecos) return;
     if (marketRefresh.isPending) return;
     const shouldRefresh = sourceNeedsRefresh(krx) || sourceNeedsRefresh(ecos);
@@ -107,9 +120,16 @@ const AiDataAutoRefreshRuntime = (): null => {
     autoRefreshKeys.market = key;
     marketHadPreviousErrorRef.current = hadPreviousError;
     marketRefresh.mutate({});
-  }, [marketRefresh, marketRefresh.isPending, marketStatus.data?.ecos, marketStatus.data?.krx]);
+  }, [
+    enabled,
+    marketRefresh,
+    marketRefresh.isPending,
+    marketStatus.data?.ecos,
+    marketStatus.data?.krx,
+  ]);
 
   useEffect(() => {
+    if (!enabled) return;
     const status = dartStatus.data;
     if (!status?.available || !status.stale) return;
     if (dartRefresh.isPending) return;
@@ -117,8 +137,14 @@ const AiDataAutoRefreshRuntime = (): null => {
     if (autoRefreshKeys.dart === key) return;
     autoRefreshKeys.dart = key;
     dartRefresh.mutate();
-  }, [dartRefresh, dartRefresh.isPending, dartStatus.data]);
+  }, [dartRefresh, dartRefresh.isPending, dartStatus.data, enabled]);
 
+  return null;
+};
+
+const AppNotificationsRuntime = (): null => {
+  useWatchEventNotifications();
+  useTradeNotifications();
   return null;
 };
 
@@ -126,7 +152,29 @@ function sourceNeedsRefresh(status: MarketSourceStatus | undefined): boolean {
   return Boolean(status?.isAvailable && (status.isStale || status.lastError));
 }
 
-export const AppProviders = ({ children }: PropsWithChildren): ReactElement => {
+const MainWindowRuntimes = (): ReactElement => {
+  const bootStatus = trpc.boot.getStatus.useQuery(undefined, {
+    refetchInterval: (query) =>
+      query.state.data?.phase === 'runtime-ready' || query.state.data?.phase === 'degraded'
+        ? false
+        : 500,
+    staleTime: 500,
+  });
+  const runtimeReady = bootStatus.data?.phase === 'runtime-ready';
+  return (
+    <>
+      <AiDataAutoRefreshRuntime enabled={runtimeReady} />
+      <AppNotificationsRuntime />
+    </>
+  );
+};
+
+const PopoutWindowRuntimes = (): ReactElement => <></>;
+
+export const AppProviders = ({
+  children,
+  windowKind,
+}: PropsWithChildren<{ windowKind: AppWindowKind }>): ReactElement => {
   const [queryClient] = useState(() => createQueryClient());
   const [trpcClient] = useState(() =>
     trpc.createClient({
@@ -140,7 +188,7 @@ export const AppProviders = ({ children }: PropsWithChildren): ReactElement => {
       <QueryClientProvider client={queryClient}>
         <DisplaySettingsRuntime />
         <SettingsSyncRuntime />
-        <AiDataAutoRefreshRuntime />
+        {windowKind === 'main' ? <MainWindowRuntimes /> : <PopoutWindowRuntimes />}
         <Toaster
           position="top-right"
           theme="light"

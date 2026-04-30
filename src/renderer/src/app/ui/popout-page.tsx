@@ -1,98 +1,37 @@
-import { StockPickerList } from '@renderer/entities/stock';
-import {
-  AddWatchOrderDialog,
-  type AddWatchOrderPrefillPayload,
-  consumeAddWatchOrderPrefill,
-} from '@renderer/features/add-watch-order';
-import { ProfitCalculatorPage } from '@renderer/features/profit-calculator';
-import { AddAccountPage } from '@renderer/features/switch-account';
-import { LogsPage } from '@renderer/pages/logs';
-import { ReportsPage } from '@renderer/pages/reports';
-import { SettingsPage } from '@renderer/pages/settings';
-import { TradePage } from '@renderer/pages/trade';
 import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
 import { getPopoutWindowTitle } from '@shared/popout';
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { lazy, type ReactElement, Suspense, useEffect } from 'react';
 import type { PopoutRoute } from '../model/popout-route';
 import type { PopoutApi } from '../model/use-popout-state';
 
-/**
- * 자동감시 추가/수정 팝아웃 페이지.
- * watch-board 에서 localStorage 에 저장한 prefill 을 읽어 다이얼로그를 표시한다.
- * 저장 또는 취소 시 창을 닫는다.
- */
-const AddWatchOrderPage = (): ReactElement => {
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [payload, setPayload] = useState<AddWatchOrderPrefillPayload | null>(null);
-  const [open, setOpen] = useState(false);
-  const [ready, setReady] = useState(false);
-  const isEdit = payload?.prefill?.existingId !== undefined;
-
-  useEffect(() => {
-    try {
-      const parsed = consumeAddWatchOrderPrefill();
-      if (parsed) setPayload(parsed);
-    } catch {
-      // 파싱 실패 시 빈 신규 폼으로 진행
-    }
-    setOpen(true);
-    setReady(true);
-  }, []);
-
-  useEffect(() => {
-    document.title = isEdit ? 'Split Stock · 자동감시 수정' : 'Split Stock · 자동감시 추가';
-  }, [isEdit]);
-
-  useEffect(() => {
-    const shell = window.appShell;
-    const node = contentRef.current;
-    if (!ready || !shell?.fitContentHeight || !node) return;
-
-    let frameId = 0;
-    let lastHeight = 0;
-    const schedule = (): void => {
-      if (frameId !== 0) return;
-      frameId = window.requestAnimationFrame(() => {
-        frameId = 0;
-        const nextHeight = Math.ceil(node.getBoundingClientRect().height);
-        if (nextHeight <= 0 || nextHeight === lastHeight) return;
-        lastHeight = nextHeight;
-        void shell.fitContentHeight(nextHeight);
-      });
-    };
-
-    schedule();
-    const observer = new ResizeObserver(() => schedule());
-    observer.observe(node);
-    window.addEventListener('resize', schedule);
-    return () => {
-      if (frameId !== 0) window.cancelAnimationFrame(frameId);
-      observer.disconnect();
-      window.removeEventListener('resize', schedule);
-    };
-  }, [ready]);
-
-  const handleClose = (): void => {
-    setOpen(false);
-    window.close();
-  };
-
-  if (!ready) {
-    return <div style={{ padding: '1rem' }}>{LOADING_MESSAGES.GENERAL}</div>;
-  }
-
-  return (
-    <div ref={contentRef}>
-      <AddWatchOrderDialog
-        open={open}
-        accountId={payload?.accountId ?? 0}
-        prefill={payload?.prefill ?? null}
-        layout="page"
-        onClose={handleClose}
-      />
-    </div>
-  );
-};
+const TradePopout = lazy(() =>
+  import('./popouts/trade-popout').then((m) => ({ default: m.TradePopout })),
+);
+const LogsPopout = lazy(() =>
+  import('./popouts/logs-popout').then((m) => ({ default: m.LogsPopout })),
+);
+const ReportsPopout = lazy(() =>
+  import('./popouts/reports-popout').then((m) => ({ default: m.ReportsPopout })),
+);
+const SettingsPopout = lazy(() =>
+  import('./popouts/settings-popout').then((m) => ({ default: m.SettingsPopout })),
+);
+const StockPickerPopout = lazy(() =>
+  import('./popouts/stock-picker-popout').then((m) => ({ default: m.StockPickerPopout })),
+);
+const ProfitCalculatorPopout = lazy(() =>
+  import('./popouts/profit-calculator-popout').then((m) => ({
+    default: m.ProfitCalculatorPopout,
+  })),
+);
+const AddAccountPopout = lazy(() =>
+  import('./popouts/add-account-popout').then((m) => ({ default: m.AddAccountPopout })),
+);
+const AddWatchOrderPopout = lazy(() =>
+  import('./popouts/add-watch-order-popout').then((m) => ({
+    default: m.AddWatchOrderPopout,
+  })),
+);
 
 export interface PopoutPageProps {
   route: PopoutRoute;
@@ -112,43 +51,28 @@ export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => 
   let content: ReactElement;
   switch (route) {
     case 'trade':
-      content = (
-        <TradePage
-          isStockPickerPopoutOpen={popout.isOpen('stock-picker')}
-          onOpenStockPickerPopout={() => popout.popout('stock-picker')}
-        />
-      );
+      content = <TradePopout popout={popout} />;
       break;
     case 'logs':
-      content = <LogsPage />;
+      content = <LogsPopout />;
       break;
     case 'reports':
-      content = <ReportsPage />;
+      content = <ReportsPopout />;
       break;
     case 'stock-picker':
-      content = (
-        <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-          <StockPickerList
-            alwaysOpen
-            hidePopoutButton
-            onSelect={(entry) => {
-              window.appShell?.assignStock?.(entry.pdno, entry.name);
-            }}
-          />
-        </div>
-      );
+      content = <StockPickerPopout />;
       break;
     case 'profit-calculator':
-      content = <ProfitCalculatorPage />;
+      content = <ProfitCalculatorPopout />;
       break;
     case 'add-account':
-      content = <AddAccountPage />;
+      content = <AddAccountPopout />;
       break;
     case 'add-watch-order':
-      content = <AddWatchOrderPage />;
+      content = <AddWatchOrderPopout />;
       break;
     case 'settings':
-      content = <SettingsPage />;
+      content = <SettingsPopout />;
       break;
   }
 
@@ -163,7 +87,9 @@ export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => 
         minHeight: 0,
       }}
     >
-      {content}
+      <Suspense fallback={<div style={{ padding: '1rem' }}>{LOADING_MESSAGES.ROUTE_LOADING}</div>}>
+        {content}
+      </Suspense>
     </div>
   );
 };

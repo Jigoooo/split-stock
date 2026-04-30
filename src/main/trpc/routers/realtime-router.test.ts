@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { BootStatusService } from '../../boot/boot-status';
 import type { OrderbookUpdate, TickUpdate } from '../../kis/ws-frame-parser';
 import { FeedBus } from '../../realtime/feed-bus';
 import type { Context } from '../context';
@@ -46,6 +47,34 @@ function createCtx(bus: FeedBus): Context {
 }
 
 describe('realtimeRouter subscriptions', () => {
+  it('runtime 준비 전에는 typed boot-not-ready precondition을 반환한다', async () => {
+    const bootStatus = new BootStatusService();
+    bootStatus.markShellReady('test shell');
+    const caller = createCaller({
+      currentEnv: 'MOCK',
+      bootStatus,
+    } as unknown as Context);
+
+    await expect(caller.status()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining('boot-not-ready'),
+    });
+  });
+
+  it('환경 선택 전이라도 runtime 미준비 호출은 boot-not-ready로 막는다', async () => {
+    const bootStatus = new BootStatusService();
+    bootStatus.markShellReady('test shell');
+    const caller = createCaller({
+      currentEnv: null,
+      bootStatus,
+    } as unknown as Context);
+
+    await expect(caller.status()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining('boot-not-ready'),
+    });
+  });
+
   it('start 성공 후 계좌 실시간 dirty subscription을 재연결한다', async () => {
     const start = vi.fn(async () => ({ ok: true as const }));
     const syncAccountRealtimeSubscription = vi.fn();

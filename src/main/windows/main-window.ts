@@ -2,11 +2,23 @@ import { join } from 'node:path';
 import { getPopoutRouteConfig, getPopoutWindowTitle, type PopoutRoute } from '@shared/popout';
 import type { BrowserWindow as BrowserWindowType } from 'electron';
 import { BrowserWindow, isDev, screen, shell } from '../electron-runtime';
+import { markStartup } from '../perf/startup-perf';
 
 export interface CreateWindowOpts {
   popoutRoute?: PopoutRoute;
   /** 팝아웃 창은 parent가 위치한 모니터에 열리도록 기준 창을 전달 */
   parent?: BrowserWindowType;
+  showPolicy?: WindowShowPolicy;
+}
+
+export type WindowKind = 'main' | 'popout';
+export type WindowShowPolicy = 'ready-to-show' | 'immediate-with-background';
+
+export interface ConstructedMainWindow {
+  window: BrowserWindowType;
+  kind: WindowKind;
+  popoutRoute?: PopoutRoute;
+  showPolicy: WindowShowPolicy;
 }
 
 interface WindowLayoutSpec {
@@ -196,11 +208,13 @@ export function fitWindowHeightToContent(win: BrowserWindowType, contentHeight: 
   win.setBounds({ x: bounds.x, y: nextY, width: bounds.width, height: nextHeight });
 }
 
-export function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
-  const { popoutRoute, parent } = opts;
+export function constructMainWindow(opts: CreateWindowOpts = {}): ConstructedMainWindow {
+  const { popoutRoute, parent, showPolicy = 'ready-to-show' } = opts;
   const display = pickTargetDisplay(parent);
   const layout = getWindowLayout(popoutRoute);
   const bounds = resolveWindowBounds(layout, display);
+  const kind: WindowKind = popoutRoute ? 'popout' : 'main';
+  markStartup('window.construct.start', { kind, route: popoutRoute ?? null });
   const win = new BrowserWindow({
     x: bounds.x,
     y: bounds.y,
@@ -211,6 +225,7 @@ export function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType
     maxWidth: bounds.maxWidth,
     maxHeight: bounds.maxHeight,
     show: false,
+    backgroundColor: '#f4f6fb',
     autoHideMenuBar: true,
     title: popoutRoute ? getPopoutWindowTitle(popoutRoute) : layout.title,
     webPreferences: {
@@ -225,7 +240,11 @@ export function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType
   bindDisplayConstraints(win, layout);
 
   win.on('ready-to-show', () => {
-    win.show();
+    markStartup('window.ready-to-show', { kind, route: popoutRoute ?? null, id: win.id });
+    if (showPolicy === 'ready-to-show') {
+      win.show();
+      markStartup('window.show', { kind, route: popoutRoute ?? null, id: win.id, showPolicy });
+    }
     if (isDev) win.webContents.openDevTools({ mode: 'detach' });
   });
 
@@ -234,12 +253,27 @@ export function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType
     return { action: 'deny' };
   });
 
+  markStartup('window.construct.end', { kind, route: popoutRoute ?? null, id: win.id });
+  return { window: win, kind, ...(popoutRoute ? { popoutRoute } : {}), showPolicy };
+}
+
+export function loadMainWindow(ref: ConstructedMainWindow): void {
+  const { window: win, popoutRoute, kind, showPolicy } = ref;
   const hash = popoutRoute ? `/popout/${encodeURIComponent(popoutRoute)}` : '';
+  markStartup('window.load.start', { kind, route: popoutRoute ?? null, id: win.id });
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}${hash ? `#${hash}` : ''}`);
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'), { hash });
   }
+  if (showPolicy === 'immediate-with-background') {
+    win.show();
+    markStartup('window.show', { kind, route: popoutRoute ?? null, id: win.id, showPolicy });
+  }
+}
 
-  return win;
+export function createMainWindow(opts: CreateWindowOpts = {}): BrowserWindowType {
+  const ref = constructMainWindow(opts);
+  loadMainWindow(ref);
+  return ref.window;
 }
