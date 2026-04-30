@@ -1,8 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { useEffect, useRef, useState } from 'react';
 
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10분 — LLM 비용 절감 + 모달 재오픈 시 즉시 표시.
-
 export type RecommendationPickHandler = (pdno: string, name: string) => void;
 
 export interface OpenRecommendationOptions {
@@ -559,14 +557,7 @@ export function useSymbolRecommendations() {
     }
 
     const cached = cacheRef.current;
-    const sameExtras =
-      cached !== null &&
-      cached.extras.length === extraPdnos.length &&
-      cached.extras.every((p, i) => p === extraPdnos[i]);
-    const sameMode = cached !== null && cached.aiOff === aiOff;
-    const sameAuto = cached !== null && cached.includeAutoDiscovery === includeAutoDiscovery;
-    const fresh = cached !== null && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
-    if (cached && sameExtras && sameMode && sameAuto && fresh) {
+    if (cached && view.ranked.length === 0 && view.userInputResults.length === 0) {
       setView({
         isOpen: true,
         isPending: false,
@@ -584,21 +575,14 @@ export function useSymbolRecommendations() {
       });
       return;
     }
-    setView({
+    setView((prev) => ({
+      ...prev,
       isOpen: true,
       isPending: false,
       progress: null,
-      ranked: [],
-      userInputResults: [],
-      distribution: EMPTY_DIST,
-      diagnostics: EMPTY_DIAGNOSTICS,
-      emptyReason: null,
-      rejectedCount: 0,
-      durationMs: 0,
-      lastFetchedAt: null,
       fromCache: false,
       error: null,
-    });
+    }));
   };
 
   const analyze = (): void => {

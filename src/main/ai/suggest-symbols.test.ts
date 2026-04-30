@@ -570,6 +570,50 @@ describe('suggestSymbols', () => {
     expect(item.cons.some((reason) => reason.includes('AI 점수 상한 적용'))).toBe(true);
   });
 
+  it('normalizes mismatched LLM tier to the final score bucket', async () => {
+    const chat = vi.fn<LlmClient['chat']>().mockResolvedValue({
+      parsed: {
+        recommended: [
+          {
+            pdno: '005930',
+            score: 68,
+            tier: 'avoid',
+            confidence: 'med',
+            volatilityFit: 'mid',
+            liquidityFit: 'ok',
+            summary: '점수와 등급이 불일치한 응답입니다.',
+            pros: ['회전성 양호'],
+            cons: [],
+            entryNote: null,
+            consensusCount: 1,
+            citedTools: [],
+          },
+        ],
+        userInputResults: [],
+      },
+      text: '{}',
+      toolCalls: [],
+    } satisfies ChatResponse<unknown>);
+
+    const result = await suggestSymbols(
+      baseInput(65, {
+        extraPdnos: [],
+        includeAutoDiscovery: true,
+        llmClient: { chat } as unknown as LlmClient,
+        fetchNewsEvidence: async () => new Map(),
+        discoverAutoCandidates: async () => autoDiscoveryResult({ '005930': '삼성전자' }),
+      }),
+    );
+
+    const item = result.ranked[0];
+    expect(item).toBeDefined();
+    if (!item) throw new Error('missing ranked item');
+    expect(item.score).toBe(68);
+    expect(item.tier).toBe(scoreToTier(item.score));
+    expect(item.tier).toBe('moderate');
+    expect(item.cons.some((reason) => reason.includes('등급 보정'))).toBe(true);
+  });
+
   it('attaches news clusters to evidence refs for traceability', async () => {
     const chat = vi.fn<LlmClient['chat']>().mockResolvedValue({
       parsed: {

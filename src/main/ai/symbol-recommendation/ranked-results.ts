@@ -256,7 +256,9 @@ export function buildLlmRankedSymbols(args: {
     const algo = args.algoByPdno.get(item.pdno);
     const fact = args.factsByPdno.get(item.pdno);
     const anchored = anchorLlmScore(item, algo);
-    const capped = capSymbolByDataQuality(anchored, fact?.dataQuality ?? 'blocked');
+    const capped = normalizeTierByScore(
+      capSymbolByDataQuality(anchored, fact?.dataQuality ?? 'blocked'),
+    );
     out.push({
       ...capped,
       summary: compactText(anchored.summary, 200) || '분석 요약이 부족합니다.',
@@ -293,7 +295,7 @@ export function buildLlmRankedSymbols(args: {
 function anchorLlmScore(item: RankedItem, algo: AlgoSignals | undefined): RankedItem {
   const algoScore = algo?.rangeCycleScore ?? null;
   const maxScore = algoScore === null ? 40 : Math.min(100, algoScore + 10);
-  if (item.score <= maxScore) return item;
+  if (item.score <= maxScore) return normalizeTierByScore(item);
 
   const score = Math.max(0, Math.min(100, Math.round(maxScore)));
   const reason =
@@ -308,6 +310,34 @@ function anchorLlmScore(item: RankedItem, algo: AlgoSignals | undefined): Ranked
     confidence: item.confidence === 'high' ? 'med' : item.confidence,
     cons,
   };
+}
+
+function normalizeTierByScore<T extends RankedItem>(item: T): T {
+  const tier = scoreToTier(item.score);
+  if (item.tier === tier) return item;
+  return {
+    ...item,
+    tier,
+    cons: [
+      `등급 보정(${tierLabel(item.tier)}->${tierLabel(tier)}) — 점수 ${item.score} 기준`,
+      ...(item.cons ?? []),
+    ].slice(0, 3),
+  };
+}
+
+function tierLabel(tier: Tier): string {
+  switch (tier) {
+    case 'top':
+      return '최우선';
+    case 'strong':
+      return '강함';
+    case 'moderate':
+      return '보통';
+    case 'watch':
+      return '관찰';
+    case 'avoid':
+      return '보류';
+  }
 }
 
 function enrichCons(item: RankedItem, algo: AlgoSignals | undefined): string[] {

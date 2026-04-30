@@ -127,11 +127,15 @@ export function useStrategyRecommendationSessionValue() {
   const [view, setView] = useState<StrategyRecommendationViewState>(INITIAL_VIEW);
   const [lastApplied, setLastApplied] = useState<AppliedStrategyRecommendation | null>(null);
   const activePdnoRef = useRef<string | null>(null);
+  const pendingPdnoRef = useRef<string | null>(null);
   const startedAtRef = useRef<number | null>(null);
+  const suggestedByPdnoRef = useRef<Map<string, SuggestedStrategyView>>(new Map());
   const activeApplyConsumersRef = useRef<Set<string>>(new Set());
 
   const mut = trpc.ai.suggestStrategy.useMutation({
     onSuccess: (res) => {
+      const pdno = pendingPdnoRef.current ?? activePdnoRef.current;
+      pendingPdnoRef.current = null;
       startedAtRef.current = null;
       const suggestion = res.suggestion;
       if (!suggestion) {
@@ -140,38 +144,50 @@ export function useStrategyRecommendationSessionValue() {
           isOpen: true,
           isPending: false,
           progress: null,
-          suggested: null,
+          activePdno: pdno ?? prev.activePdno,
+          suggested: pdno
+            ? (suggestedByPdnoRef.current.get(pdno) ?? prev.suggested)
+            : prev.suggested,
           error: res.emptyReason ?? 'AI 추천 결과가 없습니다.',
         }));
         return;
       }
       const profile = mergeIntoProfile(suggestion);
+      const suggested: SuggestedStrategyView = {
+        profile,
+        reasoning: suggestion.reasoning,
+        stageRationales: suggestion.stageRationales ?? [],
+        globalRisks: suggestion.globalRisks ?? [],
+        evidenceRefs: suggestion.evidenceRefs ?? [],
+        analysisConfidence: suggestion.analysisConfidence ?? 'low',
+        dataQuality: suggestion.dataQuality ?? res.dataQuality ?? 'blocked',
+        dataQualityReason: res.dataQualityReason,
+      };
+      if (pdno) {
+        activePdnoRef.current = pdno;
+        suggestedByPdnoRef.current.set(pdno, suggested);
+      }
       setView((prev) => ({
         ...prev,
         isOpen: true,
         isPending: false,
+        activePdno: pdno ?? prev.activePdno,
         progress: null,
         error: null,
-        suggested: {
-          profile,
-          reasoning: suggestion.reasoning,
-          stageRationales: suggestion.stageRationales ?? [],
-          globalRisks: suggestion.globalRisks ?? [],
-          evidenceRefs: suggestion.evidenceRefs ?? [],
-          analysisConfidence: suggestion.analysisConfidence ?? 'low',
-          dataQuality: suggestion.dataQuality ?? res.dataQuality ?? 'blocked',
-          dataQualityReason: res.dataQualityReason,
-        },
+        suggested,
       }));
     },
     onError: (err) => {
+      const pdno = pendingPdnoRef.current ?? activePdnoRef.current;
+      pendingPdnoRef.current = null;
       startedAtRef.current = null;
       setView((prev) => ({
         ...prev,
         isOpen: true,
         isPending: false,
         progress: null,
-        suggested: null,
+        activePdno: pdno ?? prev.activePdno,
+        suggested: pdno ? (suggestedByPdnoRef.current.get(pdno) ?? prev.suggested) : prev.suggested,
         error: `AI strategy 추천 실패: ${err.message}`,
       }));
     },
@@ -194,7 +210,13 @@ export function useStrategyRecommendationSessionValue() {
 
   const activatePdno = (pdno: string): string => {
     activePdnoRef.current = pdno;
-    setView((prev) => ({ ...prev, activePdno: pdno }));
+    setView((prev) => ({
+      ...prev,
+      activePdno: pdno,
+      suggested: prev.isPending ? prev.suggested : (suggestedByPdnoRef.current.get(pdno) ?? null),
+      error: prev.isPending ? prev.error : null,
+      progress: prev.isPending ? prev.progress : null,
+    }));
     return pdno;
   };
 
@@ -225,6 +247,7 @@ export function useStrategyRecommendationSessionValue() {
 
     const startedAt = Date.now();
     startedAtRef.current = startedAt;
+    pendingPdnoRef.current = pdno;
     setView((prev) => ({
       ...prev,
       isOpen: true,
@@ -259,7 +282,6 @@ export function useStrategyRecommendationSessionValue() {
     setView((prev) => ({
       ...prev,
       isOpen: false,
-      suggested: null,
       error: null,
     }));
   };

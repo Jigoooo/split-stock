@@ -32,11 +32,11 @@ const SOURCE_LABEL: Record<'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO', string> = {
 };
 
 const TIER_LABEL: Record<RecommendTier, string> = {
-  top: 'TOP',
-  strong: 'STRONG',
-  moderate: 'MODERATE',
-  watch: 'WATCH',
-  avoid: 'AVOID',
+  top: '최우선',
+  strong: '강함',
+  moderate: '보통',
+  watch: '관찰',
+  avoid: '보류',
 };
 const TIER_COLOR: Record<RecommendTier, { bg: string; fg: string }> = {
   top: { bg: '#D97757', fg: '#ffffff' },
@@ -199,7 +199,7 @@ export function RecommendDetail({
           <h3 style={{ margin: 0, fontSize: '1.45rem', color: 'var(--fg)' }}>{item.name}</h3>
           <div className="muted" style={{ fontSize: '1rem', marginTop: '0.25rem' }}>
             {item.pdno} · {TIER_LABEL[item.tier]} · {item.score}점 ·{' '}
-            {item.dataQualityReason ?? 'data quality n/a'}
+            {item.dataQualityReason ?? '데이터 품질 정보 없음'}
           </div>
         </div>
         <button

@@ -350,6 +350,19 @@ export const StrategyPreviewModal = ({
                     취소
                   </Button>
                   <Button
+                    variant="ghost"
+                    dense
+                    iconLeading={<RefreshCw size={14} />}
+                    onClick={onRetry}
+                    style={{
+                      color: '#D97757',
+                      borderColor: '#D97757',
+                      minWidth: '7rem',
+                    }}
+                  >
+                    다시 분석
+                  </Button>
+                  <Button
                     variant="primary"
                     dense
                     onClick={onApply}

@@ -24,11 +24,11 @@ import { ExtraPdnoPicker } from './extra-pdno-picker';
 import { RecommendCard, RecommendDetail } from './recommend-card';
 
 const TIER_LABELS: Record<keyof TierDistribution, string> = {
-  top: 'TOP',
-  strong: 'STRONG',
-  moderate: 'MODERATE',
-  watch: 'WATCH',
-  avoid: 'AVOID',
+  top: '최우선',
+  strong: '강함',
+  moderate: '보통',
+  watch: '관찰',
+  avoid: '보류',
 };
 const DISCOVERY_CONDITION_LABELS: Record<DiscoveryConditionKey, string> = {
   score: '점수',
@@ -151,7 +151,7 @@ function DiscoveryStatus({
   const universeSummary = formatUniverseQuality(discovery.universeQuality);
   const bucketSummary = formatDiscoveryBuckets(discovery.bucketCounts);
   const titleParts = [
-    failed.length > 0 ? `실패 source: ${failed.join(', ')}` : null,
+    failed.length > 0 ? `실패 소스: ${failed.join(', ')}` : null,
     discovery.basisDate ? `KRX 기준일 ${discovery.basisDate}` : null,
     universeSummary,
     bucketSummary,
@@ -167,7 +167,7 @@ function DiscoveryStatus({
   ].filter((part): part is string => part !== null);
   const text =
     discovery.addedCount > 0
-      ? `자동발굴 ${discovery.addedCount}개 · ${tierSummary || 'tier 없음'} · seed ${discovery.seedCount}`
+      ? `자동발굴 ${discovery.addedCount}개 · ${tierSummary || '등급 없음'} · 시드 ${discovery.seedCount}`
       : `자동발굴 제한 · ${formatDiscoveryReason(discovery.emptyReason)}`;
   return (
     <span
@@ -201,7 +201,10 @@ function DiscoveryDebugPanel({
   const tradeBuckets = formatRecordCounts(discovery.bucketCounts?.tradeValue);
   const sourceSummary = diagnostics.sources
     .filter((source) => source.source === 'krx')
-    .map((source) => `${source.status}${source.count !== undefined ? ` ${source.count}` : ''}`)
+    .map(
+      (source) =>
+        `${formatApiStatus(source.status)}${source.count !== undefined ? ` ${source.count}` : ''}`,
+    )
     .join(', ');
   return (
     <div
@@ -220,29 +223,29 @@ function DiscoveryDebugPanel({
     >
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
         <span>
-          universe {quality ? `${quality.eligible}/${quality.raw}` : discovery.universeCount}
+          유니버스 {quality ? `${quality.eligible}/${quality.raw}` : discovery.universeCount}
         </span>
-        <span>seed {discovery.seedCount}</span>
+        <span>시드 {discovery.seedCount}</span>
         <span>
-          screened {discovery.screenedCount} → added {discovery.addedCount}
+          평가 {discovery.screenedCount} → 추가 {discovery.addedCount}
         </span>
         <span>
-          candles{' '}
+          일봉{' '}
           {discovery.candleCoverage
-            ? `${discovery.candleCoverage.fetched}/${discovery.candleCoverage.requested} failed ${discovery.candleCoverage.failed}`
-            : `${discovery.candlesFetched} fetched`}
+            ? `${discovery.candleCoverage.fetched}/${discovery.candleCoverage.requested} 실패 ${discovery.candleCoverage.failed}`
+            : `${discovery.candlesFetched} 수집`}
         </span>
         {sourceSummary ? <span>KRX {sourceSummary}</span> : null}
       </div>
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
         {quality ? (
           <span>
-            excluded trade {quality.excludedByTradeValue}, base {quality.excludedByBaseInfo}, known{' '}
-            {quality.excludedByAlreadyKnown}, baseMissing {quality.baseInfoMissing}
+            제외: 거래대금 {quality.excludedByTradeValue}, 기준정보 {quality.excludedByBaseInfo},
+            기존종목 {quality.excludedByAlreadyKnown}, 기준정보 없음 {quality.baseInfoMissing}
           </span>
         ) : null}
-        {markets ? <span>market {markets}</span> : null}
-        {tradeBuckets ? <span>trade {tradeBuckets}</span> : null}
+        {markets ? <span>시장 {markets}</span> : null}
+        {tradeBuckets ? <span>거래대금 {tradeBuckets}</span> : null}
       </div>
     </div>
   );
@@ -269,8 +272,21 @@ function formatDiscoveryConditionCounts(
 function formatRecordCounts(counts: Record<string, number> | undefined): string {
   if (!counts) return '';
   return Object.entries(counts)
-    .map(([key, count]) => `${key}:${count}`)
+    .map(([key, count]) => `${formatBucketLabel(key)}:${count}`)
     .join(', ');
+}
+
+function formatApiStatus(status: 'used' | 'cache' | 'skipped' | 'failed'): string {
+  switch (status) {
+    case 'used':
+      return '사용';
+    case 'cache':
+      return '캐시';
+    case 'skipped':
+      return '건너뜀';
+    case 'failed':
+      return '실패';
+  }
 }
 
 function formatUniverseQuality(
@@ -278,7 +294,7 @@ function formatUniverseQuality(
 ): string | null {
   if (!quality) return null;
   return [
-    `universe ${quality.eligible}/${quality.raw}`,
+    `유니버스 ${quality.eligible}/${quality.raw}`,
     quality.excludedByTradeValue > 0 ? `거래대금 제외 ${quality.excludedByTradeValue}` : null,
     quality.excludedByBaseInfo > 0 ? `기준정보 제외 ${quality.excludedByBaseInfo}` : null,
     quality.baseInfoMissing > 0 ? `기준정보 없음 ${quality.baseInfoMissing}` : null,
@@ -292,14 +308,41 @@ function formatDiscoveryBuckets(
 ): string | null {
   if (!counts) return null;
   const markets = Object.entries(counts.market)
-    .map(([market, count]) => `${market} ${count}`)
+    .map(([market, count]) => `${formatBucketLabel(market)} ${count}`)
     .join(', ');
   const trades = Object.entries(counts.tradeValue)
-    .map(([bucket, count]) => `${bucket} ${count}`)
+    .map(([bucket, count]) => `${formatBucketLabel(bucket)} ${count}`)
     .join(', ');
   return [markets ? `시장 ${markets}` : null, trades ? `거래대금 ${trades}` : null]
     .filter((part): part is string => part !== null)
     .join(' / ');
+}
+
+function formatBucketLabel(key: string): string {
+  switch (key) {
+    case 'cap-unknown':
+      return '시총 미상';
+    case 'cap-small':
+      return '소형';
+    case 'cap-mid':
+      return '중형';
+    case 'cap-large':
+      return '대형';
+    case 'cap-mega':
+      return '초대형';
+    case 'trade-unknown':
+      return '거래대금 미상';
+    case 'trade-100m-500m':
+      return '1억~5억';
+    case 'trade-500m-2b':
+      return '5억~20억';
+    case 'trade-2b-10b':
+      return '20억~100억';
+    case 'trade-10b-plus':
+      return '100억 이상';
+    default:
+      return key;
+  }
 }
 
 function formatDiscoveryReason(reason: string | null): string {
@@ -495,7 +538,7 @@ export const RecommendModal = ({
                 {view.fromCache && view.lastFetchedAt !== null ? (
                   <span
                     className="muted"
-                    title="LLM 비용 절감을 위해 10분 동안 결과를 캐시합니다. '다시 분석' 버튼으로 강제 재호출."
+                    title="마지막 추천 결과를 유지합니다. 새 결과가 필요하면 '다시 분석' 버튼을 누르세요."
                     style={{
                       fontSize: '1rem',
                       padding: '0.2rem 0.55rem',
