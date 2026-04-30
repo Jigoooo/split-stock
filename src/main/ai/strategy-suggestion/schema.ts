@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { EvidenceRef } from '../magic-split-facts';
+import type { EvidenceRef } from '../range-cycle-facts';
 
 const RawBuyRuleSchema = z.object({
   nth: z.number().int().min(1).max(50),

@@ -19,12 +19,14 @@ import { round, round1, shiftYmd, toKstYmd } from './math-utils';
 import {
   buildIndicatorReasons,
   buildLabels,
-  combineScore,
+  combineRangeCycleScore,
   computeConfidence,
   scoreBbPosition,
   scoreLiquidity,
+  scoreOversoldConsensus,
   scoreRange,
   scoreSupportProx,
+  scoreTrendNeutrality,
   scoreVolatility,
 } from './scoring';
 import {
@@ -48,10 +50,10 @@ export type { AlgoSignals, AlgoSignalsInput, AlgoThresholds, ConsensusContext };
 export { ALGO_THRESHOLDS, computeConsensus, detectConflicts };
 
 /**
- * 매직스플릿 적합도 + 보조 신호 — LLM 호출 전에 결정론적으로 계산.
+ * 박스권 분할매매 회전성 + 보조 신호 — LLM 호출 전에 결정론적으로 계산.
  *
  * indicatorts 라이브러리의 검증된 함수(bb/macd/rsi/atr/stoch/aroon/obv/mfi/cci/psar)를
- * 사용하고, 매직스플릿 도메인 가드(percentile 박스권 / S·R 클러스터 / consensus /
+ * 사용하고, 회전성 도메인 가드(percentile 박스권 / S·R 클러스터 / consensus /
  * conflicts)를 직접 추가한다.
  */
 export function computeAlgoSignals(input: AlgoSignalsInput): AlgoSignals[] {
@@ -68,13 +70,15 @@ export function computeAlgoSignals(input: AlgoSignalsInput): AlgoSignals[] {
 function emptySignals(pdno: string, reason: string): AlgoSignals {
   return {
     pdno,
-    splitScore: null,
+    rangeCycleScore: null,
     components: {
       volatility: null,
       liquidity: null,
       range: null,
       bbPosition: null,
       supportProx: null,
+      trendNeutrality: null,
+      oversoldConsensus: null,
     },
     box: null,
     bollinger: null,
@@ -139,22 +143,11 @@ function computeSingle(
         down: round(indicators.aroon.down),
         isStrongUpTrend:
           indicators.aroon.up >= T.aroonStrongUp && indicators.aroon.down <= T.aroonWeakDown,
+        isStrongDownTrend:
+          indicators.aroon.down >= T.aroonStrongUp && indicators.aroon.up <= T.aroonWeakDown,
       }
     : null;
   const supportResistance = buildSupportResistance(candles, T, lastClose);
-  const components = {
-    volatility: scoreVolatility(stats.volPct),
-    liquidity: scoreLiquidity(stats.avgVol),
-    range: scoreRange(stats.rangePct),
-    bbPosition: scoreBbPosition(bollinger?.position ?? null),
-    supportProx: scoreSupportProx(supportResistance),
-  };
-
-  let splitScore = combineScore(components);
-  if (candles.length < T.minCandlesForFull && splitScore !== null) {
-    splitScore = Math.min(splitScore, 30);
-  }
-
   const ctx: ConsensusContext = {
     rsi: indicators.rsi,
     bbPosition: bollinger?.position ?? null,
@@ -171,9 +164,23 @@ function computeSingle(
     T,
   };
   const consensus = computeConsensus(ctx);
+  const components = {
+    volatility: scoreVolatility(stats.volPct),
+    liquidity: scoreLiquidity(stats.avgVol),
+    range: scoreRange(stats.rangePct),
+    bbPosition: scoreBbPosition(bollinger?.position ?? null),
+    supportProx: scoreSupportProx(supportResistance),
+    trendNeutrality: scoreTrendNeutrality(aroon25),
+    oversoldConsensus: scoreOversoldConsensus(consensus),
+  };
+
+  let rangeCycleScore = combineRangeCycleScore(components);
+  if (candles.length < T.minCandlesForFull && rangeCycleScore !== null) {
+    rangeCycleScore = Math.min(rangeCycleScore, 30);
+  }
   return {
     pdno,
-    splitScore,
+    rangeCycleScore,
     components,
     box: stats.box,
     bollinger,

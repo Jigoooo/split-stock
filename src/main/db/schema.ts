@@ -49,7 +49,7 @@ export const accessTokens = sqliteTable(
 );
 
 /**
- * 계좌 — 매직스플릿은 단일/다계좌 모두 지원.
+ * 계좌 — 박스권 분할매매은 단일/다계좌 모두 지원.
  */
 export const accounts = sqliteTable('accounts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -65,7 +65,7 @@ export const accounts = sqliteTable('accounts', {
 });
 
 /**
- * 차수 장부 — 매직스플릿의 핵심 자료구조.
+ * 차수 장부 — 박스권 분할매매의 핵심 자료구조.
  * 각 차수(nth)는 독립 포지션으로 관리되며, 해당 차수 매입가 기준 익절.
  */
 export const lots = sqliteTable('lots', {

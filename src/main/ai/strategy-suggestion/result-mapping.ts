@@ -1,4 +1,4 @@
-import type { DataQuality, EvidenceRef } from '../magic-split-facts';
+import type { DataQuality, EvidenceRef } from '../range-cycle-facts';
 import { LenientStrategySuggestionSchema, type StrategySuggestion } from './schema';
 
 export function normalizeSuggestion(

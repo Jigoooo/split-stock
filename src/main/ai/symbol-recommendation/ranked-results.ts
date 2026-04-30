@@ -1,11 +1,11 @@
 import type { AlgoSignals } from '../algo/algo-signals';
 import { applyTierQuota, scoreToTier, summarizeTiers, type Tier } from '../algo/composite-score';
 import type { CandidateEntry } from '../build-candidate-pool';
-import { capSymbolByDataQuality, type MagicSplitFacts } from '../magic-split-facts';
 import type { MarketContextSnapshot } from '../market-context-service';
 import type { NaverSearchTrendSummary } from '../naver-datalab-client';
 import type { NewsEvidencePack } from '../news-evidence';
 import type { NewsItem } from '../news-fetcher';
+import { capSymbolByDataQuality, type RangeCycleFacts } from '../range-cycle-facts';
 import type { SymbolStat } from '../symbol-stats';
 import { buildSymbolEvidenceRefs } from './evidence';
 import { buildRankedMarketContext } from './market-context';
@@ -92,7 +92,7 @@ export interface RankedFallbackArgs {
   algoByPdno: Map<string, AlgoSignals>;
   statsByPdno: Map<string, SymbolStat>;
   marketContext: MarketContextSnapshot | null;
-  factsByPdno: Map<string, MagicSplitFacts>;
+  factsByPdno: Map<string, RangeCycleFacts>;
 }
 
 function buildFallbackRanked(topN: number, args: RankedFallbackArgs) {
@@ -125,7 +125,7 @@ export function buildAlgoOnlyRanked(
   statsByPdno: Map<string, SymbolStat>,
   topN: number,
   marketContext: MarketContextSnapshot | null,
-  factsByPdno: Map<string, MagicSplitFacts>,
+  factsByPdno: Map<string, RangeCycleFacts>,
 ): RankedSymbol[] {
   const ranked = [...pool]
     .map((c) => buildAlgoRankedSymbol(c, algoByPdno, statsByPdno, marketContext, factsByPdno))
@@ -138,15 +138,15 @@ function buildAlgoRankedSymbol(
   algoByPdno: Map<string, AlgoSignals>,
   statsByPdno: Map<string, SymbolStat>,
   marketContext: MarketContextSnapshot | null,
-  factsByPdno: Map<string, MagicSplitFacts>,
+  factsByPdno: Map<string, RangeCycleFacts>,
 ): RankedSymbol {
   const algo = algoByPdno.get(c.pdno);
   const stat = statsByPdno.get(c.pdno);
   const fact = factsByPdno.get(c.pdno);
   const capped = capSymbolByDataQuality(
     {
-      score: algo?.splitScore ?? 0,
-      tier: scoreToTier(algo?.splitScore ?? null),
+      score: algo?.rangeCycleScore ?? 0,
+      tier: scoreToTier(algo?.rangeCycleScore ?? null),
       confidence: algo?.confidence ?? 'low',
       cons: [...(algo?.conflicts ?? [])],
     },
@@ -157,9 +157,11 @@ function buildAlgoRankedSymbol(
   const labels = algo?.labels ?? [];
   const pros: string[] = [];
   const cons: string[] = [...capped.cons];
-  if ((algo?.components.volatility ?? 0) >= 75) pros.push('변동성 적정 — 차수 트리거 충분');
+  if ((algo?.components.range ?? 0) >= 75) pros.push('박스권 폭 적정 — 차수 간격 설계 가능');
+  if ((algo?.components.volatility ?? 0) >= 75)
+    pros.push('변동성 적정 — 반복 매수/익절 트리거 충분');
   if ((algo?.components.liquidity ?? 0) >= 75) pros.push('거래량 충분 — 슬리피지 위험 낮음');
-  if ((algo?.components.range ?? 0) >= 75) pros.push('박스권 폭 적정');
+  if ((algo?.components.trendNeutrality ?? 0) >= 75) pros.push('추세 중립 — 박스권 회전 후보');
   if (algo?.bollinger?.position !== null && (algo?.bollinger?.position ?? 1) <= 0.15) {
     pros.push('BB 하단 근접 — 1차 진입 매력');
   }
@@ -181,19 +183,22 @@ function buildAlgoRankedSymbol(
     volatilityFit:
       volComp === null ? 'mid' : volComp >= 75 ? 'mid' : volComp >= 40 ? 'low' : 'high',
     liquidityFit: liqComp === null ? 'ok' : liqComp >= 75 ? 'good' : liqComp >= 50 ? 'ok' : 'poor',
-    summary: labels.length > 0 ? labels.join(' / ') : `알고리즘 점수 ${algo?.splitScore ?? 0}점`,
+    summary:
+      labels.length > 0
+        ? labels.join(' / ')
+        : `박스권 분할매매 회전성 ${algo?.rangeCycleScore ?? 0}점`,
     pros: pros.slice(0, 3),
     cons: cons.slice(0, 3),
     entryNote:
       algo?.box && algo.rsi14 !== null
-        ? `박스권 ${algo.box.low.toLocaleString()}~${algo.box.high.toLocaleString()} 중 RSI ${algo.rsi14}. 박스 하단 1차 매수 검토.`
+        ? `박스권 ${algo.box.low.toLocaleString()}~${algo.box.high.toLocaleString()} 중 RSI ${algo.rsi14}. 직전 차수 기준 하향 매수와 차수별 독립 익절 검토.`
         : null,
     consensusCount: algo?.consensusCount ?? 0,
     citedTools: [],
     sources: c.sources,
     stats: symbolStats(stat),
     marketContext: buildRankedMarketContext(c.pdno, marketContext),
-    algoScore: algo?.splitScore ?? null,
+    algoScore: algo?.rangeCycleScore ?? null,
     algoLabels: labels,
     aiOff: true,
     news: [],
@@ -214,11 +219,11 @@ export function buildLlmRankedSymbols(args: {
   poolByPdno: Map<string, CandidateEntry>;
   statsByPdno: Map<string, SymbolStat>;
   algoByPdno: Map<string, AlgoSignals>;
-  factsByPdno: Map<string, MagicSplitFacts>;
+  factsByPdno: Map<string, RangeCycleFacts>;
   marketContext: MarketContextSnapshot | null;
   newsByPdno: Map<string, ReadonlyArray<NewsItem>>;
   newsEvidenceByPdno: Map<string, NewsEvidencePack>;
-  disclosureEvidenceRefs: ReadonlyArray<import('../magic-split-facts').EvidenceRef>;
+  disclosureEvidenceRefs: ReadonlyArray<import('../range-cycle-facts').EvidenceRef>;
   searchTrendsByPdno: Map<string, NaverSearchTrendSummary>;
   onRejected: () => void;
 }): RankedSymbol[] {
@@ -242,7 +247,7 @@ export function buildLlmRankedSymbols(args: {
       sources: poolEntry?.sources ?? [],
       stats: symbolStats(args.statsByPdno.get(item.pdno)),
       marketContext: buildRankedMarketContext(item.pdno, args.marketContext),
-      algoScore: algo?.splitScore ?? null,
+      algoScore: algo?.rangeCycleScore ?? null,
       algoLabels: algo?.labels ?? [],
       aiOff: false,
       news: args.newsByPdno.get(item.pdno) ?? [],
@@ -268,9 +273,9 @@ export function buildLlmRankedSymbols(args: {
 function enrichCons(item: RankedItem, algo: AlgoSignals | undefined): string[] {
   const cons = [...(item.cons ?? [])];
   if (!algo) return cons.slice(0, 5);
-  if (algo.splitScore !== null && Math.abs(algo.splitScore - item.score) >= 30) {
+  if (algo.rangeCycleScore !== null && Math.abs(algo.rangeCycleScore - item.score) >= 30) {
     cons.unshift(
-      `알고리즘 점수(${algo.splitScore}) vs LLM 점수(${item.score}) 차이 ≥30 — 추가 검증 권장`,
+      `회전성 점수(${algo.rangeCycleScore}) vs LLM 점수(${item.score}) 차이 >=30 — 추가 검증 권장`,
     );
   }
   const seen = new Set(cons);

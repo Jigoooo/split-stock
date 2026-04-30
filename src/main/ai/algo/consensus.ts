@@ -67,7 +67,12 @@ export function detectConflicts(ctx: ConsensusContext): string[] {
   }
   if (ctx.aroon?.isStrongUpTrend) {
     conflicts.push(
-      `Aroon up=${Math.round(ctx.aroon.up)} down=${Math.round(ctx.aroon.down)} — 강한 추세장, 매직스플릿 부적합 가능`,
+      `Aroon up=${Math.round(ctx.aroon.up)} down=${Math.round(ctx.aroon.down)} — 강한 상승 추세장, 박스권 회전성 낮음`,
+    );
+  }
+  if (ctx.aroon?.isStrongDownTrend) {
+    conflicts.push(
+      `Aroon up=${Math.round(ctx.aroon.up)} down=${Math.round(ctx.aroon.down)} — 강한 하락 추세장, 단계 매수 위험 높음`,
     );
   }
   if (

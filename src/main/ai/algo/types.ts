@@ -5,7 +5,7 @@ export const ALGO_THRESHOLDS = {
   /** RSI 과매수/과매도 임계 (한국 변동성 환경 기본 70/30, 보수 75/25). */
   rsiOverbought: 70,
   rsiOversold: 30,
-  /** Aroon 강한 추세 판정. up>=70 + down<=30 → 매직스플릿 부적합. */
+  /** Aroon 강한 상승 추세 판정. up>=70 + down<=30 → 박스권 회전 부적합. */
   aroonStrongUp: 70,
   aroonWeakDown: 30,
   /** MFI 과매수/과매도. */
@@ -26,21 +26,23 @@ export const ALGO_THRESHOLDS = {
   /** consensus: 3+ 동의 시 strong, 2 시 moderate, 1 시 weak. */
   consensusStrong: 3,
   consensusModerate: 2,
-  /** 데이터 부족 임계 — 60봉 미만이면 splitScore cap 30. */
+  /** 데이터 부족 임계 — 60봉 미만이면 rangeCycleScore cap 30. */
   minCandlesForFull: 60,
   minCandlesForBasic: 30,
 } as const;
 
 export interface AlgoSignals {
   pdno: string;
-  /** 매직스플릿 적합도 종합 점수 0~100. null = 미산출. */
-  splitScore: number | null;
+  /** 박스권 분할매매 반복 회전성 점수 0~100. null = 미산출. */
+  rangeCycleScore: number | null;
   components: {
     volatility: number | null;
     liquidity: number | null;
     range: number | null;
     bbPosition: number | null;
     supportProx: number | null;
+    trendNeutrality: number | null;
+    oversoldConsensus: number | null;
   };
   box: { high: number; low: number; mid: number } | null;
   bollinger: {
@@ -58,7 +60,12 @@ export interface AlgoSignals {
   rsi14: number | null;
   atr14: number | null;
   stochastic: { k: number; d: number } | null;
-  aroon25: { up: number; down: number; isStrongUpTrend: boolean } | null;
+  aroon25: {
+    up: number;
+    down: number;
+    isStrongUpTrend: boolean;
+    isStrongDownTrend: boolean;
+  } | null;
   divergence: 'bullish' | 'bearish' | 'none';
   mfi14: number | null;
   cci20: number | null;
@@ -98,7 +105,12 @@ export interface ConsensusContext {
   mfi: number | null;
   stoch: { k: number; d: number } | null;
   cci: number | null;
-  aroon: { up: number; down: number; isStrongUpTrend: boolean } | null;
+  aroon: {
+    up: number;
+    down: number;
+    isStrongUpTrend: boolean;
+    isStrongDownTrend: boolean;
+  } | null;
   macd: { cross: 'golden' | 'dead' | 'none'; histogram: number } | null;
   psar: { trend: 1 | -1 } | null;
   momentum: number | null;

@@ -47,19 +47,57 @@ export function scoreSupportProx(
   return Math.max(0, 10 - Math.round((pct - 15) / 5));
 }
 
-export function combineScore(c: {
+export function scoreTrendNeutrality(
+  aroon: {
+    up: number;
+    down: number;
+    isStrongUpTrend: boolean;
+    isStrongDownTrend: boolean;
+  } | null,
+): number | null {
+  if (!aroon) return null;
+  if (aroon.isStrongDownTrend) return 10;
+  if (aroon.isStrongUpTrend) return 20;
+  const spread = Math.abs(aroon.up - aroon.down);
+  if (spread <= 20) return 100;
+  if (spread <= 40) return 85;
+  if (spread <= 60) return 65;
+  return 45;
+}
+
+export function scoreOversoldConsensus(args: {
+  level: 'strong' | 'moderate' | 'weak' | 'none';
+  direction: 'bullish' | 'bearish' | 'mixed' | 'none';
+}): number | null {
+  if (args.direction === 'none' || args.level === 'none') return 50;
+  if (args.direction === 'mixed') return 40;
+  if (args.direction === 'bullish') {
+    if (args.level === 'strong') return 100;
+    if (args.level === 'moderate') return 85;
+    return 65;
+  }
+  if (args.level === 'strong') return 15;
+  if (args.level === 'moderate') return 25;
+  return 35;
+}
+
+export function combineRangeCycleScore(c: {
   volatility: number | null;
   liquidity: number | null;
   range: number | null;
   bbPosition: number | null;
   supportProx: number | null;
+  trendNeutrality: number | null;
+  oversoldConsensus: number | null;
 }): number | null {
   const weights = {
-    volatility: 0.3,
-    liquidity: 0.2,
-    range: 0.2,
-    bbPosition: 0.15,
-    supportProx: 0.15,
+    volatility: 0.22,
+    range: 0.22,
+    liquidity: 0.18,
+    supportProx: 0.14,
+    trendNeutrality: 0.12,
+    bbPosition: 0.07,
+    oversoldConsensus: 0.05,
   };
   let sum = 0;
   let weightSum = 0;
@@ -91,7 +129,12 @@ export function buildLabels(args: {
   rsi: number | null;
   spike: number | null;
   momentum: number | null;
-  aroon: { up: number; down: number; isStrongUpTrend: boolean } | null;
+  aroon: {
+    up: number;
+    down: number;
+    isStrongUpTrend: boolean;
+    isStrongDownTrend: boolean;
+  } | null;
   mfi: number | null;
   consensusLevel: 'strong' | 'moderate' | 'weak' | 'none';
 }): string[] {
@@ -115,6 +158,8 @@ export function buildLabels(args: {
     else if (args.momentum <= -10) labels.push(`20일 ${args.momentum}%`);
   }
   if (args.aroon?.isStrongUpTrend) labels.push('강한 추세장');
+  else if (args.aroon?.isStrongDownTrend) labels.push('강한 하락 추세장');
+  else if (args.aroon) labels.push('추세 중립');
   if (args.mfi !== null) {
     if (args.mfi >= 80) labels.push(`MFI ${round1(args.mfi)} 과매수`);
     else if (args.mfi <= 20) labels.push(`MFI ${round1(args.mfi)} 과매도`);
@@ -128,7 +173,12 @@ export function buildIndicatorReasons(args: {
   bbPosition: number | null;
   mfi: number | null;
   stoch: { k: number; d: number } | null;
-  aroon: { up: number; down: number; isStrongUpTrend: boolean } | null;
+  aroon: {
+    up: number;
+    down: number;
+    isStrongUpTrend: boolean;
+    isStrongDownTrend: boolean;
+  } | null;
   macd: { cross: 'golden' | 'dead' | 'none'; histogram: number } | null;
   psar: { trend: 1 | -1; value: number } | null;
   momentum: number | null;
@@ -183,9 +233,10 @@ function trendReasons(args: Parameters<typeof buildIndicatorReasons>[0]) {
     out.push({
       indicator: 'Aroon(25)',
       value: `up=${Math.round(args.aroon.up)} down=${Math.round(args.aroon.down)}`,
-      meaning: args.aroon.isStrongUpTrend
-        ? '강한 상승 추세 — 매직스플릿 부적합 가능'
-        : '추세 약함 — 박스권 매매 적합',
+      meaning:
+        args.aroon.isStrongUpTrend || args.aroon.isStrongDownTrend
+          ? '강한 방향성 — 박스권 분할매매 회전성 낮음'
+          : '추세 중립 — 박스권 회전 후보',
     });
   }
   if (args.macd) {

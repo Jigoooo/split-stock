@@ -1,6 +1,6 @@
 import { applyTierQuota, preRank, summarizeTiers } from '../algo/composite-score';
 import { type AutoDiscoveredCandidate, disabledAutoDiscoveryDiagnostics } from '../auto-discovery';
-import { buildMagicSplitFacts } from '../magic-split-facts';
+import { buildRangeCycleFacts } from '../range-cycle-facts';
 import { buildPool } from './candidate-flow';
 import { extractDisclosureEvidenceRefs } from './evidence';
 import {
@@ -72,7 +72,7 @@ export async function runSuggestSymbols(input: SuggestSymbolsInput): Promise<Sug
     marketContext ? diagnosticsFromMarketContext(marketContext) : [],
   );
 
-  const facts = buildMagicSplitFacts({
+  const facts = buildRangeCycleFacts({
     candlesRepo: input.candlesRepo,
     pdnos: pool.map((p) => p.pdno),
     marketContextByPdno: (pdno) => buildRankedMarketContext(pdno, marketContext),

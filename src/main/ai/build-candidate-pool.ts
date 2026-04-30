@@ -2,7 +2,7 @@ import { and, eq, inArray, ne } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { lots as lotsTable, stockMaster, watchOrders } from '../db/schema';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
-import { screenMagicSplitFit } from './algo/screen-magic-split-fit';
+import { screenRangeCycleFit } from './algo/screen-range-cycle-fit';
 
 export type CandidateSource = 'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO';
 
@@ -17,7 +17,7 @@ export interface CandidatePoolInput {
    */
   extraPdnos?: ReadonlyArray<string>;
   /**
-   * D 풀(자동 발굴) 활성화 — A∪B∪C 외에도 매직스플릿 사전 스크리닝 통과 종목을 합집합.
+   * D 풀(자동 발굴) 활성화 — A∪B∪C 외에도 박스권 분할매매 사전 스크리닝 통과 종목을 합집합.
    * 기본 false. 모달 토글로 사용자가 켤 수 있음.
    */
   includeAutoDiscovery?: boolean;
@@ -91,7 +91,7 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
     }
   }
 
-  // D 풀 — 매직스플릿 사전 스크리닝 통과 종목 자동 발굴.
+  // D 풀 — 박스권 분할매매 사전 스크리닝 통과 종목 자동 발굴.
   // A∪B∪C 와 중복은 자동 dedupe. 결정론 알고리즘이라 LLM 호출 0회.
   if (input.includeAutoDiscovery && input.autoCandidates) {
     for (const candidate of input.autoCandidates) {
@@ -101,7 +101,7 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
     }
   } else if (input.includeAutoDiscovery && input.candlesRepo) {
     const exclude = new Set(map.keys());
-    const screened = screenMagicSplitFit({
+    const screened = screenRangeCycleFit({
       db: input.db,
       candlesRepo: input.candlesRepo,
       cap: input.autoCap ?? 50,

@@ -80,7 +80,7 @@ const STRATEGY_PROGRESS_STAGES: ReadonlyArray<StrategyProgressStage> = [
     atMs: 1_500,
     percent: 24,
     label: '변동성과 지표 계산 중',
-    detail: '최근 가격 흐름, 박스권, 매직스플릿 신호를 계산하는 중입니다.',
+    detail: '최근 가격 흐름, 박스권, 박스권 분할매매 신호를 계산하는 중입니다.',
   },
   {
     key: 'context',

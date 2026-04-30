@@ -37,7 +37,7 @@ const AI_PROGRESS_STAGES: ReadonlyArray<ProgressStage> = [
     atMs: 3_000,
     percent: 32,
     label: '일봉과 지표 계산 중',
-    detail: '필요한 후보의 일봉을 보충하고 매직스플릿 신호를 계산하는 중입니다.',
+    detail: '필요한 후보의 일봉을 보충하고 박스권 분할매매 신호를 계산하는 중입니다.',
   },
   {
     key: 'context',
@@ -89,7 +89,7 @@ const ALGO_PROGRESS_STAGES: ReadonlyArray<ProgressStage> = [
     atMs: 2_000,
     percent: 50,
     label: '일봉과 지표 계산 중',
-    detail: '필요한 후보의 일봉을 보충하고 매직스플릿 신호를 계산하는 중입니다.',
+    detail: '필요한 후보의 일봉을 보충하고 박스권 분할매매 신호를 계산하는 중입니다.',
   },
   {
     key: 'context',
@@ -342,7 +342,7 @@ function buildProgress(elapsedMs: number, aiOff: boolean): RecommendationProgres
 }
 
 /**
- * AI 매직스플릿 추천 hook — RecommendButton 클릭 시 mutation 트리거 + 결과 캐시.
+ * AI 박스권 분할매매 추천 hook — RecommendButton 클릭 시 mutation 트리거 + 결과 캐시.
  *
  * mutation 으로 사용 (idempotent X) — 매번 LLM 호출. 사용자가 재실행 명시.
  */
@@ -373,7 +373,7 @@ export function useSymbolRecommendations() {
   const [extraPdnos, setExtraPdnos] = useState<string[]>([]);
   // AI 끄기 모드 — LLM 호출 없이 알고리즘 신호만으로 ranking. 키 미설정 시 자동 fallback.
   const [aiOff, setAiOff] = useState(false);
-  // D 풀 (자동 발굴) 활성화 — A∪B∪C 외에도 매직스플릿 사전 스크리닝 통과 종목 포함.
+  // D 풀 (자동 발굴) 활성화 — A∪B∪C 외에도 박스권 분할매매 사전 스크리닝 통과 종목 포함.
   const [includeAutoDiscovery, setIncludeAutoDiscovery] = useState(true);
 
   const mut = trpc.ai.suggestSymbols.useMutation({

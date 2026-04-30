@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ChartPeriod, DailyCandle, DailyCandlesRepo } from '../trading/daily-candles-repo';
 import {
-  buildMagicSplitFacts,
+  buildRangeCycleFacts,
   capSymbolByDataQuality,
   classifyDataQuality,
-} from './magic-split-facts';
+} from './range-cycle-facts';
 
 function createRepo(count: number): DailyCandlesRepo {
   const candles = buildCandles('2026-01-01', count);
@@ -36,7 +36,7 @@ function buildCandles(start: string, count: number): DailyCandle[] {
   return out;
 }
 
-describe('MagicSplitFacts', () => {
+describe('RangeCycleFacts', () => {
   it('classifies candle coverage into blocked, limited, and normal', () => {
     expect(classifyDataQuality(29)).toBe('blocked');
     expect(classifyDataQuality(30)).toBe('limited');
@@ -45,7 +45,7 @@ describe('MagicSplitFacts', () => {
   });
 
   it('builds shared facts with dataQuality and evidence refs', () => {
-    const [facts] = buildMagicSplitFacts({
+    const [facts] = buildRangeCycleFacts({
       candlesRepo: createRepo(65),
       pdnos: ['005930'],
       asOfDate: '2026-04-01',

@@ -9,11 +9,11 @@ import type {
   AutoDiscoveryResult,
 } from '../auto-discovery';
 import type { LlmClient } from '../llm-client';
-import type { DataQuality, MagicSplitFacts } from '../magic-split-facts';
 import type { MarketContextSnapshot } from '../market-context-service';
 import type { NaverSearchTrendSummary } from '../naver-datalab-client';
 import type { NewsEvidencePack } from '../news-evidence';
 import type { NewsItem } from '../news-fetcher';
+import type { DataQuality, RangeCycleFacts } from '../range-cycle-facts';
 
 export interface SuggestSymbolsInput {
   db: Db;
@@ -134,7 +134,7 @@ export type RankedSymbol = RankedItem & {
   dataQuality: DataQuality;
   dataQualityReason: string;
   analysisConfidence: 'high' | 'med' | 'low';
-  evidenceRefs: MagicSplitFacts['evidenceRefs'];
+  evidenceRefs: RangeCycleFacts['evidenceRefs'];
   globalRisks: ReadonlyArray<string>;
   newsClusters: ReadonlyArray<NewsEvidencePack['clusters'][number]>;
 };

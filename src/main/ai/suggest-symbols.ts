@@ -13,7 +13,7 @@ export type {
 export { buildRankedMarketContext };
 
 /**
- * AI 매직스플릿 적합 종목 추천.
+ * AI 박스권 분할매매 적합 종목 추천.
  *
  * Public facade only: 후보 풀/컨텍스트/LLM/result mapping orchestration 은
  * symbol-recommendation 내부 모듈에 둔다.

@@ -1,15 +1,15 @@
-import type { EvidenceRef, MagicSplitFacts } from '../magic-split-facts';
 import type { NaverSearchTrendSummary } from '../naver-datalab-client';
 import type { NewsEvidencePack } from '../news-evidence';
+import type { EvidenceRef, RangeCycleFacts } from '../range-cycle-facts';
 
 export function buildSymbolEvidenceRefs(
-  facts: MagicSplitFacts | undefined,
+  facts: RangeCycleFacts | undefined,
   newsEvidence: NewsEvidencePack | undefined,
   citedTools: ReadonlyArray<string> = [],
   disclosureEvidenceRefs: ReadonlyArray<EvidenceRef> = [],
   searchTrend: NaverSearchTrendSummary | undefined = undefined,
-): MagicSplitFacts['evidenceRefs'] {
-  const refs: MagicSplitFacts['evidenceRefs'] = [];
+): RangeCycleFacts['evidenceRefs'] {
+  const refs: RangeCycleFacts['evidenceRefs'] = [];
   if (facts) {
     refs.push({
       id: `data:${facts.dataQuality}`,

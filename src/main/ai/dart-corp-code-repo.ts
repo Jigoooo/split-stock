@@ -148,7 +148,7 @@ export class DartCorpCodeRepo {
 }
 
 /**
- * 상장 종목(stock_code 비어있지 않은) 만 추출. 비상장 회사는 매직스플릿 대상 아님.
+ * 상장 종목(stock_code 비어있지 않은) 만 추출. 비상장 회사는 박스권 분할매매 대상 아님.
  *
  * XML 구조 (flat):
  *   <list>

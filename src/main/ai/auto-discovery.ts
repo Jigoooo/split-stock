@@ -3,7 +3,7 @@ import type { Db } from '../db/client';
 import type { EventLogger } from '../logging/event-logger';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import type { StockMasterSyncService } from '../trading/stock-master-sync';
-import { screenMagicSplitFit } from './algo/screen-magic-split-fit';
+import { screenRangeCycleFit } from './algo/screen-range-cycle-fit';
 import { ensureDailyCandles } from './ensure-candles';
 import type { CachedKrxDailyTrade } from './market-context-repo';
 import type { MarketContextService } from './market-context-service';
@@ -140,7 +140,7 @@ export async function discoverAutoCandidates(
   diagnostics.candlesFailed = ensured.failed;
   diagnostics.candlesSkipped = ensured.skipped;
 
-  const screened = screenMagicSplitFit({
+  const screened = screenRangeCycleFit({
     db: input.db,
     candlesRepo: input.candlesRepo,
     cap: input.autoCap ?? DEFAULT_AUTO_CAP,

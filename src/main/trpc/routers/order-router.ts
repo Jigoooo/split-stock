@@ -9,7 +9,7 @@ const AccountIdField = z.number().int().positive();
 
 export const orderRouter = router({
   /**
-   * 즉시 매수/매도 주문 — 매직스플릿의 수동(직접) 주문 경로.
+   * 즉시 매수/매도 주문 — 박스권 분할매매의 수동(직접) 주문 경로.
    * 성공 시 orders 테이블에 PENDING으로 기록.
    */
   placeCash: authedProcedure

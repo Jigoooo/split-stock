@@ -1,5 +1,5 @@
-import type { EvidenceRef, MagicSplitFacts } from '../magic-split-facts';
 import type { NaverSearchTrendSummary } from '../naver-datalab-client';
+import type { EvidenceRef, RangeCycleFacts } from '../range-cycle-facts';
 import type { SuggestStrategyInput } from './types';
 
 export async function fetchDisclosureContext(
@@ -38,7 +38,7 @@ export async function fetchDisclosureContext(
 }
 
 export function buildStrategyEvidenceRefs(
-  facts: MagicSplitFacts,
+  facts: RangeCycleFacts,
   disclosureRefs: ReadonlyArray<EvidenceRef>,
   input: Pick<SuggestStrategyInput, 'searchTrend' | 'newsEvidence'>,
 ): EvidenceRef[] {

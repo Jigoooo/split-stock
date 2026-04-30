@@ -11,7 +11,7 @@ import { RecommendModal } from './recommend-modal';
 export interface RecommendButtonProps {
   /** 추천 결과 카드 클릭 시 호출 — 외부 폼 prefill 용. */
   onPick?: (pdno: string, name: string) => void;
-  /** 라벨 변경. 기본 'AI 매직스플릿 추천'. */
+  /** 라벨 변경. 기본 'AI 박스권 분할매매 추천'. */
   label?: string;
   dense?: boolean;
 }
@@ -70,7 +70,7 @@ const RecommendButtonTrigger = ({
   const disabled = isAiListLoading;
   const title = !hasDefaultKey
     ? 'AI 키 미등록 — 알고리즘 전용 모드로 추천. 설정 → AI 탭에서 키를 등록하면 LLM 활용.'
-    : 'AI 또는 알고리즘으로 매직스플릿 적합 종목 추천 (top/strong/moderate/watch/avoid 분포)';
+    : 'AI 또는 알고리즘으로 박스권 분할매매 적합 종목 추천 (top/strong/moderate/watch/avoid 분포)';
   const handleClick = (): void => open({ onPick });
 
   return (
@@ -81,7 +81,7 @@ const RecommendButtonTrigger = ({
       disabled={disabled}
       onClick={handleClick}
       title={title}
-      aria-label="AI 매직스플릿 추천"
+      aria-label="AI 박스권 분할매매 추천"
       style={{
         color: '#D97757',
         borderColor: '#D97757',

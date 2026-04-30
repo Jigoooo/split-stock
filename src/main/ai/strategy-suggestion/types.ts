@@ -4,9 +4,9 @@ import type { StockMasterRepo } from '../../trading/stock-master-repo';
 import type { AiCredentialsRepo } from '../ai-credentials-repo';
 import type { DartClient } from '../dart-client';
 import type { LlmClient } from '../llm-client';
-import type { DataQuality } from '../magic-split-facts';
 import type { NaverSearchTrendSummary } from '../naver-datalab-client';
 import type { NewsEvidencePack } from '../news-evidence';
+import type { DataQuality } from '../range-cycle-facts';
 import type { RankedMarketContext } from '../suggest-symbols';
 import type { StrategySuggestion } from './schema';
 

@@ -19,8 +19,8 @@ export interface PreRankResult<T> {
 /**
  * 결정론적 사전 순위 — LLM 호출 전 후보 풀을 압축.
  *
- * splitScore 기준으로 정렬하되, splitScore 가 같거나 null 인 경우 components 합산을 fallback.
- * 데이터 부족(splitScore=null)은 우선순위 가장 낮음.
+ * rangeCycleScore 기준으로 정렬하되, rangeCycleScore 가 같거나 null 인 경우 components 합산을 fallback.
+ * 데이터 부족(rangeCycleScore=null)은 우선순위 가장 낮음.
  */
 export function preRank<T extends { pdno: string }>(input: PreRankInput<T>): PreRankResult<T> {
   const topN = Math.max(1, input.topN ?? 10);
@@ -37,31 +37,33 @@ export function preRank<T extends { pdno: string }>(input: PreRankInput<T>): Pre
 
 function effectiveScore(s: AlgoSignals | undefined): number {
   if (!s) return -1;
-  if (s.splitScore !== null) return s.splitScore;
-  // splitScore null fallback — 컴포넌트 합산 평균.
+  if (s.rangeCycleScore !== null) return s.rangeCycleScore;
+  // rangeCycleScore null fallback — 컴포넌트 합산 평균.
   const parts = [
     s.components.volatility,
     s.components.liquidity,
     s.components.range,
     s.components.bbPosition,
     s.components.supportProx,
+    s.components.trendNeutrality,
+    s.components.oversoldConsensus,
   ].filter((v): v is number => v !== null);
   if (parts.length === 0) return -1;
   return parts.reduce((acc, x) => acc + x, 0) / parts.length;
 }
 
 /**
- * splitScore → tier 매핑.
+ * rangeCycleScore → tier 매핑.
  *
  * top: ≥85, strong: 70~84, moderate: 55~69, watch: 40~54, avoid: <40.
- * splitScore null 이거나 데이터 부족이면 watch (보수적).
+ * rangeCycleScore null 이거나 데이터 부족이면 watch (보수적).
  */
-export function scoreToTier(splitScore: number | null): Tier {
-  if (splitScore === null) return 'watch';
-  if (splitScore >= 85) return 'top';
-  if (splitScore >= 70) return 'strong';
-  if (splitScore >= 55) return 'moderate';
-  if (splitScore >= 40) return 'watch';
+export function scoreToTier(rangeCycleScore: number | null): Tier {
+  if (rangeCycleScore === null) return 'watch';
+  if (rangeCycleScore >= 85) return 'top';
+  if (rangeCycleScore >= 70) return 'strong';
+  if (rangeCycleScore >= 55) return 'moderate';
+  if (rangeCycleScore >= 40) return 'watch';
   return 'avoid';
 }
 

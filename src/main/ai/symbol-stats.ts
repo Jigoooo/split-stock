@@ -28,7 +28,7 @@ export interface SymbolStatsInput {
 }
 
 /**
- * 매직스플릿 적합도 판단을 위한 종목별 기초 통계.
+ * 박스권 분할매매 회전성 판단을 위한 종목별 기초 통계.
  *
  * 내부적으로 `computeAlgoSignals` 가 산출하는 변동성·거래량·박스권 컴포넌트를 그대로 노출.
  * 이전 버전은 자체적으로 같은 통계를 다시 계산했으나 중복이라 통합.
@@ -49,7 +49,7 @@ export function computeSymbolStats(input: SymbolStatsInput): SymbolStat[] {
 
   return input.pdnos.map((pdno) => {
     const sig = signals.get(pdno);
-    if (!sig || sig.splitScore === null) {
+    if (!sig || sig.rangeCycleScore === null) {
       const reason = sig?.labels.find((l) => l.includes('데이터 부족')) ?? '데이터 부족';
       return {
         pdno,

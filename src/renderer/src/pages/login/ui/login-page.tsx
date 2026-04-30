@@ -27,7 +27,7 @@ export const LoginPage = (): ReactElement => {
           <TrendingUp size={16} aria-hidden />
           <span>split-stock</span>
           <span className="muted" style={{ fontWeight: 400 }}>
-            · 매직스플릿 · 한국투자증권
+            · 박스권 분할매매 · 한국투자증권
           </span>
         </div>
 

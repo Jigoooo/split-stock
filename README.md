@@ -1,6 +1,6 @@
 # split-stock
 
-매직스플릿 방식(N분할 하향매수 + 차수 독립 익절)을 한국투자증권 KIS API 위에 재구현하는 Electron 데스크톱 앱.
+박스권 분할매매 방식(N분할 하향매수 + 차수 독립 익절)을 한국투자증권 KIS API 위에 재구현하는 Electron 데스크톱 앱.
 
 > ⚠️ 본 저장소는 개발 초기 스캐폴딩 단계입니다. 실전 운영 전에는 `/.omc/prd.json`에 정의된 모든 User Story가 `passes: true` 상태여야 합니다.
 
@@ -125,7 +125,6 @@ pnpm dlx claude-code /ralph
 
 ## 참고
 
-- 매직스플릿 가이드북 원본: <https://wikidocs.net/book/8428>
 - KIS Developers: <https://apiportal.koreainvestment.com/intro>
 - KIS 공식 GitHub: <https://github.com/koreainvestment/open-trading-api>
 - FSD 공식: <https://feature-sliced.design>

@@ -1,5 +1,5 @@
 import { DEFAULT_STRATEGY_PROFILE, StrategyProfileSchema } from '@shared/contracts';
-import { buildMagicSplitFacts } from '../magic-split-facts';
+import { buildRangeCycleFacts } from '../range-cycle-facts';
 import { buildStrategyEvidenceRefs, fetchDisclosureContext } from './evidence';
 import { buildStrategyPrompt, STRATEGY_SYSTEM_PROMPT } from './prompt';
 import {
@@ -25,7 +25,7 @@ export async function runSuggestStrategy(
 
   if (input.ensureCandles) await input.ensureCandles([input.pdno]);
 
-  const facts = buildMagicSplitFacts({
+  const facts = buildRangeCycleFacts({
     candlesRepo: input.candlesRepo,
     pdnos: [input.pdno],
     marketContextByPdno: () => input.marketContext ?? null,

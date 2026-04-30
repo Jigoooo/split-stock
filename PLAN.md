@@ -1,7 +1,7 @@
 # AI 종목추천/차수추천 근거 통합 고도화 계획
 
 ## Summary
-- 종목추천과 차수추천은 같은 원천 분석 계층인 `MagicSplitFacts`를 공유한다.
+- 종목추천과 차수추천은 같은 원천 분석 계층인 `RangeCycleFacts`를 공유한다.
 - 종목추천은 “후보 선별/랭킹”, 차수추천은 “선택 종목의 매수 단계 설계”로 최종 판단만 분리한다.
 - 차수추천은 완전 수동 실행으로 바꾼다. 개별매매설정 진입 시 자동 요청하지 않고, 사용자가 분석 버튼을 누를 때마다 뉴스/공시/시장지표까지 포함한 전체 분석을 새로 실행한다.
 - AI 결과는 미리보기/추천만 제공한다. 자동저장/자동주문은 범위에서 제외한다.
@@ -18,7 +18,7 @@
 
 ## Implementation
 - 공통 분석 계층:
-  - `computeAlgoSignals` 결과를 감싸는 `MagicSplitFacts`를 추가한다.
+  - `computeAlgoSignals` 결과를 감싸는 `RangeCycleFacts`를 추가한다.
   - 포함 항목: 기술지표 요약, consensus/conflicts, support/resistance, volatility/liquidity/range, news/disclosure/market evidence, data quality.
   - 종목추천과 차수추천은 이 facts를 입력받는 adapter를 각각 둔다.
 
@@ -63,7 +63,7 @@
 - Backtest overfitting 참고: https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2326253
 
 ## Test Plan
-- `MagicSplitFacts` 테스트:
+- `RangeCycleFacts` 테스트:
   - `<30`, `30~59`, `60+` data quality 분기.
   - 종목추천/차수추천이 같은 facts를 공유하는지 검증.
 
@@ -87,7 +87,7 @@
   - 860px 이하 반응형 스택 확인.
 
 ## Acceptance Criteria
-- 종목추천과 차수추천의 주요 판단 근거가 같은 `MagicSplitFacts`에서 나온다.
+- 종목추천과 차수추천의 주요 판단 근거가 같은 `RangeCycleFacts`에서 나온다.
 - 추천/보류 결과마다 기술지표, 뉴스, 공시, 시장지표 중 어떤 근거가 쓰였는지 추적 가능하다.
 - 차수추천은 자동 실행되지 않고, 버튼 클릭 시에만 매번 새 분석을 수행한다.
 - 데이터 부족/충돌 상황에서 AI가 무리한 추천을 만들지 않는다.

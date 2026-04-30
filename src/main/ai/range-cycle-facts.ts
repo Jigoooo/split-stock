@@ -13,7 +13,7 @@ export interface EvidenceRef {
   detail: string;
 }
 
-export interface MagicSplitFacts {
+export interface RangeCycleFacts {
   pdno: string;
   candleCount: number;
   dataQuality: DataQuality;
@@ -26,14 +26,14 @@ export interface MagicSplitFacts {
   globalRisks: string[];
 }
 
-export interface BuildMagicSplitFactsInput {
+export interface BuildRangeCycleFactsInput {
   candlesRepo: DailyCandlesRepo;
   pdnos: ReadonlyArray<string>;
   marketContextByPdno?: (pdno: string) => RankedMarketContext | null;
   asOfDate?: string;
 }
 
-export function buildMagicSplitFacts(input: BuildMagicSplitFactsInput): MagicSplitFacts[] {
+export function buildRangeCycleFacts(input: BuildRangeCycleFactsInput): RangeCycleFacts[] {
   const asOf = input.asOfDate ?? toKstYmd(new Date());
   const from = shiftYmd(asOf, -240);
   const algos = computeAlgoSignals({
@@ -58,7 +58,7 @@ export function buildMagicSplitFacts(input: BuildMagicSplitFactsInput): MagicSpl
     const fallbackStat = computeSymbolStats({ ...input, pdnos: [pdno] })[0];
     const stat = statByPdno.get(pdno) ?? fallbackStat;
     if (!algo || !stat) {
-      throw new Error(`MagicSplitFacts 생성 실패: ${pdno}`);
+      throw new Error(`RangeCycleFacts 생성 실패: ${pdno}`);
     }
     const marketContext = input.marketContextByPdno?.(pdno) ?? null;
     const evidenceRefs = buildEvidenceRefs(algo, marketContext);

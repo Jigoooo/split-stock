@@ -1,6 +1,6 @@
 # split-stock 기능 문서
 
-매직스플릿 방식(N분할 하향매수 + 차수별 독립 익절)을 한국투자증권 KIS Developers API 위에 Electron 데스크톱 앱으로 재구현한 프로젝트입니다. 본 디렉토리는 지금까지 구현된 기능을 도메인별로 묶어 **사용방법 / 실제 테스트 방법 / 인증 필요 여부 / 의도된 엣지 케이스** 관점에서 정리합니다.
+박스권 분할매매 방식(N분할 하향매수 + 차수별 독립 익절)을 한국투자증권 KIS Developers API 위에 Electron 데스크톱 앱으로 재구현한 프로젝트입니다. 본 디렉토리는 지금까지 구현된 기능을 도메인별로 묶어 **사용방법 / 실제 테스트 방법 / 인증 필요 여부 / 의도된 엣지 케이스** 관점에서 정리합니다.
 
 > 스택 개요: Electron 41 + Vite 8(rolldown) + React 19 + TypeScript 6(strict, composite) + SQLite(better-sqlite3) + Drizzle ORM + trpc-electron v11 + Zod + neverthrow. 자세한 내용은 [features/ui-and-build.md](features/ui-and-build.md) 참조.
 

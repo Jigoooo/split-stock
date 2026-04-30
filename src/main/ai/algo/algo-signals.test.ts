@@ -87,6 +87,10 @@ function buildUpTrendCandles(start: string, count: number): DailyCandle[] {
   });
 }
 
+function withVolume(candles: DailyCandle[], volume: number): DailyCandle[] {
+  return candles.map((c) => ({ ...c, volume }));
+}
+
 /** Outlier 1건 포함 박스권 — 박스 + 1일 단발 spike. */
 function buildBoxWithOutlier(start: string, count: number): DailyCandle[] {
   const candles = buildBoxRangeCandles(start, count);
@@ -100,19 +104,19 @@ function buildBoxWithOutlier(start: string, count: number): DailyCandle[] {
 }
 
 describe('computeAlgoSignals', () => {
-  it('데이터 < 30봉 인 경우 splitScore null + dataReason 라벨', () => {
+  it('데이터 < 30봉 인 경우 rangeCycleScore null + dataReason 라벨', () => {
     const repo = createMockRepo({ '000001': buildBoxRangeCandles('2025-01-01', 10) });
     const [sig] = computeAlgoSignals({
       candlesRepo: repo,
       pdnos: ['000001'],
       asOfDate: '2025-06-01',
     });
-    expect(sig?.splitScore).toBeNull();
+    expect(sig?.rangeCycleScore).toBeNull();
     expect(sig?.confidence).toBe('low');
     expect(sig?.labels.some((l) => l.includes('데이터 부족'))).toBe(true);
   });
 
-  it('박스권 횡보 캔들은 splitScore 가 합리적으로 산출됨 (60+봉)', () => {
+  it('박스권 횡보 캔들은 rangeCycleScore 가 합리적으로 산출됨 (60+봉)', () => {
     const candles = buildBoxRangeCandles('2025-01-01', 90);
     const repo = createMockRepo({ '000001': candles });
     const [sig] = computeAlgoSignals({
@@ -122,12 +126,31 @@ describe('computeAlgoSignals', () => {
     });
     expect(sig).toBeDefined();
     if (!sig) throw new Error('no signal');
-    expect(sig.splitScore).not.toBeNull();
+    expect(sig.rangeCycleScore).not.toBeNull();
     expect(sig.confidence === 'med' || sig.confidence === 'high').toBe(true);
     expect(sig.bollinger).not.toBeNull();
     expect(sig.rsi14).not.toBeNull();
     expect(sig.aroon25).not.toBeNull();
     expect(sig.atr14).not.toBeNull();
+  });
+
+  it('rangeCycleScore 는 박스권 회전 후보를 강한 추세와 유동성 부족 후보보다 높게 평가', () => {
+    const repo = createMockRepo({
+      BOX: buildBoxRangeCandles('2025-01-01', 90),
+      TREND: buildUpTrendCandles('2025-01-01', 90),
+      ILLIQ: withVolume(buildBoxRangeCandles('2025-01-01', 90), 3_000),
+    });
+    const [box, trend, illiquid] = computeAlgoSignals({
+      candlesRepo: repo,
+      pdnos: ['BOX', 'TREND', 'ILLIQ'],
+      asOfDate: '2025-06-01',
+    });
+    if (!box || !trend || !illiquid) throw new Error('missing signal');
+    expect(box.rangeCycleScore).not.toBeNull();
+    expect(trend.rangeCycleScore).not.toBeNull();
+    expect(illiquid.rangeCycleScore).not.toBeNull();
+    expect(box.rangeCycleScore ?? 0).toBeGreaterThan(trend.rangeCycleScore ?? 0);
+    expect(box.rangeCycleScore ?? 0).toBeGreaterThan(illiquid.rangeCycleScore ?? 0);
   });
 
   it('Bollinger 결과는 lower < middle < upper 순서를 만족', () => {
@@ -207,9 +230,9 @@ describe('computeAlgoSignals', () => {
     });
     expect(sig).toBeDefined();
     if (!sig) throw new Error('no signal');
-    // splitScore 는 null 또는 finite — Number.isNaN 이면 안 됨.
-    if (sig.splitScore !== null) {
-      expect(Number.isFinite(sig.splitScore)).toBe(true);
+    // rangeCycleScore 는 null 또는 finite — Number.isNaN 이면 안 됨.
+    if (sig.rangeCycleScore !== null) {
+      expect(Number.isFinite(sig.rangeCycleScore)).toBe(true);
     }
   });
 
@@ -229,7 +252,7 @@ describe('computeAlgoSignals', () => {
     expect(sig.mfi14).not.toBeNull();
   });
 
-  it('데이터 60봉 미만이면 splitScore 가 30 이하로 cap', () => {
+  it('데이터 60봉 미만이면 rangeCycleScore 가 30 이하로 cap', () => {
     const candles = buildBoxRangeCandles('2025-01-01', 40);
     const repo = createMockRepo({ '000001': candles });
     const [sig] = computeAlgoSignals({
@@ -238,8 +261,8 @@ describe('computeAlgoSignals', () => {
       asOfDate: '2025-04-30',
     });
     if (!sig) throw new Error('no signal');
-    if (sig.splitScore !== null) {
-      expect(sig.splitScore).toBeLessThanOrEqual(30);
+    if (sig.rangeCycleScore !== null) {
+      expect(sig.rangeCycleScore).toBeLessThanOrEqual(30);
     }
   });
 
@@ -282,7 +305,7 @@ describe('composite-score', () => {
     expect(scoreToTier(null)).toBe('watch');
   });
 
-  it('preRank — splitScore 내림차순으로 Top N', () => {
+  it('preRank — rangeCycleScore 내림차순으로 Top N', () => {
     const candidates = [{ pdno: 'A' }, { pdno: 'B' }, { pdno: 'C' }, { pdno: 'D' }];
     const signals = new Map<string, ReturnType<typeof minimalSignal>>([
       ['A', minimalSignal(50)],
@@ -411,8 +434,12 @@ describe('detectConflicts', () => {
     expect(r.some((c) => c.includes('BB 하단') && c.includes('과매수'))).toBe(true);
   });
 
-  it('Aroon strong-trend → 매직스플릿 부적합 경고', () => {
-    const r = detectConflicts(makeCtx({ aroon: { up: 85, down: 15, isStrongUpTrend: true } }));
+  it('Aroon strong-trend → 박스권 회전성 저하 경고', () => {
+    const r = detectConflicts(
+      makeCtx({
+        aroon: { up: 85, down: 15, isStrongUpTrend: true, isStrongDownTrend: false },
+      }),
+    );
     expect(r.some((c) => c.includes('Aroon') && c.includes('추세장'))).toBe(true);
   });
 
@@ -435,13 +462,15 @@ describe('detectConflicts', () => {
 function minimalSignal(score: number | null) {
   return {
     pdno: 'X',
-    splitScore: score,
+    rangeCycleScore: score,
     components: {
       volatility: score,
       liquidity: score,
       range: score,
       bbPosition: null,
       supportProx: null,
+      trendNeutrality: score,
+      oversoldConsensus: score,
     },
     box: null,
     bollinger: null,
