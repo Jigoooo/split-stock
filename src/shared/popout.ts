@@ -72,9 +72,9 @@ export const POPOUT_ROUTE_CONFIG = {
   'add-watch-order': {
     label: '자동감시 추가',
     title: 'Split Stock · 자동감시 추가',
-    defaultWidth: 1080,
+    defaultWidth: 1240,
     defaultHeight: 880,
-    minWidth: 760,
+    minWidth: 900,
     autoContentHeight: true,
   },
 } as const satisfies Record<string, PopoutRouteConfig>;

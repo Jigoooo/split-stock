@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { formLabelStyle } from '../config/add-watch-order-section-options';
 
 interface AddWatchOrderFormRowProps {
   children: ReactNode;
@@ -14,14 +15,13 @@ export const AddWatchOrderFormRow = ({
   <div
     style={{
       display: 'grid',
-      gridTemplateColumns: '6rem minmax(0, 1fr)',
-      gap: '0.7rem',
+      gridTemplateColumns: '7rem minmax(0, 1fr)',
+      gap: '0.85rem',
       alignItems: 'start',
+      padding: '0.18rem 0',
     }}
   >
-    <span className="muted" style={{ paddingTop: '0.35rem' }}>
-      {label}
-    </span>
+    <span style={formLabelStyle()}>{label}</span>
     <div style={{ display: 'grid', gap: '0.25rem' }}>
       {children}
       {error ? (

@@ -1,10 +1,13 @@
 import type { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { FakeBrokerAdapter } from '../../brokers/__tests__/fake-broker-adapter';
 import { bootstrapSchema } from '../../db/bootstrap-schema';
 import { createTestDb, type Db } from '../../db/client';
 import { SettingsRepo } from '../../db/settings-repo';
 import { FakeTimer } from '../../testing/fake-timer';
+import { type DailyCandle, DailyCandlesRepo } from '../../trading/daily-candles-repo';
 import { PrebuyRepo } from '../../trading/prebuy-repo';
+import { StrategyRepo } from '../../trading/strategy-repo';
 import { WatchEngine } from '../../trading/watch-engine';
 import type { Context } from '../context';
 import { t } from '../trpc-core';
@@ -13,6 +16,8 @@ import { watchRouter } from './watch-router';
 const createCaller = t.createCallerFactory(watchRouter);
 
 interface SetupResult {
+  broker: FakeBrokerAdapter;
+  candlesRepo: DailyCandlesRepo;
   db: Db;
   engine: WatchEngine;
   baseCtx: Omit<Context, 'currentEnv' | 'activeAccountId'>;
@@ -22,15 +27,38 @@ function setup(): SetupResult {
   const db = createTestDb();
   bootstrapSchema(db);
   const engine = new WatchEngine({ db, timer: new FakeTimer() });
+  const logger = { log: () => {} };
+  const settingsRepo = new SettingsRepo(db);
+  const candlesRepo = new DailyCandlesRepo(db);
+  const broker = new FakeBrokerAdapter({
+    quoteBySymbol: {
+      '005930': {
+        symbol: '005930',
+        price: 100_000,
+        dayChange: -1_200,
+        dayChangeRate: -1.19,
+        accumVolume: 1_234_567,
+        open: 101_500,
+        high: 102_000,
+        low: 99_200,
+        upperLimit: 130_000,
+        lowerLimit: 70_000,
+        prevClose: 101_200,
+      },
+    },
+  });
   // 라우터 가드 테스트만 검증 — 미사용 의존성은 unsafe cast 로 채움.
   const baseCtx = {
+    brokerForAccount: () => broker,
+    candlesRepo,
     db,
     watchEngine: engine,
-    settingsRepo: new SettingsRepo(db),
+    settingsRepo,
     prebuyRepo: new PrebuyRepo(db),
-    logger: { log: () => {} },
+    strategyRepo: new StrategyRepo(settingsRepo, logger),
+    logger,
   } as unknown as Omit<Context, 'currentEnv' | 'activeAccountId'>;
-  return { db, engine, baseCtx };
+  return { broker, candlesRepo, db, engine, baseCtx };
 }
 
 function ctxFor(
@@ -44,6 +72,41 @@ function ctxFor(
     setCurrentEnv: () => {},
     setActiveAccountId: () => {},
   } as unknown as Context;
+}
+
+function seedDailyCandles(
+  repo: DailyCandlesRepo,
+  pdno: string,
+  candles: ReadonlyArray<DailyCandle>,
+): void {
+  repo.upsertMany(pdno, 'D', [...candles]);
+}
+
+function makeCandles(count: number, close = 100_000): DailyCandle[] {
+  const today = toKstYmd(new Date());
+  return Array.from({ length: count }, (_, i) => {
+    const wave = i % 12;
+    const base = close - 12_000 + wave * 1_000;
+    return {
+      date: shiftYmd(today, i - count + 1),
+      open: base + 300,
+      high: base + 2_500,
+      low: base - 2_500,
+      close: base,
+      volume: 1_000_000 + wave * 10_000,
+    };
+  });
+}
+
+function toKstYmd(d: Date): string {
+  const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+}
+
+function shiftYmd(base: string, days: number): string {
+  const d = new Date(`${base}T00:00:00+09:00`);
+  d.setDate(d.getDate() + days);
+  return toKstYmd(d);
 }
 
 describe('watch-router 권한 검증', () => {
@@ -204,6 +267,96 @@ describe('watch-router 권한 검증', () => {
           comparator: 'LTE',
         } as never),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' } satisfies Partial<TRPCError>);
+    });
+  });
+
+  describe('getReservationBuyDraft', () => {
+    it('현재가와 일봉 기반 후보를 tick 단위로 산출하고 기본 실행조건을 추천한다', async () => {
+      seedDailyCandles(s.candlesRepo, '005930', makeCandles(80));
+      const caller = createCaller(ctxFor(s.baseCtx, 1));
+
+      const draft = await caller.getReservationBuyDraft({ accountId: 1, pdno: '005930' });
+
+      expect(draft.quote).toMatchObject({ symbol: '005930', price: 100_000 });
+      expect(draft.rangeContext.candleCount).toBeGreaterThanOrEqual(60);
+      expect(draft.rangeContext.dataQuality).toBe('normal');
+      expect(draft.priceCandidates.map((item) => item.id)).toContain('box-low');
+      expect(draft.priceCandidates.map((item) => item.id)).toContain('pullback-2');
+      expect(draft.priceCandidates.every((item) => item.price < 100_000)).toBe(true);
+      expect(draft.priceCandidates.every((item) => item.price % 100 === 0)).toBe(true);
+      expect(draft.recommended).toMatchObject({
+        amountKrw: 1_000_000,
+        orderType: 'LIMIT',
+        qtyOrAmountMode: 'AMOUNT',
+      });
+      expect(draft.recommended.targetPrice).toEqual(expect.any(Number));
+      expect(draft.recommended.targetPrice).toBeLessThan(100_000);
+      expect(draft.sourceStatus.quote).toBe('used');
+      expect(draft.sourceStatus.candles).toBe('cache');
+    });
+
+    it('박스하단이 현재가 대비 과도하게 멀면 기본 추천에서 제외하고 근접 눌림가를 선택한다', async () => {
+      seedDailyCandles(s.candlesRepo, '028050', makeCandles(100, 132_000));
+      const broker = new FakeBrokerAdapter({
+        quoteBySymbol: {
+          '028050': {
+            symbol: '028050',
+            price: 278_000,
+            dayChange: 1_500,
+            dayChangeRate: 0.54,
+            accumVolume: 400_000,
+            open: 276_000,
+            high: 281_000,
+            low: 275_000,
+            upperLimit: 361_000,
+            lowerLimit: 195_000,
+            prevClose: 276_500,
+          },
+        },
+      });
+      const caller = createCaller(
+        ctxFor(
+          {
+            ...s.baseCtx,
+            brokerForAccount: () => broker,
+          },
+          1,
+        ),
+      );
+
+      const draft = await caller.getReservationBuyDraft({ accountId: 1, pdno: '028050' });
+
+      const boxLow = draft.priceCandidates.find((item) => item.id === 'box-low');
+      expect(boxLow?.distancePct).toBeLessThan(-20);
+      expect(draft.recommended.priceCandidateId).toBe('pullback-2');
+      expect(draft.recommended.targetPrice).toBe(272_000);
+      expect(draft.warnings.some((warning) => warning.includes('20% 이상 멀어 근접 눌림가'))).toBe(
+        true,
+      );
+    });
+
+    it('일봉 30개 미만은 감시가 자동 추천을 비우고 데이터 부족 경고를 반환한다', async () => {
+      seedDailyCandles(s.candlesRepo, '005930', makeCandles(12));
+      const caller = createCaller(ctxFor(s.baseCtx, 1));
+
+      const draft = await caller.getReservationBuyDraft({ accountId: 1, pdno: '005930' });
+
+      expect(draft.rangeContext.dataQuality).toBe('blocked');
+      expect(draft.priceCandidates).toEqual([]);
+      expect(draft.recommended.targetPrice).toBeNull();
+      expect(draft.warnings.some((warning) => warning.includes('일봉 30개 미만'))).toBe(true);
+    });
+
+    it('quote 실패는 전체 폼을 깨지 않고 sourceStatus 에만 반영한다', async () => {
+      seedDailyCandles(s.candlesRepo, '000660', makeCandles(80, 150_000));
+      const caller = createCaller(ctxFor(s.baseCtx, 1));
+
+      const draft = await caller.getReservationBuyDraft({ accountId: 1, pdno: '000660' });
+
+      expect(draft.quote).toBeNull();
+      expect(draft.sourceStatus.quote).toBe('failed');
+      expect(draft.rangeContext.candleCount).toBeGreaterThanOrEqual(60);
+      expect(draft.recommended.amountKrw).toBe(1_000_000);
     });
   });
 

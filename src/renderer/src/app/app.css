@@ -1057,6 +1057,23 @@ body {
   height: 1.65rem;
 }
 
+.add-watch-order-dialog .hts-date-shell {
+  min-height: 3rem;
+  padding: 0.1rem 0.3rem 0.1rem 0.55rem;
+  border-radius: 0.3rem;
+  box-shadow: 0 0.1rem 0.2rem rgba(15, 23, 42, 0.04);
+}
+
+.add-watch-order-dialog .hts-date-input--dense {
+  min-height: 2.8rem;
+}
+
+.add-watch-order-dialog .hts-date-shell__trigger {
+  width: 2.15rem;
+  min-width: 2.15rem;
+  border-radius: 0.3rem;
+}
+
 .hts-input--num {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;

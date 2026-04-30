@@ -19,6 +19,9 @@ vi.mock('@renderer/shared/api/trpc', () => ({
     watch: {
       create: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
       update: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
+      getReservationBuyDraft: {
+        useQuery: () => ({ data: undefined, error: null, isLoading: false }),
+      },
     },
   },
 }));

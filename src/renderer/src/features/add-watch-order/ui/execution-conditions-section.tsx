@@ -6,12 +6,16 @@ import {
   ORDER_TYPE_ITEMS,
   QTY_MODE_ITEMS,
   sectionCardStyle,
+  sectionHeaderStyle,
+  sectionTitleStyle,
+  stripStyle,
 } from '../config/add-watch-order-section-options';
 import { type AddWatchOrderFormErrors, calcAmountPreview } from '../model/add-watch-order-form';
 import { AddWatchOrderFormRow } from './add-watch-order-form-row';
 
 interface ExecutionConditionsSectionProps {
   amountKrwRaw: string;
+  currentPrice: number | null;
   errors: AddWatchOrderFormErrors;
   isDense: boolean;
   isPageLayout: boolean;
@@ -19,17 +23,21 @@ interface ExecutionConditionsSectionProps {
   onAmountQuick: (delta: number) => void;
   onAmountReset: () => void;
   orderType: WatchOrderType;
+  pdName: string;
+  pdno: string;
   qtyMode: WatchQtyMode;
   qtyRaw: string;
   setAmountKrwRaw: (value: string) => void;
   setOrderType: (value: WatchOrderType) => void;
   setQtyMode: (value: WatchQtyMode) => void;
   setQtyRaw: (value: string) => void;
+  targetPriceDistancePct: number | null;
   targetPriceRaw: string;
 }
 
 export const ExecutionConditionsSection = ({
   amountKrwRaw,
+  currentPrice,
   errors,
   isDense,
   isPageLayout,
@@ -37,29 +45,26 @@ export const ExecutionConditionsSection = ({
   onAmountQuick,
   onAmountReset,
   orderType,
+  pdName,
+  pdno,
   qtyMode,
   qtyRaw,
   setAmountKrwRaw,
   setOrderType,
   setQtyMode,
   setQtyRaw,
+  targetPriceDistancePct,
   targetPriceRaw,
 }: ExecutionConditionsSectionProps): ReactElement => {
   const preview = calcAmountPreview(amountKrwRaw, targetPriceRaw);
 
   return (
     <section aria-label="실행조건" style={sectionCardStyle(isPageLayout)}>
-      <div
-        style={{
-          fontSize: isPageLayout ? '1.05rem' : '0.9rem',
-          fontWeight: 600,
-          color: 'var(--fg-2)',
-        }}
-      >
-        실행조건
-      </div>
-      <div className="muted" style={{ fontSize: isPageLayout ? '0.92rem' : '0.82rem' }}>
-        예약매수가 실행될 때 어떤 방식과 수량 기준으로 주문할지 정합니다.
+      <div style={sectionHeaderStyle(isPageLayout)}>
+        <span style={sectionTitleStyle(isPageLayout)}>실행조건</span>
+        <span className="muted" style={{ fontSize: isPageLayout ? '0.84rem' : '0.76rem' }}>
+          {orderType === 'LIMIT' ? '지정가' : '시장가'} · {qtyMode === 'AMOUNT' ? '금액' : '수량'}
+        </span>
       </div>
 
       <AddWatchOrderFormRow label="주문 방식">
@@ -162,10 +167,11 @@ export const ExecutionConditionsSection = ({
                 style={{
                   fontSize: isPageLayout ? '0.9rem' : '0.8rem',
                   padding: isPageLayout ? '0.45rem 0.6rem' : '0.25rem 0.4rem',
-                  borderRadius: '4px',
+                  borderRadius: '0.45rem',
+                  border: '0.1rem solid var(--border)',
                   background: preview.isHighRemainder
                     ? 'var(--color-danger-bg, rgba(255,80,80,0.12))'
-                    : 'var(--color-muted-bg, rgba(255,255,255,0.06))',
+                    : 'var(--bg-2)',
                   display: 'grid',
                   gap: isPageLayout ? '0.2rem' : '0.1rem',
                 }}
@@ -185,6 +191,101 @@ export const ExecutionConditionsSection = ({
           </div>
         </AddWatchOrderFormRow>
       )}
+
+      <ExecutionSummary
+        amountKrwRaw={amountKrwRaw}
+        currentPrice={currentPrice}
+        isPageLayout={isPageLayout}
+        orderType={orderType}
+        pdName={pdName}
+        pdno={pdno}
+        preview={preview}
+        qtyMode={qtyMode}
+        qtyRaw={qtyRaw}
+        targetPriceDistancePct={targetPriceDistancePct}
+        targetPriceRaw={targetPriceRaw}
+      />
     </section>
   );
 };
+
+function ExecutionSummary({
+  amountKrwRaw,
+  currentPrice,
+  isPageLayout,
+  orderType,
+  pdName,
+  pdno,
+  preview,
+  qtyMode,
+  qtyRaw,
+  targetPriceDistancePct,
+  targetPriceRaw,
+}: {
+  amountKrwRaw: string;
+  currentPrice: number | null;
+  isPageLayout: boolean;
+  orderType: WatchOrderType;
+  pdName: string;
+  pdno: string;
+  preview: ReturnType<typeof calcAmountPreview>;
+  qtyMode: WatchQtyMode;
+  qtyRaw: string;
+  targetPriceDistancePct: number | null;
+  targetPriceRaw: string;
+}): ReactElement {
+  const targetPrice = parseNumber(targetPriceRaw);
+  const amountKrw = parseNumber(amountKrwRaw);
+  const qty = parseNumber(qtyRaw);
+  const orderLabel = orderType === 'LIMIT' ? '지정가' : '시장가';
+  const basis =
+    qtyMode === 'AMOUNT'
+      ? amountKrw !== null
+        ? `${formatKrw(amountKrw)}원`
+        : '금액 미입력'
+      : qty !== null
+        ? `${formatKrw(qty)}주`
+        : '수량 미입력';
+  const distance =
+    targetPriceDistancePct !== null
+      ? `현재가 대비 ${formatSignedPct(targetPriceDistancePct)}`
+      : null;
+
+  return (
+    <section
+      aria-label="저장 요약"
+      style={{
+        ...stripStyle(isPageLayout),
+        fontSize: isPageLayout ? '0.9rem' : '0.8rem',
+      }}
+    >
+      <strong style={{ color: 'var(--fg-2)' }}>저장 요약</strong>
+      <span>
+        {pdno ? `${pdName || pdno} ` : '종목 선택 후 '}
+        {targetPrice !== null ? `${formatKrw(targetPrice)}원 이하` : '감시가격 미입력'}
+        {distance ? ` (${distance})` : ''} 도달 시 {orderLabel} 예약매수
+      </span>
+      <span className="muted">
+        기준 {basis}
+        {preview
+          ? `, 예상 ${formatKrw(preview.qty)}주 / 잔여 ${formatKrw(preview.remainder)}원`
+          : ''}
+        {currentPrice !== null ? `, 현재가 ${formatKrw(currentPrice)}원` : ''}
+      </span>
+    </section>
+  );
+}
+
+function parseNumber(value: string): number | null {
+  const parsed = Number(value.replaceAll(',', '').trim());
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function formatKrw(value: number): string {
+  return value.toLocaleString('ko-KR');
+}
+
+function formatSignedPct(value: number): string {
+  return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
+}

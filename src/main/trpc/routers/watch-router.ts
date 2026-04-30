@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   cancelWatchOrder,
   createReservationBuyWatchOrder,
+  getReservationBuyDraft,
   getWatchControlState,
   listWatchHistory,
   listWatchOrders,
@@ -40,6 +41,11 @@ const ReservationBuyBaseShape = {
   amountKrw: z.number().int().positive().optional(),
   expiresAt: z.union([z.number().int().positive(), z.date()]).optional(),
 } as const;
+
+const ReservationBuyDraftInputSchema = z.object({
+  accountId: z.number().int().positive(),
+  pdno: z.string().regex(/^\d{6}$/),
+});
 
 const ReservationBuyCreateInputSchema = z
   .object(ReservationBuyBaseShape)
@@ -107,6 +113,10 @@ export const watchRouter = router({
   cancel: runtimeProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(({ ctx, input }) => cancelWatchOrder(ctx, input)),
+
+  getReservationBuyDraft: runtimeProcedure
+    .input(ReservationBuyDraftInputSchema)
+    .query(({ ctx, input }) => getReservationBuyDraft(ctx, input)),
 
   create: runtimeProcedure
     .input(ReservationBuyCreateInputSchema)

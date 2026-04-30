@@ -23,9 +23,9 @@ export const AddWatchOrderDialogContent = ({
   const modalRef = useRef<HTMLDivElement | null>(null);
   const isDense = !isPageLayout;
   const titleText = controller.isEdit ? '자동감시 수정' : '자동감시 추가';
-  const chromePadding = isPageLayout ? '0.9rem 1.1rem' : '0.35rem 0.6rem';
-  const bodyPadding = isPageLayout ? '1rem 1.1rem' : '0.4rem 0.6rem';
-  const bodyGap = isPageLayout ? '1rem 1.5rem' : '0.5rem 0.8rem';
+  const chromePadding = isPageLayout ? '1rem 1.2rem' : '0.75rem 0.9rem';
+  const bodyPadding = isPageLayout ? '1.1rem 1.2rem' : '0.9rem';
+  const bodyGap = isPageLayout ? '1.15rem' : '0.85rem';
   useDialogFocus({
     enabled: !isPageLayout,
     rootRef: modalRef,
@@ -35,7 +35,7 @@ export const AddWatchOrderDialogContent = ({
   const content = (
     <div
       ref={modalRef}
-      className={`panel${layout === 'page' ? ' add-watch-order-page' : ' modal'}`}
+      className={`panel add-watch-order-dialog${layout === 'page' ? ' add-watch-order-page' : ' modal'}`}
       tabIndex={isPageLayout ? undefined : -1}
       style={
         isPageLayout
@@ -45,8 +45,17 @@ export const AddWatchOrderDialogContent = ({
               display: 'flex',
               flexDirection: 'column',
               boxSizing: 'border-box',
+              background: 'var(--bg)',
             }
-          : { minWidth: 'min(600px, 92vw)', maxWidth: '720px', width: 'min(600px, 92vw)' }
+          : {
+              width: 'min(1180px, 96vw)',
+              maxHeight: 'min(88vh, 820px)',
+              overflow: 'auto',
+              borderRadius: '0.65rem',
+              background: 'var(--bg)',
+              border: '0.1rem solid var(--border)',
+              boxShadow: '0 1.2rem 3rem rgba(15, 23, 42, 0.18)',
+            }
       }
     >
       {isPageLayout ? null : (
@@ -58,10 +67,12 @@ export const AddWatchOrderDialogContent = ({
             justifyContent: 'space-between',
             gap: '0.6rem',
             padding: chromePadding,
-            fontSize: '1rem',
+            fontSize: '0.95rem',
+            borderBottom: '0.1rem solid var(--border)',
+            background: 'var(--bg)',
           }}
         >
-          <span>{titleText}</span>
+          <span style={{ fontWeight: 800 }}>{titleText}</span>
           <Button
             variant="ghost"
             iconOnly
@@ -78,7 +89,7 @@ export const AddWatchOrderDialogContent = ({
         className="panel__body"
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(30rem, 100%), 1fr))',
           gap: bodyGap,
           alignItems: 'start',
           flex: 1,
@@ -87,15 +98,22 @@ export const AddWatchOrderDialogContent = ({
         }}
       >
         <WatchConditionsSection
+          draft={controller.draft}
+          draftError={controller.draftError}
           pdno={controller.pdno}
           pdName={controller.pdName}
           targetPriceRaw={controller.targetPriceRaw}
+          targetPriceDistancePct={controller.targetPriceDistancePct}
+          targetPriceImmediateWarning={controller.targetPriceImmediateWarning}
           expiresAtIso={controller.expiresAtIso}
           todayIso={controller.todayIso}
           isPageLayout={isPageLayout}
+          isDraftLoading={controller.isDraftLoading}
           isDense={isDense}
           isPending={controller.isPending}
           errors={controller.errors}
+          selectedPriceCandidateId={controller.selectedPriceCandidateId}
+          onApplyPriceCandidate={controller.applyPriceCandidate}
           setTargetPriceRaw={controller.setTargetPriceRaw}
           setExpiresAtIso={controller.setExpiresAtIso}
           onPickStock={controller.onPickStock}
@@ -107,6 +125,10 @@ export const AddWatchOrderDialogContent = ({
           qtyRaw={controller.qtyRaw}
           amountKrwRaw={controller.amountKrwRaw}
           targetPriceRaw={controller.targetPriceRaw}
+          currentPrice={controller.currentPrice}
+          pdName={controller.pdName}
+          pdno={controller.pdno}
+          targetPriceDistancePct={controller.targetPriceDistancePct}
           isPageLayout={isPageLayout}
           isDense={isDense}
           isPending={controller.isPending}

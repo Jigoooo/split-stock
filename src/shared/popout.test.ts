@@ -21,7 +21,11 @@ describe('popout config', () => {
   });
 
   it('자동감시 추가 팝업은 콘텐츠 높이 기반 리사이즈를 허용한다', () => {
-    expect(getPopoutRouteConfig('add-watch-order').autoContentHeight).toBe(true);
+    expect(getPopoutRouteConfig('add-watch-order')).toMatchObject({
+      autoContentHeight: true,
+      defaultWidth: 1240,
+      minWidth: 900,
+    });
     expect(getPopoutRouteConfig('add-watch-order').minHeight).toBeUndefined();
   });
 
