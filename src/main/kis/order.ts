@@ -11,6 +11,14 @@ import { hashIdentifier } from '../logging/event-logger';
 import { KIS_PATH, trId } from './endpoints';
 import { interpretRtCd, makeKisError } from './errors';
 import type { KisHttpClient } from './http-client';
+import {
+  divisionCode,
+  getRateLimitRetryDelayMs,
+  orderAuthHeaders,
+  priceString,
+  shouldRetryRateLimitedOrder,
+  sleep,
+} from './order-helpers';
 
 export interface OrderDeps {
   http: KisHttpClient;
@@ -43,37 +51,6 @@ export interface OrderAmendParams {
   qtyAllOrder?: boolean;
 }
 
-function authHeaders(deps: OrderDeps, trIdValue: string): Record<string, string> {
-  return {
-    authorization: `Bearer ${deps.token}`,
-    appkey: deps.appKey,
-    appsecret: deps.appSecret,
-    tr_id: trIdValue,
-    custtype: 'P',
-  };
-}
-
-function divisionCode(division: 'LIMIT' | 'MARKET'): '00' | '01' {
-  return division === 'MARKET' ? '01' : '00';
-}
-
-function priceString(price: number, division: 'LIMIT' | 'MARKET'): string {
-  return division === 'MARKET' ? '0' : String(price);
-}
-
-function shouldRetryRateLimitedOrder(deps: OrderDeps): boolean {
-  return deps.env === 'MOCK';
-}
-
-function getRateLimitRetryDelayMs(deps: OrderDeps): number {
-  return deps.rateLimitRetryDelayMs ?? 1100;
-}
-
-async function sleep(ms: number): Promise<void> {
-  if (ms <= 0) return;
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /**
  * 현금 매수/매도 — POST /uapi/domestic-stock/v1/trading/order-cash.
  *
@@ -101,7 +78,7 @@ export async function orderCash(
   }
 
   const tr = trId(req.side === 'BUY' ? 'BUY_CASH' : 'SELL_CASH', deps.env);
-  const headers = authHeaders(deps, tr);
+  const headers = orderAuthHeaders(deps, tr);
   const body: Record<string, string> = {
     CANO: deps.accountNo8,
     ACNT_PRDT_CD: deps.accountProdCd,
@@ -272,7 +249,7 @@ export async function cancelOrRevise(
   }
 
   const tr = trId('CANCEL_REVISE', deps.env);
-  const headers = authHeaders(deps, tr);
+  const headers = orderAuthHeaders(deps, tr);
   const body: Record<string, string> = {
     CANO: deps.accountNo8,
     ACNT_PRDT_CD: deps.accountProdCd,

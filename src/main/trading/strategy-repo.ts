@@ -8,6 +8,16 @@ import {
 import { err, ok, type Result } from 'neverthrow';
 import type { SettingsRepo } from '../db/settings-repo';
 import type { EventLogger } from '../logging/event-logger';
+import {
+  activeKey,
+  activePrefixForAccount,
+  isStrategyRepoProfileKey,
+  LEGACY_ACTIVE_PREFIX,
+  LEGACY_PRESET_PREFIX,
+  presetKey,
+  presetPrefixForAccount,
+} from './strategy-repo-keys';
+import { hasSameAutoControls, isUnsafeDefaultAutoProfile } from './strategy-repo-policy';
 
 export type StrategyRepoError =
   | { kind: 'VALIDATION'; msg: string }
@@ -19,23 +29,6 @@ export type StrategyAutoControls = Pick<
   StrategyProfile,
   'autoBuyEnabled' | 'autoBuyOrderType' | 'autoSellEnabled' | 'autoSellOrderType'
 >;
-
-const ACTIVE_PREFIX = 'strategy.active';
-const PRESET_PREFIX = 'strategy.preset';
-const LEGACY_ACTIVE_PREFIX = 'strategy.active'; // 단일 계좌 시절 키 prefix
-const LEGACY_PRESET_PREFIX = 'strategy.preset.'; // 단일 계좌 시절 키 prefix
-
-function activeKey(accountId: number, pdno: string | null): string {
-  return pdno ? `${ACTIVE_PREFIX}.${accountId}.${pdno}` : `${ACTIVE_PREFIX}.${accountId}`;
-}
-
-function presetKey(accountId: number, name: string): string {
-  return `${PRESET_PREFIX}.${accountId}.${name}`;
-}
-
-function presetPrefixForAccount(accountId: number): string {
-  return `${PRESET_PREFIX}.${accountId}.`;
-}
 
 /**
  * 전략 프로필 저장소 — settings 테이블에 JSON 직렬화하여 계좌별 분리 저장.
@@ -99,7 +92,7 @@ export class StrategyRepo {
     accountId: number,
     controls: StrategyAutoControls,
   ): { updated: number; failed: number } {
-    const prefix = `${ACTIVE_PREFIX}.${accountId}.`;
+    const prefix = activePrefixForAccount(accountId);
     let updated = 0;
     let failed = 0;
 
@@ -364,9 +357,7 @@ export class StrategyRepo {
     let autoDisabled = 0;
 
     for (const row of rows) {
-      if (!row.key.startsWith(`${ACTIVE_PREFIX}.`) && !row.key.startsWith(`${PRESET_PREFIX}.`)) {
-        continue;
-      }
+      if (!isStrategyRepoProfileKey(row.key)) continue;
 
       let nextProfile: StrategyProfile;
       let recoveredWithDefault = false;
@@ -384,7 +375,7 @@ export class StrategyRepo {
         recoveredWithDefault = true;
       }
 
-      if (row.key.startsWith(`${ACTIVE_PREFIX}.`) && isUnsafeDefaultAutoProfile(nextProfile)) {
+      if (row.key.startsWith('strategy.active.') && isUnsafeDefaultAutoProfile(nextProfile)) {
         nextProfile = {
           ...nextProfile,
           autoBuyEnabled: false,
@@ -480,23 +471,4 @@ export class StrategyRepo {
       return err({ kind: 'PARSE_FAILED', cause });
     }
   }
-}
-
-function isUnsafeDefaultAutoProfile(profile: StrategyProfile): boolean {
-  if (!profile.autoBuyEnabled || !profile.autoSellEnabled) return false;
-  const disabled = {
-    ...profile,
-    autoBuyEnabled: false,
-    autoSellEnabled: false,
-  };
-  return JSON.stringify(disabled) === JSON.stringify(DEFAULT_STRATEGY_PROFILE);
-}
-
-function hasSameAutoControls(profile: StrategyProfile, controls: StrategyAutoControls): boolean {
-  return (
-    profile.autoBuyEnabled === controls.autoBuyEnabled &&
-    profile.autoBuyOrderType === controls.autoBuyOrderType &&
-    profile.autoSellEnabled === controls.autoSellEnabled &&
-    profile.autoSellOrderType === controls.autoSellOrderType
-  );
 }

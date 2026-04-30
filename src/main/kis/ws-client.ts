@@ -1,12 +1,14 @@
-import { createDecipheriv } from 'node:crypto';
 import type { AppEnv, CniNotice, KisError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
-import { z } from 'zod';
 import type { EventLogger } from '../logging/event-logger';
-import { KIS_PATH, KIS_WS_URL } from './endpoints';
+import { KIS_WS_URL } from './endpoints';
 import { makeKisError } from './errors';
 import type { KisHttpClient } from './http-client';
+import { issueApprovalKey } from './ws-approval';
+import { decryptAes256CbcBase64 } from './ws-crypto';
 
+export { issueApprovalKey } from './ws-approval';
+export { decryptAes256CbcBase64 } from './ws-crypto';
 // renderer 가 동일 타입을 참조해야 하므로 shared/contracts 에 단일 정의 — 본 모듈에서도 재export.
 export type { CniNotice };
 
@@ -44,36 +46,6 @@ export const realTimer: Timer = {
   },
   now: () => Date.now(),
 };
-
-const KisApprovalResponseSchema = z.object({
-  approval_key: z.string().min(1),
-});
-
-/**
- * KIS 실시간 접속용 approval_key 발급 — POST /oauth2/Approval.
- * 평상시 access_token과는 별도의 키. 요청 바디는 appkey/appsecret + secretkey 필드명 사용.
- */
-export async function issueApprovalKey(
-  http: KisHttpClient,
-  appKey: string,
-  appSecret: string,
-): Promise<Result<string, KisError>> {
-  const r = await http.post<unknown>(KIS_PATH.APPROVAL_KEY, {
-    grant_type: 'client_credentials',
-    appkey: appKey,
-    secretkey: appSecret,
-  });
-  if (r.isErr()) return err(r.error);
-  const parsed = KisApprovalResponseSchema.safeParse(r.value.body);
-  if (!parsed.success) {
-    return err(
-      makeKisError('VALIDATION', 'approval 응답 파싱 실패', {
-        cause: parsed.error.message,
-      }),
-    );
-  }
-  return ok(parsed.data.approval_key);
-}
 
 /**
  * 지원 TR 목록.
@@ -471,17 +443,4 @@ export class KisWsClient {
       raw: decrypted,
     });
   }
-}
-
-export function decryptAes256CbcBase64(key: string, iv: string, cipherText: string): string {
-  const decipher = createDecipheriv(
-    'aes-256-cbc',
-    Buffer.from(key, 'utf8'),
-    Buffer.from(iv, 'utf8'),
-  );
-  const decrypted = Buffer.concat([
-    decipher.update(Buffer.from(cipherText, 'base64')),
-    decipher.final(),
-  ]);
-  return decrypted.toString('utf8');
 }

@@ -1,14 +1,27 @@
-import type { DailyExecution, TradeExecutionEvent } from '@shared/contracts';
+import type { TradeExecutionEvent } from '@shared/contracts';
 import { eq, inArray } from 'drizzle-orm';
 import { realTimer, type Timer } from '../brokers/core/types';
 import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
-import { lots, orders, trades } from '../db/schema';
+import { orders, trades } from '../db/schema';
 import type { EventLogger } from '../logging/event-logger';
-import { reconcileCancelledSellLot } from './partial-sell-lot-reconciliation';
+import {
+  readLotNth,
+  reconcileLinkedLot,
+  toDate,
+  weightedAvgTradePrice,
+} from './manual-order-lot-reconciliation';
+import {
+  resolveManualOrderDecision,
+  resolveMarketFillWithoutPrice,
+  resolveServerPendingAbsenceDecision,
+} from './manual-order-reconciliation-policy';
 
-type OrderStatus = 'PENDING' | 'PARTIAL' | 'FILLED' | 'CANCELLED' | 'REJECTED';
-type OrderDivision = 'LIMIT' | 'MARKET';
+export type { ReconcileDecision } from './manual-order-reconciliation-policy';
+export {
+  resolveManualOrderDecision,
+  resolveServerPendingAbsenceDecision,
+} from './manual-order-reconciliation-policy';
 
 interface PendingOrderRow {
   id: number;
@@ -46,117 +59,6 @@ export interface ManualOrderReconcilerOptions {
   timer?: Timer;
   pollMs?: number;
   stalePendingGraceMs?: number;
-}
-
-export interface ReconcileDecision {
-  nextStatus: OrderStatus;
-  totalFilledQty: number;
-  deltaFilledQty: number;
-  remainingQty: number;
-  executionPrice: number;
-}
-
-interface PendingSnapshotContext {
-  serverPendingPresent: boolean;
-  now: Date;
-  placedAt: Date;
-  graceMs: number;
-}
-
-export function resolveManualOrderDecision(input: {
-  localStatus: 'PENDING' | 'PARTIAL';
-  orderQty: number;
-  localFilledQty: number;
-  localPrice: number;
-  division?: OrderDivision;
-  remote: DailyExecution;
-}): ReconcileDecision | null {
-  const totalFilledQty = Math.min(input.orderQty, Math.max(0, input.remote.totalFilledQty));
-  const deltaFilledQty = Math.max(0, totalFilledQty - input.localFilledQty);
-  const remainingQty =
-    input.remote.remainingQty > 0
-      ? input.remote.remainingQty
-      : Math.max(0, input.orderQty - totalFilledQty);
-  const division = input.division ?? 'LIMIT';
-  const executionPrice = resolveExecutionPrice({
-    division,
-    localPrice: input.localPrice,
-    remoteOrderPrice: input.remote.orderPrice,
-    remoteAvgFillPrice: input.remote.avgFillPrice,
-    totalFilledQty,
-  });
-  if (executionPrice === null) return null;
-
-  if (totalFilledQty > 0) {
-    const nextStatus: OrderStatus = input.remote.cancelled
-      ? remainingQty > 0
-        ? 'CANCELLED'
-        : 'FILLED'
-      : remainingQty > 0
-        ? 'PARTIAL'
-        : 'FILLED';
-    if (deltaFilledQty === 0 && nextStatus === input.localStatus) return null;
-    return { nextStatus, totalFilledQty, deltaFilledQty, remainingQty, executionPrice };
-  }
-
-  if (input.remote.rejectedQty > 0) {
-    return {
-      nextStatus: 'REJECTED',
-      totalFilledQty: 0,
-      deltaFilledQty: 0,
-      remainingQty: input.orderQty,
-      executionPrice,
-    };
-  }
-
-  if (input.remote.cancelled) {
-    return {
-      nextStatus: 'CANCELLED',
-      totalFilledQty: 0,
-      deltaFilledQty: 0,
-      remainingQty,
-      executionPrice,
-    };
-  }
-
-  return null;
-}
-
-export function resolveServerPendingAbsenceDecision(input: {
-  localFilledQty: number;
-  orderQty: number;
-  localPrice: number;
-  localExecutionPrice?: number;
-  division?: OrderDivision;
-  context: PendingSnapshotContext;
-}): ReconcileDecision | null {
-  if (input.context.serverPendingPresent) return null;
-  if (input.context.now.getTime() - input.context.placedAt.getTime() < input.context.graceMs) {
-    return null;
-  }
-
-  const division = input.division ?? 'LIMIT';
-  const executionPrice =
-    input.localFilledQty > 0
-      ? division === 'MARKET'
-        ? input.localExecutionPrice && input.localExecutionPrice > 0
-          ? input.localExecutionPrice
-          : null
-        : input.localExecutionPrice && input.localExecutionPrice > 0
-          ? input.localExecutionPrice
-          : input.localPrice
-      : division === 'MARKET'
-        ? 0
-        : input.localPrice;
-  if (executionPrice === null) return null;
-
-  return {
-    nextStatus: input.localFilledQty >= input.orderQty ? 'FILLED' : 'CANCELLED',
-    totalFilledQty: input.localFilledQty,
-    deltaFilledQty: 0,
-    remainingQty: Math.max(0, input.orderQty - input.localFilledQty),
-    executionPrice,
-  };
 }
 
 export class ManualOrderReconciler {
@@ -406,97 +308,5 @@ export class ManualOrderReconciler {
     } finally {
       this.running = false;
     }
-  }
-}
-
-function toDate(value: Date | number | string): Date {
-  return value instanceof Date ? value : new Date(value);
-}
-
-function resolveExecutionPrice(input: {
-  division: OrderDivision;
-  localPrice: number;
-  remoteOrderPrice: number;
-  remoteAvgFillPrice: number;
-  totalFilledQty: number;
-}): number | null {
-  if (input.remoteAvgFillPrice > 0) return input.remoteAvgFillPrice;
-  if (input.division === 'MARKET') {
-    return input.totalFilledQty > 0 ? null : 0;
-  }
-  if (input.remoteOrderPrice > 0) return input.remoteOrderPrice;
-  return input.localPrice;
-}
-
-function resolveMarketFillWithoutPrice(input: {
-  division: string;
-  localFilledQty: number;
-  remote: DailyExecution;
-}): boolean {
-  return (
-    input.division === 'MARKET' &&
-    input.remote.totalFilledQty > input.localFilledQty &&
-    input.remote.avgFillPrice <= 0
-  );
-}
-
-function weightedAvgTradePrice(rows: Array<{ qty: number; price: number }>): number {
-  const totalQty = rows.reduce((sum, row) => sum + row.qty, 0);
-  if (totalQty <= 0) return 0;
-  const totalAmount = rows.reduce((sum, row) => sum + row.qty * row.price, 0);
-  return Math.round(totalAmount / totalQty);
-}
-
-function readLotNth(db: Db, lotId: number): number | null {
-  const row = db.select({ nth: lots.nth }).from(lots).where(eq(lots.id, lotId)).get();
-  return row?.nth ?? null;
-}
-
-function reconcileLinkedLot(
-  db: Db,
-  input: {
-    decision: ReconcileDecision;
-    lotId: number;
-    now: Date;
-    side: 'BUY' | 'SELL';
-  },
-): void {
-  if (input.side === 'BUY') {
-    if (input.decision.nextStatus === 'CANCELLED' && input.decision.totalFilledQty === 0) {
-      db.delete(lots).where(eq(lots.id, input.lotId)).run();
-      return;
-    }
-
-    db.update(lots)
-      .set({
-        buyPrice: input.decision.executionPrice,
-        qty: input.decision.totalFilledQty,
-        amountKrw: input.decision.executionPrice * input.decision.totalFilledQty,
-        status: input.decision.nextStatus === 'PARTIAL' ? 'BUYING' : 'OPEN',
-      })
-      .where(eq(lots.id, input.lotId))
-      .run();
-    return;
-  }
-
-  if (input.decision.nextStatus === 'FILLED') {
-    db.update(lots)
-      .set({
-        status: 'SOLD',
-        soldAt: input.now,
-        sellPrice: input.decision.executionPrice,
-      })
-      .where(eq(lots.id, input.lotId))
-      .run();
-    return;
-  }
-
-  if (input.decision.nextStatus === 'CANCELLED') {
-    reconcileCancelledSellLot(db, {
-      lotId: input.lotId,
-      filledQty: input.decision.totalFilledQty,
-      executionPrice: input.decision.executionPrice,
-      now: input.now,
-    });
   }
 }

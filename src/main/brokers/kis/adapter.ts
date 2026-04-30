@@ -16,7 +16,6 @@ import type {
   BrokerError,
   Candle,
   DailyExecution,
-  KisError,
   OrderAck,
   OrderAmendIntent,
   OrderbookSnapshot,
@@ -43,6 +42,9 @@ import {
 import { toOrderbookSnapshot } from './mappers/orderbook';
 import { toQuote } from './mappers/quote';
 import type { KisRealtimeAdapter } from './realtime-adapter';
+import { shouldFallbackKisMockTradingDayToLocal, yyyymmdd } from './trading-day-fallback';
+
+export { shouldFallbackKisMockTradingDayToLocal } from './trading-day-fallback';
 
 /**
  * KisAdapter 가 의존하는 외부 객체.
@@ -387,16 +389,4 @@ export class KisAdapter implements BrokerPort {
       accountProdCd: this.deps.credentials.accountProdCd,
     };
   }
-}
-
-function yyyymmdd(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}${m}${d}`;
-}
-
-export function shouldFallbackKisMockTradingDayToLocal(env: AppEnv, error: KisError): boolean {
-  if (env !== 'MOCK' || error.kind !== 'API_BUSINESS') return false;
-  return /해당\s*서비스를\s*찾을\s*수?\s*없습니다|service\s*not\s*found/i.test(error.msg);
 }

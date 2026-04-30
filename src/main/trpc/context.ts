@@ -9,12 +9,8 @@ import type { NaverDatalabClient } from '../ai/naver-datalab-client';
 import type { NewsFetcher } from '../ai/news-fetcher';
 import type { BackupScheduler } from '../backup/scheduler';
 import type { WsFactory } from '../brokers/core/types';
-import { createBrokerPort } from '../brokers/factory';
-import { KisRealtimeAdapter } from '../brokers/kis/realtime-adapter';
-import { KiwoomAuth } from '../brokers/kiwoom/auth';
 import type { KiwoomHttpClient } from '../brokers/kiwoom/http-client';
-import { KiwoomSocketClient } from '../brokers/kiwoom/socket-client';
-import { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
+import type { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
 import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
 import type { SettingsRepo } from '../db/settings-repo';
@@ -41,6 +37,7 @@ import type { StrategyExecutionEngine } from '../trading/strategy-execution-engi
 import type { StrategyRepo } from '../trading/strategy-repo';
 import type { TradingCalendarService } from '../trading/trading-calendar-service';
 import type { WatchEngine } from '../trading/watch-engine';
+import { createContextBrokerResolver } from './context-broker-resolver';
 
 export interface Context {
   db: Db;
@@ -150,10 +147,6 @@ export interface ContextFactoryOptions
   initialActiveAccountId?: number | null;
 }
 
-const missingKiwoomWsFactory: WsFactory = (url) => {
-  throw new Error(`Kiwoom WS factory not wired (url=${url})`);
-};
-
 export function createContextFactory(opts: ContextFactoryOptions): {
   create: () => Context;
   setEnv: (env: AppEnv | null) => void;
@@ -188,104 +181,11 @@ export function createContextFactory(opts: ContextFactoryOptions): {
   let currentStateSync: CurrentStateSync | null = null;
   let accountRealtimeSub: { unsubscribe(): void } | null = null;
 
-  /**
-   * Broker adapter 캐시 — key = `${env}:${accountId}`.
-   * env 전환 또는 setEnvAndAccount 시 clear.
-   */
-  const brokerCache = new Map<string, BrokerPort>();
-  const clearBrokerCache = (): void => {
-    for (const port of brokerCache.values()) port.dispose();
-    brokerCache.clear();
-  };
-  /**
-   * KIS RealtimePort 어댑터 — context lifetime 동안 단일 인스턴스 (모든 broker 가
-   * 같은 RealtimeService + FeedBus 를 공유). bus 가 미준비(env 미선택) 면 미생성.
-   */
-  let kisRealtimeAdapter: KisRealtimeAdapter | null = null;
-  const ensureRealtimeAdapter = (): KisRealtimeAdapter | undefined => {
-    if (kisRealtimeAdapter) return kisRealtimeAdapter;
-    if (!deps.bus) return undefined;
-    kisRealtimeAdapter = new KisRealtimeAdapter({
-      getService: () => realtime,
-      bus: deps.bus,
-      getHtsId: () => {
-        if (activeAccountId === null) return null;
-        const cred = deps.credentialsRepo.loadCredentials(activeAccountId);
-        if (cred.isErr() || !cred.value || cred.value.env !== currentEnv) return null;
-        return cred.value.htsId?.trim() || null;
-      },
-    });
-    return kisRealtimeAdapter;
-  };
-  const brokerForAccount = (accountId: number): BrokerPort | null => {
-    if (!currentEnv) return null;
-    const key = `${currentEnv}:${accountId}`;
-    const cached = brokerCache.get(key);
-    if (cached) return cached;
-    const credResult = deps.credentialsRepo.loadCredentials(accountId);
-    if (credResult.isErr() || !credResult.value) return null;
-    const cred = credResult.value;
-    if (cred.env !== currentEnv) return null;
-
-    let port: BrokerPort;
-    if (cred.broker === 'KIWOOM') {
-      // Kiwoom: env 별 http + 계좌별 auth + 단일 socket(필요 시).
-      const auth = new KiwoomAuth({
-        env: currentEnv,
-        appKey: cred.appKey,
-        // CredentialsSchema 의 appSecret 을 Kiwoom 의 secretKey 로 사용
-        secretKey: cred.appSecret,
-      });
-      const socket = new KiwoomSocketClient({
-        env: currentEnv,
-        getToken: () => {
-          if (!currentEnv) return null;
-          const token = deps.kiwoomTokenStore.load(currentEnv);
-          if (token.isErr() || !token.value) return null;
-          return KiwoomTokenStore.isReusable(token.value, Date.now()) ? token.value.token : null;
-        },
-        factory: deps.kiwoomWsFactory ?? missingKiwoomWsFactory,
-      });
-      port = createBrokerPort({
-        brokerId: 'KIWOOM',
-        deps: {
-          env: currentEnv,
-          auth,
-          http: deps.kiwoomHttpByEnv[currentEnv],
-          tokenStore: deps.kiwoomTokenStore,
-          tradingCalendar: deps.tradingCalendar,
-          credentials: {
-            appKey: cred.appKey,
-            secretKey: cred.appSecret,
-            accountNo: `${cred.accountNo8}${cred.accountProdCd}`,
-          },
-          socket,
-        },
-      });
-    } else {
-      const realtimeAdapter = ensureRealtimeAdapter();
-      port = createBrokerPort({
-        brokerId: 'KIS',
-        deps: {
-          env: currentEnv,
-          httpByEnv: deps.httpByEnv,
-          authService: deps.auth,
-          credentials: {
-            appKey: cred.appKey,
-            appSecret: cred.appSecret,
-            accountNo8: cred.accountNo8,
-            accountProdCd: cred.accountProdCd,
-            ...(cred.htsId !== undefined && { htsId: cred.htsId }),
-          },
-          logger: deps.logger,
-          tradingCalendar: deps.tradingCalendar,
-          ...(realtimeAdapter !== undefined && { realtime: realtimeAdapter }),
-        },
-      });
-    }
-    brokerCache.set(key, port);
-    return port;
-  };
+  const { brokerForAccount, clearBrokerCache } = createContextBrokerResolver(deps, {
+    getCurrentEnv: () => currentEnv,
+    getActiveAccountId: () => activeAccountId,
+    getRealtime: () => realtime,
+  });
 
   const syncWatchEngine = (accountId: number | null): void => {
     deps.watchEngine?.setActiveAccountId(accountId);
