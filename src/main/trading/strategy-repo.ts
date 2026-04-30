@@ -1,23 +1,19 @@
-import {
-  DEFAULT_STRATEGY_PROFILE,
-  migrateLegacyStrategyProfile,
-  normalizeStrategyProfile,
-  type StrategyProfile,
-  StrategyProfileSchema,
-} from '@shared/contracts';
+import { DEFAULT_STRATEGY_PROFILE, type StrategyProfile } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
 import type { SettingsRepo } from '../db/settings-repo';
 import type { EventLogger } from '../logging/event-logger';
+import { activeKey, activePrefixForAccount } from './strategy-repo-keys';
 import {
-  activeKey,
-  activePrefixForAccount,
-  isStrategyRepoProfileKey,
-  LEGACY_ACTIVE_PREFIX,
-  LEGACY_PRESET_PREFIX,
-  presetKey,
-  presetPrefixForAccount,
-} from './strategy-repo-keys';
-import { hasSameAutoControls, isUnsafeDefaultAutoProfile } from './strategy-repo-policy';
+  migrateLegacyStrategyKeys,
+  upgradeStoredStrategyProfiles,
+} from './strategy-repo-migration';
+import { hasSameAutoControls } from './strategy-repo-policy';
+import {
+  deleteStrategyPreset,
+  listStrategyPresets,
+  saveStrategyPreset,
+} from './strategy-repo-presets';
+import { normalizeStrategyProfileForSave, readStrategyProfile } from './strategy-repo-read';
 
 export type StrategyRepoError =
   | { kind: 'VALIDATION'; msg: string }
@@ -64,16 +60,13 @@ export class StrategyRepo {
     pdno: string | null,
     profile: StrategyProfile,
   ): Result<void, StrategyRepoError> {
-    const normalized = normalizeStrategyProfile(profile);
-    if (!normalized) {
-      const parsed = StrategyProfileSchema.safeParse(profile);
-      return err({
-        kind: 'VALIDATION',
-        msg: parsed.success ? 'strategy profile normalize failed' : parsed.error.message,
-      });
-    }
+    const normalized = normalizeStrategyProfileForSave(
+      profile,
+      'strategy profile normalize failed',
+    );
+    if (normalized.isErr()) return err(normalized.error);
     const before = this.readProfile(activeKey(accountId, pdno));
-    this.settings.set(activeKey(accountId, pdno), JSON.stringify(normalized));
+    this.settings.set(activeKey(accountId, pdno), JSON.stringify(normalized.value));
     this.logger.log({
       level: 'INFO',
       category: 'FSM',
@@ -82,7 +75,7 @@ export class StrategyRepo {
         accountId,
         pdno: pdno ?? '__global__',
         before: before.isOk() ? before.value : null,
-        after: normalized,
+        after: normalized.value,
       },
     });
     return ok(undefined);
@@ -222,20 +215,7 @@ export class StrategyRepo {
   }
 
   listPresets(accountId: number): Array<{ name: string; profile: StrategyProfile }> {
-    const all = this.settings.list();
-    const prefix = presetPrefixForAccount(accountId);
-    const results: Array<{ name: string; profile: StrategyProfile }> = [];
-    for (const row of all) {
-      if (!row.key.startsWith(prefix)) continue;
-      const name = row.key.slice(prefix.length);
-      try {
-        const profile = migrateLegacyStrategyProfile(JSON.parse(row.value));
-        if (profile) results.push({ name, profile });
-      } catch {
-        // skip malformed entries — 복원 실패는 무시
-      }
-    }
-    return results.sort((a, b) => a.name.localeCompare(b.name));
+    return listStrategyPresets(this.settings, accountId);
   }
 
   savePreset(
@@ -243,35 +223,11 @@ export class StrategyRepo {
     name: string,
     profile: StrategyProfile,
   ): Result<void, StrategyRepoError> {
-    const normalized = normalizeStrategyProfile(profile);
-    if (!normalized) {
-      const parsed = StrategyProfileSchema.safeParse(profile);
-      return err({
-        kind: 'VALIDATION',
-        msg: parsed.success ? 'strategy preset normalize failed' : parsed.error.message,
-      });
-    }
-    if (name.length === 0 || name.length > 50) {
-      return err({ kind: 'VALIDATION', msg: '프리셋 이름은 1~50자' });
-    }
-    this.settings.set(presetKey(accountId, name), JSON.stringify(normalized));
-    this.logger.log({
-      level: 'INFO',
-      category: 'FSM',
-      message: 'strategy.preset.saved',
-      payload: { accountId, name, profile: normalized },
-    });
-    return ok(undefined);
+    return saveStrategyPreset(this.settings, this.logger, accountId, name, profile);
   }
 
   deletePreset(accountId: number, name: string): void {
-    this.settings.delete(presetKey(accountId, name));
-    this.logger.log({
-      level: 'INFO',
-      category: 'FSM',
-      message: 'strategy.preset.deleted',
-      payload: { accountId, name },
-    });
+    deleteStrategyPreset(this.settings, this.logger, accountId, name);
   }
 
   /**
@@ -284,140 +240,11 @@ export class StrategyRepo {
    * 부팅 시 ensureActive 후 1회 호출.
    */
   migrateLegacyKeys(defaultAccountId: number): { migrated: number } {
-    const all = this.settings.list();
-    let migrated = 0;
-    for (const row of all) {
-      const key = row.key;
-      // active 글로벌
-      if (key === LEGACY_ACTIVE_PREFIX) {
-        const newKey = activeKey(defaultAccountId, null);
-        if (this.settings.get(newKey) === null) {
-          this.settings.set(newKey, row.value);
-          this.settings.delete(key);
-          migrated++;
-        }
-        continue;
-      }
-      // active 종목별 — strategy.active.{pdno}
-      if (key.startsWith(`${LEGACY_ACTIVE_PREFIX}.`)) {
-        const tail = key.slice(LEGACY_ACTIVE_PREFIX.length + 1);
-        // 형식 구분:
-        //   - 구 종목별: tail 이 정확히 6자리 숫자 (KIS 종목코드)
-        //   - 신 글로벌:  tail 이 1~5자리 또는 7자리+ 숫자 (accountId)
-        //   - 신 종목별:  tail 에 '.' 포함 (accountId.pdno)
-        if (tail.includes('.')) {
-          // 새 형식 (accountId.pdno). skip.
-          continue;
-        }
-        if (/^\d{6}$/.test(tail)) {
-          // 구 종목별 키.
-          const newKey = activeKey(defaultAccountId, tail);
-          if (this.settings.get(newKey) === null) {
-            this.settings.set(newKey, row.value);
-            this.settings.delete(key);
-            migrated++;
-          }
-          continue;
-        }
-        // 그 외 (숫자 1~5자리 또는 7자리+ accountId 단독) → 새 형식 글로벌. skip.
-        continue;
-      }
-      // preset
-      if (key.startsWith(LEGACY_PRESET_PREFIX)) {
-        const tail = key.slice(LEGACY_PRESET_PREFIX.length);
-        // 새 형식: strategy.preset.{accountId}.{name} → tail 의 첫 segment 가 숫자
-        const firstSeg = tail.split('.')[0];
-        if (firstSeg !== undefined && /^\d+$/.test(firstSeg) && tail.includes('.')) {
-          // 이미 새 형식. skip.
-          continue;
-        }
-        const newKey = presetKey(defaultAccountId, tail);
-        if (this.settings.get(newKey) === null) {
-          this.settings.set(newKey, row.value);
-          this.settings.delete(key);
-          migrated++;
-        }
-      }
-    }
-    if (migrated > 0) {
-      this.logger.log({
-        level: 'INFO',
-        category: 'FSM',
-        message: 'strategy.legacy_keys.migrated',
-        payload: { accountId: defaultAccountId, count: migrated },
-      });
-    }
-    return { migrated };
+    return migrateLegacyStrategyKeys(this.settings, this.logger, defaultAccountId);
   }
 
   upgradeStoredProfiles(): { upgraded: number; recovered: number; autoDisabled: number } {
-    const rows = this.settings.list();
-    let upgraded = 0;
-    let recovered = 0;
-    let autoDisabled = 0;
-
-    for (const row of rows) {
-      if (!isStrategyRepoProfileKey(row.key)) continue;
-
-      let nextProfile: StrategyProfile;
-      let recoveredWithDefault = false;
-      try {
-        const raw = JSON.parse(row.value);
-        const migrated = migrateLegacyStrategyProfile(raw);
-        if (migrated) {
-          nextProfile = migrated;
-        } else {
-          nextProfile = DEFAULT_STRATEGY_PROFILE;
-          recoveredWithDefault = true;
-        }
-      } catch {
-        nextProfile = DEFAULT_STRATEGY_PROFILE;
-        recoveredWithDefault = true;
-      }
-
-      if (row.key.startsWith('strategy.active.') && isUnsafeDefaultAutoProfile(nextProfile)) {
-        nextProfile = {
-          ...nextProfile,
-          autoBuyEnabled: false,
-          autoSellEnabled: false,
-        };
-        autoDisabled += 1;
-      }
-
-      const normalized = JSON.stringify(nextProfile);
-      if (normalized === row.value) continue;
-
-      this.settings.set(row.key, normalized);
-      if (recoveredWithDefault) {
-        recovered += 1;
-        this.logger.log({
-          level: 'ERROR',
-          category: 'FSM',
-          message: 'strategy.migration.recovered_with_default',
-          payload: { key: row.key },
-        });
-      } else {
-        upgraded += 1;
-      }
-    }
-
-    if (upgraded > 0 || recovered > 0) {
-      this.logger.log({
-        level: recovered > 0 ? 'WARN' : 'INFO',
-        category: 'FSM',
-        message: 'strategy.migration.completed',
-        payload: { upgraded, recovered, autoDisabled },
-      });
-    }
-    if (autoDisabled > 0) {
-      this.logger.log({
-        level: 'WARN',
-        category: 'FSM',
-        message: 'strategy.default_auto.disabled',
-        payload: { count: autoDisabled },
-      });
-    }
-    return { upgraded, recovered, autoDisabled };
+    return upgradeStoredStrategyProfiles(this.settings, this.logger);
   }
 
   backfillMissingActiveProfiles(
@@ -454,21 +281,6 @@ export class StrategyRepo {
   }
 
   private readProfile(key: string): Result<StrategyProfile | null, StrategyRepoError> {
-    const raw = this.settings.get(key);
-    if (raw === null) return ok(null);
-    try {
-      const parsedRaw = JSON.parse(raw);
-      const normalized = migrateLegacyStrategyProfile(parsedRaw);
-      if (!normalized) {
-        const next = StrategyProfileSchema.safeParse(parsedRaw);
-        return err({
-          kind: 'PARSE_FAILED',
-          cause: next.success ? 'strategy profile normalize failed' : next.error.message,
-        });
-      }
-      return ok(normalized);
-    } catch (cause) {
-      return err({ kind: 'PARSE_FAILED', cause });
-    }
+    return readStrategyProfile(this.settings, key);
   }
 }

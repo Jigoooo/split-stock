@@ -5,7 +5,12 @@ import { KIS_WS_URL } from './endpoints';
 import { makeKisError } from './errors';
 import type { KisHttpClient } from './http-client';
 import { issueApprovalKey } from './ws-approval';
+import { parseKisControlFrame } from './ws-control-frame';
 import { decryptAes256CbcBase64 } from './ws-crypto';
+import { WsDeduper } from './ws-dedup';
+import { parseKisRealtimeFrame } from './ws-realtime-frame';
+import { reconnectDelayMs } from './ws-reconnect';
+import { buildSubscriptionControlFrame, subscriptionId } from './ws-subscriptions';
 
 export { issueApprovalKey } from './ws-approval';
 export { decryptAes256CbcBase64 } from './ws-crypto';
@@ -69,10 +74,6 @@ export interface CniCryptoParams {
 export interface SubscriptionKey {
   tr: RealtimeTr;
   code: string;
-}
-
-function subscriptionId(sub: SubscriptionKey): string {
-  return `${sub.tr}:${sub.code}`;
 }
 
 export interface RealtimeMessage {
@@ -152,9 +153,7 @@ export class KisWsClient {
   private current: ConnectedState | null = null;
   private reconnectAttempt = 0;
   private reconnectTimer: { clear: () => void } | null = null;
-  private seenKeys = new Set<string>();
-  private readonly seenLimit = 2048;
-  private seenOrder: string[] = [];
+  private readonly deduper = new WsDeduper(2048);
   private cniSeq = 0;
 
   constructor(opts: KisWsClientOptions) {
@@ -301,7 +300,7 @@ export class KisWsClient {
     if (this.phase === 'closed') return;
     this.phase = 'reconnect-wait';
     const attempt = this.reconnectAttempt;
-    const delay = Math.min(this.reconnectBaseMs * 2 ** attempt, this.reconnectMaxMs);
+    const delay = reconnectDelayMs(this.reconnectBaseMs, this.reconnectMaxMs, attempt);
     this.reconnectAttempt += 1;
     this.logger.log({
       level: 'INFO',
@@ -317,15 +316,7 @@ export class KisWsClient {
 
   private sendControl(ws: WsLike, sub: SubscriptionKey, type: '1' | '2'): void {
     if (!this.approvalKey) return;
-    const frame = {
-      header: {
-        approval_key: this.approvalKey,
-        custtype: 'P',
-        tr_type: type, // 1=subscribe, 2=unsubscribe
-        'content-type': 'utf-8',
-      },
-      body: { input: { tr_id: sub.tr, tr_key: sub.code } },
-    };
+    const frame = buildSubscriptionControlFrame(this.approvalKey, sub, type);
     try {
       ws.send(JSON.stringify(frame));
     } catch (cause) {
@@ -344,60 +335,38 @@ export class KisWsClient {
       this.handleControlFrame(raw);
       return;
     }
-    const parts = raw.split('|');
-    if (parts.length < 4) return;
-    const [encryptFlag, trId, , payload] = parts;
-    if (!trId || !payload) return;
-    if (trId === 'H0STCNI0' || trId === 'H0STCNI9') {
-      this.handleCniPayload(trId, payload, encryptFlag === '1' || encryptFlag === 'Y');
+    const parsed = parseKisRealtimeFrame(raw);
+    if (!parsed) return;
+    if (parsed.kind === 'cni') {
+      this.handleCniPayload(parsed.tr, parsed.payload, parsed.encrypted);
       return;
     }
-    const firstRecord = payload.split('^');
-    const code = firstRecord[0] ?? '';
-    const seqRaw = firstRecord[1] ?? '';
-    const seq = Number(seqRaw);
-    if (!Number.isFinite(seq) || !code) return;
-    const dedupKey = `${trId}:${code}:${seq}`;
-    if (this.seenKeys.has(dedupKey)) return;
-    this.seenKeys.add(dedupKey);
-    this.seenOrder.push(dedupKey);
-    if (this.seenOrder.length > this.seenLimit) {
-      const evicted = this.seenOrder.shift();
-      if (evicted) this.seenKeys.delete(evicted);
-    }
+    const dedupKey = `${parsed.tr}:${parsed.code}:${parsed.seq}`;
+    if (!this.deduper.remember(dedupKey)) return;
     if (this.onMessage) {
-      this.onMessage({ tr: trId, code, seq, raw });
+      this.onMessage({ tr: parsed.tr, code: parsed.code, seq: parsed.seq, raw });
     }
   }
 
   private handleControlFrame(raw: string): void {
-    try {
-      const parsed = JSON.parse(raw) as {
-        header?: { tr_id?: string; tr_key?: string; encrypt?: string };
-        body?: { rt_cd?: string; output?: { iv?: string; key?: string } };
-      };
-      const trId = parsed.header?.tr_id;
-      if (trId === 'PINGPONG') return; // heartbeat ack — 로깅 생략
-      if (
-        (trId === 'H0STCNI0' || trId === 'H0STCNI9') &&
-        parsed.body?.rt_cd === '0' &&
-        parsed.body.output?.iv &&
-        parsed.body.output.key
-      ) {
-        this.cniCryptoByTr.set(trId, {
-          iv: parsed.body.output.iv,
-          key: parsed.body.output.key,
-          htsId: parsed.header?.tr_key ?? '',
-        });
-      }
-    } catch (cause) {
+    const parsed = parseKisControlFrame(raw);
+    if (!parsed.ok) {
       this.logger.log({
         level: 'WARN',
         category: 'WS',
         message: 'ws.control.parse_failed',
-        payload: { cause: cause instanceof Error ? cause.message : String(cause) },
+        payload: {
+          cause: parsed.cause instanceof Error ? parsed.cause.message : String(parsed.cause),
+        },
       });
+      return;
     }
+    if (parsed.frame.kind === 'pingpong' || parsed.frame.kind === 'ignored') return;
+    this.cniCryptoByTr.set(parsed.frame.tr, {
+      iv: parsed.frame.iv,
+      key: parsed.frame.key,
+      htsId: parsed.frame.htsId,
+    });
   }
 
   private handleCniPayload(tr: 'H0STCNI0' | 'H0STCNI9', payload: string, encrypted: boolean): void {
@@ -427,13 +396,7 @@ export class KisWsClient {
     }
 
     const dedupKey = `${tr}:${decrypted}`;
-    if (this.seenKeys.has(dedupKey)) return;
-    this.seenKeys.add(dedupKey);
-    this.seenOrder.push(dedupKey);
-    if (this.seenOrder.length > this.seenLimit) {
-      const evicted = this.seenOrder.shift();
-      if (evicted) this.seenKeys.delete(evicted);
-    }
+    if (!this.deduper.remember(dedupKey)) return;
 
     this.cniSeq += 1;
     this.onCniNotice?.({
