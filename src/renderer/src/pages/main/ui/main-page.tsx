@@ -74,7 +74,7 @@ export const MainPage = ({
     storage: localStorage,
   });
 
-  const { isProd, overlayLines, selectedEntry } = useMainTradingContext(
+  const { isProd, overlayLines, selectedEntry, tradeHistoryEntry } = useMainTradingContext(
     selectedPdno,
     selectedStock,
   );
@@ -119,8 +119,8 @@ export const MainPage = ({
             <Panel id="main-right" defaultSize={40} minSize={25} style={panelStyle}>
               <MainTradeHistoryPane
                 accountId={accountId}
-                selectedPdno={selectedPdno}
-                selectedName={selectedEntry?.name ?? null}
+                selectedPdno={tradeHistoryEntry?.pdno ?? null}
+                selectedName={tradeHistoryEntry?.name ?? null}
                 onOpenStrategySettings={onOpenStrategySettings}
               />
             </Panel>

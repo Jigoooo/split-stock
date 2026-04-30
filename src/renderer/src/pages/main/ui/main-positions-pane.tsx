@@ -82,7 +82,7 @@ export const MainPositionsPane = (props: MainPositionsPaneProps): ReactElement =
             ) : l2 === 'unfilled' ? (
               <ActiveOrdersPanel />
             ) : (
-              <PastTradesPane accountId={accountId} onSelect={onSelect} />
+              <PastTradesPane accountId={accountId} />
             )}
           </div>
         </>

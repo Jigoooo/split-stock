@@ -16,16 +16,24 @@ export function useMainTradingContext(
   const isProd = envQuery.data?.env === 'PROD';
   const balance = useBalanceWithLots();
   const stockList = useStockList('');
+  const selectedPosition =
+    selectedPdno !== null
+      ? (balance.positions.find((position) => position.code === selectedPdno) ?? null)
+      : null;
   const selectedEntry =
     selectedPdno !== null
       ? {
           pdno: selectedPdno,
           name:
             selectedStock?.name ??
-            balance.positions.find((position) => position.code === selectedPdno)?.name ??
+            selectedPosition?.name ??
             stockList.entries.find((entry) => entry.pdno === selectedPdno)?.name ??
             selectedPdno,
         }
+      : null;
+  const tradeHistoryEntry =
+    selectedEntry !== null && selectedPosition !== null
+      ? { pdno: selectedEntry.pdno, name: selectedEntry.name }
       : null;
   const overlay = usePositionOverlay(selectedEntry?.pdno ?? null, { includeSold: true });
 
@@ -33,5 +41,6 @@ export function useMainTradingContext(
     isProd,
     overlayLines: overlay.lines,
     selectedEntry,
+    tradeHistoryEntry,
   };
 }
