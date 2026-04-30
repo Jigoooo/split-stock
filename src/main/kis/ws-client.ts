@@ -153,6 +153,7 @@ export class KisWsClient {
   private current: ConnectedState | null = null;
   private reconnectAttempt = 0;
   private reconnectTimer: { clear: () => void } | null = null;
+  private reconnectStabilityTimer: { clear: () => void } | null = null;
   private readonly deduper = new WsDeduper(2048);
   private cniSeq = 0;
 
@@ -192,6 +193,7 @@ export class KisWsClient {
       this.reconnectTimer.clear();
       this.reconnectTimer = null;
     }
+    this.clearReconnectStabilityTimer();
     if (this.current) {
       if (this.current.heartbeatHandle) this.current.heartbeatHandle.clear();
       try {
@@ -243,7 +245,11 @@ export class KisWsClient {
 
     const onOpen = (): void => {
       this.phase = 'open';
-      this.reconnectAttempt = 0;
+      this.clearReconnectStabilityTimer();
+      this.reconnectStabilityTimer = this.timer.setTimeout(() => {
+        this.reconnectStabilityTimer = null;
+        this.reconnectAttempt = 0;
+      }, this.reconnectBaseMs);
       const heartbeat = this.timer.setInterval(() => {
         try {
           ws.send(JSON.stringify({ header: { tr_id: 'PINGPONG', tr_type: '1' } }));
@@ -276,6 +282,7 @@ export class KisWsClient {
         payload: { code: event.code ?? null, reason: event.reason ?? null },
       });
       if (this.current?.heartbeatHandle) this.current.heartbeatHandle.clear();
+      this.clearReconnectStabilityTimer();
       this.current = null;
       if (this.phase === 'closed') return;
       this.scheduleReconnect();
@@ -294,6 +301,12 @@ export class KisWsClient {
     ws.addEventListener('message', onMessage);
     ws.addEventListener('close', onClose);
     ws.addEventListener('error', onError);
+  }
+
+  private clearReconnectStabilityTimer(): void {
+    if (!this.reconnectStabilityTimer) return;
+    this.reconnectStabilityTimer.clear();
+    this.reconnectStabilityTimer = null;
   }
 
   private scheduleReconnect(): void {

@@ -43,7 +43,12 @@ export const LogTableRow = memo(function LogTableRow(props: LogTableRowProps): R
       selected={isSelected}
       style={{ left: 0, position: 'absolute', right: 0, top }}
     >
-      <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.timestamp} numeric>
+      <TableGrid.Cell
+        width={LOG_TABLE_COLUMN_WIDTHS.timestamp}
+        numeric
+        className="logs-table-row__timestamp"
+        title={timestampLabel}
+      >
         {timestampLabel}
       </TableGrid.Cell>
       <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.level}>

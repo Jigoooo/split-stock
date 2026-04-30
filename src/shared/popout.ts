@@ -20,9 +20,11 @@ export const POPOUT_ROUTE_CONFIG = {
   logs: {
     label: '이벤트 로그',
     title: 'Split Stock · 이벤트 로그',
-    defaultWidth: 1040,
-    defaultHeight: 740,
-    minWidth: 720,
+    // 로그는 timestamp + payload preview 를 한 화면에서 비교해야 하므로
+    // 일반 팝아웃보다 넓은 기본 폭을 사용한다.
+    defaultWidth: 1280,
+    defaultHeight: 760,
+    minWidth: 900,
     minHeight: 540,
   },
   reports: {

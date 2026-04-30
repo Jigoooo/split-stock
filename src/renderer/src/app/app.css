@@ -1943,6 +1943,31 @@ body {
   padding: 0.35rem 0.65rem;
 }
 
+.logs-table.table-grid-root[data-variant="hts"]
+  .table-grid-body
+  .table-grid-row:hover:not(.table-grid-row--placeholder),
+.logs-table.table-grid-root[data-variant="hts"]
+  .table-grid-body
+  .table-grid-row:hover:not(.table-grid-row--placeholder)
+  .table-grid-cell {
+  background: var(--accent-tint-8);
+}
+
+.logs-table.table-grid-root[data-variant="hts"]
+  .table-grid-body
+  .table-grid-row[data-selected="true"]:hover,
+.logs-table.table-grid-root[data-variant="hts"]
+  .table-grid-body
+  .table-grid-row[data-selected="true"]:hover
+  .table-grid-cell {
+  background: var(--accent-tint-12);
+}
+
+.logs-table-row__timestamp {
+  font-size: 1.04rem;
+  letter-spacing: 0;
+}
+
 .logs-table-row__content {
   display: grid;
   align-content: center;

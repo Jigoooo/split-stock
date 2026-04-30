@@ -57,12 +57,17 @@ export const LogsTable = ({
       variant="hts"
       stickyHeader
       horizontalScroll
+      storageKey="logs"
       aria-label="이벤트 로그"
       className="logs-table"
       style={{ flex: 1, minHeight: 0 }}
     >
       <TableGrid.Header>
-        <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.timestamp} numeric>
+        <TableGrid.Cell
+          width={LOG_TABLE_COLUMN_WIDTHS.timestamp}
+          numeric
+          title="YYYY-MM-DD HH:mm:ss"
+        >
           시각
         </TableGrid.Cell>
         <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.level}>레벨</TableGrid.Cell>

@@ -24,4 +24,11 @@ describe('popout config', () => {
     expect(getPopoutRouteConfig('add-watch-order').autoContentHeight).toBe(true);
     expect(getPopoutRouteConfig('add-watch-order').minHeight).toBeUndefined();
   });
+
+  it('이벤트 로그 팝업은 로그 테이블을 위해 넓은 기본 폭을 사용한다', () => {
+    expect(getPopoutRouteConfig('logs')).toMatchObject({
+      defaultWidth: 1280,
+      minWidth: 900,
+    });
+  });
 });

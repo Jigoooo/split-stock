@@ -287,7 +287,9 @@ describe('KisWsClient', () => {
     s0.openNow();
     s0.remoteClose();
     for (const delay of expected) {
-      timer.advance(delay);
+      timer.advance(delay - 1);
+      expect(sockets.length).toBe(prevIndex + 1);
+      timer.advance(1);
       const next = sockets[prevIndex + 1];
       if (!next) throw new Error(`no reconnect after ${delay}ms`);
       next.openNow();
