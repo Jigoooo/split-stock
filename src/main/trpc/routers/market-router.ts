@@ -1,6 +1,7 @@
 import type { OrderbookSnapshot, Quote } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { TradingCalendarImportError } from '../../trading/trading-calendar-service';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 function toIsoDate(d: Date): string {
@@ -8,6 +9,13 @@ function toIsoDate(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function parseYyyymmdd(yyyymmdd: string): Date {
+  const y = Number(yyyymmdd.slice(0, 4));
+  const m = Number(yyyymmdd.slice(4, 6)) - 1;
+  const d = Number(yyyymmdd.slice(6, 8));
+  return new Date(y, m, d);
 }
 
 /**
@@ -47,6 +55,67 @@ function toLegacyOrderbook(o: OrderbookSnapshot) {
 }
 
 export const marketRouter = router({
+  getTradingDayStatus: publicProcedure
+    .input(
+      z
+        .object({
+          date: z
+            .string()
+            .regex(/^\d{8}$/)
+            .optional(),
+          accountId: z.number().int().positive().optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const date = input?.date ? parseYyyymmdd(input.date) : new Date();
+      const accountId = input?.accountId ?? ctx.activeAccountId;
+      const broker = accountId !== null ? ctx.brokerForAccount(accountId) : null;
+      if (broker) {
+        const r = await broker.getTradingDayStatus(date);
+        if (r.isErr()) {
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: `거래일 확인 실패: ${r.error.kind} - ${r.error.msg}`,
+          });
+        }
+        return r.value;
+      }
+      return ctx.tradingCalendar.getTradingDayStatus(date);
+    }),
+
+  getTradingCalendarStatus: publicProcedure.query(({ ctx }) => ctx.tradingCalendar.getStatus()),
+
+  refreshTradingCalendar: authedProcedure.mutation(({ ctx }) =>
+    ctx.tradingCalendar.refreshTradingCalendar(),
+  ),
+
+  importTradingCalendar: authedProcedure
+    .input(
+      z.object({
+        content: z.string().min(1),
+        source: z.enum(['KRX_DOWNLOAD', 'MANUAL_IMPORT']).default('MANUAL_IMPORT'),
+        sourceVersion: z.string().min(1).max(80).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      try {
+        return ctx.tradingCalendar.importTradingCalendar({
+          content: input.content,
+          source: input.source,
+          ...(input.sourceVersion !== undefined && { sourceVersion: input.sourceVersion }),
+        });
+      } catch (cause) {
+        if (cause instanceof TradingCalendarImportError) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: cause.message });
+        }
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
+    }),
+
   searchStock: publicProcedure
     .input(
       z.object({

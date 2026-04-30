@@ -6,7 +6,7 @@ import {
 } from '@shared/contracts';
 import { eq, sql } from 'drizzle-orm';
 import { err, ok, type Result } from 'neverthrow';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FakeBrokerAdapter } from '../../brokers/__tests__/fake-broker-adapter';
 import { bootstrapSchema } from '../../db/bootstrap-schema';
 import { createTestDb } from '../../db/client';
@@ -18,6 +18,15 @@ import { t } from '../trpc-core';
 import { orderRouter } from './order-router';
 
 const createCaller = t.createCallerFactory(orderRouter);
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-04-30T10:00:00+09:00'));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 function createOrderCtx(broker = new FakeBrokerAdapter({ startOrderId: 9000 })) {
   const db = createTestDb();

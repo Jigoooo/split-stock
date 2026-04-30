@@ -224,6 +224,23 @@ export const lotsSnapshots = sqliteTable(
 );
 
 /**
+ * 공통 KRX 거래 캘린더.
+ *
+ * 주문 가능 여부는 KIS/Kiwoom broker별 응답이 아니라 이 테이블의 KRX 기준
+ * verdict 를 최종 판단으로 사용한다. KIS chk-holiday 는 보조 검증 로그만 남긴다.
+ */
+export const tradingCalendarDays = sqliteTable('trading_calendar_days', {
+  date: text('date').primaryKey(), // YYYYMMDD
+  openDay: integer('open_day', { mode: 'boolean' }).notNull(),
+  openMinute: integer('open_minute'), // KST 0~1439, 휴장/UNKNOWN 이면 NULL
+  closeMinute: integer('close_minute'),
+  reason: text('reason').notNull(),
+  source: text('source').notNull(), // KRX_DOWNLOAD | MANUAL_IMPORT | BUNDLED | UNKNOWN
+  sourceVersion: text('source_version'),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+/**
  * 예약 매수 — 잔고에 없는 신규 종목 감시 주문(최대 100건).
  * status: 'PENDING' | 'FILLED' | 'EXPIRED' | 'CANCELLED'.
  */

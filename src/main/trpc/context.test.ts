@@ -86,6 +86,7 @@ describe('createContextFactory account realtime wiring', () => {
       stockMasterRepo: {},
       stockMasterSync: {},
       candlesRepo: {},
+      tradingCalendar: { getTradingDayStatus: vi.fn() },
       lotsRepo: {},
       prebuyRepo: {},
       activeAccounts: {},

@@ -148,7 +148,7 @@ export class BalanceSync {
       if (snapResult.isErr()) continue;
 
       const lotsQty = snapResult.value.lots
-        .filter((l) => l.status === 'OPEN' || l.status === 'BUYING')
+        .filter((l) => l.status === 'OPEN' || l.status === 'BUYING' || l.status === 'SELLING')
         .reduce((sum, l) => sum + l.qty, 0);
 
       if (lotsQty === 0) {

@@ -10,9 +10,9 @@ import type {
   OrderIntent,
   Quote,
   StockSymbol,
+  TradingDayVerdict,
 } from '@shared/contracts';
 import { makeBrokerError } from '@shared/contracts';
-import { isKrxTradingDay } from '@shared/market-rules';
 import { err, ok, type Result } from 'neverthrow';
 import type { CancelOrderInput, GetDailyOhlcvParams, ListDailyExecutionsParams } from '../ports';
 import type { BrokerPort } from '../ports/broker-port';
@@ -66,6 +66,9 @@ export interface KiwoomAdapterDeps {
    * KIWOOM_QUERY_EXCHANGE 로 변환. 미지정 시 'KRX'.
    */
   defaultExchange?: KiwoomOrderExchange;
+  tradingCalendar: {
+    getTradingDayStatus(date: Date | string): TradingDayVerdict;
+  };
   /** RealtimePort 본문에 사용할 KiwoomSocketClient. 미주입 시 realtime() throw. */
   socket?: KiwoomSocketClient;
 }
@@ -291,9 +294,22 @@ export class KiwoomAdapter implements BrokerPort {
     return ok(candles);
   }
 
+  async getTradingDayStatus(date: Date): Promise<Result<TradingDayVerdict, BrokerError>> {
+    return ok(this.deps.tradingCalendar.getTradingDayStatus(date));
+  }
+
   async isTradingDay(date: Date): Promise<Result<boolean, BrokerError>> {
-    // Kiwoom 은 휴장일 endpoint 미제공 → shared/market-rules KRX 휴장일 폴백.
-    return ok(isKrxTradingDay(date));
+    const verdict = this.deps.tradingCalendar.getTradingDayStatus(date);
+    if (verdict.source === 'UNKNOWN') {
+      return err(
+        makeBrokerError({
+          brokerId: 'KIWOOM',
+          kind: 'BUSINESS',
+          msg: `거래일 확인 불가: ${verdict.reason}`,
+        }),
+      );
+    }
+    return ok(verdict.openDay);
   }
 
   realtime(): RealtimePort {

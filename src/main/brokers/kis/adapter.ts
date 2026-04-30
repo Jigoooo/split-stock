@@ -23,9 +23,9 @@ import type {
   OrderIntent,
   Quote,
   StockSymbol,
+  TradingDayVerdict,
 } from '@shared/contracts';
 import { makeBrokerError } from '@shared/contracts';
-import { isKrxTradingDay } from '@shared/market-rules';
 import { err, ok, type Result } from 'neverthrow';
 import type { CancelOrderInput, GetDailyOhlcvParams, ListDailyExecutionsParams } from '../ports';
 import type { BrokerPort } from '../ports/broker-port';
@@ -63,6 +63,9 @@ export interface KisAdapterDeps {
     htsId?: string;
   };
   logger: EventLogger;
+  tradingCalendar: {
+    getTradingDayStatus(date: Date | string): TradingDayVerdict;
+  };
   /** MOCK 환경 rate-limit 재시도 대기. 테스트에서 단축 가능. */
   rateLimitRetryDelayMs?: number;
   /**
@@ -243,9 +246,44 @@ export class KisAdapter implements BrokerPort {
     return ok(r.value.map(toCandle));
   }
 
+  async getTradingDayStatus(date: Date): Promise<Result<TradingDayVerdict, BrokerError>> {
+    const verdict = this.deps.tradingCalendar.getTradingDayStatus(date);
+    return ok(await this.verifyKisTradingDay(date, verdict));
+  }
+
   async isTradingDay(date: Date): Promise<Result<boolean, BrokerError>> {
+    const verdictResult = await this.getTradingDayStatus(date);
+    if (verdictResult.isErr()) return err(verdictResult.error);
+    if (verdictResult.value.source === 'UNKNOWN') {
+      return err(
+        makeBrokerError({
+          brokerId: 'KIS',
+          kind: 'BUSINESS',
+          msg: `거래일 확인 불가: ${verdictResult.value.reason}`,
+        }),
+      );
+    }
+    return ok(verdictResult.value.openDay);
+  }
+
+  private async verifyKisTradingDay(
+    date: Date,
+    verdict: TradingDayVerdict,
+  ): Promise<TradingDayVerdict> {
     const tokenResult = await this.token();
-    if (tokenResult.isErr()) return err(tokenResult.error);
+    if (tokenResult.isErr()) {
+      this.deps.logger.log({
+        level: 'WARN',
+        category: 'ORDER',
+        message: 'kis.trading-day.verification-failed',
+        payload: {
+          date: verdict.date,
+          kind: tokenResult.error.kind,
+          msg: tokenResult.error.msg,
+        },
+      });
+      return verdict;
+    }
     const token = tokenResult.value;
     const bassDt = yyyymmdd(date);
     const r = await inquireDomesticHoliday(
@@ -260,23 +298,51 @@ export class KisAdapter implements BrokerPort {
     );
     if (r.isErr()) {
       if (shouldFallbackKisMockTradingDayToLocal(this.env, r.error)) {
-        const openDay = isKrxTradingDay(date);
         this.deps.logger.log({
           level: 'INFO',
           category: 'ORDER',
-          message: 'kis.trading-day.mock-local-fallback',
+          message: 'kis.trading-day.verification-unavailable',
           payload: {
             date: bassDt,
-            openDay,
+            calendarOpenDay: verdict.openDay,
             reason: r.error.msg,
           },
         });
-        return ok(openDay);
+        return verdict;
       }
-      return err(kisErrorToBrokerError(r.error));
+      const brokerError = kisErrorToBrokerError(r.error);
+      this.deps.logger.log({
+        level: 'WARN',
+        category: 'ORDER',
+        message: 'kis.trading-day.verification-failed',
+        payload: {
+          date: bassDt,
+          kind: brokerError.kind,
+          msg: brokerError.msg,
+        },
+      });
+      return verdict;
     }
     const hit = r.value.find((h) => h.date === bassDt);
-    return ok(hit?.openDay ?? false);
+    const kisOpenDay = hit?.openDay ?? false;
+    if (kisOpenDay === verdict.openDay) {
+      return { ...verdict, kisVerified: true };
+    }
+    this.deps.logger.log({
+      level: 'WARN',
+      category: 'ORDER',
+      message: 'calendar-source-mismatch',
+      payload: {
+        date: bassDt,
+        brokerId: 'KIS',
+        env: this.env,
+        calendarOpenDay: verdict.openDay,
+        kisOpenDay,
+        source: verdict.source,
+        reason: verdict.reason,
+      },
+    });
+    return { ...verdict, kisVerified: false };
   }
 
   // ─── RealtimePort (Stage 4 까지 미구현) ─────────────────────────────────

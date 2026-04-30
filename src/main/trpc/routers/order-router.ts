@@ -5,6 +5,7 @@ import {
   makeBrokerError,
 } from '@shared/contracts';
 import { correctLimitPrice } from '@shared/market-rules';
+import { getRegularMarketSessionKst } from '@shared/trading/market-session';
 import { TRPCError } from '@trpc/server';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { err } from 'neverthrow';
@@ -80,6 +81,71 @@ async function brokerAmend(
 }
 
 const AccountIdField = z.number().int().positive();
+
+async function assertManualOrderAllowed(input: {
+  broker: BrokerPort;
+  accountId: number;
+  pdno: string;
+  logger: Pick<EventLogger, 'log'>;
+  now?: Date;
+}): Promise<void> {
+  const session = getRegularMarketSessionKst(input.now ?? new Date());
+  if (session.isWeekend) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: '주말에는 국내 정규장 주문을 보낼 수 없습니다.',
+    });
+  }
+
+  const status = await input.broker.getTradingDayStatus(parseYyyymmdd(session.date));
+  if (status.isErr()) {
+    input.logger.log({
+      level: 'WARN',
+      category: 'ORDER',
+      message: 'manual-order.market-session.unknown',
+      payload: {
+        accountId: input.accountId,
+        pdno: input.pdno,
+        brokerId: input.broker.brokerId,
+        env: input.broker.env,
+        kind: status.error.kind,
+        msg: status.error.msg,
+      },
+    });
+    throw new TRPCError({ code: 'FORBIDDEN', message: '거래일 확인 실패로 주문을 차단했습니다.' });
+  }
+  const verdict = status.value;
+  if (verdict.source === 'UNKNOWN' || verdict.stale) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: `거래일 확인 불가로 주문을 차단했습니다. (${verdict.reason})`,
+    });
+  }
+  if (!verdict.openDay) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: `휴장일 주문을 차단했습니다. (${verdict.reason})`,
+    });
+  }
+  if (
+    verdict.openMinute === null ||
+    verdict.closeMinute === null ||
+    session.minutes < verdict.openMinute ||
+    session.minutes > verdict.closeMinute
+  ) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: '정규장 시간이 아니므로 주문을 차단했습니다.',
+    });
+  }
+}
+
+function parseYyyymmdd(yyyymmdd: string): Date {
+  const y = Number(yyyymmdd.slice(0, 4));
+  const m = Number(yyyymmdd.slice(4, 6)) - 1;
+  const d = Number(yyyymmdd.slice(6, 8));
+  return new Date(y, m, d);
+}
 
 function readFilledQtyByOrderId(db: Db, orderIds: number[]): Map<number, number> {
   if (orderIds.length === 0) return new Map();
@@ -269,6 +335,7 @@ export const orderRouter = router({
       if (!broker) {
         throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
       }
+      await assertManualOrderAllowed({ broker, accountId, pdno: input.pdno, logger: ctx.logger });
       // 안전 스위치 체크: 해당 계좌의 SafetyState 만 확인 (per-account 격리).
       const safety = ctx.safetyRegistry.get(accountId);
       if (!safety.canTrade(input.pdno)) {

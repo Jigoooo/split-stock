@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FakeTimer } from '../testing/fake-timer';
-import { buildLotSyncMismatches, CurrentStateSync } from './current-state-sync';
+import { buildLotSyncMismatches, buildLotSyncState, CurrentStateSync } from './current-state-sync';
 
 describe('buildLotSyncMismatches', () => {
   it('동일 수량이면 mismatch가 없다', () => {
@@ -28,6 +28,33 @@ describe('buildLotSyncMismatches', () => {
         lotsByPdno: { '005930': [{ qty: 3, status: 'BUYING' }] },
       }),
     ).toEqual([{ pdno: '005930', kisQty: 0, lotQty: 3, reason: 'STALE_LOTS' }]);
+  });
+
+  it('SELLING 차수의 일시 수량 차이는 RECONCILING으로 분리한다', () => {
+    expect(
+      buildLotSyncState({
+        positions: [],
+        lotsByPdno: { '005930': [{ qty: 3, status: 'SELLING' }] },
+      }),
+    ).toEqual({
+      syncStatus: 'RECONCILING',
+      mismatches: [],
+      pendingMismatches: [{ pdno: '005930', kisQty: 0, lotQty: 3, reason: 'STALE_LOTS' }],
+    });
+  });
+
+  it('최근 매도 주문 종목의 차이는 grace window 동안 RECONCILING으로 표시한다', () => {
+    expect(
+      buildLotSyncState({
+        positions: [{ code: '005930', qty: 1 }],
+        lotsByPdno: { '005930': [{ qty: 3, status: 'OPEN' }] },
+        recentSellOrderPdnos: new Set(['005930']),
+      }),
+    ).toMatchObject({
+      syncStatus: 'RECONCILING',
+      mismatches: [],
+      pendingMismatches: [{ pdno: '005930', kisQty: 1, lotQty: 3, reason: 'QTY_MISMATCH' }],
+    });
   });
 });
 

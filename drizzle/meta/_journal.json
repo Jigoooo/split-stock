@@ -113,6 +113,13 @@
       "when": 1782100000000,
       "tag": "0015_krx_ecos_context",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1782200000000,
+      "tag": "0016_trading_calendar",
+      "breakpoints": true
     }
   ]
 }

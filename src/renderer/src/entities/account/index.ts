@@ -6,6 +6,8 @@ export type {
   BalanceWithLotsStrategyMeta,
   BalanceWithLotsSummary,
   LotEntry,
+  LotSyncMismatch,
+  LotSyncStatus,
   UseBalanceWithLotsResult,
 } from './model/use-balance-with-lots';
 export { useBalanceWithLots } from './model/use-balance-with-lots';

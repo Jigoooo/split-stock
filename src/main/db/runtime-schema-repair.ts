@@ -110,3 +110,22 @@ export function repairMarketContextRuntimeSchema(db: Db): void {
     return;
   }
 }
+
+export function repairTradingCalendarRuntimeSchema(db: Db): void {
+  try {
+    db.run(
+      sql.raw(`CREATE TABLE IF NOT EXISTS trading_calendar_days (
+        date TEXT PRIMARY KEY,
+        open_day INTEGER NOT NULL,
+        open_minute INTEGER,
+        close_minute INTEGER,
+        reason TEXT NOT NULL,
+        source TEXT NOT NULL,
+        source_version TEXT,
+        updated_at INTEGER NOT NULL
+      )`),
+    );
+  } catch {
+    return;
+  }
+}

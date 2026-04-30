@@ -39,6 +39,7 @@ import type { StockMasterRepo } from '../trading/stock-master-repo';
 import type { StockMasterSyncService } from '../trading/stock-master-sync';
 import type { StrategyExecutionEngine } from '../trading/strategy-execution-engine';
 import type { StrategyRepo } from '../trading/strategy-repo';
+import type { TradingCalendarService } from '../trading/trading-calendar-service';
 import type { WatchEngine } from '../trading/watch-engine';
 
 export interface Context {
@@ -65,6 +66,7 @@ export interface Context {
   stockMasterRepo: StockMasterRepo;
   stockMasterSync: StockMasterSyncService;
   candlesRepo: DailyCandlesRepo;
+  tradingCalendar: TradingCalendarService;
   lotsRepo: LotsRepo;
   activeAccounts: ActiveAccountRepo;
   /**
@@ -251,6 +253,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
           auth,
           http: deps.kiwoomHttpByEnv[currentEnv],
           tokenStore: deps.kiwoomTokenStore,
+          tradingCalendar: deps.tradingCalendar,
           credentials: {
             appKey: cred.appKey,
             secretKey: cred.appSecret,
@@ -275,6 +278,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
             ...(cred.htsId !== undefined && { htsId: cred.htsId }),
           },
           logger: deps.logger,
+          tradingCalendar: deps.tradingCalendar,
           ...(realtimeAdapter !== undefined && { realtime: realtimeAdapter }),
         },
       });

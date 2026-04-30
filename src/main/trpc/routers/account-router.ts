@@ -2,18 +2,19 @@ import type { AppEnv, Balance, BrokerError, KisError } from '@shared/contracts';
 import { CredentialsSchema } from '@shared/contracts';
 import { buildLotOverlay, type LotOverlaySnapshot } from '@shared/trading/lot-overlay';
 import { TRPCError } from '@trpc/server';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, gte, inArray, or } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ActiveAccountRepo } from '../../account/active-account';
 import {
   repairAccountFromStoredCredentials,
   repairStoredCredentialAccounts,
 } from '../../account/repair-stored-accounts';
-import { lots as lotsTable } from '../../db/schema';
+import type { Db } from '../../db/client';
+import { lots as lotsTable, orders as ordersTable } from '../../db/schema';
 import { SETTING_KEYS } from '../../db/settings-repo';
 import type { EventLogger } from '../../logging/event-logger';
 import type { CredentialsRepo } from '../../security/credentials-repo';
-import { buildLotSyncMismatches } from '../../trading/current-state-sync';
+import { buildLotSyncState, SELL_SETTLEMENT_GRACE_MS } from '../../trading/current-state-sync';
 import type { LotStatus } from '../../trading/fsm';
 import type { LotSnapshotEntry } from '../../trading/lots-repo';
 import { resolveAccountId } from '../router-helpers';
@@ -136,6 +137,23 @@ function balanceErrorMessage(e: KisError): string {
     default:
       return `잔고조회에 실패했습니다.${diag}`;
   }
+}
+
+function readRecentSellOrderPdnos(db: Db, accountId: number): Set<string> {
+  const cutoff = new Date(Date.now() - SELL_SETTLEMENT_GRACE_MS);
+  const rows = db
+    .select({ pdno: ordersTable.pdno })
+    .from(ordersTable)
+    .where(
+      and(
+        eq(ordersTable.accountId, accountId),
+        eq(ordersTable.side, 'SELL'),
+        inArray(ordersTable.status, ['PENDING', 'PARTIAL', 'FILLED']),
+        or(gte(ordersTable.placedAt, cutoff), gte(ordersTable.filledAt, cutoff)),
+      ),
+    )
+    .all();
+  return new Set(rows.map((row) => row.pdno));
 }
 
 /**
@@ -531,7 +549,10 @@ export const accountRouter = router({
           .select()
           .from(lotsTable)
           .where(
-            and(eq(lotsTable.accountId, accountId), inArray(lotsTable.status, ['OPEN', 'BUYING'])),
+            and(
+              eq(lotsTable.accountId, accountId),
+              inArray(lotsTable.status, ['OPEN', 'BUYING', 'SELLING']),
+            ),
           )
           .all();
         for (const r of lotRows) {
@@ -600,12 +621,14 @@ export const accountRouter = router({
         });
         strategiesByPdno = {};
       }
-      const mismatches = buildLotSyncMismatches({
+      const recentSellOrderPdnos = readRecentSellOrderPdnos(ctx.db, accountId);
+      const syncState = buildLotSyncState({
         positions: balance.value.positions.map((position) => ({
           code: position.code,
           qty: position.qty,
         })),
         lotsByPdno,
+        recentSellOrderPdnos,
       });
       const totalBuyAmount = balance.value.positions.reduce(
         (sum, position) => sum + position.qty * position.avgPrice,
@@ -626,8 +649,10 @@ export const accountRouter = router({
         totalPnlAmount,
         totalPnlRate,
         lotsByPdno,
-        syncStatus: mismatches.length > 0 ? 'MISMATCH' : 'IN_SYNC',
-        mismatches,
+        syncStatus: syncState.syncStatus,
+        mismatches: syncState.mismatches,
+        pendingMismatches: syncState.pendingMismatches,
+        brokerLabel: broker.brokerId,
         strategiesByPdno,
       };
     }),

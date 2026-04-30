@@ -24,6 +24,9 @@ export function formatStageCell(
   lot: LotEntry,
   stagePnlRate: number | null,
 ): string {
+  if (lot.status === 'SELLING') {
+    return mode === 'QTY' ? `매도중 ${thousandSeparator(lot.qty)}주` : '매도중';
+  }
   switch (mode) {
     case 'DATE':
       return new Date(lot.boughtAt).toLocaleDateString('ko-KR', {
@@ -40,7 +43,7 @@ export function formatStageCell(
 export function formatStageTitle(nth: number, lot: LotEntry, stagePnlRate: number | null): string {
   return [
     `${nth}차`,
-    lot.status,
+    lot.status === 'SELLING' ? '매도중/체결 반영 중' : lot.status,
     `매수일 ${new Date(lot.boughtAt).toLocaleDateString('ko-KR')}`,
     `수량 ${thousandSeparator(lot.qty)}주`,
     `수익률 ${stagePnlRate === null ? '-' : `${stagePnlRate.toFixed(2)}%`}`,

@@ -15,6 +15,7 @@ import type {
   RealtimeEvent,
   RealtimeKind,
   StockSymbol,
+  TradingDayVerdict,
 } from '@shared/contracts';
 import { makeBrokerError } from '@shared/contracts';
 import { err, ok, type Result } from 'neverthrow';
@@ -61,6 +62,7 @@ export interface FakeBrokerAdapterOptions {
   dailyExecutions?: DailyExecution[];
   /** 휴장일 함수. 기본: 토/일 false, 그 외 true. */
   isTradingDayFn?: (date: Date) => boolean;
+  getTradingDayStatusFn?: (date: Date) => TradingDayVerdict;
   /** 다음 발급 brokerOrderId 의 시작값. */
   startOrderId?: number;
   /** 강제 에러 모드 — 모든 호출이 이 에러로 실패. */
@@ -80,6 +82,13 @@ const DEFAULT_TRADING_DAY = (date: Date): boolean => {
   return day !== 0 && day !== 6;
 };
 
+function yyyymmdd(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}${m}${d}`;
+}
+
 export class FakeBrokerAdapter implements BrokerPort {
   readonly brokerId: BrokerId;
   readonly env: AppEnv;
@@ -93,6 +102,7 @@ export class FakeBrokerAdapter implements BrokerPort {
     getQuote: 0,
     getOrderbook: 0,
     getDailyOhlcv: 0,
+    getTradingDayStatus: 0,
     isTradingDay: 0,
     listDailyExecutions: 0,
     ensureSession: 0,
@@ -223,8 +233,29 @@ export class FakeBrokerAdapter implements BrokerPort {
   async isTradingDay(date: Date): Promise<Result<boolean, BrokerError>> {
     this.callCount.isTradingDay += 1;
     if (this.opts.forceError) return err(this.opts.forceError);
+    const status = this.opts.getTradingDayStatusFn?.(date);
+    if (status) return ok(status.openDay);
     const fn = this.opts.isTradingDayFn ?? DEFAULT_TRADING_DAY;
     return ok(fn(date));
+  }
+
+  async getTradingDayStatus(date: Date): Promise<Result<TradingDayVerdict, BrokerError>> {
+    this.callCount.getTradingDayStatus += 1;
+    if (this.opts.forceError) return err(this.opts.forceError);
+    if (this.opts.getTradingDayStatusFn) return ok(this.opts.getTradingDayStatusFn(date));
+    const fn = this.opts.isTradingDayFn ?? DEFAULT_TRADING_DAY;
+    return ok({
+      date: yyyymmdd(date),
+      openDay: fn(date),
+      openMinute: fn(date) ? 9 * 60 : null,
+      closeMinute: fn(date) ? 15 * 60 + 30 : null,
+      source: 'BUNDLED',
+      sourceVersion: 'fake',
+      reason: fn(date) ? 'REGULAR' : 'MARKET_CLOSING',
+      confidence: 'MEDIUM',
+      stale: false,
+      checkedAt: Date.now(),
+    });
   }
 
   realtime(): RealtimePort {

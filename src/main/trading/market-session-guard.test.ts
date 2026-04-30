@@ -26,7 +26,7 @@ describe('MarketSessionGuard', () => {
         source: 'STRATEGY',
       }),
     ).rejects.toMatchObject({ code: 'MARKET_WEEKEND' });
-    expect(broker.callCount.isTradingDay).toBe(0);
+    expect(broker.callCount.getTradingDayStatus).toBe(0);
   });
 
   it('정규장 시간이 아니면 차단한다', async () => {
@@ -72,10 +72,10 @@ describe('MarketSessionGuard', () => {
     await expect(guard.assertAutoOrderAllowed(input)).resolves.toBeUndefined();
     await expect(guard.assertAutoOrderAllowed(input)).resolves.toBeUndefined();
     // 두 번째 호출은 캐시 hit — broker 1 회만 호출
-    expect(broker.callCount.isTradingDay).toBe(1);
+    expect(broker.callCount.getTradingDayStatus).toBe(1);
   });
 
-  it('broker.isTradingDay 가 false 면 자동주문을 차단한다', async () => {
+  it('broker.getTradingDayStatus 가 휴장일이면 자동주문을 차단한다', async () => {
     const broker = new FakeBrokerAdapter({
       isTradingDayFn: () => false, // 강제 false (예: 임시 휴장일)
     });
@@ -91,7 +91,7 @@ describe('MarketSessionGuard', () => {
     ).rejects.toBeInstanceOf(AutoOrderBlockedError);
   });
 
-  it('broker.isTradingDay 가 에러 반환 시 MARKET_SESSION_UNKNOWN', async () => {
+  it('broker.getTradingDayStatus 가 에러 반환 시 MARKET_SESSION_UNKNOWN', async () => {
     const broker = new FakeBrokerAdapter({
       forceError: { brokerId: 'KIS', kind: 'NETWORK', msg: 'down' },
     });

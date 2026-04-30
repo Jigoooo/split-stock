@@ -1,4 +1,11 @@
-import type { BrokerError, Candle, OrderbookSnapshot, Quote, StockSymbol } from '@shared/contracts';
+import type {
+  BrokerError,
+  Candle,
+  OrderbookSnapshot,
+  Quote,
+  StockSymbol,
+  TradingDayVerdict,
+} from '@shared/contracts';
 import type { Result } from '../core/result';
 
 export interface GetDailyOhlcvParams {
@@ -13,14 +20,13 @@ export interface GetDailyOhlcvParams {
  * 시세 port — 현재가/호가/일봉/거래일 판정.
  *
  * 거래일 판정:
- *  - KIS 는 inquireDomesticHoliday 로 broker-specific 응답
- *  - Kiwoom 은 휴장일 endpoint 미제공 → adapter 가 shared/market-rules/krx-holidays.ts
- *    (Stage 6 추가) 캐시로 broker-agnostic 폴백
- *  - 둘 다 같은 결과 (boolean) 반환
+ *  - KIS/Kiwoom 모두 TradingCalendarService 의 공통 KRX verdict 를 최종 기준으로 사용
+ *  - KIS chk-holiday 는 검증/로그 보조 신호로만 사용
  */
 export interface MarketPort {
   getQuote(symbol: StockSymbol): Promise<Result<Quote, BrokerError>>;
   getOrderbook(symbol: StockSymbol): Promise<Result<OrderbookSnapshot, BrokerError>>;
   getDailyOhlcv(params: GetDailyOhlcvParams): Promise<Result<Candle[], BrokerError>>;
+  getTradingDayStatus(date: Date): Promise<Result<TradingDayVerdict, BrokerError>>;
   isTradingDay(date: Date): Promise<Result<boolean, BrokerError>>;
 }

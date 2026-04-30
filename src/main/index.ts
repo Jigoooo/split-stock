@@ -70,6 +70,7 @@ import { defaultDbPath, migrate, openDb } from './db/client';
 import {
   repairAccountsRuntimeSchema,
   repairMarketContextRuntimeSchema,
+  repairTradingCalendarRuntimeSchema,
 } from './db/runtime-schema-repair';
 import { orders } from './db/schema';
 import {
@@ -123,6 +124,7 @@ import { StockMasterSyncService } from './trading/stock-master-sync';
 import { StrategyExecutionEngine } from './trading/strategy-execution-engine';
 import { StrategyRepo } from './trading/strategy-repo';
 import { RotatingQuoteFeed } from './trading/tiered-quote-feed';
+import { TradingCalendarService } from './trading/trading-calendar-service';
 import { WatchEngine, type WatchOrder } from './trading/watch-engine';
 import { quarantineLegacyWatchRows } from './trading/watch-legacy-quarantine';
 import { executeStrategyOrder, executeWatchOrder } from './trading/watch-order-executor';
@@ -144,6 +146,7 @@ function bootstrapDeps(userDataDir: string) {
   migrate(db, resolveMigrationsDir());
   repairAccountsRuntimeSchema(db);
   repairMarketContextRuntimeSchema(db);
+  repairTradingCalendarRuntimeSchema(db);
 
   const credentialsRepo = new CredentialsRepo(db, {
     isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
@@ -217,6 +220,17 @@ function bootstrapDeps(userDataDir: string) {
   const stockMasterRepo = new StockMasterRepo(db);
   const stockMasterSync = new StockMasterSyncService(stockMasterRepo, settingsRepo);
   const candlesRepo = new DailyCandlesRepo(db);
+  const tradingCalendar = new TradingCalendarService({ db, logger: eventLogger });
+  try {
+    tradingCalendar.seedBundled();
+  } catch (cause) {
+    eventLogger.log({
+      level: 'ERROR',
+      category: 'SYS',
+      message: 'trading-calendar.seed-failed',
+      payload: { cause: cause instanceof Error ? cause.message : String(cause) },
+    });
+  }
   const prebuyRepo = new PrebuyRepo(db);
   // stockMasterRepo 주입 — cyclesByPdno 의 종목명(name) 필드를 stock_master 에서 lookup.
   const lotsRepo = new LotsRepo(db, stockMasterRepo);
@@ -852,6 +866,7 @@ function bootstrapDeps(userDataDir: string) {
     stockMasterRepo,
     stockMasterSync,
     candlesRepo,
+    tradingCalendar,
     lotsRepo,
     prebuyRepo,
     activeAccounts,

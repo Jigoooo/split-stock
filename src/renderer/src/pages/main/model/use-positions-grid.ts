@@ -3,6 +3,8 @@ import {
   type BalanceWithLotsStrategyMeta,
   type BalanceWithLotsSummary,
   type LotEntry,
+  type LotSyncMismatch,
+  type LotSyncStatus,
   useBalanceWithLots,
 } from '@renderer/entities/account';
 
@@ -17,15 +19,12 @@ export interface PositionsGridRow {
 export interface UsePositionsGridResult {
   isPending: boolean;
   error: { message: string } | null;
-  mismatches: Array<{
-    pdno: string;
-    kisQty: number;
-    lotQty: number;
-    reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH';
-  }>;
+  mismatches: LotSyncMismatch[];
+  pendingMismatches: LotSyncMismatch[];
   rows: PositionsGridRow[];
   summary: BalanceWithLotsSummary;
-  syncStatus: 'IN_SYNC' | 'MISMATCH';
+  syncStatus: LotSyncStatus;
+  brokerLabel: string;
   /** 그리드 전체 차수 컬럼 수 — 모든 rows 의 max 와 1 중 큰 값. 헤더/셀 컬럼 안정성 보장. */
   gridMaxStages: number;
 }
@@ -42,7 +41,9 @@ export function usePositionsGrid(): UsePositionsGridResult {
     isPending,
     lotsByPdno,
     mismatches,
+    pendingMismatches,
     positions,
+    brokerLabel,
     strategiesByPdno,
     summary,
     syncStatus,
@@ -65,5 +66,15 @@ export function usePositionsGrid(): UsePositionsGridResult {
     }
   }
 
-  return { error, gridMaxStages, isPending, mismatches, rows, summary, syncStatus };
+  return {
+    brokerLabel,
+    error,
+    gridMaxStages,
+    isPending,
+    mismatches,
+    pendingMismatches,
+    rows,
+    summary,
+    syncStatus,
+  };
 }

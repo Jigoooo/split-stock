@@ -126,6 +126,16 @@ const CREATE_STATEMENTS: readonly string[] = [
     created_at INTEGER NOT NULL,
     PRIMARY KEY (account_id, snapshot_date, pdno)
   )`,
+  `CREATE TABLE IF NOT EXISTS trading_calendar_days (
+    date TEXT PRIMARY KEY,
+    open_day INTEGER NOT NULL,
+    open_minute INTEGER,
+    close_minute INTEGER,
+    reason TEXT NOT NULL,
+    source TEXT NOT NULL,
+    source_version TEXT,
+    updated_at INTEGER NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS watch_orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id INTEGER NOT NULL,

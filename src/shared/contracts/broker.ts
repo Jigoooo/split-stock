@@ -192,6 +192,40 @@ export const DailyExecutionSchema = z.object({
 export type DailyExecution = z.infer<typeof DailyExecutionSchema>;
 
 /**
+ * 거래일 판정 출처.
+ *
+ * KIS/Kiwoom adapter 는 broker별 휴장일 endpoint 결과를 최종 판단으로 쓰지 않고,
+ * 공통 KRX 캘린더 verdict 를 사용한다. KIS chk-holiday 는 검증/로그 보조 신호다.
+ */
+export const TradingDaySourceSchema = z.enum([
+  'KRX_DOWNLOAD',
+  'MANUAL_IMPORT',
+  'BUNDLED',
+  'UNKNOWN',
+]);
+export type TradingDaySource = z.infer<typeof TradingDaySourceSchema>;
+
+export const TradingDayConfidenceSchema = z.enum(['HIGH', 'MEDIUM', 'LOW']);
+export type TradingDayConfidence = z.infer<typeof TradingDayConfidenceSchema>;
+
+export const TradingDayVerdictSchema = z.object({
+  /** KST 기준 YYYYMMDD */
+  date: z.string().regex(/^\d{8}$/),
+  openDay: z.boolean(),
+  /** KST 분 단위. 예: 09:00=540, 15:30=930. UNKNOWN 이면 null. */
+  openMinute: z.number().int().min(0).max(1439).nullable(),
+  closeMinute: z.number().int().min(0).max(1439).nullable(),
+  source: TradingDaySourceSchema,
+  sourceVersion: z.string().nullable(),
+  reason: z.string(),
+  confidence: TradingDayConfidenceSchema,
+  stale: z.boolean(),
+  checkedAt: z.number().int(),
+  kisVerified: z.boolean().optional(),
+});
+export type TradingDayVerdict = z.infer<typeof TradingDayVerdictSchema>;
+
+/**
  * 실시간 이벤트 (broker-agnostic).
  * KIS의 H0STCNT0/H0STASP0/H0STCNI0과 Kiwoom의 0B/0D/00을 같은 형태로 흡수.
  */

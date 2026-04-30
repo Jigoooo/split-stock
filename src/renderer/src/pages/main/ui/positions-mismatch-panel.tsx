@@ -6,16 +6,24 @@ import type { UsePositionsGridResult } from '../model/use-positions-grid';
 
 interface PositionsMismatchPanelProps {
   mismatches: UsePositionsGridResult['mismatches'];
+  pendingMismatches: UsePositionsGridResult['pendingMismatches'];
+  syncStatus: UsePositionsGridResult['syncStatus'];
+  brokerLabel: string;
   onSync: () => void;
   syncPending: boolean;
 }
 
 export const PositionsMismatchPanel = ({
+  brokerLabel,
   mismatches,
   onSync,
+  pendingMismatches,
+  syncStatus,
   syncPending,
 }: PositionsMismatchPanelProps): ReactElement => {
   const [showDetails, setShowDetails] = useState(false);
+  const isReconciling = syncStatus === 'RECONCILING';
+  const visibleMismatches = isReconciling ? pendingMismatches : mismatches;
 
   return (
     <div style={{ flexShrink: 0 }}>
@@ -23,10 +31,14 @@ export const PositionsMismatchPanel = ({
         className="panel__body"
         style={{ alignItems: 'center', display: 'flex', flexShrink: 0, gap: '0.6rem' }}
       >
-        <span className="chip chip--down" role="status">
-          KIS 잔고와 차수 장부 불일치 {thousandSeparator(mismatches.length)}건
+        <span className={isReconciling ? 'chip chip--live' : 'chip chip--down'} role="status">
+          {isReconciling
+            ? `${brokerLabel} 잔고와 차수 장부 체결 반영 중 ${thousandSeparator(
+                pendingMismatches.length,
+              )}건`
+            : `${brokerLabel} 잔고와 차수 장부 불일치 ${thousandSeparator(mismatches.length)}건`}
         </span>
-        <Button dense disabled={syncPending} onClick={onSync}>
+        <Button dense disabled={syncPending || isReconciling} onClick={onSync}>
           {syncPending ? '동기화 중…' : '동기화'}
         </Button>
         <Button
@@ -39,12 +51,12 @@ export const PositionsMismatchPanel = ({
       </div>
       {showDetails ? (
         <div className="panel__body muted" style={{ display: 'grid', gap: '0.3rem' }}>
-          {mismatches.map((mismatch) => (
+          {visibleMismatches.map((mismatch) => (
             <div key={`${mismatch.pdno}:${mismatch.reason}`}>
               <span className="num">{mismatch.pdno}</span>
               {' · '}
-              {describeMismatchReason(mismatch.reason)}
-              {' · KIS '}
+              {isReconciling ? '매도중/체결 반영 중' : describeMismatchReason(mismatch.reason)}
+              {` · ${brokerLabel} `}
               <span className="num">{thousandSeparator(mismatch.kisQty)}주</span>
               {' / lot '}
               <span className="num">{thousandSeparator(mismatch.lotQty)}주</span>

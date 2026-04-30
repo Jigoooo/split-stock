@@ -27,8 +27,17 @@ export interface PositionsGridProps {
 
 export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
   const { accountId, onSelect, selectedPdno = null } = props;
-  const { error, gridMaxStages, isPending, mismatches, rows, summary, syncStatus } =
-    usePositionsGrid();
+  const {
+    brokerLabel,
+    error,
+    gridMaxStages,
+    isPending,
+    mismatches,
+    pendingMismatches,
+    rows,
+    summary,
+    syncStatus,
+  } = usePositionsGrid();
   const displaySettings = useGetDisplaySettings();
   const updateDisplaySettings = useUpdateDisplaySettings();
   const syncCurrentState = useSyncCurrentState(accountId);
@@ -86,9 +95,12 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
 
       <PositionsSummary summary={summary} />
 
-      {syncStatus === 'MISMATCH' ? (
+      {syncStatus !== 'IN_SYNC' ? (
         <PositionsMismatchPanel
+          brokerLabel={brokerLabel}
           mismatches={mismatches}
+          pendingMismatches={pendingMismatches}
+          syncStatus={syncStatus}
           syncPending={syncCurrentState.isPending}
           onSync={() => void syncCurrentState.mutateAsync({ accountId })}
         />

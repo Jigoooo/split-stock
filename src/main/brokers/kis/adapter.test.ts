@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { KisAdapter, shouldFallbackKisMockTradingDayToLocal } from './adapter';
 
 describe('KisAdapter trading day fallback', () => {
-  it('KIS MOCK 휴장일 서비스 미지원 응답은 로컬 KRX 거래일 판정으로 fallback 한다', async () => {
+  it('KIS MOCK 휴장일 서비스 미지원 응답은 공통 KRX 캘린더 verdict 를 유지한다', async () => {
     const logger = { log: vi.fn() };
     const http = {
       get: vi.fn(async () =>
@@ -35,6 +35,20 @@ describe('KisAdapter trading day fallback', () => {
       env: 'MOCK',
       httpByEnv: { MOCK: http as unknown as KisHttpClient, PROD: http as unknown as KisHttpClient },
       logger: logger as unknown as EventLogger,
+      tradingCalendar: {
+        getTradingDayStatus: () => ({
+          date: '20260430',
+          openDay: true,
+          openMinute: 540,
+          closeMinute: 930,
+          source: 'BUNDLED',
+          sourceVersion: 'test',
+          reason: 'REGULAR',
+          confidence: 'MEDIUM',
+          stale: false,
+          checkedAt: Date.now(),
+        }),
+      },
     });
 
     const result = await adapter.isTradingDay(new Date('2026-04-30T10:00:00+09:00'));
@@ -45,10 +59,10 @@ describe('KisAdapter trading day fallback', () => {
       expect.objectContaining({
         level: 'INFO',
         category: 'ORDER',
-        message: 'kis.trading-day.mock-local-fallback',
+        message: 'kis.trading-day.verification-unavailable',
         payload: expect.objectContaining({
           date: '20260430',
-          openDay: true,
+          calendarOpenDay: true,
         }),
       }),
     );

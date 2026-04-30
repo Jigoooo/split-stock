@@ -3,13 +3,20 @@ import type { EventLogger } from '../logging/event-logger';
 import type { BalanceSync } from './balance-sync';
 import type { ManualOrderReconciler } from './manual-order-reconciler';
 
-export type LotSyncStatus = 'IN_SYNC' | 'MISMATCH';
+export type LotSyncStatus = 'IN_SYNC' | 'RECONCILING' | 'MISMATCH';
+export const SELL_SETTLEMENT_GRACE_MS = 30_000;
 
 export interface LotSyncMismatch {
   pdno: string;
   kisQty: number;
   lotQty: number;
   reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH';
+}
+
+export interface LotSyncState {
+  syncStatus: LotSyncStatus;
+  mismatches: LotSyncMismatch[];
+  pendingMismatches: LotSyncMismatch[];
 }
 
 export interface CurrentStateSyncOptions {
@@ -34,10 +41,11 @@ export interface CurrentStateSyncTarget {
   symbol?: string;
 }
 
-export function buildLotSyncMismatches(input: {
+export function buildLotSyncState(input: {
   lotsByPdno: Record<string, Array<{ qty: number; status: string }>>;
   positions: Array<{ code: string; qty: number }>;
-}): LotSyncMismatch[] {
+  recentSellOrderPdnos?: ReadonlySet<string>;
+}): LotSyncState {
   const kisQtyByPdno = new Map<string, number>();
   for (const position of input.positions) {
     if (position.qty <= 0) continue;
@@ -45,25 +53,48 @@ export function buildLotSyncMismatches(input: {
   }
 
   const lotQtyByPdno = new Map<string, number>();
+  const hasSellingLot = new Set<string>();
   for (const [pdno, lots] of Object.entries(input.lotsByPdno)) {
     const qty = lots.reduce((sum, lot) => sum + lot.qty, 0);
     if (qty > 0) lotQtyByPdno.set(pdno, qty);
+    if (lots.some((lot) => lot.status === 'SELLING')) hasSellingLot.add(pdno);
   }
 
   const pdnos = new Set([...kisQtyByPdno.keys(), ...lotQtyByPdno.keys()]);
   const mismatches: LotSyncMismatch[] = [];
+  const pendingMismatches: LotSyncMismatch[] = [];
   for (const pdno of pdnos) {
     const kisQty = kisQtyByPdno.get(pdno) ?? 0;
     const lotQty = lotQtyByPdno.get(pdno) ?? 0;
     if (kisQty === lotQty) continue;
-    mismatches.push({
+    const mismatch: LotSyncMismatch = {
       pdno,
       kisQty,
       lotQty,
       reason: kisQty > 0 && lotQty === 0 ? 'NO_LOTS' : kisQty === 0 ? 'STALE_LOTS' : 'QTY_MISMATCH',
-    });
+    };
+    if (hasSellingLot.has(pdno) || input.recentSellOrderPdnos?.has(pdno)) {
+      pendingMismatches.push(mismatch);
+    } else {
+      mismatches.push(mismatch);
+    }
   }
-  return mismatches.sort((a, b) => a.pdno.localeCompare(b.pdno));
+  mismatches.sort((a, b) => a.pdno.localeCompare(b.pdno));
+  pendingMismatches.sort((a, b) => a.pdno.localeCompare(b.pdno));
+  return {
+    syncStatus:
+      mismatches.length > 0 ? 'MISMATCH' : pendingMismatches.length > 0 ? 'RECONCILING' : 'IN_SYNC',
+    mismatches,
+    pendingMismatches,
+  };
+}
+
+export function buildLotSyncMismatches(input: {
+  lotsByPdno: Record<string, Array<{ qty: number; status: string }>>;
+  positions: Array<{ code: string; qty: number }>;
+  recentSellOrderPdnos?: ReadonlySet<string>;
+}): LotSyncMismatch[] {
+  return buildLotSyncState(input).mismatches;
 }
 
 /**

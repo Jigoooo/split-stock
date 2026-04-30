@@ -43,6 +43,15 @@ export interface BalanceWithLotsSummary {
   estimatedAsset: number;
 }
 
+export type LotSyncStatus = 'IN_SYNC' | 'RECONCILING' | 'MISMATCH';
+
+export interface LotSyncMismatch {
+  pdno: string;
+  kisQty: number;
+  lotQty: number;
+  reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH';
+}
+
 export interface UseBalanceWithLotsResult {
   positions: BalanceWithLotsPosition[];
   deposit: number;
@@ -54,13 +63,10 @@ export interface UseBalanceWithLotsResult {
   totalPnlRate: number;
   summary: BalanceWithLotsSummary;
   lotsByPdno: Record<string, LotEntry[]>;
-  mismatches: Array<{
-    pdno: string;
-    kisQty: number;
-    lotQty: number;
-    reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH';
-  }>;
-  syncStatus: 'IN_SYNC' | 'MISMATCH';
+  mismatches: LotSyncMismatch[];
+  pendingMismatches: LotSyncMismatch[];
+  syncStatus: LotSyncStatus;
+  brokerLabel: string;
   strategiesByPdno: Record<string, BalanceWithLotsStrategyMeta>;
   isPending: boolean;
   error: { message: string } | null;
@@ -76,13 +82,10 @@ export interface BalanceWithLotsSnapshot {
   totalPnlAmount: number;
   totalPnlRate: number;
   lotsByPdno: Record<string, LotEntry[]>;
-  mismatches: Array<{
-    pdno: string;
-    kisQty: number;
-    lotQty: number;
-    reason: 'NO_LOTS' | 'STALE_LOTS' | 'QTY_MISMATCH';
-  }>;
-  syncStatus: 'IN_SYNC' | 'MISMATCH';
+  mismatches: LotSyncMismatch[];
+  pendingMismatches?: LotSyncMismatch[];
+  syncStatus: LotSyncStatus;
+  brokerLabel?: string;
   strategiesByPdno: Record<string, BalanceWithLotsStrategyMeta>;
 }
 
@@ -260,7 +263,9 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
     summary,
     lotsByPdno: (data?.lotsByPdno ?? {}) as Record<string, LotEntry[]>,
     mismatches: data?.mismatches ?? [],
-    syncStatus: (data?.syncStatus ?? 'IN_SYNC') as 'IN_SYNC' | 'MISMATCH',
+    pendingMismatches: data?.pendingMismatches ?? [],
+    syncStatus: (data?.syncStatus ?? 'IN_SYNC') as LotSyncStatus,
+    brokerLabel: data?.brokerLabel ?? 'KIS',
     strategiesByPdno:
       strategyMetaQuery.data?.strategiesByPdno ??
       (strategyPdnos.length > 0 ? {} : (data?.strategiesByPdno ?? {})),
