@@ -51,6 +51,7 @@ export function useWatchEventNotifications(): void {
       const parsed = AutoOrderRetryEventSchema.safeParse(event);
       if (!parsed.success) return;
       const payload = parsed.data;
+      if (shouldSuppressAutoOrderRetryToast(payload)) return;
       const toastKey = autoOrderToastKey(payload);
       const now = Date.now();
       const lastAt = autoOrderToastLastAt.current.get(toastKey);
@@ -79,6 +80,11 @@ export function useWatchEventNotifications(): void {
     });
     return () => unsubscribe?.();
   }, []);
+}
+
+function shouldSuppressAutoOrderRetryToast(event: AutoOrderRetryEvent): boolean {
+  if (event.failureType !== 'BLOCKED' || event.status !== 'WAITING_CONDITION') return false;
+  return /정규장|주말|개장일이 아닙니다|휴장/.test(event.reason);
 }
 
 export function formatAutoOrderRetryToast(event: AutoOrderRetryEvent): {

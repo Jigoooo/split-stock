@@ -115,6 +115,26 @@ export function teeLoggers(...loggers: EventLogger[]): EventLogger {
 }
 
 /**
+ * 파일 로그처럼 물리 저장 위치를 분리해야 하는 sink 에 사용한다.
+ * DB logger 는 전체 이벤트 타임라인 보존을 위해 별도로 tee 에 연결한다.
+ */
+export function splitErrorLogger(normalLogger: EventLogger, errorLogger: EventLogger): EventLogger {
+  return {
+    log(entry: EventLogEntry): void {
+      try {
+        if (entry.level === 'ERROR') {
+          errorLogger.log(entry);
+        } else {
+          normalLogger.log(entry);
+        }
+      } catch {
+        // logger 실패는 업무 흐름에 영향을 주면 안 된다.
+      }
+    },
+  };
+}
+
+/**
  * API 실패 이벤트만 dedicated sink 에도 복제한다.
  *
  * primaryLogger 는 기존 DB/일반 파일 로그를 그대로 담당하고, apiFailureLogger 는

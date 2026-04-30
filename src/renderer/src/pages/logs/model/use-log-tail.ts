@@ -2,6 +2,7 @@ import { trpc } from '@renderer/shared/api/trpc';
 import { useState } from 'react';
 
 export const LOG_LEVELS = ['', 'INFO', 'WARN', 'ERROR'] as const;
+export const LOG_STREAMS = ['', 'normal', 'error'] as const;
 export const LOG_TAIL_LIMIT = 200;
 export const LOG_CATEGORIES = [
   '',
@@ -15,6 +16,7 @@ export const LOG_CATEGORIES = [
 ] as const;
 export const LOG_EXPORT_FORMATS = ['csv', 'json'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
+export type LogStream = (typeof LOG_STREAMS)[number];
 export type LogCategory = (typeof LOG_CATEGORIES)[number];
 export type LogDateRange = 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' | '';
 export type LogExportFormat = (typeof LOG_EXPORT_FORMATS)[number];
@@ -42,6 +44,7 @@ export interface UseLogTailResult {
     setDateRange: (dateRange: LogDateRange) => void;
     setLevel: (level: LogLevel) => void;
     setSearch: (search: string) => void;
+    setStream: (stream: LogStream) => void;
   };
   data: {
     entries: LogEntry[];
@@ -51,6 +54,7 @@ export interface UseLogTailResult {
     dateRange: LogDateRange;
     level: LogLevel;
     search: string;
+    stream: LogStream;
   };
   status: {
     error: { message: string } | null;
@@ -61,6 +65,7 @@ export interface UseLogTailResult {
 
 export function useLogTail(): UseLogTailResult {
   const [level, setLevel] = useState<LogLevel>('');
+  const [stream, setStream] = useState<LogStream>('');
   const [categories, setCategories] = useState<Set<LogCategory>>(new Set());
   const [search, setSearch] = useState('');
   const [dateRange, setDateRange] = useState<LogDateRange>('');
@@ -83,6 +88,7 @@ export function useLogTail(): UseLogTailResult {
     {
       limit: LOG_TAIL_LIMIT,
       ...(level ? { level: level as 'INFO' | 'WARN' | 'ERROR' } : {}),
+      ...(stream ? { stream: stream as 'normal' | 'error' } : {}),
       ...(selectedCategories ? { categories: selectedCategories } : {}),
       ...(search ? { search } : {}),
       ...(dateRange
@@ -98,6 +104,7 @@ export function useLogTail(): UseLogTailResult {
     exportMutation.mutateAsync({
       format,
       ...(level ? { level: level as 'INFO' | 'WARN' | 'ERROR' } : {}),
+      ...(stream ? { stream: stream as 'normal' | 'error' } : {}),
       ...(selectedCategories ? { categories: selectedCategories } : {}),
       ...(search ? { search } : {}),
       ...(dateRange
@@ -112,6 +119,7 @@ export function useLogTail(): UseLogTailResult {
       setDateRange,
       setLevel,
       setSearch,
+      setStream,
     },
     data: {
       entries: tail.data?.entries ?? [],
@@ -121,6 +129,7 @@ export function useLogTail(): UseLogTailResult {
       dateRange,
       level,
       search,
+      stream,
     },
     status: {
       error: tail.error ? { message: tail.error.message } : null,

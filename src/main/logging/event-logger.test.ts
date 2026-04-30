@@ -9,6 +9,7 @@ import {
   hashIdentifier,
   logExternalApiFailure,
   maskPayload,
+  splitErrorLogger,
 } from './event-logger';
 
 describe('maskPayload', () => {
@@ -138,5 +139,24 @@ describe('createApiFailureLogger', () => {
         durationMs: 12,
       },
     });
+  });
+});
+
+describe('splitErrorLogger', () => {
+  it('ERROR는 error sink로, 나머지는 normal sink로 분리한다', () => {
+    const normalEntries: unknown[] = [];
+    const errorEntries: unknown[] = [];
+    const logger = splitErrorLogger(
+      { log: (entry) => normalEntries.push(entry) },
+      { log: (entry) => errorEntries.push(entry) },
+    );
+
+    logger.log({ level: 'INFO', category: 'SYS', message: 'normal' });
+    logger.log({ level: 'WARN', category: 'ORDER', message: 'warn' });
+    logger.log({ level: 'ERROR', category: 'SYS', message: 'boom' });
+
+    expect(normalEntries).toHaveLength(2);
+    expect(errorEntries).toHaveLength(1);
+    expect(errorEntries[0]).toMatchObject({ level: 'ERROR', message: 'boom' });
   });
 });

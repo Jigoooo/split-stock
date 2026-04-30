@@ -12,6 +12,7 @@ const LOG_LEVELS = ['INFO', 'WARN', 'ERROR'] as const;
 const LOG_CATEGORIES = ['AUTH', 'ORDER', 'FSM', 'WS', 'SYS', 'BALANCE', 'CANCEL'] as const;
 const LOG_DATE_RANGES = ['today', 'month', 'lastMonth', 'last3Months', 'year'] as const;
 const LOG_EXPORT_FORMATS = ['csv', 'json'] as const;
+const LOG_STREAMS = ['all', 'normal', 'error'] as const;
 
 const TailInputSchema = z
   .object({
@@ -21,6 +22,7 @@ const TailInputSchema = z
     categories: z.array(z.enum(LOG_CATEGORIES)).optional(),
     search: z.string().optional(),
     dateRange: z.enum(LOG_DATE_RANGES).optional(),
+    stream: z.enum(LOG_STREAMS).optional(),
   })
   .default({ limit: 100 });
 
@@ -30,6 +32,7 @@ const ExportInputSchema = z.object({
   categories: z.array(z.enum(LOG_CATEGORIES)).optional(),
   search: z.string().optional(),
   dateRange: z.enum(LOG_DATE_RANGES).optional(),
+  stream: z.enum(LOG_STREAMS).optional(),
 });
 
 export interface LogRow {
@@ -93,6 +96,12 @@ export function readFilteredLogs(
 
   if (input.level) {
     rows = rows.filter((row) => row.level === input.level);
+  }
+
+  if (input.stream === 'error') {
+    rows = rows.filter((row) => row.level === 'ERROR');
+  } else if (input.stream === 'normal') {
+    rows = rows.filter((row) => row.level !== 'ERROR');
   }
 
   if (input.categories && input.categories.length > 0) {

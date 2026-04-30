@@ -489,7 +489,7 @@ describe('StrategyExecutionEngine', () => {
     );
   });
 
-  it('장 사전 가드가 차단하면 주문 시도 없이 로그만 남긴다', async () => {
+  it('장 사전 가드가 차단하면 주문 시도와 사용자 노출 이벤트 없이 로그만 남긴다', async () => {
     const { bus, logger, lotsRepo, safetyRegistry, strategyRepo } = setup();
     lotsRepo.insertLot({
       accountId: 1,
@@ -508,6 +508,7 @@ describe('StrategyExecutionEngine', () => {
         throw new AutoOrderBlockedError('MARKET_WEEKEND', '자동주문 차단: 주말');
       }),
     };
+    const onAutoOrderRetryScheduled = vi.fn();
 
     const engine = new StrategyExecutionEngine({
       bus,
@@ -518,6 +519,7 @@ describe('StrategyExecutionEngine', () => {
       getActiveAccountId: () => 1,
       executeOrder,
       marketSessionGuard,
+      onAutoOrderRetryScheduled,
     });
     engine.refreshTrackedSymbols();
 
@@ -538,6 +540,7 @@ describe('StrategyExecutionEngine', () => {
         message: 'strategy-engine.order-blocked',
       }),
     );
+    expect(onAutoOrderRetryScheduled).not.toHaveBeenCalled();
     expect(safetyRegistry.get(1).getSnapshot().master).toBe(true);
     expect(safetyRegistry.get(1).getSnapshot().errorLock.active).toBe(false);
   });

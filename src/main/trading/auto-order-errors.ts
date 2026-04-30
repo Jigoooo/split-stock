@@ -22,3 +22,7 @@ export class AutoOrderBlockedError extends Error {
 export function isAutoOrderBlockedError(error: unknown): error is AutoOrderBlockedError {
   return error instanceof AutoOrderBlockedError;
 }
+
+export function isPassiveMarketClosedBlockCode(code: AutoOrderBlockCode | string): boolean {
+  return code === 'MARKET_WEEKEND' || code === 'MARKET_TIME_CLOSED' || code === 'MARKET_CLOSED_DAY';
+}

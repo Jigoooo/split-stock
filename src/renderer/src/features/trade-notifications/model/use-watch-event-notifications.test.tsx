@@ -243,6 +243,50 @@ describe('useWatchEventNotifications', () => {
     expect(toastSuccess).not.toHaveBeenCalled();
   });
 
+  it('장외/휴장 자동주문 대기 이벤트는 toast 로 노출하지 않는다', () => {
+    let onAutoOrderRetryEvent: ((event: AutoOrderRetryEvent) => void) | undefined;
+
+    window.appShell = {
+      openPopout: vi.fn().mockResolvedValue({ ok: true }),
+      onPopoutClosed: vi.fn(() => () => undefined),
+      assignStock: vi.fn(),
+      onStockAssigned: vi.fn(() => () => undefined),
+      broadcastAccountChanged: vi.fn(),
+      onAccountChanged: vi.fn(() => () => undefined),
+      broadcastSettingsChanged: vi.fn(),
+      onSettingsChanged: vi.fn(() => () => undefined),
+      onWatchEvent: vi.fn(() => () => undefined),
+      onAutoOrderRetryEvent: vi.fn((listener) => {
+        onAutoOrderRetryEvent = listener;
+        return () => undefined;
+      }),
+      onTradeEvent: vi.fn(() => () => undefined),
+      setAlwaysOnTop: vi.fn().mockResolvedValue(undefined),
+      fitContentHeight: vi.fn().mockResolvedValue(undefined),
+    };
+
+    render(<HookHarness />);
+    onAutoOrderRetryEvent?.({
+      accountId: 1,
+      attempt: 1,
+      failureType: 'BLOCKED',
+      nth: 1,
+      occurredAt: 1_799_999_999_000,
+      pdno: '005930',
+      price: 71_400,
+      qty: 10,
+      reason: '자동주문 차단: 국내 정규장 시간이 아닙니다.',
+      retryAfterMs: null,
+      side: 'SELL',
+      status: 'WAITING_CONDITION',
+      triggerReason: 'PROFIT_SELL',
+    });
+
+    expect(toastWarning).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
   it('동일 자동주문 상태 toast 는 60초 안에 반복 노출하지 않는다', () => {
     let onAutoOrderRetryEvent: ((event: AutoOrderRetryEvent) => void) | undefined;
 

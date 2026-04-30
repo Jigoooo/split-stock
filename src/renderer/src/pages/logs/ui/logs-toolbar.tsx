@@ -3,10 +3,12 @@ import { Button, Select } from '@renderer/shared/ui';
 import type { ReactElement, TransitionStartFunction } from 'react';
 import {
   LOG_LEVELS,
+  LOG_STREAMS,
   LOG_TAIL_LIMIT,
   type LogDateRange,
   type LogExportFormat,
   type LogLevel,
+  type LogStream,
 } from '../model/use-log-tail';
 
 interface LogsToolbarProps {
@@ -16,9 +18,11 @@ interface LogsToolbarProps {
   level: LogLevel;
   onExport: (format: LogExportFormat) => void;
   search: string;
+  stream: LogStream;
   setDateRange: (range: LogDateRange) => void;
   setLevel: (level: LogLevel) => void;
   setSearch: (search: string) => void;
+  setStream: (stream: LogStream) => void;
   startTransition: TransitionStartFunction;
 }
 
@@ -29,9 +33,11 @@ export const LogsToolbar = ({
   level,
   onExport,
   search,
+  stream,
   setDateRange,
   setLevel,
   setSearch,
+  setStream,
   startTransition,
 }: LogsToolbarProps): ReactElement => (
   <div
@@ -49,6 +55,21 @@ export const LogsToolbar = ({
         {LOG_LEVELS.map((item) => (
           <option key={item} value={item}>
             {item || '전체'}
+          </option>
+        ))}
+      </Select>
+    </label>
+    <label htmlFor="logs-stream" style={{ display: 'grid', gap: '0.25rem' }}>
+      <span className="muted">구분</span>
+      <Select
+        id="logs-stream"
+        value={stream}
+        onChange={(event) => startTransition(() => setStream(event.target.value as LogStream))}
+        dense
+      >
+        {LOG_STREAMS.map((item) => (
+          <option key={item} value={item}>
+            {item === 'normal' ? '일반' : item === 'error' ? '에러' : '전체'}
           </option>
         ))}
       </Select>

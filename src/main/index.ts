@@ -90,6 +90,7 @@ import {
   cleanupOldEventLogs,
   createApiFailureLogger,
   createEventLogger,
+  splitErrorLogger,
   teeLoggers,
 } from './logging/event-logger';
 import { createFileLogger } from './logging/file-logger';
@@ -154,12 +155,17 @@ function bootstrapDeps(userDataDir: string) {
   if (!isDev) app.setAppLogsPath();
   const logsRoot = isDev ? join(process.cwd(), 'logs', 'dev') : app.getPath('logs');
   const fileLogger = createFileLogger({ dir: logsRoot, retentionDays: 40 });
+  const errorFileLogger = createFileLogger({
+    dir: join(logsRoot, 'errors'),
+    retentionDays: 40,
+  });
   const apiErrorFileLogger = createFileLogger({
     dir: join(logsRoot, 'api-errors'),
     retentionDays: 40,
   });
   // 부팅 시 1회 로테이션 — 40일 경과 파일 정리
   fileLogger.rotate();
+  errorFileLogger.rotate();
   apiErrorFileLogger.rotate();
   // event_logs 테이블 retention — 30일 초과 row 삭제. 장기 운영 시 디스크/DB 비대 방지.
   // 콘솔에 정리 결과를 한 줄 노출 (event_logger 자체에는 기록 안 함 — 자기참조 회피).
@@ -167,7 +173,7 @@ function bootstrapDeps(userDataDir: string) {
   if (removedLogs > 0) {
     console.info(`[event-logger] cleaned up ${removedLogs} rows older than 30 days`);
   }
-  const eventLogger = teeLoggers(dbLogger, fileLogger);
+  const eventLogger = teeLoggers(dbLogger, splitErrorLogger(fileLogger, errorFileLogger));
   const apiFailureLogger = createApiFailureLogger(eventLogger, apiErrorFileLogger);
   // KIS 공식 RPS 한도: 실전 20 req/s, 모의 5 req/s. 20% margin 확보해 실전 18/모의 4로 운영.
   // 모의에서 15 RPS 디폴트 유지 시 watchEngine/quote-feed 와 balance polling 동시 발생 시

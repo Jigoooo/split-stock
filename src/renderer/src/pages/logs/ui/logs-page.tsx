@@ -85,9 +85,11 @@ export const LogsPage = (): ReactElement => {
         level={filters.level}
         onExport={handleExport}
         search={filters.search}
+        stream={filters.stream}
         setDateRange={actions.setDateRange}
         setLevel={actions.setLevel}
         setSearch={actions.setSearch}
+        setStream={actions.setStream}
         startTransition={startTransition}
       />
       <LogsCategoryStatus

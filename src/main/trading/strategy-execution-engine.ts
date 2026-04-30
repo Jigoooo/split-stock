@@ -4,7 +4,11 @@ import { realTimer, type Timer } from '../brokers/core/types';
 import type { EventLogger } from '../logging/event-logger';
 import type { FeedBus } from '../realtime/feed-bus';
 import type { SafetyStateRegistry } from '../safety/safety-state';
-import { isAutoOrderBlockedError } from './auto-order-errors';
+import {
+  type AutoOrderBlockCode,
+  isAutoOrderBlockedError,
+  isPassiveMarketClosedBlockCode,
+} from './auto-order-errors';
 import { evaluate } from './fsm';
 import type { InFlightCoordinator } from './in-flight-coordinator';
 import type { LotsRepo } from './lots-repo';
@@ -413,7 +417,7 @@ export class StrategyExecutionEngine {
 
   private handleOrderBlocked(input: {
     accountId: number;
-    code: string;
+    code: AutoOrderBlockCode;
     nth: number;
     pdno: string;
     price: number;
@@ -443,6 +447,7 @@ export class StrategyExecutionEngine {
         triggerReason: input.triggerReason,
       },
     });
+    if (isPassiveMarketClosedBlockCode(input.code)) return;
     this.emitOrderStatus({
       accountId: input.accountId,
       attempt: 1,

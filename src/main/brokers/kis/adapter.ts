@@ -16,6 +16,7 @@ import type {
   BrokerError,
   Candle,
   DailyExecution,
+  KisError,
   OrderAck,
   OrderAmendIntent,
   OrderbookSnapshot,
@@ -24,6 +25,7 @@ import type {
   StockSymbol,
 } from '@shared/contracts';
 import { makeBrokerError } from '@shared/contracts';
+import { isKrxTradingDay } from '@shared/market-rules';
 import { err, ok, type Result } from 'neverthrow';
 import type { CancelOrderInput, GetDailyOhlcvParams, ListDailyExecutionsParams } from '../ports';
 import type { BrokerPort } from '../ports/broker-port';
@@ -256,7 +258,23 @@ export class KisAdapter implements BrokerPort {
       },
       bassDt,
     );
-    if (r.isErr()) return err(kisErrorToBrokerError(r.error));
+    if (r.isErr()) {
+      if (shouldFallbackKisMockTradingDayToLocal(this.env, r.error)) {
+        const openDay = isKrxTradingDay(date);
+        this.deps.logger.log({
+          level: 'INFO',
+          category: 'ORDER',
+          message: 'kis.trading-day.mock-local-fallback',
+          payload: {
+            date: bassDt,
+            openDay,
+            reason: r.error.msg,
+          },
+        });
+        return ok(openDay);
+      }
+      return err(kisErrorToBrokerError(r.error));
+    }
     const hit = r.value.find((h) => h.date === bassDt);
     return ok(hit?.openDay ?? false);
   }
@@ -310,4 +328,9 @@ function yyyymmdd(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}${m}${d}`;
+}
+
+export function shouldFallbackKisMockTradingDayToLocal(env: AppEnv, error: KisError): boolean {
+  if (env !== 'MOCK' || error.kind !== 'API_BUSINESS') return false;
+  return /해당\s*서비스를\s*찾을\s*수?\s*없습니다|service\s*not\s*found/i.test(error.msg);
 }
