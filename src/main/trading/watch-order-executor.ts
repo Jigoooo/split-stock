@@ -1,110 +1,38 @@
-import type {
-  BrokerError,
-  BrokerErrorKind,
-  BrokerId,
-  DailyExecution,
-  OrderAck,
-} from '@shared/contracts';
-import { makeBrokerError } from '@shared/contracts';
+import { type BrokerError, makeBrokerError } from '@shared/contracts';
 import { correctLimitPrice } from '@shared/market-rules';
 import { hasActiveCycle } from '@shared/trading/next-nth';
-import { and, eq } from 'drizzle-orm';
-import { err } from 'neverthrow';
 import type { BrokerPort } from '../brokers/ports/broker-port';
-import type { Db } from '../db/client';
-import { lots, orders } from '../db/schema';
-import {
-  readPendingCancelConfig,
-  readPriceCorrectionConfig,
-  type SettingsRepo,
-} from '../db/settings-repo';
-import type { EventLogger } from '../logging/event-logger';
-import type { SafetyStateRegistry } from '../safety/safety-state';
-import type { AutoBuyGuardPort } from './auto-buy-guard';
-import type { LotsRepo } from './lots-repo';
-import type { AutoOrderMarketGuard } from './market-session-guard';
-import { createPendingBuyLot, linkPendingSellLot } from './order-lot-link';
-import type { PendingOrderWatcher } from './pending-order-watcher';
-import type { StrategyRepo } from './strategy-repo';
+import { orders } from '../db/schema';
+import { readPendingCancelConfig, readPriceCorrectionConfig } from '../db/settings-repo';
+import { findRecoverableStrategyOrderAck, isUnknownSubmitResult } from './strategy-order-recovery';
 import type { WatchOrder } from './watch-engine';
+import {
+  cancelAcceptedBrokerOrderAfterLocalFailure,
+  cancelPendingByOdno,
+} from './watch-order-cancel';
+import {
+  prepareStrategyOrderLot,
+  prepareWatchOrderLot,
+  rollbackPreparedOrderLot,
+} from './watch-order-lots';
+import { recordStrategyOrder, seedFirstEntryStrategyIfNeeded } from './watch-order-recording';
+import {
+  isStrategyOrderError,
+  type PreparedOrderLot,
+  StrategyOrderError,
+  type StrategyOrderExecutionResult,
+  type StrategyOrderInput,
+  type WatchOrderExecutorDeps,
+} from './watch-order-types';
 
-export interface WatchOrderExecutorDeps {
-  db: Db;
-  settingsRepo: SettingsRepo;
-  /**
-   * 활성 계좌의 BrokerPort 를 lazy 로 얻는 getter. broker null 이면 자격증명/
-   * 환경 미준비 → 주문 실패.
-   *
-   * Stage 4k 변경: KIS 직접 의존(httpByEnv/auth/credentialsRepo + orderCash)
-   * 제거 → BrokerPort.placeOrder 추상. Kiwoom 활성 시에도 동일 자동매매 로직
-   * 재사용.
-   */
-  getBrokerForAccount: (accountId: number) => BrokerPort | null;
-  safetyRegistry: SafetyStateRegistry;
-  pendingOrderWatcher: PendingOrderWatcher | null;
-  logger: EventLogger;
-  lotsRepo: LotsRepo;
-  strategyRepo: StrategyRepo;
-  marketSessionGuard?: AutoOrderMarketGuard;
-  autoBuyGuard?: AutoBuyGuardPort;
-}
-
-export interface StrategyOrderInput {
-  accountId: number;
-  pdno: string;
-  side: 'BUY' | 'SELL';
-  division: 'LIMIT' | 'MARKET';
-  nth: number;
-  price: number;
-  qty: number;
-  triggerReason: 'DROP_BUY' | 'PROFIT_SELL';
-  reconcileOnly?: boolean;
-}
-
-export interface StrategyOrderExecutionResult {
-  brokerOrderId: string;
-  reconciled: boolean;
-}
-
-interface PreparedOrderLot {
-  lotId: number;
-  nth: number | null;
-  side: 'BUY' | 'SELL';
-}
-
-type AutoOrderLocalSource = WatchOrder['source'] | 'STRATEGY';
-
-export class StrategyOrderError extends Error {
-  readonly brokerError: BrokerError;
-  readonly brokerId: BrokerId;
-  readonly kind: BrokerErrorKind;
-  readonly raw: BrokerError['raw'] | undefined;
-  readonly side: 'BUY' | 'SELL';
-  readonly pdno: string;
-  readonly qty: number;
-  readonly price: number;
-  readonly nth: number;
-  readonly attemptedAt: Date;
-
-  constructor(input: StrategyOrderInput, brokerError: BrokerError, attemptedAt: Date) {
-    super(`주문 실패: ${brokerError.kind} - ${brokerError.msg}`);
-    this.name = 'StrategyOrderError';
-    this.brokerError = brokerError;
-    this.brokerId = brokerError.brokerId;
-    this.kind = brokerError.kind;
-    this.raw = brokerError.raw;
-    this.side = input.side;
-    this.pdno = input.pdno;
-    this.qty = input.qty;
-    this.price = input.division === 'LIMIT' ? input.price : 0;
-    this.nth = input.nth;
-    this.attemptedAt = attemptedAt;
-  }
-}
-
-export function isStrategyOrderError(error: unknown): error is StrategyOrderError {
-  return error instanceof StrategyOrderError;
-}
+export {
+  cancelPendingByOdno,
+  isStrategyOrderError,
+  StrategyOrderError,
+  type StrategyOrderExecutionResult,
+  type StrategyOrderInput,
+  type WatchOrderExecutorDeps,
+};
 
 export async function executeWatchOrder(
   deps: WatchOrderExecutorDeps,
@@ -225,39 +153,13 @@ export async function executeWatchOrder(
   }
 
   seedFirstEntryStrategyIfNeeded(deps, order);
-
-  deps.logger.log({
-    level: 'INFO',
-    category: 'WATCH',
-    message: 'watch.order-submitted',
-    payload: {
-      accountId: order.accountId,
-      pdno: order.pdno,
-      side: order.side,
-      source: order.source,
-      nth: linkedLot.nth ?? order.nth ?? null,
-      qty,
-      triggerPrice,
-    },
+  logWatchOrderSubmitted(deps, order, linkedLot, { qty, triggerPrice });
+  registerPendingWatchOrder(deps, order, linkedLot, {
+    brokerOrderId: result.value.brokerOrderId,
+    brokerOrgNo: result.value.brokerOrgNo,
+    division,
+    qty,
   });
-
-  const pendingCfg = readPendingCancelConfig(deps.settingsRepo);
-  if (
-    pendingCfg.enabled &&
-    division === 'LIMIT' &&
-    result.value.brokerOrgNo &&
-    deps.pendingOrderWatcher
-  ) {
-    deps.pendingOrderWatcher.register({
-      pdno: order.pdno,
-      side: order.side,
-      nth: linkedLot.nth ?? order.nth ?? Date.now() % 1_000_000,
-      odno: result.value.brokerOrderId,
-      orgNo: result.value.brokerOrgNo,
-      qty,
-      accountId: order.accountId,
-    });
-  }
 }
 
 export async function executeStrategyOrder(
@@ -269,33 +171,7 @@ export async function executeStrategyOrder(
 
   const attemptedAt = new Date();
   if (input.reconcileOnly === true) {
-    const recoverableAck = await findRecoverableStrategyOrderAck(deps, broker, input, attemptedAt);
-    if (recoverableAck !== null) {
-      let preparedLot: PreparedOrderLot | null = null;
-      try {
-        preparedLot = prepareStrategyOrderLot(deps, input, attemptedAt);
-        recordStrategyOrder(deps, input, recoverableAck, attemptedAt, preparedLot, {
-          reconciled: true,
-        });
-      } catch (cause) {
-        if (preparedLot !== null) rollbackPreparedOrderLot(deps, preparedLot);
-        await cancelAcceptedBrokerOrderAfterLocalFailure(deps, broker, recoverableAck, {
-          division: input.division,
-          pdno: input.pdno,
-        });
-        throw cause;
-      }
-      return { brokerOrderId: recoverableAck.brokerOrderId, reconciled: true };
-    }
-    throw new StrategyOrderError(
-      input,
-      makeBrokerError({
-        brokerId: broker.brokerId,
-        kind: 'UNKNOWN',
-        msg: '주문 접수 여부를 아직 확인하지 못했습니다.',
-      }),
-      attemptedAt,
-    );
+    return executeReconcileOnlyStrategyOrder(deps, broker, input, attemptedAt);
   }
 
   const safety = deps.safetyRegistry.get(input.accountId);
@@ -327,31 +203,7 @@ export async function executeStrategyOrder(
     throw cause;
   }
   if (result.isErr()) {
-    if (isUnknownSubmitResult(result.error.kind)) {
-      const recoverableAck = await findRecoverableStrategyOrderAck(
-        deps,
-        broker,
-        input,
-        attemptedAt,
-      );
-      if (recoverableAck !== null) {
-        try {
-          recordStrategyOrder(deps, input, recoverableAck, attemptedAt, preparedLot, {
-            reconciled: true,
-          });
-        } catch (cause) {
-          rollbackPreparedOrderLot(deps, preparedLot);
-          await cancelAcceptedBrokerOrderAfterLocalFailure(deps, broker, recoverableAck, {
-            division: input.division,
-            pdno: input.pdno,
-          });
-          throw cause;
-        }
-        return { brokerOrderId: recoverableAck.brokerOrderId, reconciled: true };
-      }
-    }
-    rollbackPreparedOrderLot(deps, preparedLot);
-    throw new StrategyOrderError(input, result.error, attemptedAt);
+    return handleRejectedStrategyOrder(deps, broker, input, attemptedAt, preparedLot, result.error);
   }
 
   try {
@@ -373,412 +225,121 @@ export async function executeStrategyOrder(
   return { brokerOrderId: result.value.brokerOrderId, reconciled: false };
 }
 
-async function findRecoverableStrategyOrderAck(
+async function executeReconcileOnlyStrategyOrder(
   deps: WatchOrderExecutorDeps,
   broker: BrokerPort,
   input: StrategyOrderInput,
   attemptedAt: Date,
-): Promise<OrderAck | null> {
-  const oneMinuteBefore = new Date(attemptedAt.getTime() - 60_000);
-  const twoMinutesAfter = new Date(attemptedAt.getTime() + 120_000);
-  const remote = await listRecoveryExecutions(broker, {
-    from: oneMinuteBefore,
-    to: twoMinutesAfter,
-    symbol: input.pdno,
-    side: input.side,
-  });
-  if (remote.error) {
-    deps.logger.log({
-      level: 'WARN',
-      category: 'ORDER',
-      message: 'strategy.order-reconcile.lookup-failed',
-      payload: {
-        accountId: input.accountId,
+): Promise<StrategyOrderExecutionResult> {
+  const recoverableAck = await findRecoverableStrategyOrderAck(deps, broker, input, attemptedAt);
+  if (recoverableAck === null) {
+    throw new StrategyOrderError(
+      input,
+      makeBrokerError({
         brokerId: broker.brokerId,
-        kind: remote.error.kind,
-        msg: remote.error.msg,
-        nth: input.nth,
-        pdno: input.pdno,
-        side: input.side,
-      },
-    });
-    return null;
+        kind: 'UNKNOWN',
+        msg: '주문 접수 여부를 아직 확인하지 못했습니다.',
+      }),
+      attemptedAt,
+    );
   }
 
-  const price = input.division === 'LIMIT' ? input.price : 0;
-  const match = remote.value.find((entry) => isMatchingRecoveredOrder(entry, input, price));
-  if (!match) return null;
-
-  deps.logger.log({
-    level: 'WARN',
-    category: 'ORDER',
-    message: 'strategy.order-reconcile.matched',
-    payload: {
-      accountId: input.accountId,
-      brokerId: broker.brokerId,
-      brokerOrderId: match.brokerOrderId,
-      nth: input.nth,
+  let preparedLot: PreparedOrderLot | null = null;
+  try {
+    preparedLot = prepareStrategyOrderLot(deps, input, attemptedAt);
+    recordStrategyOrder(deps, input, recoverableAck, attemptedAt, preparedLot, {
+      reconciled: true,
+    });
+  } catch (cause) {
+    if (preparedLot !== null) rollbackPreparedOrderLot(deps, preparedLot);
+    await cancelAcceptedBrokerOrderAfterLocalFailure(deps, broker, recoverableAck, {
+      division: input.division,
       pdno: input.pdno,
-      side: input.side,
-    },
-  });
-
-  return {
-    brokerOrderId: match.brokerOrderId,
-    ...(match.brokerOrgNo !== undefined && { brokerOrgNo: match.brokerOrgNo }),
-    acceptedAt: match.orderedAt,
-  };
-}
-
-async function listRecoveryExecutions(
-  broker: BrokerPort,
-  params: {
-    from: Date;
-    side: 'BUY' | 'SELL';
-    symbol: string;
-    to: Date;
-  },
-): Promise<{ value: DailyExecution[]; error: BrokerError | null }> {
-  const all = new Map<string, DailyExecution>();
-  let firstError: BrokerError | null = null;
-
-  for (const filledOnly of [false, true] as const) {
-    const result = await broker.listDailyExecutions({
-      ...params,
-      filledOnly,
     });
-    if (result.isErr()) {
-      firstError ??= result.error;
-      continue;
-    }
-    for (const entry of result.value) {
-      all.set(entry.brokerOrderId, entry);
-    }
+    throw cause;
   }
-
-  if (all.size === 0 && firstError !== null) {
-    return { value: [], error: firstError };
-  }
-  return { value: Array.from(all.values()), error: null };
+  return { brokerOrderId: recoverableAck.brokerOrderId, reconciled: true };
 }
 
-function isMatchingRecoveredOrder(
-  entry: DailyExecution,
+async function handleRejectedStrategyOrder(
+  deps: WatchOrderExecutorDeps,
+  broker: BrokerPort,
   input: StrategyOrderInput,
-  price: number,
-): boolean {
-  if (entry.symbol !== input.pdno) return false;
-  if (entry.side !== input.side) return false;
-  if (entry.orderQty !== input.qty) return false;
-  if (entry.cancelled) return false;
-  if (input.division === 'LIMIT' && entry.orderPrice !== price) return false;
-  return entry.remainingQty > 0 || entry.totalFilledQty > 0;
+  attemptedAt: Date,
+  preparedLot: PreparedOrderLot,
+  brokerError: BrokerError,
+): Promise<StrategyOrderExecutionResult> {
+  if (isUnknownSubmitResult(brokerError.kind)) {
+    const recoverableAck = await findRecoverableStrategyOrderAck(deps, broker, input, attemptedAt);
+    if (recoverableAck !== null) {
+      try {
+        recordStrategyOrder(deps, input, recoverableAck, attemptedAt, preparedLot, {
+          reconciled: true,
+        });
+      } catch (cause) {
+        rollbackPreparedOrderLot(deps, preparedLot);
+        await cancelAcceptedBrokerOrderAfterLocalFailure(deps, broker, recoverableAck, {
+          division: input.division,
+          pdno: input.pdno,
+        });
+        throw cause;
+      }
+      return { brokerOrderId: recoverableAck.brokerOrderId, reconciled: true };
+    }
+  }
+  rollbackPreparedOrderLot(deps, preparedLot);
+  throw new StrategyOrderError(input, brokerError, attemptedAt);
 }
 
-function isUnknownSubmitResult(kind: BrokerErrorKind): boolean {
-  return kind === 'NETWORK' || kind === 'UNKNOWN';
-}
-
-function prepareWatchOrderLot(
+function logWatchOrderSubmitted(
   deps: WatchOrderExecutorDeps,
   order: WatchOrder,
-  input: {
-    division: 'LIMIT' | 'MARKET';
-    limitPrice: number;
-    now: Date;
-    qty: number;
-  },
-): PreparedOrderLot {
-  if (order.side === 'BUY') {
-    return createRequiredPendingBuyLot(deps, {
-      accountId: order.accountId,
-      pdno: order.pdno,
-      placedAt: input.now,
-      price: input.division === 'LIMIT' ? input.limitPrice : 0,
-      qty: input.qty,
-      requestedNth: order.nth,
-      source: order.source,
-    });
-  }
-  return linkRequiredPendingSellLot(deps, {
-    accountId: order.accountId,
-    pdno: order.pdno,
-    requestedNth: order.nth,
-  });
-}
-
-function prepareStrategyOrderLot(
-  deps: WatchOrderExecutorDeps,
-  input: StrategyOrderInput,
-  now: Date,
-): PreparedOrderLot {
-  if (input.side === 'BUY') {
-    return createRequiredPendingBuyLot(deps, {
-      accountId: input.accountId,
-      pdno: input.pdno,
-      placedAt: now,
-      price: input.division === 'LIMIT' ? input.price : 0,
-      qty: input.qty,
-      requestedNth: input.nth,
-      source: 'STRATEGY',
-    });
-  }
-  return linkRequiredPendingSellLot(deps, {
-    accountId: input.accountId,
-    pdno: input.pdno,
-    requestedNth: input.nth,
-  });
-}
-
-function createRequiredPendingBuyLot(
-  deps: WatchOrderExecutorDeps,
-  input: {
-    accountId: number;
-    pdno: string;
-    placedAt: Date;
-    price: number;
-    qty: number;
-    requestedNth: number | null;
-    source: AutoOrderLocalSource;
-  },
-): PreparedOrderLot {
-  const linked = createPendingBuyLot(
-    {
-      logger: deps.logger,
-      lotsRepo: deps.lotsRepo,
-    },
-    input,
-  );
-  if (linked.lotId === null) {
-    throw new Error('자동매수 차수 예약 실패: 로컬 BUYING 차수를 생성하지 못했습니다.');
-  }
-  return { lotId: linked.lotId, nth: linked.nth, side: 'BUY' };
-}
-
-function linkRequiredPendingSellLot(
-  deps: WatchOrderExecutorDeps,
-  input: {
-    accountId: number;
-    pdno: string;
-    requestedNth: number | null;
-  },
-): PreparedOrderLot {
-  const linked = linkPendingSellLot(
-    {
-      logger: deps.logger,
-      lotsRepo: deps.lotsRepo,
-    },
-    input,
-  );
-  if (linked.lotId === null) {
-    throw new Error(
-      '자동매도 차수 예약 실패: 매도 가능한 OPEN 차수를 SELLING으로 전환하지 못했습니다.',
-    );
-  }
-  return { lotId: linked.lotId, nth: linked.nth, side: 'SELL' };
-}
-
-function rollbackPreparedOrderLot(deps: WatchOrderExecutorDeps, linkedLot: PreparedOrderLot): void {
-  try {
-    if (linkedLot.side === 'BUY') {
-      deps.db.delete(lots).where(eq(lots.id, linkedLot.lotId)).run();
-      return;
-    }
-    deps.db
-      .update(lots)
-      .set({ status: 'OPEN', soldAt: null, sellPrice: null })
-      .where(eq(lots.id, linkedLot.lotId))
-      .run();
-  } catch (cause) {
-    deps.logger.log({
-      level: 'WARN',
-      category: 'ORDER',
-      message: 'order.local-reservation.rollback-failed',
-      payload: {
-        lotId: linkedLot.lotId,
-        reason: cause instanceof Error ? cause.message : String(cause),
-        side: linkedLot.side,
-      },
-    });
-  }
-}
-
-async function cancelAcceptedBrokerOrderAfterLocalFailure(
-  deps: WatchOrderExecutorDeps,
-  broker: BrokerPort,
-  ack: OrderAck,
-  input: {
-    division: 'LIMIT' | 'MARKET';
-    pdno: string;
-  },
-): Promise<void> {
-  if (!ack.brokerOrgNo && broker.brokerId === 'KIS') {
-    deps.logger.log({
-      level: 'WARN',
-      category: 'ORDER',
-      message: 'order.local-failure.cancel-skipped-orgno-missing',
-      payload: { odno: ack.brokerOrderId, pdno: input.pdno },
-    });
-    return;
-  }
-  const cancelResult = await broker
-    .cancelOrder({
-      brokerOrderId: ack.brokerOrderId,
-      ...(ack.brokerOrgNo !== undefined && { brokerOrgNo: ack.brokerOrgNo }),
-      qtyAllOrder: true,
-      all: true,
-      kind: input.division,
-      symbol: input.pdno,
-    })
-    .catch((cause) =>
-      err(
-        makeBrokerError({
-          brokerId: broker.brokerId,
-          kind: 'UNKNOWN',
-          msg: cause instanceof Error ? cause.message : String(cause),
-          cause,
-        }),
-      ),
-    );
-  if (cancelResult.isErr()) {
-    deps.logger.log({
-      level: 'WARN',
-      category: 'ORDER',
-      message: 'order.local-failure.cancel-failed',
-      payload: {
-        kind: cancelResult.error.kind,
-        msg: cancelResult.error.msg,
-        odno: ack.brokerOrderId,
-        pdno: input.pdno,
-      },
-    });
-  }
-}
-
-function seedFirstEntryStrategyIfNeeded(deps: WatchOrderExecutorDeps, order: WatchOrder): void {
-  if ((order.source !== 'PREBUY' && order.source !== 'CUSTOM') || order.side !== 'BUY') return;
-
-  const seeded = deps.strategyRepo.ensureSeededActive(order.accountId, order.pdno);
-  if (seeded.isErr()) {
-    deps.logger.log({
-      level: 'ERROR',
-      category: 'WATCH',
-      message: 'watch.first-entry.seed-failed',
-      payload: {
-        accountId: order.accountId,
-        pdno: order.pdno,
-        source: order.source,
-        reason: seeded.error.kind,
-      },
-    });
-    return;
-  }
+  linkedLot: PreparedOrderLot,
+  input: { qty: number; triggerPrice: number },
+): void {
   deps.logger.log({
     level: 'INFO',
     category: 'WATCH',
-    message: 'watch.first-entry.seeded',
+    message: 'watch.order-submitted',
     payload: {
       accountId: order.accountId,
       pdno: order.pdno,
+      side: order.side,
       source: order.source,
-      templateSource: seeded.value.source,
+      nth: linkedLot.nth ?? order.nth ?? null,
+      qty: input.qty,
+      triggerPrice: input.triggerPrice,
     },
   });
 }
 
-function recordStrategyOrder(
+function registerPendingWatchOrder(
   deps: WatchOrderExecutorDeps,
-  input: StrategyOrderInput,
-  ack: OrderAck,
-  now: Date,
+  order: WatchOrder,
   linkedLot: PreparedOrderLot,
-  opts: { reconciled: boolean },
+  input: {
+    brokerOrderId: string;
+    brokerOrgNo: string | undefined;
+    division: 'LIMIT' | 'MARKET';
+    qty: number;
+  },
 ): void {
-  deps.db
-    .insert(orders)
-    .values({
-      accountId: input.accountId,
-      lotId: linkedLot.lotId,
-      odno: ack.brokerOrderId,
-      orgNo: ack.brokerOrgNo ?? null,
-      pdno: input.pdno,
-      side: input.side,
-      division: input.division,
-      qty: input.qty,
-      price: input.division === 'LIMIT' ? input.price : 0,
-      status: 'PENDING',
-      placedAt: now,
-    })
-    .run();
-
   const pendingCfg = readPendingCancelConfig(deps.settingsRepo);
   if (
-    pendingCfg.enabled &&
-    input.division === 'LIMIT' &&
-    ack.brokerOrgNo &&
-    deps.pendingOrderWatcher
+    !pendingCfg.enabled ||
+    input.division !== 'LIMIT' ||
+    !input.brokerOrgNo ||
+    !deps.pendingOrderWatcher
   ) {
-    deps.pendingOrderWatcher.register({
-      pdno: input.pdno,
-      side: input.side,
-      nth: linkedLot.nth ?? input.nth,
-      odno: ack.brokerOrderId,
-      orgNo: ack.brokerOrgNo,
-      qty: input.qty,
-      accountId: input.accountId,
-    });
+    return;
   }
-
-  deps.logger.log({
-    level: 'INFO',
-    category: 'FSM',
-    message: 'strategy.order-submitted',
-    payload: {
-      accountId: input.accountId,
-      pdno: input.pdno,
-      side: input.side,
-      nth: linkedLot.nth ?? input.nth,
-      triggerReason: input.triggerReason,
-      qty: input.qty,
-      price: input.price,
-      reconciled: opts.reconciled,
-    },
+  deps.pendingOrderWatcher.register({
+    pdno: order.pdno,
+    side: order.side,
+    nth: linkedLot.nth ?? order.nth ?? Date.now() % 1_000_000,
+    odno: input.brokerOrderId,
+    orgNo: input.brokerOrgNo,
+    qty: input.qty,
+    accountId: order.accountId,
   });
-}
-
-export function cancelPendingByOdno(
-  db: Db,
-  pendingOrderWatcher: PendingOrderWatcher | null,
-  accountId: number,
-  odno: string,
-): void {
-  const row = db
-    .select()
-    .from(orders)
-    .where(and(eq(orders.odno, odno), eq(orders.accountId, accountId)))
-    .get();
-  db.update(orders)
-    .set({ status: 'CANCELLED' })
-    .where(and(eq(orders.odno, odno), eq(orders.accountId, accountId)))
-    .run();
-  if (row?.lotId !== null && row?.lotId !== undefined) {
-    if (row.side === 'BUY') {
-      db.delete(lots).where(eq(lots.id, row.lotId)).run();
-    } else if (row.side === 'SELL') {
-      db.update(lots)
-        .set({ status: 'OPEN', soldAt: null, sellPrice: null })
-        .where(eq(lots.id, row.lotId))
-        .run();
-    }
-  }
-  if (!pendingOrderWatcher) return;
-  const active = pendingOrderWatcher.listActive();
-  for (const entry of active) {
-    if (entry.odno !== odno) continue;
-    pendingOrderWatcher.cancel({
-      pdno: entry.pdno,
-      side: entry.side,
-      nth: entry.nth,
-    });
-  }
 }
