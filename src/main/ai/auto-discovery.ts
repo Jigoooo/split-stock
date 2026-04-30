@@ -3,7 +3,12 @@ import type { Db } from '../db/client';
 import type { EventLogger } from '../logging/event-logger';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import type { StockMasterSyncService } from '../trading/stock-master-sync';
-import { screenRangeCycleFit } from './algo/screen-range-cycle-fit';
+import {
+  emptyRangeCycleDiagnostics,
+  type RangeCycleConditionPassCounts,
+  type RangeCycleTierCounts,
+  screenRangeCycleFitWithDiagnostics,
+} from './algo/screen-range-cycle-fit';
 import { ensureDailyCandles } from './ensure-candles';
 import type { CachedKrxDailyTrade } from './market-context-repo';
 import type { MarketContextService } from './market-context-service';
@@ -39,6 +44,10 @@ export interface AutoDiscoveryDiagnostics {
   candlesSkipped: boolean;
   screenedCount: number;
   addedCount: number;
+  blockedCount: number;
+  conditionPassCounts: RangeCycleConditionPassCounts;
+  tierCounts: RangeCycleTierCounts;
+  lowestIncludedScore: number | null;
   emptyReason: string | null;
   sources: ApiContextDiagnostic[];
 }
@@ -87,6 +96,7 @@ export async function discoverAutoCandidates(
     candlesSkipped: false,
     screenedCount: 0,
     addedCount: 0,
+    ...emptyAutoScreeningDiagnostics(),
     emptyReason: null,
     sources: OPTIONAL_CONTEXT_SOURCES.map((source) => ({
       source,
@@ -140,21 +150,25 @@ export async function discoverAutoCandidates(
   diagnostics.candlesFailed = ensured.failed;
   diagnostics.candlesSkipped = ensured.skipped;
 
-  const screened = screenRangeCycleFit({
+  const screened = screenRangeCycleFitWithDiagnostics({
     db: input.db,
     candlesRepo: input.candlesRepo,
     cap: input.autoCap ?? DEFAULT_AUTO_CAP,
     ...(input.excludePdnos ? { excludePdnos: input.excludePdnos } : {}),
     candidatePdnos: seeds.map((row) => row.pdno),
   });
-  diagnostics.screenedCount = screened.length;
-  diagnostics.addedCount = screened.length;
-  if (screened.length === 0) {
+  diagnostics.screenedCount = screened.diagnostics.evaluatedCount;
+  diagnostics.addedCount = screened.candidates.length;
+  diagnostics.blockedCount = screened.diagnostics.blockedCount;
+  diagnostics.conditionPassCounts = screened.diagnostics.conditionPassCounts;
+  diagnostics.tierCounts = screened.diagnostics.tierCounts;
+  diagnostics.lowestIncludedScore = screened.diagnostics.lowestIncludedScore;
+  if (screened.candidates.length === 0) {
     diagnostics.emptyReason = ensured.skipped ? 'broker_unavailable_or_no_cache' : 'no_screen_pass';
   }
 
   return {
-    candidates: screened.map((row) => ({ pdno: row.pdno, name: row.name })),
+    candidates: screened.candidates.map((row) => ({ pdno: row.pdno, name: row.name })),
     diagnostics,
   };
 }
@@ -170,8 +184,22 @@ export function disabledAutoDiscoveryDiagnostics(): AutoDiscoveryDiagnostics {
     candlesSkipped: false,
     screenedCount: 0,
     addedCount: 0,
+    ...emptyAutoScreeningDiagnostics(),
     emptyReason: 'disabled',
     sources: [],
+  };
+}
+
+function emptyAutoScreeningDiagnostics(): Pick<
+  AutoDiscoveryDiagnostics,
+  'blockedCount' | 'conditionPassCounts' | 'tierCounts' | 'lowestIncludedScore'
+> {
+  const screening = emptyRangeCycleDiagnostics();
+  return {
+    blockedCount: screening.blockedCount,
+    conditionPassCounts: screening.conditionPassCounts,
+    tierCounts: screening.tierCounts,
+    lowestIncludedScore: screening.lowestIncludedScore,
   };
 }
 

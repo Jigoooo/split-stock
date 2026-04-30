@@ -236,10 +236,11 @@ export function buildLlmRankedSymbols(args: {
     const poolEntry = args.poolByPdno.get(item.pdno);
     const algo = args.algoByPdno.get(item.pdno);
     const fact = args.factsByPdno.get(item.pdno);
-    const capped = capSymbolByDataQuality(item, fact?.dataQuality ?? 'blocked');
+    const anchored = anchorLlmScore(item, algo);
+    const capped = capSymbolByDataQuality(anchored, fact?.dataQuality ?? 'blocked');
     out.push({
       ...capped,
-      summary: compactText(item.summary, 200) || '분석 요약이 부족합니다.',
+      summary: compactText(anchored.summary, 200) || '분석 요약이 부족합니다.',
       pros: compactTextList(capped.pros ?? [], 200).slice(0, 3),
       cons: compactTextList(enrichCons(capped, algo), 200),
       entryNote: capped.entryNote ? compactText(capped.entryNote, 300) || null : null,
@@ -268,6 +269,26 @@ export function buildLlmRankedSymbols(args: {
     });
   }
   return out;
+}
+
+function anchorLlmScore(item: RankedItem, algo: AlgoSignals | undefined): RankedItem {
+  const algoScore = algo?.rangeCycleScore ?? null;
+  const maxScore = algoScore === null ? 40 : Math.min(100, algoScore + 10);
+  if (item.score <= maxScore) return item;
+
+  const score = Math.max(0, Math.min(100, Math.round(maxScore)));
+  const reason =
+    algoScore === null
+      ? `AI 점수 상한 적용(${item.score}->${score}) — 알고리즘 신호 없음`
+      : `AI 점수 상한 적용(${item.score}->${score}) — 회전성 점수 ${algoScore}`;
+  const cons = [reason, ...(item.cons ?? [])].slice(0, 3);
+  return {
+    ...item,
+    score,
+    tier: scoreToTier(score),
+    confidence: item.confidence === 'high' ? 'med' : item.confidence,
+    cons,
+  };
 }
 
 function enrichCons(item: RankedItem, algo: AlgoSignals | undefined): string[] {

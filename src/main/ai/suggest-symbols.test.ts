@@ -3,6 +3,7 @@ import type { Db } from '../db/client';
 import type { EventLogger } from '../logging/event-logger';
 import type { ChartPeriod, DailyCandle, DailyCandlesRepo } from '../trading/daily-candles-repo';
 import type { AiCredentialsRepo, AiProviderConfigWithKey } from './ai-credentials-repo';
+import { scoreToTier } from './algo/composite-score';
 import type { ChatResponse, LlmClient } from './llm-client';
 import type { NewsEvidencePack } from './news-evidence';
 import { suggestSymbols } from './suggest-symbols';
@@ -161,6 +162,16 @@ describe('suggestSymbols', () => {
             candlesSkipped: false,
             screenedCount: 1,
             addedCount: 1,
+            blockedCount: 0,
+            conditionPassCounts: {
+              score: 1,
+              volatility: 1,
+              range: 1,
+              liquidity: 1,
+              trendNeutrality: 1,
+            },
+            tierCounts: { top: 0, strong: 1, moderate: 0, watch: 0, avoid: 0 },
+            lowestIncludedScore: 72,
             emptyReason: null,
             sources: [{ source: 'krx', status: 'used', count: 2, stale: false, reason: null }],
           },
@@ -175,6 +186,48 @@ describe('suggestSymbols', () => {
       sources: ['AUTO'],
     });
     expect(result.diagnostics.discovery.addedCount).toBe(1);
+  });
+
+  it('caps LLM over-promotion to the deterministic algorithm anchor', async () => {
+    const chat = vi.fn<LlmClient['chat']>().mockResolvedValue({
+      parsed: {
+        recommended: [
+          {
+            pdno: '005930',
+            score: 100,
+            tier: 'top',
+            confidence: 'high',
+            volatilityFit: 'mid',
+            liquidityFit: 'good',
+            summary: 'AI가 매우 강한 후보로 판단했습니다.',
+            pros: ['AI 고평가'],
+            cons: [],
+            entryNote: null,
+            consensusCount: 3,
+            citedTools: [],
+          },
+        ],
+        userInputResults: [],
+      },
+      text: '{}',
+      toolCalls: [],
+    } satisfies ChatResponse<unknown>);
+
+    const result = await suggestSymbols(
+      baseInput(65, {
+        llmClient: { chat } as unknown as LlmClient,
+        fetchNewsEvidence: async () => new Map(),
+      }),
+    );
+
+    const item = result.ranked[0];
+    expect(item).toBeDefined();
+    if (!item) throw new Error('missing ranked item');
+    expect(item.algoScore).not.toBeNull();
+    expect(item.score).toBeLessThan(100);
+    expect(item.score).toBeLessThanOrEqual((item.algoScore ?? 0) + 10);
+    expect(item.tier).toBe(scoreToTier(item.score));
+    expect(item.cons.some((reason) => reason.includes('AI 점수 상한 적용'))).toBe(true);
   });
 
   it('attaches news clusters to evidence refs for traceability', async () => {

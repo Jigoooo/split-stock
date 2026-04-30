@@ -14,6 +14,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import type {
+  DiscoveryConditionKey,
   RecommendationDiagnostics,
   RecommendationProgressState,
   RecommendationViewState,
@@ -28,6 +29,13 @@ const TIER_LABELS: Record<keyof TierDistribution, string> = {
   moderate: 'MODERATE',
   watch: 'WATCH',
   avoid: 'AVOID',
+};
+const DISCOVERY_CONDITION_LABELS: Record<DiscoveryConditionKey, string> = {
+  score: '점수',
+  volatility: '변동성',
+  range: '박스',
+  liquidity: '유동성',
+  trendNeutrality: '추세',
 };
 
 function DistributionChips({ distribution }: { distribution: TierDistribution }): ReactElement {
@@ -135,20 +143,29 @@ function DiscoveryStatus({
   const failed = diagnostics.sources
     .filter((source) => source.status === 'failed')
     .map((source) => source.source);
+  const tierSummary = formatTierCounts(discovery.tierCounts);
+  const conditionSummary = formatDiscoveryConditionCounts(
+    discovery.conditionPassCounts,
+    discovery.screenedCount,
+  );
+  const titleParts = [
+    failed.length > 0 ? `실패 source: ${failed.join(', ')}` : null,
+    discovery.basisDate ? `KRX 기준일 ${discovery.basisDate}` : null,
+    `평가 ${discovery.screenedCount}개`,
+    discovery.blockedCount > 0 ? `차단 ${discovery.blockedCount}개` : null,
+    discovery.lowestIncludedScore !== null
+      ? `최저 포함점수 ${discovery.lowestIncludedScore}`
+      : null,
+    conditionSummary ? `조건 통과: ${conditionSummary}` : null,
+  ].filter((part): part is string => part !== null);
   const text =
     discovery.addedCount > 0
-      ? `자동발굴 ${discovery.addedCount}개 반영 · seed ${discovery.seedCount} · universe ${discovery.universeCount}`
+      ? `자동발굴 ${discovery.addedCount}개 · ${tierSummary || 'tier 없음'} · seed ${discovery.seedCount}`
       : `자동발굴 제한 · ${formatDiscoveryReason(discovery.emptyReason)}`;
   return (
     <span
       className="muted"
-      title={
-        failed.length > 0
-          ? `실패 source: ${failed.join(', ')}`
-          : discovery.basisDate
-            ? `KRX 기준일 ${discovery.basisDate}`
-            : undefined
-      }
+      title={titleParts.length > 0 ? titleParts.join(' · ') : undefined}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -165,6 +182,24 @@ function DiscoveryStatus({
   );
 }
 
+function formatTierCounts(counts: TierDistribution): string {
+  const parts = (['top', 'strong', 'moderate', 'watch', 'avoid'] as const)
+    .filter((tier) => counts[tier] > 0)
+    .map((tier) => `${TIER_LABELS[tier]} ${counts[tier]}`);
+  return parts.join(' ');
+}
+
+function formatDiscoveryConditionCounts(
+  counts: Record<DiscoveryConditionKey, number>,
+  total: number,
+): string {
+  if (total <= 0) return '';
+  const parts = (['score', 'volatility', 'range', 'liquidity', 'trendNeutrality'] as const).map(
+    (key) => `${DISCOVERY_CONDITION_LABELS[key]} ${counts[key]}/${total}`,
+  );
+  return parts.join(', ');
+}
+
 function formatDiscoveryReason(reason: string | null): string {
   switch (reason) {
     case 'krx_unavailable':
@@ -172,7 +207,7 @@ function formatDiscoveryReason(reason: string | null): string {
     case 'broker_unavailable_or_no_cache':
       return '일봉 수집 불가';
     case 'no_screen_pass':
-      return '조건 통과 없음';
+      return '산출 후보 없음';
     case 'no_seed_after_liquidity_filter':
       return '유동성 후보 없음';
     case 'auto_discovery_failed':

@@ -153,6 +153,14 @@ export interface RecommendedNewsCluster {
 
 export type RecommendTier = 'top' | 'strong' | 'moderate' | 'watch' | 'avoid';
 export type RecommendConfidence = 'high' | 'med' | 'low';
+export type DiscoveryConditionKey =
+  | 'score'
+  | 'volatility'
+  | 'range'
+  | 'liquidity'
+  | 'trendNeutrality';
+export type DiscoveryConditionPassCounts = Record<DiscoveryConditionKey, number>;
+export type DiscoveryTierCounts = Record<RecommendTier, number>;
 
 export interface TierDistribution {
   top: number;
@@ -191,6 +199,10 @@ export interface RecommendationDiscoveryDiagnostics {
   candlesSkipped: boolean;
   screenedCount: number;
   addedCount: number;
+  blockedCount: number;
+  conditionPassCounts: DiscoveryConditionPassCounts;
+  tierCounts: DiscoveryTierCounts;
+  lowestIncludedScore: number | null;
   emptyReason: string | null;
   sources: ReadonlyArray<RecommendationApiDiagnostic>;
 }
@@ -295,6 +307,20 @@ export interface RecommendationProgressState {
 }
 
 const EMPTY_DIST: TierDistribution = { top: 0, strong: 0, moderate: 0, watch: 0, avoid: 0 };
+const EMPTY_DISCOVERY_CONDITION_COUNTS: DiscoveryConditionPassCounts = {
+  score: 0,
+  volatility: 0,
+  range: 0,
+  liquidity: 0,
+  trendNeutrality: 0,
+};
+const EMPTY_DISCOVERY_TIER_COUNTS: DiscoveryTierCounts = {
+  top: 0,
+  strong: 0,
+  moderate: 0,
+  watch: 0,
+  avoid: 0,
+};
 const EMPTY_DIAGNOSTICS: RecommendationDiagnostics = {
   discovery: {
     enabled: false,
@@ -306,6 +332,10 @@ const EMPTY_DIAGNOSTICS: RecommendationDiagnostics = {
     candlesSkipped: false,
     screenedCount: 0,
     addedCount: 0,
+    blockedCount: 0,
+    conditionPassCounts: EMPTY_DISCOVERY_CONDITION_COUNTS,
+    tierCounts: EMPTY_DISCOVERY_TIER_COUNTS,
+    lowestIncludedScore: null,
     emptyReason: null,
     sources: [],
   },
