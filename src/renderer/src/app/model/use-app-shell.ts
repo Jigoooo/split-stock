@@ -30,6 +30,11 @@ export function useAppShell(): UseAppShellReturn {
     staleTime: 30_000,
   });
   const env = envQuery.data?.env ?? null;
+  const activeAccountQuery = trpc.account.getActive.useQuery(undefined, {
+    enabled: env !== null,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
   const [pendingEnv, setPendingEnv] = useState<EnvValue | null>(null);
 
   useKillSwitchHotkey();
@@ -76,7 +81,11 @@ export function useAppShell(): UseAppShellReturn {
     env,
     stored,
     pendingEnv,
-    isInitializing: envQuery.isPending || storedQuery.isPending || accountsQuery.isPending,
+    isInitializing:
+      envQuery.isPending ||
+      storedQuery.isPending ||
+      accountsQuery.isPending ||
+      (env !== null && activeAccountQuery.isPending),
     isSwitchingEnv: setEnv.isPending,
     requestEnvSwitch,
     confirmEnvSwitch,
