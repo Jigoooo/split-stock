@@ -1,6 +1,7 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { Button, Select } from '@renderer/shared/ui';
-import type { ReactElement, TransitionStartFunction } from 'react';
+import { Button, Select, TextInput } from '@renderer/shared/ui';
+import { Search, X } from 'lucide-react';
+import type { ReactElement } from 'react';
 import {
   LOG_LEVELS,
   LOG_STREAMS,
@@ -14,6 +15,7 @@ import {
 interface LogsToolbarProps {
   dateRange: LogDateRange;
   entriesCount: number;
+  exportDisabled: boolean;
   exportPending: boolean;
   level: LogLevel;
   onExport: (format: LogExportFormat) => void;
@@ -23,12 +25,12 @@ interface LogsToolbarProps {
   setLevel: (level: LogLevel) => void;
   setSearch: (search: string) => void;
   setStream: (stream: LogStream) => void;
-  startTransition: TransitionStartFunction;
 }
 
 export const LogsToolbar = ({
   dateRange,
   entriesCount,
+  exportDisabled,
   exportPending,
   level,
   onExport,
@@ -38,18 +40,17 @@ export const LogsToolbar = ({
   setLevel,
   setSearch,
   setStream,
-  startTransition,
 }: LogsToolbarProps): ReactElement => (
   <div
-    className="panel__body"
-    style={{ display: 'flex', gap: '0.8rem', alignItems: 'end', flexWrap: 'wrap', flexShrink: 0 }}
+    className="panel__body logs-toolbar"
+    style={{ alignItems: 'end', display: 'flex', flexShrink: 0, flexWrap: 'wrap', gap: '0.8rem' }}
   >
-    <label htmlFor="logs-level" style={{ display: 'grid', gap: '0.25rem' }}>
+    <label htmlFor="logs-level" style={{ display: 'grid', flex: '0 0 9rem', gap: '0.25rem' }}>
       <span className="muted">레벨</span>
       <Select
         id="logs-level"
         value={level}
-        onChange={(event) => startTransition(() => setLevel(event.target.value as LogLevel))}
+        onChange={(event) => setLevel(event.target.value as LogLevel)}
         dense
       >
         {LOG_LEVELS.map((item) => (
@@ -59,12 +60,12 @@ export const LogsToolbar = ({
         ))}
       </Select>
     </label>
-    <label htmlFor="logs-stream" style={{ display: 'grid', gap: '0.25rem' }}>
+    <label htmlFor="logs-stream" style={{ display: 'grid', flex: '0 0 9rem', gap: '0.25rem' }}>
       <span className="muted">구분</span>
       <Select
         id="logs-stream"
         value={stream}
-        onChange={(event) => startTransition(() => setStream(event.target.value as LogStream))}
+        onChange={(event) => setStream(event.target.value as LogStream)}
         dense
       >
         {LOG_STREAMS.map((item) => (
@@ -74,14 +75,12 @@ export const LogsToolbar = ({
         ))}
       </Select>
     </label>
-    <label htmlFor="logs-date-range" style={{ display: 'grid', gap: '0.25rem' }}>
+    <label htmlFor="logs-date-range" style={{ display: 'grid', flex: '0 0 11rem', gap: '0.25rem' }}>
       <span className="muted">기간</span>
       <Select
         id="logs-date-range"
         value={dateRange}
-        onChange={(event) =>
-          startTransition(() => setDateRange(event.target.value as LogDateRange))
-        }
+        onChange={(event) => setDateRange(event.target.value as LogDateRange)}
         dense
       >
         <option value="">전체</option>
@@ -92,15 +91,23 @@ export const LogsToolbar = ({
         <option value="year">1년</option>
       </Select>
     </label>
-    <label htmlFor="logs-search" style={{ display: 'grid', gap: '0.25rem' }}>
+    <label htmlFor="logs-search" style={{ display: 'grid', flex: '1 1 24rem', gap: '0.25rem' }}>
       <span className="muted">검색</span>
-      <input
+      <TextInput
         id="logs-search"
         type="text"
         placeholder="메시지 / payload 검색..."
         value={search}
-        onChange={(event) => startTransition(() => setSearch(event.target.value))}
-        style={{ padding: '0.4rem', fontSize: '0.9rem' }}
+        onChange={(event) => setSearch(event.target.value)}
+        dense
+        iconLeading={<Search size={14} />}
+        suffix={
+          search ? (
+            <button type="button" aria-label="검색어 지우기" onClick={() => setSearch('')}>
+              <X size={13} />
+            </button>
+          ) : null
+        }
       />
     </label>
     <div
@@ -115,10 +122,10 @@ export const LogsToolbar = ({
       <span className="muted">
         최근 최대 {thousandSeparator(LOG_TAIL_LIMIT)}건 중 {thousandSeparator(entriesCount)}건 표시
       </span>
-      <Button dense onClick={() => onExport('csv')} disabled={exportPending}>
+      <Button dense onClick={() => onExport('csv')} disabled={exportPending || exportDisabled}>
         CSV 저장
       </Button>
-      <Button dense onClick={() => onExport('json')} disabled={exportPending}>
+      <Button dense onClick={() => onExport('json')} disabled={exportPending || exportDisabled}>
         JSON 저장
       </Button>
     </div>

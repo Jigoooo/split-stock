@@ -1,10 +1,11 @@
 export const LOG_TABLE_COLUMN_WIDTHS = {
-  timestamp: 168,
-  level: 88,
+  timestamp: 158,
+  level: 82,
   category: 104,
-  message: 280,
-  payload: 420,
+  content: 720,
 } as const;
+
+export const LOG_TABLE_ROW_ESTIMATE = 42;
 
 export const LOG_TABLE_TOTAL_WIDTH = Object.values(LOG_TABLE_COLUMN_WIDTHS).reduce(
   (sum, width) => sum + width,

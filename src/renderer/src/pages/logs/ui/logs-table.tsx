@@ -1,15 +1,31 @@
 import { TableGrid, useTableGridVirtual } from '@renderer/shared/ui';
-import { type ReactElement, useRef } from 'react';
-import { formatLogTs, LOG_TABLE_COLUMN_WIDTHS, LOG_TABLE_TOTAL_WIDTH } from '../config/log-table';
+import { type ReactElement, useCallback, useRef } from 'react';
+import {
+  formatLogTs,
+  LOG_TABLE_COLUMN_WIDTHS,
+  LOG_TABLE_ROW_ESTIMATE,
+  LOG_TABLE_TOTAL_WIDTH,
+} from '../config/log-table';
 import { buildLogPayloadPreview } from '../lib/log-payload';
 import type { LogEntry } from '../model/use-log-tail';
 import { LogTableRow } from './log-table-row';
 
+const LOG_TABLE_SKELETON_ROWS = [
+  'skeleton-1',
+  'skeleton-2',
+  'skeleton-3',
+  'skeleton-4',
+  'skeleton-5',
+  'skeleton-6',
+  'skeleton-7',
+  'skeleton-8',
+] as const;
+
 interface LogsTableProps {
   entries: LogEntry[];
   error: { message: string } | null;
+  isFilterSettling: boolean;
   isPending: boolean;
-  isTransitionPending: boolean;
   onSelect: (id: LogEntry['id']) => void;
   selectedId: LogEntry['id'] | null;
 }
@@ -17,18 +33,24 @@ interface LogsTableProps {
 export const LogsTable = ({
   entries,
   error,
+  isFilterSettling,
   isPending,
-  isTransitionPending,
   onSelect,
   selectedId,
 }: LogsTableProps): ReactElement => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const getItemKey = useCallback((index: number) => entries[index]?.id ?? index, [entries]);
   const virtual = useTableGridVirtual({
     count: entries.length,
-    estimateSize: () => 26,
+    estimateSize: () => LOG_TABLE_ROW_ESTIMATE,
+    getItemKey,
     parentRef: scrollRef,
     overscan: 12,
+    useFlushSync: false,
   });
+  const showInitialSkeleton = isPending && entries.length === 0;
+  const showUpdatingStrip =
+    !showInitialSkeleton && !error && entries.length > 0 && isFilterSettling;
 
   return (
     <TableGrid.Root
@@ -36,6 +58,7 @@ export const LogsTable = ({
       stickyHeader
       horizontalScroll
       aria-label="이벤트 로그"
+      className="logs-table"
       style={{ flex: 1, minHeight: 0 }}
     >
       <TableGrid.Header>
@@ -43,12 +66,9 @@ export const LogsTable = ({
           시각
         </TableGrid.Cell>
         <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.level}>레벨</TableGrid.Cell>
-        <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.category}>카테고리</TableGrid.Cell>
-        <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.message} overflow="ellipsis">
-          메시지
-        </TableGrid.Cell>
-        <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.payload} overflow="ellipsis">
-          payload 요약
+        <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.category}>분류</TableGrid.Cell>
+        <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.content} overflow="ellipsis">
+          내용
         </TableGrid.Cell>
       </TableGrid.Header>
       <TableGrid.Body scrollRef={scrollRef}>
@@ -59,12 +79,13 @@ export const LogsTable = ({
             </TableGrid.Cell>
           </TableGrid.Row>
         ) : null}
-        {isPending || isTransitionPending ? (
-          <TableGrid.Row placeholder>
-            <TableGrid.Cell className="muted">로드 중…</TableGrid.Cell>
-          </TableGrid.Row>
+        {showInitialSkeleton ? <LogsTableSkeleton /> : null}
+        {showUpdatingStrip ? (
+          <div className="logs-table__update-strip" role="status" aria-live="polite">
+            필터 반영 중...
+          </div>
         ) : null}
-        {!isPending && !isTransitionPending && !error && entries.length === 0 ? (
+        {!isPending && !error && entries.length === 0 ? (
           <TableGrid.Row placeholder>
             <TableGrid.Cell className="muted">기록된 로그가 없습니다.</TableGrid.Cell>
           </TableGrid.Row>
@@ -84,7 +105,7 @@ export const LogsTable = ({
 
               return (
                 <LogTableRow
-                  key={entry.id}
+                  key={vItem.key}
                   category={entry.category}
                   index={vItem.index}
                   isSelected={selectedId === entry.id}
@@ -105,3 +126,22 @@ export const LogsTable = ({
     </TableGrid.Root>
   );
 };
+
+function LogsTableSkeleton(): ReactElement {
+  return (
+    <div
+      className="logs-table__skeleton"
+      aria-hidden
+      style={{ minWidth: '100%', width: LOG_TABLE_TOTAL_WIDTH }}
+    >
+      {LOG_TABLE_SKELETON_ROWS.map((rowKey) => (
+        <div className="logs-table__skeleton-row" key={rowKey}>
+          <span style={{ width: LOG_TABLE_COLUMN_WIDTHS.timestamp - 24 }} />
+          <span style={{ width: LOG_TABLE_COLUMN_WIDTHS.level - 24 }} />
+          <span style={{ width: LOG_TABLE_COLUMN_WIDTHS.category - 24 }} />
+          <span style={{ flex: 1 }} />
+        </div>
+      ))}
+    </div>
+  );
+}

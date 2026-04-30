@@ -1,5 +1,5 @@
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
-import type { RefObject } from 'react';
+import type { Key, RefObject } from 'react';
 
 export interface UseTableGridVirtualOptions {
   count: number;
@@ -7,8 +7,12 @@ export interface UseTableGridVirtualOptions {
   estimateSize: (index: number) => number;
   /** scroll container ref */
   parentRef: RefObject<HTMLElement | null>;
+  /** @tanstack/react-virtual item key override */
+  getItemKey?: (index: number) => Key;
   /** 화면 밖 prefetch 행 수 (default 8) */
   overscan?: number;
+  /** React 19/저사양 환경에서 scroll flushSync 부담을 낮출 때 false */
+  useFlushSync?: boolean;
 }
 
 export interface UseTableGridVirtualResult {
@@ -29,13 +33,15 @@ export interface UseTableGridVirtualResult {
 export function useTableGridVirtual(
   options: UseTableGridVirtualOptions,
 ): UseTableGridVirtualResult {
-  const { count, estimateSize, parentRef, overscan = 8 } = options;
+  const { count, estimateSize, parentRef, getItemKey, overscan = 8, useFlushSync } = options;
 
   const virtualizer = useVirtualizer({
     count,
     getScrollElement: () => parentRef.current,
     estimateSize,
     overscan,
+    ...(getItemKey ? { getItemKey } : {}),
+    ...(useFlushSync === undefined ? {} : { useFlushSync }),
   });
 
   return {

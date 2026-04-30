@@ -50,15 +50,15 @@ export const LogTableRow = memo(function LogTableRow(props: LogTableRowProps): R
         <span className={levelClass(level)}>{level}</span>
       </TableGrid.Cell>
       <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.category}>{category}</TableGrid.Cell>
-      <TableGrid.Cell width={LOG_TABLE_COLUMN_WIDTHS.message} overflow="ellipsis" title={message}>
-        {message}
-      </TableGrid.Cell>
       <TableGrid.Cell
-        width={LOG_TABLE_COLUMN_WIDTHS.payload}
-        overflow="ellipsis"
-        {...(payload.summary === '-' ? {} : { title: payload.summary })}
+        width={LOG_TABLE_COLUMN_WIDTHS.content}
+        overflow="nowrap"
+        title={payload.summary === '-' ? message : `${message} · ${payload.summary}`}
       >
-        <PayloadSummary payload={payload} />
+        <div className="logs-table-row__content">
+          <span className="logs-table-row__message">{message}</span>
+          <PayloadSummary payload={payload} />
+        </div>
       </TableGrid.Cell>
     </TableGrid.Row>
   );

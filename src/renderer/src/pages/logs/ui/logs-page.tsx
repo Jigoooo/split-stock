@@ -1,5 +1,5 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { type ReactElement, useEffect, useState, useTransition } from 'react';
+import { type ReactElement, useEffect, useState } from 'react';
 import { formatLogTs } from '../config/log-table';
 import { buildLogPayloadView } from '../lib/log-payload';
 import { type LogEntry, type LogExportFormat, useLogTail } from '../model/use-log-tail';
@@ -10,7 +10,6 @@ import { LogsToolbar } from './logs-toolbar';
 
 export const LogsPage = (): ReactElement => {
   const { actions, data, filters, status } = useLogTail();
-  const [isTransitionPending, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState<LogEntry['id'] | null>(null);
   const [actionMessage, setActionMessage] = useState('');
 
@@ -33,7 +32,11 @@ export const LogsPage = (): ReactElement => {
     ? `${selectedEntry.category} · ${formatLogTs(selectedEntry.ts)}`
     : '로그를 선택하면 아래 상세 카드에서 payload를 확인할 수 있습니다.';
   const statusText =
-    actionMessage || '행을 선택하면 아래에서 payload를 정렬된 JSON으로 확인할 수 있습니다.';
+    actionMessage ||
+    (status.isFilterSettling || status.isPlaceholderData
+      ? '필터를 적용하는 중입니다. 이전 결과를 유지하고 있습니다.'
+      : '행을 선택하면 아래에서 payload를 정렬된 JSON으로 확인할 수 있습니다.');
+  const exportDisabled = status.isFilterSettling || status.isPlaceholderData;
 
   const handleExport = async (format: LogExportFormat): Promise<void> => {
     const result = await actions.exportLogs(format);
@@ -81,6 +84,7 @@ export const LogsPage = (): ReactElement => {
       <LogsToolbar
         dateRange={filters.dateRange}
         entriesCount={data.entries.length}
+        exportDisabled={exportDisabled}
         exportPending={status.exportPending}
         level={filters.level}
         onExport={handleExport}
@@ -90,19 +94,17 @@ export const LogsPage = (): ReactElement => {
         setLevel={actions.setLevel}
         setSearch={actions.setSearch}
         setStream={actions.setStream}
-        startTransition={startTransition}
       />
       <LogsCategoryStatus
         categories={filters.categories}
         setCategories={actions.setCategories}
-        startTransition={startTransition}
         statusText={statusText}
       />
       <LogsTable
         entries={data.entries}
         error={status.error}
+        isFilterSettling={status.isFilterSettling || status.isPlaceholderData}
         isPending={status.isPending}
-        isTransitionPending={isTransitionPending}
         onSelect={setSelectedId}
         selectedId={selectedId}
       />

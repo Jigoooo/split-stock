@@ -1,5 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 
 export const LOG_LEVELS = ['', 'INFO', 'WARN', 'ERROR'] as const;
 export const LOG_STREAMS = ['', 'normal', 'error'] as const;
@@ -20,6 +20,27 @@ export type LogStream = (typeof LOG_STREAMS)[number];
 export type LogCategory = (typeof LOG_CATEGORIES)[number];
 export type LogDateRange = 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' | '';
 export type LogExportFormat = (typeof LOG_EXPORT_FORMATS)[number];
+type ActiveLogLevel = Exclude<LogLevel, ''>;
+type ActiveLogStream = Exclude<LogStream, ''>;
+type ActiveLogCategory = Exclude<LogCategory, ''>;
+
+export interface LogQueryFilters {
+  categories: ReadonlySet<LogCategory>;
+  dateRange: LogDateRange;
+  level: LogLevel;
+  search: string;
+  stream: LogStream;
+}
+
+export interface LogQueryInput {
+  categories?: ActiveLogCategory[];
+  dateRange?: Exclude<LogDateRange, ''>;
+  level?: ActiveLogLevel;
+  limit?: number;
+  search?: string;
+  stream?: ActiveLogStream;
+}
+
 export interface LogExportResult {
   canceled: boolean;
   count?: number;
@@ -59,8 +80,28 @@ export interface UseLogTailResult {
   status: {
     error: { message: string } | null;
     exportPending: boolean;
+    isFetching: boolean;
+    isFilterSettling: boolean;
+    isPlaceholderData: boolean;
     isPending: boolean;
   };
+}
+
+export function buildLogQueryInput(filters: LogQueryFilters, limit?: number): LogQueryInput {
+  const input: LogQueryInput = {};
+  const categories = Array.from(filters.categories).filter(
+    (category): category is ActiveLogCategory => category !== '',
+  );
+  const search = filters.search.trim();
+
+  if (limit !== undefined) input.limit = limit;
+  if (filters.level) input.level = filters.level as ActiveLogLevel;
+  if (filters.stream) input.stream = filters.stream as ActiveLogStream;
+  if (categories.length > 0) input.categories = categories;
+  if (search) input.search = search;
+  if (filters.dateRange) input.dateRange = filters.dateRange as Exclude<LogDateRange, ''>;
+
+  return input;
 }
 
 export function useLogTail(): UseLogTailResult {
@@ -71,45 +112,44 @@ export function useLogTail(): UseLogTailResult {
   const [dateRange, setDateRange] = useState<LogDateRange>('');
   const exportMutation = trpc.logs.export.useMutation();
 
-  const selectedCategories =
-    categories.size > 0
-      ? (Array.from(categories).filter((c) => c !== '') as (
-          | 'AUTH'
-          | 'ORDER'
-          | 'FSM'
-          | 'WS'
-          | 'SYS'
-          | 'BALANCE'
-          | 'CANCEL'
-        )[])
-      : undefined;
+  const deferredLevel = useDeferredValue(level);
+  const deferredStream = useDeferredValue(stream);
+  const deferredCategories = useDeferredValue(categories);
+  const deferredSearch = useDeferredValue(search);
+  const deferredDateRange = useDeferredValue(dateRange);
+  const isFilterSettling =
+    level !== deferredLevel ||
+    stream !== deferredStream ||
+    categories !== deferredCategories ||
+    search !== deferredSearch ||
+    dateRange !== deferredDateRange;
 
-  const tail = trpc.logs.tail.useQuery(
-    {
-      limit: LOG_TAIL_LIMIT,
-      ...(level ? { level: level as 'INFO' | 'WARN' | 'ERROR' } : {}),
-      ...(stream ? { stream: stream as 'normal' | 'error' } : {}),
-      ...(selectedCategories ? { categories: selectedCategories } : {}),
-      ...(search ? { search } : {}),
-      ...(dateRange
-        ? { dateRange: dateRange as 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' }
-        : {}),
-    },
-    {
-      refetchInterval: 2000,
-    },
+  const deferredFilters = useMemo<LogQueryFilters>(
+    () => ({
+      categories: deferredCategories,
+      dateRange: deferredDateRange,
+      level: deferredLevel,
+      search: deferredSearch,
+      stream: deferredStream,
+    }),
+    [deferredCategories, deferredDateRange, deferredLevel, deferredSearch, deferredStream],
   );
+
+  const tailInput = useMemo(
+    () => buildLogQueryInput(deferredFilters, LOG_TAIL_LIMIT),
+    [deferredFilters],
+  );
+  const exportInput = useMemo(() => buildLogQueryInput(deferredFilters), [deferredFilters]);
+
+  const tail = trpc.logs.tail.useQuery(tailInput, {
+    placeholderData: (previousData) => previousData,
+    refetchInterval: 2000,
+  });
 
   const exportLogs = async (format: LogExportFormat): Promise<LogExportResult> =>
     exportMutation.mutateAsync({
       format,
-      ...(level ? { level: level as 'INFO' | 'WARN' | 'ERROR' } : {}),
-      ...(stream ? { stream: stream as 'normal' | 'error' } : {}),
-      ...(selectedCategories ? { categories: selectedCategories } : {}),
-      ...(search ? { search } : {}),
-      ...(dateRange
-        ? { dateRange: dateRange as 'today' | 'month' | 'lastMonth' | 'last3Months' | 'year' }
-        : {}),
+      ...exportInput,
     });
 
   return {
@@ -134,6 +174,9 @@ export function useLogTail(): UseLogTailResult {
     status: {
       error: tail.error ? { message: tail.error.message } : null,
       exportPending: exportMutation.isPending,
+      isFetching: tail.isFetching,
+      isFilterSettling,
+      isPlaceholderData: tail.isPlaceholderData,
       isPending: tail.isPending,
     },
   };
