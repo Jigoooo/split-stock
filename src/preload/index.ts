@@ -92,6 +92,22 @@ contextBridge.exposeInMainWorld('appShell', {
   setAlwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('appShell:setAlwaysOnTop', on),
   fitContentHeight: (height: number): Promise<void> =>
     ipcRenderer.invoke('appShell:fitContentHeight', height),
+  markPopoutShellReady: (route: string): void => {
+    ipcRenderer.send('appShell:popout-shell-ready', route);
+  },
+  onPopoutActivated: (listener: (route: string, sequence: number) => void): (() => void) => {
+    const handler = (_: unknown, route: string, sequence: number): void =>
+      listener(route, sequence);
+    ipcRenderer.on('appShell:popout-activated', handler);
+    return () => ipcRenderer.off('appShell:popout-activated', handler);
+  },
+  onPopoutVisibilityChanged: (
+    listener: (route: string, visible: boolean) => void,
+  ): (() => void) => {
+    const handler = (_: unknown, route: string, visible: boolean): void => listener(route, visible);
+    ipcRenderer.on('appShell:popout-visibility-changed', handler);
+    return () => ipcRenderer.off('appShell:popout-visibility-changed', handler);
+  },
   markRouteReady: (route: string): void => {
     ipcRenderer.send('appShell:route-ready', route);
   },
@@ -121,5 +137,8 @@ export type AppShellBridge = {
   ) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;
   fitContentHeight: (height: number) => Promise<void>;
+  markPopoutShellReady?: (route: string) => void;
+  onPopoutActivated?: (listener: (route: string, sequence: number) => void) => () => void;
+  onPopoutVisibilityChanged?: (listener: (route: string, visible: boolean) => void) => () => void;
   markRouteReady?: (route: string) => void;
 };

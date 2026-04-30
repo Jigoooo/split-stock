@@ -1,4 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { usePopoutVisibility } from '@renderer/shared/lib/popout-window';
 import { useEffect, useEffectEvent, useMemo } from 'react';
 import type { LiveTick } from './use-live-tick';
 
@@ -7,22 +8,24 @@ type Topic = 'tick';
 export function useLiveTicks(pdnos: string[], pollMs = 1000): Record<string, LiveTick | null> {
   const envQuery = trpc.auth.getEnv.useQuery();
   const env = envQuery.data?.env ?? null;
+  const popoutVisible = usePopoutVisibility();
   const uniquePdnos = useMemo(
     () => Array.from(new Set(pdnos.filter((pdno) => /^\d{6}$/.test(pdno)))).sort(),
     [pdnos],
   );
-  useWatchMany(uniquePdnos, 'tick');
+  useWatchMany(uniquePdnos, 'tick', popoutVisible);
   const subscription = trpc.realtime.onTicks.useSubscription(
     { pdnos: uniquePdnos },
     {
-      enabled: env !== null && uniquePdnos.length > 0,
+      enabled: env !== null && popoutVisible && uniquePdnos.length > 0,
     },
   );
   const fallbackQuery = trpc.realtime.getLatestTicks.useQuery(
     { pdnos: uniquePdnos },
     {
-      enabled: env !== null && uniquePdnos.length > 0 && subscription.status === 'error',
-      refetchInterval: pollMs,
+      enabled:
+        env !== null && popoutVisible && uniquePdnos.length > 0 && subscription.status === 'error',
+      refetchInterval: popoutVisible ? pollMs : false,
     },
   );
   const ticks = (subscription.data ?? fallbackQuery.data?.ticks) as
@@ -38,7 +41,7 @@ export function useLiveTicks(pdnos: string[], pollMs = 1000): Record<string, Liv
   );
 }
 
-function useWatchMany(pdnos: string[], topic: Topic): void {
+function useWatchMany(pdnos: string[], topic: Topic, enabled: boolean): void {
   const envQuery = trpc.auth.getEnv.useQuery();
   const env = envQuery.data?.env ?? null;
   const watchMutation = trpc.realtime.watch.useMutation();
@@ -55,10 +58,10 @@ function useWatchMany(pdnos: string[], topic: Topic): void {
   });
 
   useEffect(() => {
-    if (env === null || pdnos.length === 0) return;
+    if (env === null || !enabled || pdnos.length === 0) return;
     watchMany(pdnos, topic);
     return () => {
       unwatchMany(pdnos, topic);
     };
-  }, [pdnos, topic, env]);
+  }, [pdnos, topic, env, enabled]);
 }

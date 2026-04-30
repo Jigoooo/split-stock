@@ -104,7 +104,7 @@ export function buildLogQueryInput(filters: LogQueryFilters, limit?: number): Lo
   return input;
 }
 
-export function useLogTail(): UseLogTailResult {
+export function useLogTail(options: { pollingEnabled?: boolean } = {}): UseLogTailResult {
   const [level, setLevel] = useState<LogLevel>('');
   const [stream, setStream] = useState<LogStream>('');
   const [categories, setCategories] = useState<Set<LogCategory>>(new Set());
@@ -143,7 +143,7 @@ export function useLogTail(): UseLogTailResult {
 
   const tail = trpc.logs.tail.useQuery(tailInput, {
     placeholderData: (previousData) => previousData,
-    refetchInterval: 2000,
+    refetchInterval: options.pollingEnabled === false ? false : 2000,
   });
 
   const exportLogs = async (format: LogExportFormat): Promise<LogExportResult> =>

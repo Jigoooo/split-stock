@@ -1,5 +1,6 @@
 import { type LiveTick, useLiveTick } from '@renderer/entities/realtime';
 import { trpc } from '@renderer/shared/api/trpc';
+import { usePopoutVisibility } from '@renderer/shared/lib/popout-window';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 export type { LiveTick } from '@renderer/entities/realtime';
@@ -28,18 +29,19 @@ export interface LiveOrderbook {
 export function useLiveOrderbook(pdno: string, pollMs = 500): LiveOrderbook | null {
   const envQuery = trpc.auth.getEnv.useQuery();
   const env = envQuery.data?.env ?? null;
-  useWatch(pdno, 'orderbook');
+  const popoutVisible = usePopoutVisibility();
+  useWatch(pdno, 'orderbook', popoutVisible);
   const subscription = trpc.realtime.onOrderbook.useSubscription(
     { pdno },
     {
-      enabled: env !== null,
+      enabled: env !== null && popoutVisible,
     },
   );
   const fallbackWs = trpc.realtime.getLatestOrderbook.useQuery(
     { pdno },
     {
-      enabled: env !== null && subscription.status === 'error',
-      refetchInterval: pollMs,
+      enabled: env !== null && popoutVisible && subscription.status === 'error',
+      refetchInterval: popoutVisible ? pollMs : false,
     },
   );
   const wsData = (subscription.data ?? fallbackWs.data?.orderbook ?? null) as LiveOrderbook | null;
@@ -47,8 +49,8 @@ export function useLiveOrderbook(pdno: string, pollMs = 500): LiveOrderbook | nu
   const rest = trpc.market.getOrderbook.useQuery(
     { code: pdno },
     {
-      enabled: env !== null && wsData === null,
-      refetchInterval: env !== null && wsData === null ? 5000 : false,
+      enabled: env !== null && popoutVisible && wsData === null,
+      refetchInterval: env !== null && popoutVisible && wsData === null ? 5000 : false,
       staleTime: 3000,
     },
   );
@@ -66,6 +68,7 @@ export function useLiveOrderbook(pdno: string, pollMs = 500): LiveOrderbook | nu
 export function useFocusedSubscription(pdno: string): void {
   const envQuery = trpc.auth.getEnv.useQuery();
   const env = envQuery.data?.env ?? null;
+  const popoutVisible = usePopoutVisibility();
   const focusMutation = trpc.realtime.focus.useMutation();
   const blurMutation = trpc.realtime.blur.useMutation();
   const focus = useEffectEvent((next: string) => {
@@ -76,12 +79,12 @@ export function useFocusedSubscription(pdno: string): void {
   });
 
   useEffect(() => {
-    if (env === null) return;
+    if (env === null || !popoutVisible) return;
     focus(pdno);
     return () => {
       blur(pdno);
     };
-  }, [pdno, env]);
+  }, [pdno, env, popoutVisible]);
 }
 
 /**
@@ -90,7 +93,11 @@ export function useFocusedSubscription(pdno: string): void {
  * 데이터 미수집 상태(start 전 등)는 'UNKNOWN'.
  */
 export function useRoutingMode(pdno: string, pollMs = 2000): WsRoutingMode {
-  const q = trpc.realtime.getRoutingStatus.useQuery({ pdno }, { refetchInterval: pollMs });
+  const popoutVisible = usePopoutVisibility();
+  const q = trpc.realtime.getRoutingStatus.useQuery(
+    { pdno },
+    { refetchInterval: popoutVisible ? pollMs : false },
+  );
   const sub = q.data?.subscriptions.find((s) => s.pdno === pdno);
   if (!sub) return 'UNKNOWN';
   return sub.isWS ? 'WS' : 'POLLING';
@@ -124,7 +131,7 @@ export function useTradeFeed(pdno: string, capacity = 200): LiveTick[] {
  * (context.ts `setCurrentEnv` → 새 RealtimeService, 이전 watches 는 소실), 새 인스턴스에
  * watch 를 다시 보내야 호가/체결 피드가 재개된다.
  */
-function useWatch(pdno: string, topic: Topic): void {
+function useWatch(pdno: string, topic: Topic, enabled: boolean): void {
   const envQuery = trpc.auth.getEnv.useQuery();
   const env = envQuery.data?.env ?? null;
   const watchMutation = trpc.realtime.watch.useMutation();
@@ -137,10 +144,10 @@ function useWatch(pdno: string, topic: Topic): void {
   });
 
   useEffect(() => {
-    if (env === null) return;
+    if (env === null || !enabled) return;
     watch(pdno, topic);
     return () => {
       unwatch(pdno, topic);
     };
-  }, [pdno, topic, env]);
+  }, [pdno, topic, env, enabled]);
 }

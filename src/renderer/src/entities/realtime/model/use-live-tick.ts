@@ -1,4 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { usePopoutVisibility } from '@renderer/shared/lib/popout-window';
 import { useEffect, useEffectEvent } from 'react';
 
 type Topic = 'tick';
@@ -22,24 +23,25 @@ export interface LiveTick {
 export function useLiveTick(pdno: string, pollMs = 1000): LiveTick | null {
   const envQuery = trpc.auth.getEnv.useQuery();
   const env = envQuery.data?.env ?? null;
-  useWatch(pdno, 'tick');
+  const popoutVisible = usePopoutVisibility();
+  useWatch(pdno, 'tick', popoutVisible);
   const subscription = trpc.realtime.onTick.useSubscription(
     { pdno },
     {
-      enabled: env !== null,
+      enabled: env !== null && popoutVisible,
     },
   );
   const fallbackQuery = trpc.realtime.getLatestTick.useQuery(
     { pdno },
     {
-      enabled: env !== null && subscription.status === 'error',
-      refetchInterval: pollMs,
+      enabled: env !== null && popoutVisible && subscription.status === 'error',
+      refetchInterval: popoutVisible ? pollMs : false,
     },
   );
   return (subscription.data ?? fallbackQuery.data?.tick ?? null) as LiveTick | null;
 }
 
-function useWatch(pdno: string, topic: Topic): void {
+function useWatch(pdno: string, topic: Topic, enabled: boolean): void {
   const envQuery = trpc.auth.getEnv.useQuery();
   const env = envQuery.data?.env ?? null;
   const watchMutation = trpc.realtime.watch.useMutation();
@@ -52,10 +54,10 @@ function useWatch(pdno: string, topic: Topic): void {
   });
 
   useEffect(() => {
-    if (env === null) return;
+    if (env === null || !enabled) return;
     watch(pdno, topic);
     return () => {
       unwatch(pdno, topic);
     };
-  }, [pdno, topic, env]);
+  }, [pdno, topic, env, enabled]);
 }

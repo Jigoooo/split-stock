@@ -1,5 +1,6 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { usePopoutVisibility } from '@renderer/shared/lib/popout-window';
 import {
   Button,
   DateInput,
@@ -29,6 +30,7 @@ function downloadCsv(csv: string, filename: string): void {
 }
 
 export const ReportsPage = (): ReactElement => {
+  const popoutVisible = usePopoutVisibility();
   const {
     exportCsv,
     fromStr,
@@ -61,7 +63,7 @@ export const ReportsPage = (): ReactElement => {
   }, []);
   const opsQuery = trpc.reports.getDailyOpsSummary.useQuery({ date: today });
   const realtimeStatsQuery = trpc.monitoring.getRealtimeStats.useQuery(undefined, {
-    refetchInterval: 5_000,
+    refetchInterval: popoutVisible ? 5_000 : false,
   });
 
   const onExport = async (kind: 'trades' | 'lots' | 'events'): Promise<void> => {

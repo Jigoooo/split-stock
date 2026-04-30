@@ -12,7 +12,10 @@ export interface CreateWindowOpts {
 }
 
 export type WindowKind = 'main' | 'popout';
-export type WindowShowPolicy = 'ready-to-show' | 'immediate-with-background';
+export type WindowShowPolicy =
+  | 'ready-to-show'
+  | 'immediate-with-background'
+  | 'renderer-shell-ready';
 
 export interface ConstructedMainWindow {
   window: BrowserWindowType;

@@ -4,6 +4,7 @@ import { CredentialsReentryBanner } from '@renderer/features/backup-restore';
 import { SwitchEnvDialog } from '@renderer/features/switch-env';
 import { LoginPage } from '@renderer/pages/login';
 import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
+import { getPopoutLabel } from '@shared/popout';
 import { Navigate, Outlet } from '@tanstack/react-router';
 import { LoaderCircle } from 'lucide-react';
 import { lazy, type ReactElement, type ReactNode, Suspense, useEffect } from 'react';
@@ -20,6 +21,7 @@ const PanelWorkspace = lazy(() =>
   import('./ui/panel-workspace').then((m) => ({ default: m.PanelWorkspace })),
 );
 const PopoutPage = lazy(() => import('./ui/popout-page').then((m) => ({ default: m.PopoutPage })));
+const PREWARM_POPOUT_ROUTES: PopoutRoute[] = ['stock-picker', 'add-watch-order', 'trade'];
 
 interface AppShellFrameProps {
   children: ReactNode;
@@ -52,6 +54,65 @@ const ShellLoading = ({
     </div>
   </section>
 );
+
+export const PopoutBootShell = ({ route }: { route: PopoutRoute }): ReactElement => {
+  const label = getPopoutLabel(route);
+  return (
+    <section
+      className="popout-boot-shell"
+      role="status"
+      aria-live="polite"
+      aria-label={`${label} 로드 중`}
+    >
+      <div className="shell-loading__surface">
+        <div className="shell-loading__icon-ring" aria-hidden>
+          <LoaderCircle className="shell-loading__icon" size={26} strokeWidth={2.2} />
+        </div>
+        <div className="shell-loading__copy">
+          <div className="shell-loading__title">{label}</div>
+          <div className="shell-loading__detail">화면 구성을 불러오고 있습니다.</div>
+        </div>
+        <div className="shell-loading__progress" aria-hidden>
+          <span />
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const PopoutShellReadyMarker = ({ route }: { route: PopoutRoute }): null => {
+  useEffect(() => {
+    window.appShell?.markPopoutShellReady?.(route);
+  }, [route]);
+  return null;
+};
+
+function schedulePopoutPrewarm(): () => void {
+  let canceled = false;
+  const run = (): void => {
+    if (canceled) return;
+    void import('./ui/popout-page').then((module) => {
+      if (canceled) return;
+      for (const route of PREWARM_POPOUT_ROUTES) {
+        module.prewarmPopoutRoute(route);
+      }
+    });
+  };
+
+  if ('requestIdleCallback' in window) {
+    const idleId = window.requestIdleCallback(run, { timeout: 4000 });
+    return () => {
+      canceled = true;
+      window.cancelIdleCallback(idleId);
+    };
+  }
+
+  const timeoutId = globalThis.setTimeout(run, 1500);
+  return () => {
+    canceled = true;
+    globalThis.clearTimeout(timeoutId);
+  };
+}
 
 const FullScreenShellLoading = ({
   detail,
@@ -164,6 +225,11 @@ export const MainRoutePage = (): ReactElement => {
     window.appShell?.markRouteReady?.('main');
   }, []);
 
+  useEffect(() => {
+    if (shell.isInitializing || !shell.env) return;
+    return schedulePopoutPrewarm();
+  }, [shell.env, shell.isInitializing]);
+
   if (shell.isInitializing) {
     return <FullScreenShellLoading shell={shell} popout={popout} />;
   }
@@ -205,10 +271,14 @@ export const PopoutRoutePage = ({ route }: { route: string }): ReactElement => {
   if (!isPopoutRoute(route)) {
     return <Navigate to="/" replace />;
   }
+  const popoutRoute = route as PopoutRoute;
 
   return (
-    <Suspense fallback={null}>
-      <PopoutPage route={route as PopoutRoute} popout={popout} />
-    </Suspense>
+    <>
+      <PopoutShellReadyMarker route={popoutRoute} />
+      <Suspense fallback={<PopoutBootShell route={popoutRoute} />}>
+        <PopoutPage route={popoutRoute} popout={popout} />
+      </Suspense>
+    </>
   );
 };

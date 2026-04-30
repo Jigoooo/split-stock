@@ -5,6 +5,7 @@ import {
 } from '@renderer/features/trade-notifications';
 import { createQueryClient } from '@renderer/shared/api/query-client';
 import { trpc } from '@renderer/shared/api/trpc';
+import { usePopoutVisibility } from '@renderer/shared/lib/popout-window';
 import { DialogProvider } from '@renderer/shared/ui';
 import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import type { PropsWithChildren, ReactElement } from 'react';
@@ -36,14 +37,35 @@ export type AppWindowKind = 'main' | 'popout';
  */
 const SettingsSyncRuntime = (): null => {
   const qc = useQueryClient();
+  const visible = usePopoutVisibility();
+  const visibleRef = useRef(visible);
+  const pendingHiddenInvalidationRef = useRef(false);
+
+  useEffect(() => {
+    visibleRef.current = visible;
+  }, [visible]);
 
   useEffect(() => {
     const shell = window.appShell;
     if (!shell?.onSettingsChanged) return;
     return shell.onSettingsChanged(() => {
+      if (!visibleRef.current) {
+        pendingHiddenInvalidationRef.current = true;
+        return;
+      }
       // refetchType:'all' 로 background(focus 안 된 부모창)의 inactive query 도 즉시 refetch.
       // default 'active' 는 focus 시까지 대기 → popout 에서 변경 후 부모창 focus 전까지 동기화 지연.
       void qc.invalidateQueries({ refetchType: 'all' });
+    });
+  }, [qc]);
+
+  useEffect(() => {
+    const shell = window.appShell;
+    if (!shell?.onPopoutActivated) return;
+    return shell.onPopoutActivated(() => {
+      if (!pendingHiddenInvalidationRef.current) return;
+      pendingHiddenInvalidationRef.current = false;
+      void qc.invalidateQueries({ refetchType: 'active' });
     });
   }, [qc]);
 

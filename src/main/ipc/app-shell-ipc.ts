@@ -1,6 +1,6 @@
 import { POPOUT_ROUTES, type PopoutRoute } from '@shared/popout';
 import type { BrowserWindow as BrowserWindowType } from 'electron';
-import { BrowserWindow, ipcMain } from '../electron-runtime';
+import { app, BrowserWindow, ipcMain } from '../electron-runtime';
 import { markStartup } from '../perf/startup-perf';
 import {
   constructMainWindow,
@@ -10,6 +10,20 @@ import {
 
 interface TrpcWindowHandler {
   attachWindow: (window: BrowserWindowType) => void;
+}
+
+const HIDDEN_POPOUT_LIMIT = 2;
+const HIDDEN_POPOUT_TTL_MS = 10 * 60 * 1000;
+const POPOUT_SHELL_READY_TIMEOUT_MS = 800;
+
+interface PopoutState {
+  allowDestroy: boolean;
+  hiddenAt: number | null;
+  hideDestroyTimer: NodeJS.Timeout | null;
+  route: PopoutRoute;
+  shellReadyTimer: NodeJS.Timeout | null;
+  visible: boolean;
+  window: BrowserWindowType;
 }
 
 export function broadcastToAllWindows(channel: string, ...args: unknown[]): void {
@@ -37,7 +51,85 @@ export function registerAppShellIpc(input: {
 }): void {
   const { mainWindow, ipcHandler } = input;
   const allowedPopoutRoutes = new Set(POPOUT_ROUTES);
-  const popouts = new Map<PopoutRoute, BrowserWindowType>();
+  const popouts = new Map<PopoutRoute, PopoutState>();
+
+  const clearShellReadyTimer = (state: PopoutState): void => {
+    if (state.shellReadyTimer === null) return;
+    clearTimeout(state.shellReadyTimer);
+    state.shellReadyTimer = null;
+  };
+
+  const clearHiddenDestroyTimer = (state: PopoutState): void => {
+    if (state.hideDestroyTimer === null) return;
+    clearTimeout(state.hideDestroyTimer);
+    state.hideDestroyTimer = null;
+  };
+
+  const destroyPopout = (state: PopoutState, reason: string): void => {
+    clearShellReadyTimer(state);
+    clearHiddenDestroyTimer(state);
+    state.allowDestroy = true;
+    popouts.delete(state.route);
+    if (!state.window.isDestroyed()) {
+      markStartup('popout.destroy', { route: state.route, id: state.window.id, reason });
+      state.window.destroy();
+    }
+  };
+
+  const enforceHiddenCacheLimit = (): void => {
+    const hidden = Array.from(popouts.values())
+      .filter((state) => !state.visible && state.hiddenAt !== null && !state.window.isDestroyed())
+      .sort((a, b) => (a.hiddenAt ?? 0) - (b.hiddenAt ?? 0));
+    while (hidden.length > HIDDEN_POPOUT_LIMIT) {
+      const oldest = hidden.shift();
+      if (!oldest) return;
+      destroyPopout(oldest, 'hidden-cache-limit');
+    }
+  };
+
+  const showPopout = (state: PopoutState, reason: string): void => {
+    if (state.window.isDestroyed()) return;
+    clearShellReadyTimer(state);
+    clearHiddenDestroyTimer(state);
+    state.visible = true;
+    state.hiddenAt = null;
+    if (state.window.isMinimized()) state.window.restore();
+    state.window.show();
+    state.window.focus();
+    state.window.webContents.send('appShell:popout-visibility-changed', state.route, true);
+    state.window.webContents.send('appShell:popout-activated', state.route, Date.now());
+    markStartup('window.show', {
+      kind: 'popout',
+      route: state.route,
+      id: state.window.id,
+      showPolicy: 'renderer-shell-ready',
+      reason,
+    });
+  };
+
+  const hidePopout = (state: PopoutState, reason: string): void => {
+    if (state.window.isDestroyed() || !state.visible) return;
+    clearShellReadyTimer(state);
+    state.visible = false;
+    state.hiddenAt = Date.now();
+    state.window.webContents.send('appShell:popout-visibility-changed', state.route, false);
+    state.window.hide();
+    broadcastToAllWindows('appShell:popout-closed', state.route);
+    markStartup('popout.hide', { route: state.route, id: state.window.id, reason });
+    clearHiddenDestroyTimer(state);
+    state.hideDestroyTimer = setTimeout(() => {
+      destroyPopout(state, 'hidden-cache-ttl');
+    }, HIDDEN_POPOUT_TTL_MS);
+    enforceHiddenCacheLimit();
+  };
+
+  app.once('before-quit', () => {
+    for (const state of popouts.values()) {
+      state.allowDestroy = true;
+      clearShellReadyTimer(state);
+      clearHiddenDestroyTimer(state);
+    }
+  });
 
   // 팝아웃 창: 메인 화면에서 특정 페이지(logs, reports, settings 등)를 별도 창으로 띄움.
   // route별 1개 창만 유지 — 이미 열려 있으면 포커스만 이동, 닫히면 렌더러에 통지해 placeholder 원복.
@@ -47,11 +139,10 @@ export function registerAppShellIpc(input: {
     }
     const popoutRoute = route as PopoutRoute;
     markStartup('popout.request', { route: popoutRoute });
-    const existing = popouts.get(popoutRoute);
-    if (existing && !existing.isDestroyed()) {
-      if (existing.isMinimized()) existing.restore();
-      existing.focus();
-      markStartup('popout.focus-existing', { route: popoutRoute, id: existing.id });
+    const existingState = popouts.get(popoutRoute);
+    if (existingState && !existingState.window.isDestroyed()) {
+      showPopout(existingState, existingState.visible ? 'focus-existing' : 'show-hidden');
+      markStartup('popout.focus-existing', { route: popoutRoute, id: existingState.window.id });
       return { ok: true };
     }
     // 팝아웃은 호출한 창(부모)이 있는 모니터에 열리도록 parent 전달.
@@ -59,21 +150,45 @@ export function registerAppShellIpc(input: {
     const popoutRef = constructMainWindow({
       popoutRoute,
       parent: sender,
-      showPolicy: 'immediate-with-background',
+      showPolicy: 'renderer-shell-ready',
     });
     const popout = popoutRef.window;
-    popouts.set(popoutRoute, popout);
+    const state: PopoutState = {
+      allowDestroy: false,
+      hiddenAt: null,
+      hideDestroyTimer: null,
+      route: popoutRoute,
+      shellReadyTimer: null,
+      visible: false,
+      window: popout,
+    };
+    popouts.set(popoutRoute, state);
     ipcHandler.attachWindow(popout);
     markStartup('window.trpc-attached', {
       kind: popoutRef.kind,
       route: popoutRoute,
       id: popout.id,
     });
+    popout.on('close', (closeEvent) => {
+      if (state.allowDestroy) return;
+      closeEvent.preventDefault();
+      hidePopout(state, 'user-close');
+    });
     popout.on('closed', () => {
       popouts.delete(popoutRoute);
-      broadcastToAllWindows('appShell:popout-closed', popoutRoute);
+      clearShellReadyTimer(state);
+      clearHiddenDestroyTimer(state);
+      if (state.visible) {
+        broadcastToAllWindows('appShell:popout-closed', popoutRoute);
+      }
+    });
+    popout.webContents.on('render-process-gone', () => {
+      destroyPopout(state, 'render-process-gone');
     });
     loadMainWindow(popoutRef);
+    state.shellReadyTimer = setTimeout(() => {
+      showPopout(state, 'shell-ready-timeout');
+    }, POPOUT_SHELL_READY_TIMEOUT_MS);
     return { ok: true };
   });
 
@@ -120,6 +235,19 @@ export function registerAppShellIpc(input: {
     const target = BrowserWindow.fromWebContents(event.sender);
     if (!target || target.isDestroyed()) return;
     fitWindowHeightToContent(target, height);
+  });
+
+  ipcMain.on('appShell:popout-shell-ready', (event, route: unknown) => {
+    if (typeof route !== 'string' || !allowedPopoutRoutes.has(route as PopoutRoute)) return;
+    const state = popouts.get(route as PopoutRoute);
+    if (!state || state.window.webContents.id !== event.sender.id) return;
+    markStartup('renderer.popout-shell-ready', {
+      id: state.window.id,
+      route,
+    });
+    if (!state.visible) {
+      showPopout(state, 'renderer-shell-ready');
+    }
   });
 
   ipcMain.on('appShell:route-ready', (event, route: unknown) => {

@@ -1,4 +1,5 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { usePopoutVisibility } from '@renderer/shared/lib/popout-window';
 import { type ReactElement, useEffect, useState } from 'react';
 import { formatLogTs } from '../config/log-table';
 import { buildLogPayloadView } from '../lib/log-payload';
@@ -9,7 +10,8 @@ import { LogsTable } from './logs-table';
 import { LogsToolbar } from './logs-toolbar';
 
 export const LogsPage = (): ReactElement => {
-  const { actions, data, filters, status } = useLogTail();
+  const popoutVisible = usePopoutVisibility();
+  const { actions, data, filters, status } = useLogTail({ pollingEnabled: popoutVisible });
   const [selectedId, setSelectedId] = useState<LogEntry['id'] | null>(null);
   const [actionMessage, setActionMessage] = useState('');
 
