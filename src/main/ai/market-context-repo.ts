@@ -8,6 +8,10 @@ export interface CachedKrxDailyTrade extends KrxDailyTradeRow {
   fetchedAt: Date;
 }
 
+export interface CachedKrxBaseInfo extends KrxBaseInfoRow {
+  fetchedAt: Date;
+}
+
 export interface CachedEcosSeriesPoint extends EcosSeriesPoint {
   fetchedAt: Date;
 }
@@ -180,6 +184,39 @@ export class MarketContextRepo {
         volume: row.volume ?? null,
         tradeValue: row.tradeValue ?? null,
         marketCap: row.marketCap ?? null,
+        listedShares: row.listedShares ?? null,
+        fetchedAt: row.fetchedAt,
+      });
+    }
+    return out;
+  }
+
+  getLatestKrxBaseInfoByMarkets(markets: ReadonlyArray<KrxMarket>): Map<string, CachedKrxBaseInfo> {
+    if (markets.length === 0) return new Map();
+    const rows = this.db
+      .select()
+      .from(krxBaseInfoCache)
+      .where(inArray(krxBaseInfoCache.market, [...markets]))
+      .orderBy(desc(krxBaseInfoCache.date))
+      .all();
+    const out = new Map<string, CachedKrxBaseInfo>();
+    for (const row of rows) {
+      const key = `${row.market}:${row.pdno}`;
+      if (out.has(key)) continue;
+      out.set(key, {
+        market: row.market as KrxMarket,
+        date: row.date,
+        isin: row.isin ?? null,
+        pdno: row.pdno,
+        name: row.name,
+        shortName: row.shortName ?? null,
+        englishName: row.englishName ?? null,
+        listedAt: row.listedAt ?? null,
+        marketName: row.marketName ?? null,
+        securityGroup: row.securityGroup ?? null,
+        section: row.section ?? null,
+        stockKind: row.stockKind ?? null,
+        parValue: row.parValue ?? null,
         listedShares: row.listedShares ?? null,
         fetchedAt: row.fetchedAt,
       });

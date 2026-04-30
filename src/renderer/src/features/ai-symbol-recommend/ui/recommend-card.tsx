@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import { ExternalLink, Minus, Newspaper, Plus, Target } from 'lucide-react';
 import type { ReactElement } from 'react';
 import type { RecommendedItem, RecommendTier } from '../model/use-symbol-recommendations';
@@ -84,12 +83,10 @@ export const RecommendCard = ({
         overflow: 'hidden',
       }}
     >
-      <motion.button
+      <button
         type="button"
         onClick={() => onSelect?.(item.pdno)}
         aria-pressed={selected}
-        whileHover={{ y: -1 }}
-        transition={{ duration: 0.15 }}
         style={{
           width: '100%',
           textAlign: 'left',
@@ -175,7 +172,7 @@ export const RecommendCard = ({
         <div style={{ fontSize: '1.15rem', color: 'var(--fg)', lineHeight: 1.5 }}>
           {item.summary}
         </div>
-      </motion.button>
+      </button>
     </div>
   );
 };

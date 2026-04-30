@@ -217,7 +217,7 @@ export const aiRouter = router({
     .input(
       z
         .object({
-          topN: z.number().int().min(1).max(10).optional(),
+          topN: z.number().int().min(1).max(20).optional(),
           extraPdnos: z
             .array(z.string().regex(/^\d{6}$/))
             .max(10)

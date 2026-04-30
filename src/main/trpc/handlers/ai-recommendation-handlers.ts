@@ -239,7 +239,7 @@ async function safeOptionalContext<T>(
   } catch (cause) {
     logger.log({
       level: 'WARN',
-      category: 'SYS',
+      category: 'AI',
       message: 'ai.optional-context.failed',
       payload: {
         source,

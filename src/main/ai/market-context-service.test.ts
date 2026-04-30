@@ -282,4 +282,150 @@ describe('MarketContextService', () => {
     expect(snapshot.status.krx).toMatchObject({ isAvailable: true, isStale: false });
     expect(snapshot.krxByPdno.get('005930')?.date).toBe('2026-04-27');
   });
+
+  it('자동발굴 universe refresh 는 일별매매정보와 기준정보 캐시를 함께 반환한다', async () => {
+    const deps = fresh();
+    const getDailyTradeInfo = vi.fn(async () => [
+      {
+        market: 'KOSPI' as const,
+        date: '2026-04-28',
+        pdno: '005930',
+        name: '삼성전자',
+        close: 72100,
+        change: -300,
+        changeRate: -0.41,
+        open: 72500,
+        high: 72700,
+        low: 71800,
+        volume: 12345678,
+        tradeValue: 890000000000,
+        marketCap: 430000000000000,
+        listedShares: 5969782550,
+      },
+    ]);
+    const getBaseInfo = vi.fn(async () => [
+      {
+        market: 'KOSPI' as const,
+        date: '2026-04-28',
+        isin: 'KR7005930003',
+        pdno: '005930',
+        name: '삼성전자',
+        shortName: '삼성전자',
+        englishName: 'SamsungElec',
+        listedAt: '1975-06-11',
+        marketName: 'KOSPI',
+        securityGroup: '주권',
+        section: '전기전자',
+        stockKind: '보통주',
+        parValue: '100',
+        listedShares: 5969782550,
+      },
+    ]);
+    const service = new MarketContextService({
+      ...deps,
+      krxClient: {
+        isAvailable: () => true,
+        getDailyTradeInfo,
+        getBaseInfo,
+      } as unknown as KrxClient,
+      ecosClient: { isAvailable: () => false } as unknown as EcosClient,
+      logger: logger(),
+      now,
+    });
+
+    const snapshot = await service.getKrxUniverseForAutoDiscovery(['KOSPI']);
+
+    expect(snapshot.rows).toHaveLength(1);
+    expect(snapshot.baseInfoByKey.get('KOSPI:005930')).toMatchObject({
+      pdno: '005930',
+      stockKind: '보통주',
+      securityGroup: '주권',
+    });
+    expect(getDailyTradeInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ market: 'KOSPI', basDd: '20260428' }),
+    );
+    expect(getBaseInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ market: 'KOSPI', basDd: '20260428' }),
+    );
+  });
+
+  it('자동발굴 universe 는 개별 종목 캐시 1건을 full universe cache 로 오해하지 않는다', async () => {
+    const deps = fresh();
+    deps.settingsRepo.set('market_context.krx.last_success_at', String(now().getTime()));
+    deps.repo.upsertKrxDailyTrade([
+      {
+        market: 'KOSPI',
+        date: '2026-04-27',
+        pdno: '005930',
+        name: '삼성전자',
+        close: 72000,
+        change: null,
+        changeRate: null,
+        open: null,
+        high: null,
+        low: null,
+        volume: 1000000,
+        tradeValue: 100000000000,
+        marketCap: 420000000000000,
+        listedShares: null,
+      },
+    ]);
+    const getDailyTradeInfo = vi.fn(async () => [
+      {
+        market: 'KOSPI' as const,
+        date: '2026-04-28',
+        pdno: '005930',
+        name: '삼성전자',
+        close: 72100,
+        change: null,
+        changeRate: null,
+        open: null,
+        high: null,
+        low: null,
+        volume: 1000000,
+        tradeValue: 100000000000,
+        marketCap: 430000000000000,
+        listedShares: null,
+      },
+      {
+        market: 'KOSPI' as const,
+        date: '2026-04-28',
+        pdno: '000660',
+        name: 'SK하이닉스',
+        close: 180000,
+        change: null,
+        changeRate: null,
+        open: null,
+        high: null,
+        low: null,
+        volume: 900000,
+        tradeValue: 160000000000,
+        marketCap: 130000000000000,
+        listedShares: null,
+      },
+    ]);
+    const log = vi.fn();
+    const service = new MarketContextService({
+      ...deps,
+      krxClient: {
+        isAvailable: () => true,
+        getDailyTradeInfo,
+        getBaseInfo: vi.fn(async () => []),
+      } as unknown as KrxClient,
+      ecosClient: { isAvailable: () => false } as unknown as EcosClient,
+      logger: { log },
+      now,
+    });
+
+    const snapshot = await service.getKrxUniverseForAutoDiscovery(['KOSPI']);
+
+    expect(getDailyTradeInfo).toHaveBeenCalled();
+    expect(snapshot.rows.map((row) => row.pdno).sort()).toEqual(['000660', '005930']);
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'market-context.krx.universe-cache-insufficient-refreshing',
+        payload: expect.objectContaining({ counts: { KOSPI: 1 } }),
+      }),
+    );
+  });
 });

@@ -189,6 +189,34 @@ export interface RecommendationApiDiagnostic {
   reason?: string | null;
 }
 
+export interface RecommendationUniverseQuality {
+  raw: number;
+  eligible: number;
+  excludedByMarket: number;
+  excludedByCode: number;
+  excludedByPrice: number;
+  excludedByVolume: number;
+  excludedByTradeValue: number;
+  excludedByBaseInfo: number;
+  excludedByAlreadyKnown: number;
+  baseInfoMissing: number;
+}
+
+export interface RecommendationBucketCounts {
+  market: Record<string, number>;
+  marketCap: Record<string, number>;
+  tradeValue: Record<string, number>;
+  composite: Record<string, number>;
+}
+
+export interface RecommendationCandleCoverage {
+  requested: number;
+  fetched: number;
+  failed: number;
+  skipped: boolean;
+  minCount: number;
+}
+
 export interface RecommendationDiscoveryDiagnostics {
   enabled: boolean;
   universeCount: number;
@@ -203,6 +231,9 @@ export interface RecommendationDiscoveryDiagnostics {
   conditionPassCounts: DiscoveryConditionPassCounts;
   tierCounts: DiscoveryTierCounts;
   lowestIncludedScore: number | null;
+  universeQuality?: RecommendationUniverseQuality;
+  bucketCounts?: RecommendationBucketCounts;
+  candleCoverage?: RecommendationCandleCoverage;
   emptyReason: string | null;
   sources: ReadonlyArray<RecommendationApiDiagnostic>;
 }
@@ -416,6 +447,15 @@ export function useSymbolRecommendations() {
         (res as { diagnostics?: RecommendationDiagnostics }).diagnostics ?? EMPTY_DIAGNOSTICS;
       const userInputResults: RecommendedItem[] =
         (res as { userInputResults?: RecommendedItem[] }).userInputResults ?? [];
+      console.info('[ai-symbol-recommend] result', {
+        ranked: res.ranked.length,
+        userInputResults: userInputResults.length,
+        emptyReason: res.emptyReason,
+        rejectedCount: res.rejectedCount,
+        durationMs: res.durationMs,
+        discovery: diagnostics.discovery,
+        sources: diagnostics.sources,
+      });
       cacheRef.current = {
         ranked: res.ranked,
         userInputResults,
@@ -447,6 +487,7 @@ export function useSymbolRecommendations() {
       }));
     },
     onError: (err) => {
+      console.error('[ai-symbol-recommend] failed', { message: err.message });
       activeRequestRef.current = null;
       setView((prev) => ({
         ...prev,
@@ -582,7 +623,7 @@ export function useSymbolRecommendations() {
       error: null,
     }));
     mut.mutate({
-      topN: 8,
+      topN: 12,
       ...(request.extras.length > 0 ? { extraPdnos: request.extras } : {}),
       ...(request.aiOff ? { aiOff: true } : {}),
       includeAutoDiscovery: request.includeAutoDiscovery,

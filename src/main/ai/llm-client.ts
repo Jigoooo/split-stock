@@ -87,7 +87,7 @@ export class LlmClient {
   ): void {
     this.opts.logger.log({
       level: 'INFO',
-      category: 'SYS',
+      category: 'AI',
       message: 'ai.chat.ok',
       payload: {
         provider: req.config.provider,
@@ -105,7 +105,7 @@ export class LlmClient {
   private logFailure<T>(req: ChatRequest<T>, startedAt: number, sanitizedMsg: string): void {
     this.opts.logger.log({
       level: 'ERROR',
-      category: 'SYS',
+      category: 'AI',
       message: 'ai.chat.failed',
       payload: {
         provider: req.config.provider,

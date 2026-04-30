@@ -24,7 +24,7 @@ export interface SuggestSymbolsInput {
   logger: EventLogger;
   /** 후보 풀 cap. 기본 30. */
   poolCap?: number;
-  /** 응답 Top N (recommended 분배). 기본 8. */
+  /** 응답 Top N (recommended 분배). 기본 12. */
   topN?: number;
   /** 사용자가 stock-picker 등으로 추가한 pdno 목록. */
   extraPdnos?: ReadonlyArray<string>;

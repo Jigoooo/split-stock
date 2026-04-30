@@ -40,10 +40,10 @@ export function buildAlgoOnlyResult(
   diagnostics: SuggestSymbolsDiagnostics,
   args: RankedFallbackArgs,
 ): SuggestSymbolsResult {
-  const result = buildFallbackRanked(input.topN ?? 8, args);
+  const result = buildFallbackRanked(input.topN ?? 12, args);
   input.logger.log({
     level: 'INFO',
-    category: 'SYS',
+    category: 'AI',
     message: 'ai.suggest-symbols.algo-only',
     payload: {
       poolSize: args.pool.length,
@@ -126,11 +126,30 @@ export function buildAlgoOnlyRanked(
   topN: number,
   marketContext: MarketContextSnapshot | null,
   factsByPdno: Map<string, RangeCycleFacts>,
+  options: { applyQuota?: boolean } = {},
 ): RankedSymbol[] {
   const ranked = [...pool]
     .map((c) => buildAlgoRankedSymbol(c, algoByPdno, statsByPdno, marketContext, factsByPdno))
     .sort((a, b) => b.score - a.score);
-  return applyTierQuota(ranked).slice(0, topN);
+  return (options.applyQuota === false ? ranked : applyTierQuotaWithFill(ranked, topN)).slice(
+    0,
+    topN,
+  );
+}
+
+function applyTierQuotaWithFill<T extends { pdno: string; tier: Tier; score: number }>(
+  ranked: ReadonlyArray<T>,
+  topN: number,
+): T[] {
+  const out = applyTierQuota(ranked);
+  const seen = new Set(out.map((item) => item.pdno));
+  for (const item of ranked) {
+    if (out.length >= topN) break;
+    if (seen.has(item.pdno)) continue;
+    out.push(item);
+    seen.add(item.pdno);
+  }
+  return out;
 }
 
 function buildAlgoRankedSymbol(

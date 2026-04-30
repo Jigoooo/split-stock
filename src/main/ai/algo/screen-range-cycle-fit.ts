@@ -235,11 +235,11 @@ function classifyCandidate(sig: {
   if (volPass) reasons.push('변동성 적정');
   else riskReasons.push(`변동성 조건 미달(${formatScore(sig.components.volatility)})`);
 
-  const rangePass = sig.components.range !== null && sig.components.range >= 65;
+  const rangePass = sig.components.range !== null && sig.components.range >= 55;
   if (rangePass) reasons.push('박스권 폭 적정');
   else riskReasons.push(`박스권 폭 조건 미달(${formatScore(sig.components.range)})`);
 
-  const liqPass = sig.components.liquidity !== null && sig.components.liquidity >= 60;
+  const liqPass = sig.components.liquidity !== null && sig.components.liquidity >= 45;
   if (liqPass) reasons.push('거래량 충분');
   else riskReasons.push(`유동성 조건 미달(${formatScore(sig.components.liquidity)})`);
 
@@ -297,9 +297,9 @@ function adjustedDiscoveryScore(sig: {
   if (sig.aroon25?.isStrongDownTrend) score -= 12;
   else if (sig.aroon25?.isStrongUpTrend) score -= 8;
 
-  score += conditionPenalty(sig.components.liquidity, 60, 40, 4, 8);
+  score += conditionPenalty(sig.components.liquidity, 45, 30, 3, 6);
   score += conditionPenalty(sig.components.volatility, 60, 40, 3, 6);
-  score += conditionPenalty(sig.components.range, 65, 40, 3, 6);
+  score += conditionPenalty(sig.components.range, 55, 35, 3, 6);
   if ((sig.components.trendNeutrality ?? 0) < 45) score -= 4;
 
   return clampScore(score);

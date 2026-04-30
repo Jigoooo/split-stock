@@ -148,9 +148,16 @@ function DiscoveryStatus({
     discovery.conditionPassCounts,
     discovery.screenedCount,
   );
+  const universeSummary = formatUniverseQuality(discovery.universeQuality);
+  const bucketSummary = formatDiscoveryBuckets(discovery.bucketCounts);
   const titleParts = [
     failed.length > 0 ? `실패 source: ${failed.join(', ')}` : null,
     discovery.basisDate ? `KRX 기준일 ${discovery.basisDate}` : null,
+    universeSummary,
+    bucketSummary,
+    discovery.candleCoverage
+      ? `일봉 요청 ${discovery.candleCoverage.requested}개, 수집 ${discovery.candleCoverage.fetched}개, 실패 ${discovery.candleCoverage.failed}개`
+      : null,
     `평가 ${discovery.screenedCount}개`,
     discovery.blockedCount > 0 ? `차단 ${discovery.blockedCount}개` : null,
     discovery.lowestIncludedScore !== null
@@ -182,6 +189,65 @@ function DiscoveryStatus({
   );
 }
 
+function DiscoveryDebugPanel({
+  diagnostics,
+}: {
+  diagnostics: RecommendationDiagnostics;
+}): ReactElement | null {
+  const discovery = diagnostics.discovery;
+  if (!discovery.enabled) return null;
+  const quality = discovery.universeQuality;
+  const markets = formatRecordCounts(discovery.bucketCounts?.market);
+  const tradeBuckets = formatRecordCounts(discovery.bucketCounts?.tradeValue);
+  const sourceSummary = diagnostics.sources
+    .filter((source) => source.source === 'krx')
+    .map((source) => `${source.status}${source.count !== undefined ? ` ${source.count}` : ''}`)
+    .join(', ');
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gap: '0.35rem',
+        margin: '-0.4rem 0 1rem',
+        padding: '0.6rem 0.75rem',
+        border: '0.1rem dashed var(--border)',
+        borderRadius: '0.65rem',
+        background: 'var(--bg)',
+        color: 'var(--fg-2)',
+        fontSize: '0.85rem',
+        lineHeight: 1.45,
+      }}
+    >
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <span>
+          universe {quality ? `${quality.eligible}/${quality.raw}` : discovery.universeCount}
+        </span>
+        <span>seed {discovery.seedCount}</span>
+        <span>
+          screened {discovery.screenedCount} → added {discovery.addedCount}
+        </span>
+        <span>
+          candles{' '}
+          {discovery.candleCoverage
+            ? `${discovery.candleCoverage.fetched}/${discovery.candleCoverage.requested} failed ${discovery.candleCoverage.failed}`
+            : `${discovery.candlesFetched} fetched`}
+        </span>
+        {sourceSummary ? <span>KRX {sourceSummary}</span> : null}
+      </div>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+        {quality ? (
+          <span>
+            excluded trade {quality.excludedByTradeValue}, base {quality.excludedByBaseInfo}, known{' '}
+            {quality.excludedByAlreadyKnown}, baseMissing {quality.baseInfoMissing}
+          </span>
+        ) : null}
+        {markets ? <span>market {markets}</span> : null}
+        {tradeBuckets ? <span>trade {tradeBuckets}</span> : null}
+      </div>
+    </div>
+  );
+}
+
 function formatTierCounts(counts: TierDistribution): string {
   const parts = (['top', 'strong', 'moderate', 'watch', 'avoid'] as const)
     .filter((tier) => counts[tier] > 0)
@@ -198,6 +264,42 @@ function formatDiscoveryConditionCounts(
     (key) => `${DISCOVERY_CONDITION_LABELS[key]} ${counts[key]}/${total}`,
   );
   return parts.join(', ');
+}
+
+function formatRecordCounts(counts: Record<string, number> | undefined): string {
+  if (!counts) return '';
+  return Object.entries(counts)
+    .map(([key, count]) => `${key}:${count}`)
+    .join(', ');
+}
+
+function formatUniverseQuality(
+  quality: RecommendationDiagnostics['discovery']['universeQuality'],
+): string | null {
+  if (!quality) return null;
+  return [
+    `universe ${quality.eligible}/${quality.raw}`,
+    quality.excludedByTradeValue > 0 ? `거래대금 제외 ${quality.excludedByTradeValue}` : null,
+    quality.excludedByBaseInfo > 0 ? `기준정보 제외 ${quality.excludedByBaseInfo}` : null,
+    quality.baseInfoMissing > 0 ? `기준정보 없음 ${quality.baseInfoMissing}` : null,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(', ');
+}
+
+function formatDiscoveryBuckets(
+  counts: RecommendationDiagnostics['discovery']['bucketCounts'],
+): string | null {
+  if (!counts) return null;
+  const markets = Object.entries(counts.market)
+    .map(([market, count]) => `${market} ${count}`)
+    .join(', ');
+  const trades = Object.entries(counts.tradeValue)
+    .map(([bucket, count]) => `${bucket} ${count}`)
+    .join(', ');
+  return [markets ? `시장 ${markets}` : null, trades ? `거래대금 ${trades}` : null]
+    .filter((part): part is string => part !== null)
+    .join(' / ');
 }
 
 function formatDiscoveryReason(reason: string | null): string {
@@ -503,6 +605,7 @@ export const RecommendModal = ({
               </div>
               <DiscoveryStatus diagnostics={view.diagnostics} />
             </div>
+            {!view.isPending ? <DiscoveryDebugPanel diagnostics={view.diagnostics} /> : null}
 
             <div style={{ marginBottom: '1.2rem', flex: '0 0 auto' }}>
               <ExtraPdnoPicker

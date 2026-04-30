@@ -60,7 +60,7 @@ export async function ensureDailyCandles(input: EnsureCandlesInput): Promise<Ens
       fetched += r.value.length;
       input.logger.log({
         level: 'INFO',
-        category: 'SYS',
+        category: 'AI',
         message: 'ai.ensure-candles.fetched',
         payload: { pdno, count: r.value.length, brokerId: input.broker.brokerId },
       });
@@ -68,7 +68,7 @@ export async function ensureDailyCandles(input: EnsureCandlesInput): Promise<Ens
       failed += 1;
       input.logger.log({
         level: 'WARN',
-        category: 'SYS',
+        category: 'AI',
         message: 'ai.ensure-candles.fetch-failed',
         payload: { pdno, error: r.error.kind, msg: r.error.msg },
       });

@@ -9,7 +9,7 @@ import { eventLogs } from '../../db/schema';
 import { publicProcedure, router } from '../trpc-core';
 
 const LOG_LEVELS = ['INFO', 'WARN', 'ERROR'] as const;
-const LOG_CATEGORIES = ['AUTH', 'ORDER', 'FSM', 'WS', 'SYS', 'BALANCE', 'CANCEL'] as const;
+const LOG_CATEGORIES = ['AUTH', 'ORDER', 'FSM', 'WS', 'SYS', 'BALANCE', 'CANCEL', 'AI'] as const;
 const LOG_DATE_RANGES = ['today', 'month', 'lastMonth', 'last3Months', 'year'] as const;
 const LOG_EXPORT_FORMATS = ['csv', 'json'] as const;
 const LOG_STREAMS = ['all', 'normal', 'error'] as const;

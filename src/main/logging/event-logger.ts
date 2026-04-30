@@ -5,7 +5,7 @@ import { eventLogs } from '../db/schema';
 import { maskSecret } from '../security/mask-secret';
 
 export type EventLevel = 'INFO' | 'WARN' | 'ERROR';
-export type EventCategory = 'AUTH' | 'ORDER' | 'FSM' | 'WS' | 'SYS' | 'BALANCE' | 'WATCH';
+export type EventCategory = 'AUTH' | 'ORDER' | 'FSM' | 'WS' | 'SYS' | 'BALANCE' | 'WATCH' | 'AI';
 
 export interface EventLogEntry {
   level: EventLevel;

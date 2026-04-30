@@ -5,6 +5,7 @@ import type { EcosClient, EcosSeriesRequest } from './ecos-client';
 import type { KrxClient, KrxMarket } from './krx-client';
 import type {
   CachedEcosSeriesPoint,
+  CachedKrxBaseInfo,
   CachedKrxDailyTrade,
   MarketContextRepo,
 } from './market-context-repo';
@@ -37,6 +38,7 @@ export interface KrxUniverseSourceStatus {
 
 export interface KrxUniverseSnapshot {
   rows: CachedKrxDailyTrade[];
+  baseInfoByKey: Map<string, CachedKrxBaseInfo>;
   statuses: KrxUniverseSourceStatus[];
 }
 
@@ -52,6 +54,7 @@ export interface MarketContextServiceOptions {
 
 const STALE_MS = 24 * 60 * 60 * 1000;
 const KRX_LOOKBACK_DAYS = 7;
+const KRX_UNIVERSE_MIN_ROWS_PER_MARKET = 50;
 const KRX_SUCCESS_KEY = 'market_context.krx.last_success_at';
 const KRX_ERROR_KEY = 'market_context.krx.last_error';
 const ECOS_SUCCESS_KEY = 'market_context.ecos.last_success_at';
@@ -112,6 +115,7 @@ export class MarketContextService {
       const cached = this.opts.repo.getLatestKrxDailyTradeByMarkets(markets);
       return {
         rows: cached,
+        baseInfoByKey: this.opts.repo.getLatestKrxBaseInfoByMarkets(markets),
         statuses: markets.map((market) => ({
           market,
           status: cached.some((row) => row.market === market) ? 'cache' : 'skipped',
@@ -124,9 +128,20 @@ export class MarketContextService {
 
     if (!this.statusFor('krx').isStale) {
       const cached = this.opts.repo.getLatestKrxDailyTradeByMarkets(markets);
-      if (cached.length > 0) {
+      if (cached.length > 0 && hasUniverseLikeCache(cached, markets)) {
+        this.opts.logger.log({
+          level: 'INFO',
+          category: 'SYS',
+          message: 'market-context.krx.universe-cache-used',
+          payload: {
+            markets,
+            counts: countByMarket(cached),
+            minRowsPerMarket: KRX_UNIVERSE_MIN_ROWS_PER_MARKET,
+          },
+        });
         return {
           rows: cached,
+          baseInfoByKey: this.opts.repo.getLatestKrxBaseInfoByMarkets(markets),
           statuses: markets.map((market) => ({
             market,
             status: 'cache',
@@ -135,6 +150,18 @@ export class MarketContextService {
             reason: 'KRX fresh cache',
           })),
         };
+      }
+      if (cached.length > 0) {
+        this.opts.logger.log({
+          level: 'INFO',
+          category: 'SYS',
+          message: 'market-context.krx.universe-cache-insufficient-refreshing',
+          payload: {
+            markets,
+            counts: countByMarket(cached),
+            minRowsPerMarket: KRX_UNIVERSE_MIN_ROWS_PER_MARKET,
+          },
+        });
       }
     }
 
@@ -148,6 +175,21 @@ export class MarketContextService {
           const dailyRows = await this.opts.krxClient.getDailyTradeInfo({ market, basDd });
           if (dailyRows.length === 0) continue;
           this.opts.repo.upsertKrxDailyTrade(dailyRows);
+          try {
+            const baseRows = await this.opts.krxClient.getBaseInfo({ market, basDd });
+            this.opts.repo.upsertKrxBaseInfo(baseRows);
+          } catch (cause) {
+            this.opts.logger.log({
+              level: 'WARN',
+              category: 'SYS',
+              message: 'market-context.krx.base-info-refresh-failed',
+              payload: {
+                market,
+                basDd,
+                reason: cause instanceof Error ? cause.message : String(cause),
+              },
+            });
+          }
           foundRows = dailyRows.map((row) => ({ ...row, fetchedAt: this.now() }));
           foundBasDd = basDd;
           break;
@@ -186,7 +228,7 @@ export class MarketContextService {
     if (rows.length > 0 && statuses.some((status) => status.status === 'fresh')) {
       this.recordSuccess('krx');
     }
-    return { rows, statuses };
+    return { rows, baseInfoByKey: this.opts.repo.getLatestKrxBaseInfoByMarkets(markets), statuses };
   }
 
   async refreshKrxForPdnos(pdnos: ReadonlyArray<string>): Promise<{ inserted: number }> {
@@ -332,4 +374,18 @@ function ymdCompact(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}${m}${d}`;
+}
+
+function hasUniverseLikeCache(
+  rows: ReadonlyArray<CachedKrxDailyTrade>,
+  markets: ReadonlyArray<KrxMarket>,
+): boolean {
+  const counts = countByMarket(rows);
+  return markets.every((market) => (counts[market] ?? 0) >= KRX_UNIVERSE_MIN_ROWS_PER_MARKET);
+}
+
+function countByMarket(rows: ReadonlyArray<CachedKrxDailyTrade>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const row of rows) out[row.market] = (out[row.market] ?? 0) + 1;
+  return out;
 }

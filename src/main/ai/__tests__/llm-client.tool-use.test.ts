@@ -298,7 +298,7 @@ describe('LlmClient — Anthropic tool 루프', () => {
       });
       anthropicCreateMock.mockResolvedValueOnce({
         stop_reason: 'end_turn',
-        content: [{ type: 'text', text: '"answer":"repaired"}' }],
+        content: [{ type: 'text', text: '{"answer":"repaired"}' }],
       });
 
       const result = await client.chat({
@@ -320,8 +320,8 @@ describe('LlmClient — Anthropic tool 루프', () => {
       expect(anthropicCreateMock).toHaveBeenCalledTimes(3);
       expect(anthropicCreateMock.mock.calls[2]?.[0]?.tools).toBeUndefined();
       expect(anthropicCreateMock.mock.calls[2]?.[0]?.messages.at(-1)).toEqual({
-        role: 'assistant',
-        content: '{',
+        role: 'user',
+        content: expect.stringContaining('Return only the JSON object.'),
       });
       expect(loggedEvents.at(-1)?.payload).toMatchObject({ repaired: true, parsedOk: true });
       expect(consoleError).not.toHaveBeenCalled();

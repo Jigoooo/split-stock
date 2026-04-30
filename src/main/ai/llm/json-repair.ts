@@ -19,7 +19,7 @@ export async function repairJsonResponse<T>(
   } catch (cause) {
     logger.log({
       level: 'WARN',
-      category: 'SYS',
+      category: 'AI',
       message: 'ai.chat.json-repair-failed',
       payload: {
         provider: req.config.provider,
@@ -63,10 +63,7 @@ async function repairAnthropicJson<T>(
     max_tokens: req.maxOutputTokens ?? 1024,
     temperature: 0,
     system: buildJsonRepairSystem(req),
-    messages: [
-      { role: 'user', content: buildJsonRepairPrompt(req, rawText) },
-      { role: 'assistant', content: '{' },
-    ],
+    messages: [{ role: 'user', content: buildJsonRepairPrompt(req, rawText) }],
   });
   const text = response.content
     .filter((block): block is Anthropic.Messages.TextBlock => block.type === 'text')

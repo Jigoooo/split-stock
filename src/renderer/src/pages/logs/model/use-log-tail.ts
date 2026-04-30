@@ -13,6 +13,7 @@ export const LOG_CATEGORIES = [
   'SYS',
   'BALANCE',
   'CANCEL',
+  'AI',
 ] as const;
 export const LOG_EXPORT_FORMATS = ['csv', 'json'] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];

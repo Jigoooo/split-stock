@@ -16,7 +16,7 @@ export async function safeContextFetch<T>(
     onFailure?.(reason);
     logger.log({
       level: 'WARN',
-      category: 'SYS',
+      category: 'AI',
       message: 'ai.context.fetch-failed',
       payload: { source: label, reason },
     });
