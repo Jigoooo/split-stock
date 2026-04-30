@@ -430,6 +430,14 @@ body {
   border-color: transparent;
 }
 
+.trading-day-status-badge {
+  margin: 0 0.5rem 0.25rem 0;
+  min-height: 1.7rem;
+  padding: 0.08rem 0.45rem;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
 .header-toggle-control {
   display: inline-flex;
   align-items: center;

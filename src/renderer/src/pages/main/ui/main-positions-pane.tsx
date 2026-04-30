@@ -51,17 +51,13 @@ export const MainPositionsPane = (props: MainPositionsPaneProps): ReactElement =
       }}
       aria-label="좌측 메인 패널"
     >
-      <HtsTabs tabs={L1_TABS} active={l1} onChange={setL1} ariaLabel="좌측 외부 탭" />
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          padding: '0.25rem 0.5rem',
-          flexShrink: 0,
-        }}
-      >
-        <TradingDayStatusBadge accountId={accountId} />
-      </div>
+      <HtsTabs
+        tabs={L1_TABS}
+        active={l1}
+        onChange={setL1}
+        ariaLabel="좌측 외부 탭"
+        trailing={<TradingDayStatusBadge accountId={accountId} />}
+      />
 
       {l1 === 'positions' ? (
         <>
