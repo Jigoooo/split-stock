@@ -141,6 +141,25 @@ function resolveMigrationsDir(): string {
   return join(process.resourcesPath, 'drizzle');
 }
 
+function broadcastToAllWindows(channel: string, ...args: unknown[]): void {
+  for (const target of BrowserWindow.getAllWindows()) {
+    if (target.isDestroyed()) continue;
+    target.webContents.send(channel, ...args);
+  }
+}
+
+function broadcastToOtherWindows(
+  senderWebContentsId: number,
+  channel: string,
+  ...args: unknown[]
+): void {
+  for (const target of BrowserWindow.getAllWindows()) {
+    if (target.isDestroyed()) continue;
+    if (target.webContents.id === senderWebContentsId) continue;
+    target.webContents.send(channel, ...args);
+  }
+}
+
 function bootstrapDeps(userDataDir: string) {
   const db = openDb(defaultDbPath(userDataDir));
   migrate(db, resolveMigrationsDir());
@@ -348,10 +367,7 @@ function bootstrapDeps(userDataDir: string) {
     if (settingsRepo.get('notifications.osEnabled') !== 'false') {
       notifyWatchOutcome(event);
     }
-    for (const target of BrowserWindow.getAllWindows()) {
-      if (target.isDestroyed()) continue;
-      target.webContents.send('appShell:watch-event', event);
-    }
+    broadcastToAllWindows('appShell:watch-event', event);
   };
   const broadcastAutoOrderRetry = (event: AutoOrderRetryEvent): void => {
     const parsed = AutoOrderRetryEventSchema.safeParse(event);
@@ -364,10 +380,7 @@ function bootstrapDeps(userDataDir: string) {
       });
       return;
     }
-    for (const target of BrowserWindow.getAllWindows()) {
-      if (target.isDestroyed()) continue;
-      target.webContents.send('appShell:auto-order-retry', parsed.data);
-    }
+    broadcastToAllWindows('appShell:auto-order-retry', parsed.data);
   };
   const broadcastTradeExecution = (event: TradeExecutionEvent): void => {
     if (settingsRepo.get('notifications.osEnabled') !== 'false') {
@@ -379,10 +392,7 @@ function bootstrapDeps(userDataDir: string) {
         name: event.name,
       });
     }
-    for (const target of BrowserWindow.getAllWindows()) {
-      if (target.isDestroyed()) continue;
-      target.webContents.send('appShell:trade-event', event);
-    }
+    broadcastToAllWindows('appShell:trade-event', event);
   };
   quarantineLegacyWatchRows(db, eventLogger);
   const sharedPriceFeedRef: { feed: RotatingQuoteFeed | null } = { feed: null };
@@ -536,14 +546,7 @@ function bootstrapDeps(userDataDir: string) {
       message: 'quote-feed.cooldown',
       payload: { pdno, failures, reason },
     });
-    for (const target of BrowserWindow.getAllWindows()) {
-      if (target.isDestroyed()) continue;
-      target.webContents.send('appShell:quote-feed-cooldown', {
-        pdno,
-        failures,
-        reason,
-      });
-    }
+    broadcastToAllWindows('appShell:quote-feed-cooldown', { pdno, failures, reason });
   });
   sharedPriceFeedRef.feed = tieredFeed;
   for (const [pdno, count] of priceFeedRefCounts) {
@@ -1344,9 +1347,7 @@ void app.whenReady().then(async () => {
     ipcHandler.attachWindow(popout);
     popout.on('closed', () => {
       popouts.delete(popoutRoute);
-      for (const target of BrowserWindow.getAllWindows()) {
-        if (!target.isDestroyed()) target.webContents.send('appShell:popout-closed', popoutRoute);
-      }
+      broadcastToAllWindows('appShell:popout-closed', popoutRoute);
     });
     return { ok: true };
   });
@@ -1355,11 +1356,7 @@ void app.whenReady().then(async () => {
   ipcMain.on('appShell:assignStock', (event, pdno: unknown, name: unknown) => {
     if (typeof pdno !== 'string' || typeof name !== 'string') return;
     if (!/^\d{6}$/.test(pdno)) return;
-    for (const target of BrowserWindow.getAllWindows()) {
-      if (target.isDestroyed()) continue;
-      if (target.webContents.id === event.sender.id) continue;
-      target.webContents.send('appShell:stock-assigned', pdno, name);
-    }
+    broadcastToOtherWindows(event.sender.id, 'appShell:stock-assigned', pdno, name);
   });
 
   // 팝아웃에서 계좌 추가/변경 완료 → 송신자 제외 모든 창에 브로드캐스트(렌더러 query invalidate + 토스트 트리거)
@@ -1374,22 +1371,14 @@ void app.whenReady().then(async () => {
       safeMeta && (safeMeta.envSwitchedTo === 'PROD' || safeMeta.envSwitchedTo === 'MOCK')
         ? safeMeta
         : null;
-    for (const target of BrowserWindow.getAllWindows()) {
-      if (target.isDestroyed()) continue;
-      if (target.webContents.id === event.sender.id) continue;
-      target.webContents.send('appShell:account-changed', accountId, cleanMeta);
-    }
+    broadcastToOtherWindows(event.sender.id, 'appShell:account-changed', accountId, cleanMeta);
   });
 
   // 어느 창이든 설정 변경 → 송신자 제외 모든 창에 브로드캐스트.
   // 각 창은 onSettingsChanged 리스너에서 query invalidate 로 동기화한다.
   ipcMain.on('appShell:settings-changed', (event, scope: unknown) => {
     const safeScope = typeof scope === 'string' ? scope : 'all';
-    for (const target of BrowserWindow.getAllWindows()) {
-      if (target.isDestroyed()) continue;
-      if (target.webContents.id === event.sender.id) continue;
-      target.webContents.send('appShell:settings-changed', safeScope);
-    }
+    broadcastToOtherWindows(event.sender.id, 'appShell:settings-changed', safeScope);
   });
 
   // 팝아웃 창의 "창 항상 위로" 토글
