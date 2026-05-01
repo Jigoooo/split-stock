@@ -51,48 +51,58 @@ const TOP_TABS = [
 ] as const satisfies ReadonlyArray<HtsTabItem<string>>;
 
 type SettingsTopTab = (typeof TOP_TABS)[number]['id'];
+const DEFAULT_TOP_TAB: SettingsTopTab = 'strategy';
+const DEFAULT_STRATEGY_TAB: ExtendedStrategyTab = 'basic';
+const SETTINGS_INITIAL_TAB_STORAGE_KEY = 'popout:settings:initialTab';
+const SETTINGS_STRATEGY_TAB_STORAGE_KEY = 'popout:settings:strategyTab';
+
+interface SettingsTabIntent {
+  topTab: SettingsTopTab;
+  strategyTab: ExtendedStrategyTab;
+}
+
+export interface SettingsPageProps {
+  /**
+   * PopoutPage 의 activation key. 캐시된 settings 창이 다시 활성화될 때
+   * localStorage 에 남겨진 진입 target 을 다시 소비하기 위한 신호다.
+   */
+  activationKey?: number;
+}
 
 /**
  * 설정 페이지.
  * - 기본 자동매매 설정 + 계좌 공통 보호 설정 포함.
  * - 각 섹션은 ErrorBoundary 로 격리해 한 폼이 throw 해도 다른 섹션은 계속 사용 가능하도록 한다 (흰화면 방지).
  */
-function readInitialTab(): SettingsTopTab {
-  // popout 진입 시 호출자가 localStorage 로 전달한 초기 탭을 1회 소비.
-  // (예: 차트 위젯의 차트 설정 아이콘 → 표시 탭 자동 선택)
+function consumeSettingsTabIntent(): SettingsTabIntent {
+  let topTab = DEFAULT_TOP_TAB;
+  let strategyTab = DEFAULT_STRATEGY_TAB;
+
   try {
-    const v = window.localStorage.getItem('popout:settings:initialTab');
-    if (v) {
-      window.localStorage.removeItem('popout:settings:initialTab');
-      const matched = TOP_TABS.find((t) => t.id === v);
-      if (matched) return matched.id;
-    }
+    const requestedTopTab = window.localStorage.getItem(SETTINGS_INITIAL_TAB_STORAGE_KEY);
+    const requestedStrategyTab = window.localStorage.getItem(SETTINGS_STRATEGY_TAB_STORAGE_KEY);
+    window.localStorage.removeItem(SETTINGS_INITIAL_TAB_STORAGE_KEY);
+    window.localStorage.removeItem(SETTINGS_STRATEGY_TAB_STORAGE_KEY);
+
+    const matchedTopTab = TOP_TABS.find((t) => t.id === requestedTopTab);
+    const matchedStrategyTab = STRATEGY_TABS_WITH_FEE.find((t) => t.id === requestedStrategyTab);
+
+    topTab = matchedTopTab?.id ?? DEFAULT_TOP_TAB;
+    strategyTab = matchedStrategyTab?.id ?? DEFAULT_STRATEGY_TAB;
   } catch {
     // localStorage 차단 환경 — 기본값 fallback
   }
-  return 'strategy';
+
+  return { topTab, strategyTab };
 }
 
-function readInitialStrategyTab(): ExtendedStrategyTab {
-  // 매매설정관리 sub-tab 초기값을 호출자 localStorage 에서 1회 소비.
-  // (예: 메인 폼의 "템플릿 관리" 버튼 → 템플릿 sub-tab 자동 선택)
-  try {
-    const v = window.localStorage.getItem('popout:settings:strategyTab');
-    if (v) {
-      window.localStorage.removeItem('popout:settings:strategyTab');
-      const matched = STRATEGY_TABS_WITH_FEE.find((t) => t.id === v);
-      if (matched) return matched.id;
-    }
-  } catch {
-    // localStorage 차단 환경 — 기본값 fallback
-  }
-  return 'basic';
-}
-
-export const SettingsPage = (): ReactElement => {
-  const [topTab, setTopTab] = useState<SettingsTopTab>(readInitialTab);
-  const [strategyTab, setStrategyTab] = useState<ExtendedStrategyTab>(readInitialStrategyTab);
+export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactElement => {
+  const [initialTabs] = useState<SettingsTabIntent>(consumeSettingsTabIntent);
+  const [topTab, setTopTab] = useState<SettingsTopTab>(initialTabs.topTab);
+  const [strategyTab, setStrategyTab] = useState<ExtendedStrategyTab>(initialTabs.strategyTab);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const previousActivationKeyRef = useRef(activationKey);
+  const hasSeenInitialActivationRef = useRef((activationKey ?? 0) > 0);
   // 탭별 스크롤 위치 보존 — 사용자가 긴 패널을 읽다가 다른 탭 갔다 돌아왔을 때
   // 매번 최상단으로 리셋되는 문제(P2-Settings) 해결.
   // strategy 안의 sub-tab(strategyTab) 도 키에 포함해 세분화.
@@ -104,6 +114,19 @@ export const SettingsPage = (): ReactElement => {
     : undefined;
   const scrollPositionsRef = useRef<Map<string, number>>(new Map());
   const prevTabKeyRef = useRef<string>(tabKey);
+
+  useEffect(() => {
+    if (activationKey === undefined || activationKey === previousActivationKeyRef.current) return;
+    previousActivationKeyRef.current = activationKey;
+    if (!hasSeenInitialActivationRef.current) {
+      hasSeenInitialActivationRef.current = true;
+      return;
+    }
+
+    const next = consumeSettingsTabIntent();
+    setTopTab(next.topTab);
+    setStrategyTab(next.strategyTab);
+  }, [activationKey]);
 
   // 탭 전환 직전(=현재 탭의 마지막 위치)을 보관, 새 탭 마운트 후 저장된 위치 복원.
   useLayoutEffect(() => {

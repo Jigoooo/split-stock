@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SettingsPage } from './ui/settings-page';
 
 vi.mock('@renderer/features/backup-restore', () => ({
@@ -52,7 +52,15 @@ vi.mock('@renderer/features/price-correction-settings', () => ({
   PriceCorrectionForm: () => <div data-testid="price-correction-form" />,
 }));
 
+function expectTabSelected(name: string): void {
+  expect(screen.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
+}
+
 describe('SettingsPage', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it('상위 설정 탭으로 섹션을 분리한다', () => {
     render(<SettingsPage />);
 
@@ -70,5 +78,58 @@ describe('SettingsPage', () => {
     expect(screen.getByTestId('pending-cancel-form')).toBeInTheDocument();
     expect(screen.getByTestId('active-pending-list')).toBeInTheDocument();
     expect(screen.getByTestId('price-correction-form')).toBeInTheDocument();
+  });
+
+  it('캐시된 설정 팝아웃을 target 없이 다시 열면 기본 매매설정으로 리셋한다', () => {
+    const { rerender } = render(<SettingsPage activationKey={1} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: '표시' }));
+    expect(screen.getByTestId('chart-settings-form')).toBeInTheDocument();
+
+    rerender(<SettingsPage activationKey={2} />);
+
+    expect(screen.getByTestId('strategy-settings-surface')).toBeInTheDocument();
+    expect(screen.queryByTestId('chart-settings-form')).not.toBeInTheDocument();
+    expectTabSelected('매매설정관리');
+    expectTabSelected('기본매매 설정');
+  });
+
+  it('캐시된 설정 팝아웃을 chart target으로 다시 열면 표시 탭으로 이동한다', () => {
+    const { rerender } = render(<SettingsPage activationKey={1} />);
+
+    window.localStorage.setItem('popout:settings:initialTab', 'display');
+    rerender(<SettingsPage activationKey={2} />);
+
+    expect(screen.getByTestId('chart-settings-form')).toBeInTheDocument();
+    expect(screen.getByTestId('grid-density-form')).toBeInTheDocument();
+    expectTabSelected('표시');
+    expect(window.localStorage.getItem('popout:settings:initialTab')).toBeNull();
+  });
+
+  it('캐시된 설정 팝아웃을 strategy template target으로 다시 열면 템플릿 관리로 이동한다', () => {
+    const { rerender } = render(<SettingsPage activationKey={1} />);
+
+    window.localStorage.setItem('popout:settings:initialTab', 'strategy');
+    window.localStorage.setItem('popout:settings:strategyTab', 'templates');
+    rerender(<SettingsPage activationKey={2} />);
+
+    expect(screen.getByTestId('strategy-settings-surface')).toBeInTheDocument();
+    expectTabSelected('매매설정관리');
+    expectTabSelected('템플릿 관리');
+    expect(window.localStorage.getItem('popout:settings:initialTab')).toBeNull();
+    expect(window.localStorage.getItem('popout:settings:strategyTab')).toBeNull();
+  });
+
+  it('잘못된 cached target은 제거하고 기본 매매설정으로 fallback한다', () => {
+    window.localStorage.setItem('popout:settings:initialTab', 'unknown');
+    window.localStorage.setItem('popout:settings:strategyTab', 'unknown');
+
+    render(<SettingsPage />);
+
+    expect(screen.getByTestId('strategy-settings-surface')).toBeInTheDocument();
+    expectTabSelected('매매설정관리');
+    expectTabSelected('기본매매 설정');
+    expect(window.localStorage.getItem('popout:settings:initialTab')).toBeNull();
+    expect(window.localStorage.getItem('popout:settings:strategyTab')).toBeNull();
   });
 });

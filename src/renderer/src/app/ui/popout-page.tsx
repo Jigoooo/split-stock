@@ -1,5 +1,4 @@
 import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
-import { usePopoutActivationKey } from '@renderer/shared/lib/popout-window';
 import { getPopoutLabel, getPopoutWindowTitle } from '@shared/popout';
 import { lazy, type ReactElement, Suspense, useEffect } from 'react';
 import type { PopoutRoute } from '../model/popout-route';
@@ -51,6 +50,7 @@ export function prewarmPopoutRoute(route: PopoutRoute): void {
 }
 
 export interface PopoutPageProps {
+  activationKey: number;
   route: PopoutRoute;
   popout: PopoutApi;
 }
@@ -62,8 +62,7 @@ const PopoutRouteLoading = ({ route }: { route: PopoutRoute }): ReactElement => 
   </div>
 );
 
-export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => {
-  const activationKey = usePopoutActivationKey(route);
+export const PopoutPage = ({ activationKey, route, popout }: PopoutPageProps): ReactElement => {
   const isEdgeToEdgeRoute = route === 'add-watch-order' || route === 'add-account';
   // settings 페이지는 자체 sticky 탭 + 내부 스크롤을 사용하므로 외부 wrapper 의 overflow 를 hidden 으로
   // 두어 이중 스크롤바를 방지한다.
@@ -97,7 +96,7 @@ export const PopoutPage = ({ route, popout }: PopoutPageProps): ReactElement => 
       content = <AddWatchOrderPopout key={`add-watch-order:${activationKey}`} />;
       break;
     case 'settings':
-      content = <SettingsPopout />;
+      content = <SettingsPopout activationKey={activationKey} />;
       break;
   }
 

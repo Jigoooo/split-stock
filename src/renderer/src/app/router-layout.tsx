@@ -4,6 +4,7 @@ import { CredentialsReentryBanner } from '@renderer/features/backup-restore';
 import { SwitchEnvDialog } from '@renderer/features/switch-env';
 import { LoginPage } from '@renderer/pages/login';
 import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
+import { usePopoutActivationKey } from '@renderer/shared/lib/popout-window';
 import { getPopoutLabel } from '@shared/popout';
 import { Navigate, Outlet } from '@tanstack/react-router';
 import { LoaderCircle } from 'lucide-react';
@@ -78,13 +79,6 @@ export const PopoutBootShell = ({ route }: { route: PopoutRoute }): ReactElement
       </div>
     </section>
   );
-};
-
-const PopoutShellReadyMarker = ({ route }: { route: PopoutRoute }): null => {
-  useEffect(() => {
-    window.appShell?.markPopoutShellReady?.(route);
-  }, [route]);
-  return null;
 };
 
 function schedulePopoutPrewarm(): () => void {
@@ -263,22 +257,24 @@ export const MainRoutePage = (): ReactElement => {
 
 export const PopoutRoutePage = ({ route }: { route: string }): ReactElement => {
   const popout = usePopoutState();
+  const popoutRoute = isPopoutRoute(route) ? route : null;
+  const activationKey = usePopoutActivationKey(popoutRoute ?? '');
 
   useEffect(() => {
-    if (isPopoutRoute(route)) window.appShell?.markRouteReady?.(`popout:${route}`);
-  }, [route]);
+    if (popoutRoute) window.appShell?.markRouteReady?.(`popout:${popoutRoute}`);
+  }, [popoutRoute]);
 
-  if (!isPopoutRoute(route)) {
+  useEffect(() => {
+    if (popoutRoute) window.appShell?.markPopoutShellReady?.(popoutRoute);
+  }, [popoutRoute]);
+
+  if (!popoutRoute) {
     return <Navigate to="/" replace />;
   }
-  const popoutRoute = route as PopoutRoute;
 
   return (
-    <>
-      <PopoutShellReadyMarker route={popoutRoute} />
-      <Suspense fallback={<PopoutBootShell route={popoutRoute} />}>
-        <PopoutPage route={popoutRoute} popout={popout} />
-      </Suspense>
-    </>
+    <Suspense fallback={<PopoutBootShell route={popoutRoute} />}>
+      <PopoutPage activationKey={activationKey} route={popoutRoute} popout={popout} />
+    </Suspense>
   );
 };
