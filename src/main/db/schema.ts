@@ -54,7 +54,7 @@ export const accessTokens = sqliteTable(
 export const accounts = sqliteTable('accounts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   env: text('env').notNull(), // 'MOCK' | 'PROD'
-  broker: text('broker').notNull().default('KIS'), // 'KIS' | 'KIWOOM' — 라벨 prefix + 다계좌 식별
+  broker: text('broker').notNull().default('KIS'), // 'KIS' | 'KIWOOM' | 'UPBIT' — provider 라벨 prefix
   accountNo8: text('account_no_8').notNull(),
   accountProdCd: text('account_prod_cd').notNull(),
   nickname: text('nickname').notNull().default(''),
@@ -201,6 +201,118 @@ export const dailyCandles = sqliteTable(
     fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.pdno, t.period, t.date] })],
+);
+
+export const cryptoInstruments = sqliteTable(
+  'crypto_instruments',
+  {
+    exchange: text('exchange').notNull(),
+    market: text('market').notNull(),
+    koreanName: text('korean_name').notNull(),
+    englishName: text('english_name').notNull(),
+    quoteCurrency: text('quote_currency').notNull(),
+    baseCurrency: text('base_currency').notNull(),
+    marketWarning: text('market_warning').notNull().default('NONE'),
+    rawJson: text('raw_json'),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.exchange, t.market] })],
+);
+
+export const cryptoCandles = sqliteTable(
+  'crypto_candles',
+  {
+    exchange: text('exchange').notNull(),
+    market: text('market').notNull(),
+    unit: text('unit').notNull(),
+    candleAt: integer('candle_at', { mode: 'timestamp_ms' }).notNull(),
+    open: text('open').notNull(),
+    high: text('high').notNull(),
+    low: text('low').notNull(),
+    close: text('close').notNull(),
+    volume: text('volume').notNull(),
+    tradePrice: text('trade_price').notNull(),
+    rawJson: text('raw_json'),
+    fetchedAt: integer('fetched_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.exchange, t.market, t.unit, t.candleAt] })],
+);
+
+export const cryptoOrders = sqliteTable(
+  'crypto_orders',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    accountId: integer('account_id').notNull(),
+    exchange: text('exchange').notNull(),
+    market: text('market').notNull(),
+    uuid: text('uuid'),
+    identifier: text('identifier'),
+    side: text('side').notNull(),
+    ordType: text('ord_type').notNull(),
+    state: text('state').notNull(),
+    price: text('price'),
+    volume: text('volume'),
+    remainingVolume: text('remaining_volume').notNull().default('0'),
+    executedVolume: text('executed_volume').notNull().default('0'),
+    paidFee: text('paid_fee').notNull().default('0'),
+    locked: text('locked').notNull().default('0'),
+    rawJson: text('raw_json'),
+    placedAt: integer('placed_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('crypto_orders_account_uuid_uniq').on(t.accountId, t.uuid),
+    uniqueIndex('crypto_orders_account_identifier_uniq').on(t.accountId, t.identifier),
+  ],
+);
+
+export const cryptoFills = sqliteTable(
+  'crypto_fills',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    accountId: integer('account_id').notNull(),
+    exchange: text('exchange').notNull(),
+    orderUuid: text('order_uuid').notNull(),
+    tradeUuid: text('trade_uuid'),
+    market: text('market').notNull(),
+    side: text('side').notNull(),
+    price: text('price').notNull(),
+    volume: text('volume').notNull(),
+    funds: text('funds').notNull().default('0'),
+    fee: text('fee').notNull().default('0'),
+    rawJson: text('raw_json'),
+    executedAt: integer('executed_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [uniqueIndex('crypto_fills_account_trade_uniq').on(t.accountId, t.tradeUuid)],
+);
+
+export const cryptoBalances = sqliteTable(
+  'crypto_balances',
+  {
+    accountId: integer('account_id').notNull(),
+    exchange: text('exchange').notNull(),
+    currency: text('currency').notNull(),
+    balance: text('balance').notNull(),
+    locked: text('locked').notNull(),
+    avgBuyPrice: text('avg_buy_price').notNull(),
+    unitCurrency: text('unit_currency').notNull(),
+    rawJson: text('raw_json'),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.exchange, t.currency] })],
+);
+
+export const cryptoRealtimeCheckpoints = sqliteTable(
+  'crypto_realtime_checkpoints',
+  {
+    accountId: integer('account_id').notNull(),
+    exchange: text('exchange').notNull(),
+    stream: text('stream').notNull(),
+    lastEventAt: integer('last_event_at', { mode: 'timestamp_ms' }).notNull(),
+    cursorJson: text('cursor_json'),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.exchange, t.stream] })],
 );
 
 /**

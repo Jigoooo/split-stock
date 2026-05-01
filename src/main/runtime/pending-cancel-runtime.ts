@@ -78,6 +78,15 @@ export function createPendingCancelWatcher(input: {
         return;
       }
       const cred = credResult.value;
+      if (cred.broker === 'UPBIT') {
+        input.logger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'pending-cancel.skip',
+          payload: { reason: 'non_stock_account', odno: entry.odno, accountId, attempt },
+        });
+        return;
+      }
       const tokenResult = await input.auth.getValidToken(env, cred.appKey, cred.appSecret);
       if (tokenResult.isErr()) {
         input.logger.log({

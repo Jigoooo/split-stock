@@ -120,12 +120,48 @@ function makeDraft() {
       dataQualityReason: '일봉 80개',
       analysisConfidence: 'med',
       lastClose: 99500,
-      box: { low: 94000, mid: 99000, high: 104000 },
+      box: {
+        low: 94000,
+        mid: 99000,
+        high: 104000,
+        confidence: 'med',
+        touchesLow: 3,
+        touchesHigh: 2,
+        method: 'confluence',
+      },
       supportResistance: {
         supports: [97000, 94000],
         resistances: [104000],
         nearestSupportPct: 3,
         nearestResistancePct: 4,
+        nearestSupport: {
+          kind: 'support',
+          price: 97000,
+          zoneLow: 96600,
+          zoneHigh: 97400,
+          strength: 72,
+          touchCount: 3,
+          lastTouchedDate: '2099-01-01',
+          ageBars: 8,
+          bouncePct: 6.2,
+          volumeRatio: 1.2,
+          invalidated: false,
+          sources: ['pivot', 'repeat-touch', 'bounce'],
+        },
+        nearestResistance: {
+          kind: 'resistance',
+          price: 104000,
+          zoneLow: 103500,
+          zoneHigh: 104500,
+          strength: 66,
+          touchCount: 2,
+          lastTouchedDate: '2099-01-02',
+          ageBars: 7,
+          bouncePct: 4.1,
+          volumeRatio: 1,
+          invalidated: false,
+          sources: ['pivot', 'repeat-touch'],
+        },
       },
       rangePct120d: 10.1,
     },
@@ -137,6 +173,10 @@ function makeDraft() {
         distancePct: -3,
         reason: '현재가 아래 최근접 지지선',
         confidence: 'med',
+        strength: 72,
+        zoneLow: 96600,
+        zoneHigh: 97400,
+        basis: 'pivot+repeat-touch+bounce',
       },
       {
         id: 'box-low',
@@ -145,6 +185,10 @@ function makeDraft() {
         distancePct: -6,
         reason: '최근 120일 percentile 박스 하단',
         confidence: 'med',
+        strength: 65,
+        zoneLow: 94000,
+        zoneHigh: 104000,
+        basis: 'confluence',
       },
       {
         id: 'pullback-2',
@@ -268,6 +312,11 @@ describe('AddWatchOrderDialog', () => {
     );
     expect(screen.getByRole('region', { name: '가격 근거' })).toHaveTextContent(
       '박스 · 지지저항 · 호가',
+    );
+    expect(screen.getByRole('region', { name: '가격 근거' })).toHaveTextContent('강도 72');
+    expect(screen.getByRole('region', { name: '가격 근거' })).toHaveTextContent('3회');
+    expect(screen.getByRole('button', { name: /지지선/ })).toHaveTextContent(
+      'pivot+repeat-touch+bounce',
     );
     expect(screen.queryByRole('button', { name: '추천값 적용' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('주문타입')).toHaveTextContent('지정가');

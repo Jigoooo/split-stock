@@ -33,6 +33,8 @@ export interface EventLoggerOptions {
 const DEFAULT_SECRET_KEYS = [
   'appKey',
   'appSecret',
+  'accessKey',
+  'secretKey',
   'apiKey',
   'serviceKey',
   'clientSecret',

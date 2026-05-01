@@ -34,9 +34,12 @@ export const accountRouter = router({
 
   add: publicProcedure
     .input(
-      CredentialsSchema.extend({
-        displayName: z.string().trim().min(1).max(20).optional(),
-      }),
+      z.intersection(
+        CredentialsSchema,
+        z.object({
+          displayName: z.string().trim().min(1).max(20).optional(),
+        }),
+      ),
     )
     .mutation(({ ctx, input }) => addAccountHandler(ctx, input)),
 

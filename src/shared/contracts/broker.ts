@@ -2,10 +2,17 @@ import { z } from 'zod';
 import { AppEnvSchema } from './app';
 
 /**
- * Broker(증권사) 식별자.
- * 현재 KIS만 라이브, Kiwoom은 Stage 6.5 이후 라이브.
+ * 국내주식 Broker(증권사) 식별자.
+ * BrokerPort 는 이 범위만 구현한다. 코인거래소는 별도 CryptoExchangePort 로 분리한다.
  */
-export const BrokerIdSchema = z.enum(['KIS', 'KIWOOM']);
+export const DomesticBrokerIdSchema = z.enum(['KIS', 'KIWOOM']);
+export type DomesticBrokerId = z.infer<typeof DomesticBrokerIdSchema>;
+
+/**
+ * 계좌 provider 식별자.
+ * 기존 이름 호환을 위해 BrokerId 를 유지하지만, UPBIT 은 국내주식 BrokerPort 가 아니다.
+ */
+export const BrokerIdSchema = z.enum(['KIS', 'KIWOOM', 'UPBIT']);
 export type BrokerId = z.infer<typeof BrokerIdSchema>;
 
 /**

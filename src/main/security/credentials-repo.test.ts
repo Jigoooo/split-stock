@@ -127,8 +127,8 @@ describe('CredentialsRepo', () => {
       if (!(a.isOk() && c.isOk())) throw new Error('load failed');
       expect(a.value?.env).toBe('MOCK');
       expect(c.value?.env).toBe('PROD');
-      expect(a.value?.accountNo8).toBe('12345678');
-      expect(c.value?.accountNo8).toBe('99999999');
+      expect(a.value?.broker === 'UPBIT' ? null : a.value?.accountNo8).toBe('12345678');
+      expect(c.value?.broker === 'UPBIT' ? null : c.value?.accountNo8).toBe('99999999');
     });
 
     it('loadCredentialsByEnv — UNIQUE INDEX 보장으로 단일 결과', () => {

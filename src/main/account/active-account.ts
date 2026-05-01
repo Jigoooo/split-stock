@@ -179,6 +179,7 @@ export class ActiveAccountRepo {
           .where(
             and(
               eq(accountsTable.env, input.env),
+              eq(accountsTable.broker, input.broker ?? 'KIS'),
               eq(accountsTable.accountNo8, input.accountNo8),
               eq(accountsTable.accountProdCd, input.accountProdCd),
             ),

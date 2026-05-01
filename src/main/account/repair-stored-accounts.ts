@@ -1,3 +1,4 @@
+import { getCredentialsAccountRef } from '@shared/contracts';
 import type { EventLogger } from '../logging/event-logger';
 import type { CredentialsRepo } from '../security/credentials-repo';
 import type { ActiveAccountRepo } from './active-account';
@@ -32,12 +33,13 @@ export function repairAccountFromStoredCredentials(
     return false;
   }
 
+  const accountRef = getCredentialsAccountRef(cred.value);
   const result = deps.activeAccounts.ensureFromStoredCredentials({
     accountId,
     env: cred.value.env,
     broker: cred.value.broker,
-    accountNo8: cred.value.accountNo8,
-    accountProdCd: cred.value.accountProdCd,
+    accountNo8: accountRef.accountNo8,
+    accountProdCd: accountRef.accountProdCd,
   });
   if (result.isErr()) {
     deps.logger.log({

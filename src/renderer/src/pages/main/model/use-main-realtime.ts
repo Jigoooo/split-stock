@@ -12,9 +12,15 @@ import { useEffect } from 'react';
  */
 export function useMainRealtime() {
   const envQuery = trpc.auth.getEnv.useQuery();
+  const activeAccountQuery = trpc.account.getActive.useQuery(undefined, {
+    enabled: (envQuery.data?.env ?? null) !== null,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+  });
   const envReady = (envQuery.data?.env ?? null) !== null;
+  const stockRealtimeAllowed = activeAccountQuery.data?.account?.broker !== 'UPBIT';
   const realtimeStatus = trpc.realtime.status.useQuery(undefined, {
-    enabled: envReady,
+    enabled: envReady && stockRealtimeAllowed,
     refetchInterval: 5000,
   });
   const startRealtime = trpc.realtime.start.useMutation({
@@ -22,9 +28,9 @@ export function useMainRealtime() {
   });
 
   useEffect(() => {
-    if (!envReady) return;
+    if (!envReady || !stockRealtimeAllowed) return;
     if (realtimeStatus.data?.started) return;
     if (startRealtime.isPending) return;
     startRealtime.mutate();
-  }, [envReady, realtimeStatus.data?.started, startRealtime]);
+  }, [envReady, realtimeStatus.data?.started, startRealtime, stockRealtimeAllowed]);
 }

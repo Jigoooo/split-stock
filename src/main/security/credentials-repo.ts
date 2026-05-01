@@ -1,4 +1,10 @@
-import type { AppEnv, BrokerId, Credentials } from '@shared/contracts';
+import type {
+  AppEnv,
+  BrokerId,
+  Credentials,
+  DomesticStockCredentials,
+  UpbitCredentials,
+} from '@shared/contracts';
 import { CredentialsSchema } from '@shared/contracts';
 import { and, eq } from 'drizzle-orm';
 import { err, ok, type Result } from 'neverthrow';
@@ -126,6 +132,14 @@ export class CredentialsRepo {
    */
   loadCredentialsByEnv(
     env: AppEnv,
+    broker?: 'KIS' | 'KIWOOM',
+  ): Result<DomesticStockCredentials | null, CredentialsRepoError>;
+  loadCredentialsByEnv(
+    env: AppEnv,
+    broker: 'UPBIT',
+  ): Result<UpbitCredentials | null, CredentialsRepoError>;
+  loadCredentialsByEnv(
+    env: AppEnv,
     broker: BrokerId = 'KIS',
   ): Result<Credentials | null, CredentialsRepoError> {
     if (!this.safeStorage.isEncryptionAvailable()) {
@@ -204,13 +218,13 @@ export class CredentialsRepo {
   private decodeRow(
     row: typeof credentialsTable.$inferSelect,
   ): Result<Credentials, CredentialsRepoError> {
-    let plain: string;
+    let raw: unknown;
     try {
-      plain = this.safeStorage.decryptString(row.payload as Buffer);
+      raw = JSON.parse(this.safeStorage.decryptString(row.payload as Buffer));
     } catch (cause) {
       return err({ kind: 'DECRYPT_FAILED', cause });
     }
-    const parsed = CredentialsSchema.safeParse(JSON.parse(plain));
+    const parsed = CredentialsSchema.safeParse(raw);
     if (!parsed.success) {
       return err({ kind: 'VALIDATION', msg: parsed.error.message });
     }

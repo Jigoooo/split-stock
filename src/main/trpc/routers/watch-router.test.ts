@@ -98,6 +98,41 @@ function makeCandles(count: number, close = 100_000): DailyCandle[] {
   });
 }
 
+function makeStrongSupportCandles(): DailyCandle[] {
+  const today = toKstYmd(new Date());
+  const touchIndexes = new Set([20, 45, 70]);
+  return Array.from({ length: 90 }, (_, i) => {
+    const wave = Math.sin(i / 4);
+    let close = 104_000 + Math.round(wave * 900);
+    let high = close + 900;
+    let low = close - 700;
+    let volume = 900_000;
+    if (touchIndexes.has(i)) {
+      close = 98_000;
+      high = 99_500;
+      low = 97_000;
+      volume = 1_600_000;
+    }
+    if (touchIndexes.has(i - 1) || touchIndexes.has(i - 2)) {
+      high = Math.max(high, 108_000);
+      close = Math.max(close, 105_000);
+    }
+    if (i >= 84) {
+      close = 100_500;
+      high = 101_500;
+      low = 99_500;
+    }
+    return {
+      date: shiftYmd(today, i - 90 + 1),
+      open: close,
+      high,
+      low,
+      close,
+      volume,
+    };
+  });
+}
+
 function toKstYmd(d: Date): string {
   const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
   return kst.toISOString().slice(0, 10);
@@ -293,6 +328,22 @@ describe('watch-router 권한 검증', () => {
       expect(draft.recommended.targetPrice).toBeLessThan(100_000);
       expect(draft.sourceStatus.quote).toBe('used');
       expect(draft.sourceStatus.candles).toBe('cache');
+    });
+
+    it('강한 지지선이 현재가 아래 1~12% 구간이면 기본 추천가로 선택한다', async () => {
+      seedDailyCandles(s.candlesRepo, '005930', makeStrongSupportCandles());
+      const caller = createCaller(ctxFor(s.baseCtx, 1));
+
+      const draft = await caller.getReservationBuyDraft({ accountId: 1, pdno: '005930' });
+
+      const support = draft.priceCandidates.find((item) => item.id === 'nearest-support');
+      expect(support).toMatchObject({
+        id: 'nearest-support',
+        price: 97_000,
+      });
+      expect(support?.strength).toBeGreaterThanOrEqual(65);
+      expect(draft.recommended.priceCandidateId).toBe('nearest-support');
+      expect(draft.recommended.targetPrice).toBe(97_000);
     });
 
     it('박스하단이 현재가 대비 과도하게 멀면 기본 추천에서 제외하고 근접 눌림가를 선택한다', async () => {

@@ -18,7 +18,11 @@ import {
 import { AlertCircle, Eye, EyeOff, Lock, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 
-const BROKER_LABEL: Record<BrokerId, string> = { KIS: '한국투자증권', KIWOOM: '키움증권' };
+const BROKER_LABEL: Record<BrokerId, string> = {
+  KIS: '한국투자증권',
+  KIWOOM: '키움증권',
+  UPBIT: '업비트',
+};
 const ENV_LABEL: Record<AppEnv, string> = { MOCK: '모의(MOCK)', PROD: '실전(PROD)' };
 
 /**
@@ -65,19 +69,27 @@ export const AddAccountPage = (): ReactElement => {
 
   const onSubmit = (e: { preventDefault: () => void }): void => {
     e.preventDefault();
-    const acntNo8 = broker === 'KIS' ? accountNo8 : kiwoomAccountNo.slice(0, 8);
-    const acntProdCd: AccountProdCode = broker === 'KIS' ? accountProdCd : '01';
     const trimmedName = displayName.trim();
-    const value: Credentials & { displayName?: string } = {
-      env,
-      broker,
-      appKey,
-      appSecret,
-      accountNo8: acntNo8,
-      accountProdCd: acntProdCd,
-      ...(broker === 'KIS' && htsId.trim().length > 0 ? { htsId: htsId.trim() } : {}),
-      ...(trimmedName.length > 0 ? { displayName: trimmedName } : {}),
-    };
+    const displayNameValue = trimmedName.length > 0 ? { displayName: trimmedName } : {};
+    const value: Credentials & { displayName?: string } =
+      broker === 'UPBIT'
+        ? {
+            env: 'PROD',
+            broker: 'UPBIT',
+            accessKey: appKey,
+            secretKey: appSecret,
+            ...displayNameValue,
+          }
+        : {
+            env,
+            broker,
+            appKey,
+            appSecret,
+            accountNo8: broker === 'KIS' ? accountNo8 : kiwoomAccountNo.slice(0, 8),
+            accountProdCd: broker === 'KIS' ? accountProdCd : '01',
+            ...(broker === 'KIS' && htsId.trim().length > 0 ? { htsId: htsId.trim() } : {}),
+            ...displayNameValue,
+          };
     if (value.env === 'PROD') {
       setPendingProdValue(value);
       return;
@@ -88,9 +100,14 @@ export const AddAccountPage = (): ReactElement => {
   const canSubmit =
     appKey.length > 0 &&
     appSecret.length > 0 &&
-    (broker === 'KIS' ? accountNo8.length === 8 : kiwoomAccountNo.length === 10);
+    (broker === 'UPBIT'
+      ? true
+      : broker === 'KIS'
+        ? accountNo8.length === 8
+        : kiwoomAccountNo.length === 10);
 
-  const isProd = env === 'PROD';
+  const effectiveEnv = broker === 'UPBIT' ? 'PROD' : env;
+  const isProd = effectiveEnv === 'PROD';
 
   return (
     <div
@@ -122,7 +139,7 @@ export const AddAccountPage = (): ReactElement => {
                 ·
               </span>
               <span className="muted" style={{ fontSize: '0.95rem' }} title="현재 선택 요약">
-                {BROKER_LABEL[broker]} · {ENV_LABEL[env]}
+                {BROKER_LABEL[broker]} · {ENV_LABEL[effectiveEnv]}
               </span>
             </div>
             <button
@@ -171,12 +188,15 @@ export const AddAccountPage = (): ReactElement => {
 
           {/* ① 증권사 + ② 환경 — 같은 위계의 결정 항목이므로 grid 2열 묶음 */}
           <div className="form-grid-2col">
-            <FormSection number={1} title="증권사 선택">
+            <FormSection number={1} title="거래처 선택">
               <RadioGroup<BrokerId>
                 name="add-account-broker"
-                ariaLabel="증권사 선택"
+                ariaLabel="거래처 선택"
                 value={broker}
-                onChange={setBroker}
+                onChange={(next) => {
+                  setBroker(next);
+                  if (next === 'UPBIT') setEnv('PROD');
+                }}
                 items={[
                   {
                     value: 'KIS',
@@ -188,28 +208,50 @@ export const AddAccountPage = (): ReactElement => {
                     label: <BrokerLabel code="KW" name="키움증권" bg="#ff5e00" />,
                     description: '국내 / 모의 / 실전 (NXT·SOR 전용)',
                   },
+                  {
+                    value: 'UPBIT',
+                    label: <BrokerLabel code="UP" name="업비트" bg="#165a9f" />,
+                    description: '코인거래소 / 실전',
+                  },
                 ]}
               />
             </FormSection>
 
             {/* ② 환경 — 라디오 자체 색 위계 외 추가 강조는 두지 않음 (사용자 피드백). */}
             <FormSection number={2} title="환경">
-              <EnvironmentRadioGroup
-                name="add-account-env"
-                ariaLabel="추가 계좌 환경"
-                value={env}
-                onChange={setEnv}
-                dense
-                mockDescription="주문 없이 흐름과 시세 점검."
-                prodDescription="실전 — 실제 계좌, 주문이 즉시 체결됩니다."
-              />
+              {broker === 'UPBIT' ? (
+                <span
+                  className="chip chip--down"
+                  style={{
+                    minHeight: '2.1rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    width: 'fit-content',
+                  }}
+                >
+                  {ENV_LABEL.PROD}
+                </span>
+              ) : (
+                <EnvironmentRadioGroup
+                  name="add-account-env"
+                  ariaLabel="추가 계좌 환경"
+                  value={env}
+                  onChange={setEnv}
+                  dense
+                  mockDescription="주문 없이 흐름과 시세 점검."
+                  prodDescription="실전 — 실제 계좌, 주문이 즉시 체결됩니다."
+                />
+              )}
             </FormSection>
           </div>
 
           {/* ③/④ 자격증명 + 계좌정보 — 넓은 창 2열, 좁은 창 단일 */}
           <div className="form-grid-2col">
             <FormSection number={3} title="자격증명">
-              <Row label="App Key" inputId="add-account-app-key">
+              <Row
+                label={broker === 'UPBIT' ? 'Access Key' : 'App Key'}
+                inputId="add-account-app-key"
+              >
                 <TextInput
                   id="add-account-app-key"
                   value={appKey}
@@ -250,7 +292,24 @@ export const AddAccountPage = (): ReactElement => {
             </FormSection>
 
             <FormSection number={4} title="계좌 정보">
-              {broker === 'KIS' ? (
+              {broker === 'UPBIT' ? (
+                <Row label="계좌 기준" inputId="add-account-upbit-readonly">
+                  <span
+                    id="add-account-upbit-readonly"
+                    className="chip"
+                    style={{
+                      height: '2.1rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      width: 'fit-content',
+                    }}
+                  >
+                    <Lock size={12} aria-hidden />
+                    <span>Access Key</span>
+                  </span>
+                </Row>
+              ) : broker === 'KIS' ? (
                 <>
                   <Row label="계좌번호 (앞 8자리)" inputId="add-account-no8">
                     <TextInput
@@ -344,7 +403,7 @@ export const AddAccountPage = (): ReactElement => {
                 id="add-account-display-name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value.slice(0, 20))}
-                placeholder="예: 메인 KIS 실전"
+                placeholder={broker === 'UPBIT' ? '예: 업비트 실전' : '예: 메인 KIS 실전'}
                 maxLength={20}
                 autoComplete="off"
                 spellCheck={false}

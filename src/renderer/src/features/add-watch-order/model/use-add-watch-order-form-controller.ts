@@ -81,6 +81,25 @@ export interface ReservationBuyPriceCandidate {
   distancePct: number;
   reason: string;
   confidence: 'high' | 'med' | 'low';
+  strength?: number;
+  zoneLow?: number;
+  zoneHigh?: number;
+  basis?: string;
+}
+
+export interface SupportResistanceLevel {
+  kind: 'support' | 'resistance';
+  price: number;
+  zoneLow: number;
+  zoneHigh: number;
+  strength: number;
+  touchCount: number;
+  lastTouchedDate: string;
+  ageBars: number;
+  bouncePct: number;
+  volumeRatio: number;
+  invalidated: boolean;
+  sources: string[];
 }
 
 export interface ReservationBuyDraft {
@@ -108,12 +127,23 @@ export interface ReservationBuyDraft {
     dataQualityReason: string;
     analysisConfidence: 'high' | 'med' | 'low';
     lastClose: number | null;
-    box: { high: number; low: number; mid: number } | null;
+    box: {
+      high: number;
+      low: number;
+      mid: number;
+      confidence?: 'high' | 'med' | 'low';
+      touchesLow?: number;
+      touchesHigh?: number;
+      method?: 'percentile' | 'confluence';
+    } | null;
     supportResistance: {
       supports: number[];
       resistances: number[];
       nearestSupportPct: number | null;
       nearestResistancePct: number | null;
+      nearestSupport?: SupportResistanceLevel | null;
+      nearestResistance?: SupportResistanceLevel | null;
+      levels?: SupportResistanceLevel[];
     } | null;
     rangePct120d: number | null;
   };

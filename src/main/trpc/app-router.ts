@@ -4,6 +4,7 @@ import { aiRouter } from './routers/ai-router';
 import { authRouter } from './routers/auth-router';
 import { backupRouter } from './routers/backup-router';
 import { bootRouter } from './routers/boot-router';
+import { cryptoRouter } from './routers/crypto-router';
 import { displayRouter } from './routers/display-router';
 import { feesRouter } from './routers/fees-router';
 import { logsRouter } from './routers/logs-router';
@@ -32,6 +33,7 @@ export const appRouter = router({
   account: accountRouter,
   ai: aiRouter,
   backup: backupRouter,
+  crypto: cryptoRouter,
   display: displayRouter,
   fees: feesRouter,
   market: marketRouter,

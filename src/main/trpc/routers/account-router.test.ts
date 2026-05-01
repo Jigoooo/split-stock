@@ -78,4 +78,43 @@ describe('accountRouter stored credential repair', () => {
     expect(ctx.currentEnv).toBe('PROD');
     expect(ctx.activeAccountId).toBe(7);
   });
+
+  it('add — Upbit accessKey/secretKey 계좌를 crypto 계좌로 저장한다', async () => {
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const activeAccounts = new ActiveAccountRepo(db);
+    const credentialsRepo = new CredentialsRepo(db, makeMockSafeStorage());
+    const settingsRepo = new SettingsRepo(db);
+    const ctx = {
+      activeAccounts,
+      activeAccountId: null,
+      currentEnv: null,
+      credentialsRepo,
+      logger: { log: vi.fn() },
+      settingsRepo,
+      setEnvAndAccount(next: { env: 'MOCK' | 'PROD' | null; accountId: number | null }) {
+        ctx.currentEnv = next.env;
+        ctx.activeAccountId = next.accountId;
+      },
+    } as unknown as Context & {
+      activeAccountId: number | null;
+      currentEnv: 'MOCK' | 'PROD' | null;
+    };
+
+    const result = await createCaller(ctx).add({
+      env: 'PROD',
+      broker: 'UPBIT',
+      accessKey: 'upbit-access-key-12345678',
+      secretKey: 'upbit-secret-key-12345678',
+      displayName: '업비트 실전',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(activeAccounts.getById(result.accountId)?.broker).toBe('UPBIT');
+    expect(activeAccounts.getById(result.accountId)?.accountNo8).toBe('UPBIT***');
+    expect(activeAccounts.getById(result.accountId)?.accountProdCd).toBe('CRYPTO');
+
+    const saved = credentialsRepo.loadCredentials(result.accountId);
+    expect(saved.isOk() && saved.value?.broker).toBe('UPBIT');
+  });
 });

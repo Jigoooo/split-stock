@@ -11,6 +11,7 @@ import { Group, type Layout, Panel, Separator, useDefaultLayout } from 'react-re
 import { useMainRealtime } from '../model/use-main-realtime';
 import { useMainSelection } from '../model/use-main-selection';
 import { useMainTradingContext } from '../model/use-main-trading-context';
+import { CryptoMainPage } from './crypto-main-page';
 import { MainAccountLoading, MainNoAccount } from './main-account-status';
 import { MainBottomSection } from './main-bottom-section';
 import { MainPositionsPane } from './main-positions-pane';
@@ -60,9 +61,36 @@ export const MainPage = ({
   onOpenStockPicker,
   onOpenStrategySettings,
 }: MainPageProps): ReactElement => {
+  const { account, accountId, isPending: isAccountPending } = useActiveAccountId();
+
+  if (isAccountPending) {
+    return <MainAccountLoading />;
+  }
+
+  if (accountId === null) {
+    return <MainNoAccount />;
+  }
+
+  if (account?.broker === 'UPBIT') {
+    return <CryptoMainPage accountId={accountId} />;
+  }
+
+  return (
+    <StockMainPage
+      accountId={accountId}
+      onOpenStockPicker={onOpenStockPicker}
+      onOpenStrategySettings={onOpenStrategySettings}
+    />
+  );
+};
+
+function StockMainPage({
+  accountId,
+  onOpenStockPicker,
+  onOpenStrategySettings,
+}: MainPageProps & { accountId: number }): ReactElement {
   useMainRealtime();
 
-  const { accountId, isPending: isAccountPending } = useActiveAccountId();
   const { selectedPdno, selectedStock, setSelectedPdno, setSelectedStock } = useMainSelection();
 
   const layout = useDefaultLayout({
@@ -78,14 +106,6 @@ export const MainPage = ({
     selectedPdno,
     selectedStock,
   );
-
-  if (isAccountPending) {
-    return <MainAccountLoading />;
-  }
-
-  if (accountId === null) {
-    return <MainNoAccount />;
-  }
 
   const openAddWatchOrderPopout = (prefill: WatchOrderFormPrefill | null): void => {
     const payload: AddWatchOrderPrefillPayload = { accountId, prefill };
@@ -145,4 +165,4 @@ export const MainPage = ({
       <StrategyPreviewModalHost />
     </div>
   );
-};
+}

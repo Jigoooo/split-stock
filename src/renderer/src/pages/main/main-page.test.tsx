@@ -13,6 +13,7 @@ vi.mock('react-resizable-panels', () => ({
 
 const mockUseActiveAccountId = vi.fn();
 const mockUseBalanceWithLots = vi.fn();
+const mockUseMainRealtime = vi.fn();
 
 vi.mock('@renderer/entities/account', () => ({
   useActiveAccountId: () => mockUseActiveAccountId(),
@@ -23,7 +24,13 @@ vi.mock('@renderer/entities/account', () => ({
 }));
 
 vi.mock('@renderer/pages/main/model/use-main-realtime', () => ({
-  useMainRealtime: () => undefined,
+  useMainRealtime: () => mockUseMainRealtime(),
+}));
+
+vi.mock('./ui/crypto-main-page', () => ({
+  CryptoMainPage: ({ accountId }: { accountId: number }) => (
+    <div data-testid="crypto-main-page" data-account-id={accountId} />
+  ),
 }));
 
 vi.mock('@renderer/widgets/trading-panel', () => ({
@@ -163,6 +170,7 @@ describe('MainPage', () => {
     window.localStorage.clear();
     mockUseActiveAccountId.mockReset();
     mockUseBalanceWithLots.mockReset();
+    mockUseMainRealtime.mockReset();
     mockUseBalanceWithLots.mockReturnValue(mockBalance());
   });
 
@@ -257,5 +265,20 @@ describe('MainPage', () => {
 
     expect(screen.getByText('활성 계좌가 없습니다.')).toBeInTheDocument();
     expect(screen.queryByTestId('main-positions-pane')).not.toBeInTheDocument();
+  });
+
+  it('UPBIT 계좌에서는 국내주식 hook을 마운트하지 않고 코인 화면만 렌더링한다', () => {
+    mockUseActiveAccountId.mockReturnValue({
+      accountId: 2,
+      account: { broker: 'UPBIT' },
+      isPending: false,
+    });
+
+    render(<MainPage />);
+
+    expect(screen.getByTestId('crypto-main-page')).toHaveAttribute('data-account-id', '2');
+    expect(screen.queryByTestId('main-positions-pane')).not.toBeInTheDocument();
+    expect(mockUseMainRealtime).not.toHaveBeenCalled();
+    expect(mockUseBalanceWithLots).not.toHaveBeenCalled();
   });
 });

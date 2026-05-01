@@ -20,6 +20,7 @@ import { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
 import { defaultDbPath, migrate, openDb } from '../db/client';
 import {
   repairAccountsRuntimeSchema,
+  repairCryptoRuntimeSchema,
   repairMarketContextRuntimeSchema,
   repairTradingCalendarRuntimeSchema,
 } from '../db/runtime-schema-repair';
@@ -86,6 +87,7 @@ export function bootstrapDeps(userDataDir: string) {
   repairAccountsRuntimeSchema(db);
   repairMarketContextRuntimeSchema(db);
   repairTradingCalendarRuntimeSchema(db);
+  repairCryptoRuntimeSchema(db);
   markStartup('db.runtime-repair.end');
 
   markStartup('bootstrap.repos.start');
@@ -358,28 +360,49 @@ export function bootstrapDeps(userDataDir: string) {
   // 저장된 자격증명이 있으면 마지막 활성 환경 복원 — 재시작 후 자동 로그인.
   const savedEnv = settingsRepo.get(SETTING_KEYS.LAST_ACTIVE_ENV);
   if (savedEnv === 'MOCK' || savedEnv === 'PROD') {
-    const cred = credentialsRepo.loadCredentialsByEnv(savedEnv as AppEnv);
-    if (cred.isOk() && cred.value) {
-      factory.setEnv(savedEnv as AppEnv);
-      // 해당 env 의 계좌를 활성으로 전환.
-      const accId = credentialsRepo.resolveAccountIdByEnv(savedEnv as AppEnv);
-      if (accId !== null) {
-        repairAccountFromStoredCredentials(
-          { activeAccounts, credentialsRepo, logger: eventLogger },
-          accId,
-        );
-        activeAccounts.setActiveAccountId(accId);
-        factory.setActiveAccountId(accId);
+    let restored = false;
+    if (initialActiveAccountId !== null) {
+      const active = activeAccounts.getById(initialActiveAccountId);
+      const cred = credentialsRepo.loadCredentials(initialActiveAccountId);
+      if (active?.env === savedEnv && cred.isOk() && cred.value) {
+        factory.setEnvAndAccount({ env: savedEnv as AppEnv, accountId: active.id });
+        eventLogger.log({
+          level: 'INFO',
+          category: 'AUTH',
+          message: 'auth.env.restored',
+          payload: { env: savedEnv, accountId: active.id, broker: active.broker },
+        });
+        if (active.broker !== 'UPBIT') {
+          stockMasterSync.syncIfStaleWithLog(eventLogger);
+        }
+        restored = true;
       }
-      eventLogger.log({
-        level: 'INFO',
-        category: 'AUTH',
-        message: 'auth.env.restored',
-        payload: { env: savedEnv, accountId: accId },
-      });
-      // 로그인 상태에서 24시간 초과 시 백그라운드로 종목 마스터 동기화.
-      // 네트워크 실패는 로그만 남기고 부팅 지연 없이 계속 진행.
-      stockMasterSync.syncIfStaleWithLog(eventLogger);
+    }
+    if (!restored) {
+      const cred = credentialsRepo.loadCredentialsByEnv(savedEnv as AppEnv);
+      if (cred.isOk() && cred.value) {
+        factory.setEnv(savedEnv as AppEnv);
+        // 해당 env 의 KIS 호환 계좌를 활성으로 전환.
+        const accId = credentialsRepo.resolveAccountIdByEnv(savedEnv as AppEnv);
+        if (accId !== null) {
+          repairAccountFromStoredCredentials(
+            { activeAccounts, credentialsRepo, logger: eventLogger },
+            accId,
+          );
+          activeAccounts.setActiveAccountId(accId);
+          factory.setActiveAccountId(accId);
+        }
+        eventLogger.log({
+          level: 'INFO',
+          category: 'AUTH',
+          message: 'auth.env.restored',
+          payload: { env: savedEnv, accountId: accId },
+        });
+        // 로그인 상태에서 24시간 초과 시 백그라운드로 종목 마스터 동기화.
+        // 네트워크 실패는 로그만 남기고 부팅 지연 없이 계속 진행.
+        stockMasterSync.syncIfStaleWithLog(eventLogger);
+        restored = true;
+      }
     }
   }
 

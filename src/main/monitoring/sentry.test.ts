@@ -20,17 +20,23 @@ describe('scrubSentryEvent', () => {
     const event: SentryEventLike = {
       extra: {
         appKey: 'ABCDEFGHIJKL1234',
+        accessKey: 'UPBITACCESSKEY1234',
+        secretKey: 'UPBITSECRETKEY1234',
         pdno: '005930',
         nested: { token: 'SECRET_TOKEN_XYZ1' },
       },
     };
     const scrubbed = scrubSentryEvent(event);
     const extra = scrubbed.extra as {
+      accessKey: string;
       appKey: string;
       pdno: string;
+      secretKey: string;
       nested: { token: string };
     };
     expect(extra.appKey).toBe('************1234');
+    expect(extra.accessKey).toBe('**************1234');
+    expect(extra.secretKey).toBe('**************1234');
     expect(extra.pdno).toBe('005930');
     expect(extra.nested.token).not.toContain('SECRET_TOKEN');
     expect(extra.nested.token.endsWith('XYZ1')).toBe(true);

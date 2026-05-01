@@ -27,23 +27,70 @@ export const ACCOUNT_PROD_CODE_OPTIONS: ReadonlyArray<{
   label: `${ACCOUNT_PROD_CODE_LABEL[value]} (${value})`,
 }));
 
+const DomesticCredentialsBrokerIdSchema = z.enum(['KIS', 'KIWOOM']);
+
 /**
- * 증권사 자격 증명. 저장 시 반드시 safeStorage로 암호화.
+ * 국내주식 증권사 자격 증명. 저장 시 반드시 safeStorage로 암호화.
  * accessToken은 24h 유효, 만료 6h 이내면 기존 토큰 재사용.
  *
  * Stage 5c: broker 필드 추가. 기존 행은 default 'KIS' 로 backfill (zod default).
  * Kiwoom 활성화는 Stage 6.6 이후. Stage 5b 에서 wizard UI 가 broker 선택 후 저장.
  */
-export const CredentialsSchema = z.object({
+export const DomesticStockCredentialsSchema = z.object({
   env: AppEnvSchema,
-  broker: z.enum(['KIS', 'KIWOOM']).default('KIS'),
+  broker: DomesticCredentialsBrokerIdSchema.default('KIS'),
   appKey: z.string().min(10),
   appSecret: z.string().min(10),
   accountNo8: z.string().regex(/^\d{8}$/, 'CANO(앞 8자리)는 숫자 8자리여야 합니다'),
   accountProdCd: AccountProdCodeSchema,
   htsId: z.string().optional(),
 });
+export type DomesticStockCredentials = z.infer<typeof DomesticStockCredentialsSchema>;
+
+/**
+ * Upbit 코인거래소 자격 증명.
+ * Upbit은 모의투자 환경이 없으므로 이 앱에서는 PROD만 저장한다.
+ */
+export const UpbitCredentialsSchema = z.object({
+  env: z.literal('PROD'),
+  broker: z.literal('UPBIT'),
+  accessKey: z.string().trim().min(10),
+  secretKey: z.string().trim().min(10),
+});
+export type UpbitCredentials = z.infer<typeof UpbitCredentialsSchema>;
+
+export const CredentialsSchema = z.union([DomesticStockCredentialsSchema, UpbitCredentialsSchema]);
 export type Credentials = z.infer<typeof CredentialsSchema>;
+
+export function isUpbitCredentials(
+  value: Credentials,
+): value is z.infer<typeof UpbitCredentialsSchema> {
+  return value.broker === 'UPBIT';
+}
+
+export function getCredentialsAccountRef(value: Credentials): {
+  accountNo8: string;
+  accountProdCd: string;
+} {
+  if (isUpbitCredentials(value)) {
+    return {
+      accountNo8: 'UPBIT***',
+      accountProdCd: 'CRYPTO',
+    };
+  }
+  return { accountNo8: value.accountNo8, accountProdCd: value.accountProdCd };
+}
+
+export function getCredentialsProviderLabel(provider: Credentials['broker']): string {
+  switch (provider) {
+    case 'KIS':
+      return '한국투자증권';
+    case 'KIWOOM':
+      return '키움증권';
+    case 'UPBIT':
+      return '업비트';
+  }
+}
 
 /**
  * 저장된 액세스 토큰 — 자동 갱신 대상.

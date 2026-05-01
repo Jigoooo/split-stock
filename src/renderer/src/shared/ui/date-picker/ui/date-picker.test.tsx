@@ -58,6 +58,11 @@ function DatePickerHarness(props: {
   );
 }
 
+function currentMonthDate(day: number): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 describe('DatePicker', () => {
   it('첫 오픈에서도 calendar dialog를 바로 렌더한다', () => {
     render(<DatePickerHarness />);
@@ -130,6 +135,7 @@ describe('DatePicker', () => {
 
   it('hidden input mirrors controlled and committed values when name is provided', async () => {
     const onCommit = vi.fn();
+    const targetDate = currentMonthDate(18);
     render(
       <DatePickerHarness
         initial=""
@@ -149,12 +155,12 @@ describe('DatePicker', () => {
 
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(screen.getByRole('button', { name: '2026-04-18 선택' }));
+    fireEvent.click(screen.getByRole('button', { name: `${targetDate} 선택` }));
 
     await waitFor(() => {
-      expect(onCommit).toHaveBeenCalledWith('2026-04-18');
-      expect(hidden).toHaveValue('2026-04-18');
-      expect(trigger).toHaveTextContent('2026-04-18');
+      expect(onCommit).toHaveBeenCalledWith(targetDate);
+      expect(hidden).toHaveValue(targetDate);
+      expect(trigger).toHaveTextContent(targetDate);
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
     });
   });

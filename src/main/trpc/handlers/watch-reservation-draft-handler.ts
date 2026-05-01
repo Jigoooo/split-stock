@@ -26,6 +26,10 @@ export interface ReservationBuyPriceCandidate {
   distancePct: number;
   reason: string;
   confidence: 'high' | 'med' | 'low';
+  strength?: number;
+  zoneLow?: number;
+  zoneHigh?: number;
+  basis?: string;
 }
 
 export interface ReservationBuyDraft {
@@ -41,7 +45,7 @@ export interface ReservationBuyDraft {
     dataQualityReason: string;
     analysisConfidence: RangeCycleFacts['analysisConfidence'];
     lastClose: number | null;
-    box: { high: number; low: number; mid: number } | null;
+    box: RangeCycleFacts['algo']['box'];
     supportResistance: RangeCycleFacts['algo']['supportResistance'];
     rangePct120d: number | null;
   };
@@ -179,15 +183,49 @@ function makeNearestSupportCandidate(
   currentPrice: number,
 ): ReservationBuyPriceCandidate | null {
   const supports = facts.algo.supportResistance?.supports ?? [];
-  const support = supports.filter((price) => price < currentPrice).sort((a, b) => b - a)[0];
-  if (support === undefined) return null;
+  const strongLevel =
+    facts.algo.supportResistance?.levels
+      .filter((level) => {
+        if (level.kind !== 'support' || level.invalidated || level.price >= currentPrice)
+          return false;
+        const distancePct = ((level.price - currentPrice) / currentPrice) * 100;
+        return level.strength >= 65 && distancePct <= -1 && distancePct >= -12;
+      })
+      .sort((a, b) => b.price - a.price)[0] ?? null;
+  const level =
+    strongLevel ??
+    facts.algo.supportResistance?.nearestSupport ??
+    supports
+      .filter((price) => price < currentPrice)
+      .sort((a, b) => b - a)
+      .map((price) => ({
+        price,
+        strength: 50,
+        zoneLow: price,
+        zoneHigh: price,
+        touchCount: 0,
+        sources: [] as string[],
+      }))[0];
+  if (level === undefined || level.price >= currentPrice) return null;
   return candidateFromPrice({
     id: 'nearest-support',
     label: '지지선',
-    price: support,
+    price: level.price,
     currentPrice,
-    reason: '현재가 아래 최근접 지지선',
-    confidence: facts.analysisConfidence === 'high' ? 'high' : 'med',
+    reason:
+      level.strength >= 65
+        ? `강한 지지선(${level.touchCount}회 터치, 강도 ${level.strength})`
+        : `현재가 아래 최근접 지지선(강도 ${level.strength})`,
+    confidence:
+      facts.analysisConfidence === 'high' && level.strength >= 70
+        ? 'high'
+        : level.strength >= 65
+          ? 'med'
+          : 'low',
+    strength: level.strength,
+    zoneLow: level.zoneLow,
+    zoneHigh: level.zoneHigh,
+    basis: level.sources.length > 0 ? level.sources.join('+') : 'pivot',
   });
 }
 
@@ -195,15 +233,29 @@ function makeBoxLowCandidate(
   facts: RangeCycleFacts,
   currentPrice: number,
 ): ReservationBuyPriceCandidate | null {
-  const price = facts.algo.box?.low;
+  const box = facts.algo.box;
+  if (!box) return null;
+  const price = box.low;
   if (price === undefined || price === null) return null;
   return candidateFromPrice({
     id: 'box-low',
     label: '박스하단',
     price,
     currentPrice,
-    reason: '최근 120일 percentile 박스 하단',
-    confidence: facts.dataQuality === 'normal' ? 'med' : 'low',
+    reason:
+      box.method === 'confluence'
+        ? `검증된 박스하단(${box.touchesLow}회 터치, ${box.confidence})`
+        : '최근 120일 percentile 박스 하단',
+    confidence:
+      facts.dataQuality === 'normal' && box.confidence === 'high'
+        ? 'high'
+        : facts.dataQuality === 'normal' && box.confidence === 'med'
+          ? 'med'
+          : 'low',
+    strength: box.confidence === 'high' ? 80 : box.confidence === 'med' ? 65 : 45,
+    zoneLow: box.low,
+    zoneHigh: box.high,
+    basis: box.method,
   });
 }
 
@@ -225,6 +277,10 @@ function candidateFromPrice(input: {
   currentPrice: number;
   reason: string;
   confidence: 'high' | 'med' | 'low';
+  strength?: number;
+  zoneLow?: number;
+  zoneHigh?: number;
+  basis?: string;
 }): ReservationBuyPriceCandidate | null {
   const price = roundToTick(input.price, false);
   if (!Number.isFinite(price) || price <= 0 || price >= input.currentPrice) return null;
@@ -235,6 +291,10 @@ function candidateFromPrice(input: {
     distancePct: roundPct(((price - input.currentPrice) / input.currentPrice) * 100),
     reason: input.reason,
     confidence: input.confidence,
+    ...(input.strength !== undefined ? { strength: input.strength } : {}),
+    ...(input.zoneLow !== undefined ? { zoneLow: roundToTick(input.zoneLow, false) } : {}),
+    ...(input.zoneHigh !== undefined ? { zoneHigh: roundToTick(input.zoneHigh, true) } : {}),
+    ...(input.basis !== undefined ? { basis: input.basis } : {}),
   };
 }
 
@@ -242,7 +302,7 @@ function pickDefaultCandidate(
   candidates: ReadonlyArray<ReservationBuyPriceCandidate>,
 ): ReservationBuyPriceCandidate | null {
   const priority: PriceCandidateId[] = ['nearest-support', 'box-low', 'pullback-2'];
-  const actionableCandidates = candidates.filter(isActionableDefaultCandidate);
+  const actionableCandidates = candidates.filter(isDefaultEligibleCandidate);
   for (const id of priority) {
     const candidate = actionableCandidates.find((item) => item.id === id);
     if (candidate) return candidate;
@@ -252,6 +312,19 @@ function pickDefaultCandidate(
 
 function isActionableDefaultCandidate(candidate: ReservationBuyPriceCandidate): boolean {
   return candidate.distancePct >= -MAX_DEFAULT_DISCOUNT_PCT;
+}
+
+function isDefaultEligibleCandidate(candidate: ReservationBuyPriceCandidate): boolean {
+  if (!isActionableDefaultCandidate(candidate)) return false;
+  if (candidate.id === 'nearest-support') {
+    return (
+      (candidate.strength ?? 0) >= 65 && candidate.distancePct <= -1 && candidate.distancePct >= -12
+    );
+  }
+  if (candidate.id === 'box-low') {
+    return candidate.confidence !== 'low';
+  }
+  return true;
 }
 
 function buildWarnings(

@@ -8,6 +8,7 @@ import {
   safeAtr,
   safeBb,
   safeCci,
+  safeKc,
   safeMacd,
   safeMfi,
   safeObv,
@@ -32,12 +33,15 @@ import {
 import {
   annualizedVolPct,
   avgVolume,
+  computeConfluenceBox,
+  computeDonchianBox,
   computePercentileBox,
+  computeRangePctFromBox,
   momentum20d,
   percentileRangePct,
   volumeSpikeRatio,
 } from './stats';
-import { detectSupportResistance, nearestPct } from './support-resistance';
+import { detectSupportResistance } from './support-resistance';
 import {
   ALGO_THRESHOLDS,
   type AlgoSignals,
@@ -115,7 +119,7 @@ function computeSingle(
   }
 
   const series = candleSeries(candles);
-  const stats = computeBaseStats(candles, T);
+  const baseStats = computeBaseStats(candles, T);
   const indicators = computeIndicators(series, candles.length >= T.minCandlesForFull);
   const lastClose = series.closes.at(-1) ?? null;
   const prevClose = series.closes.at(-2) ?? null;
@@ -147,7 +151,37 @@ function computeSingle(
           indicators.aroon.down >= T.aroonStrongUp && indicators.aroon.up <= T.aroonWeakDown,
       }
     : null;
-  const supportResistance = buildSupportResistance(candles, T, lastClose);
+  const keltner =
+    indicators.kc && lastClose !== null
+      ? {
+          upper: round(indicators.kc.upper),
+          middle: round(indicators.kc.middle),
+          lower: round(indicators.kc.lower),
+        }
+      : null;
+  const supportResistance = buildSupportResistance(candles, T, lastClose, {
+    atr14: indicators.atr,
+    percentileBox: baseStats.percentileBox,
+    bollinger,
+    donchian: baseStats.donchian,
+    keltner,
+  });
+  const box = computeConfluenceBox(
+    candles.slice(-Math.min(120, candles.length)),
+    T.boxLowPct,
+    T.boxHighPct,
+    {
+      atr14: indicators.atr,
+      supportResistance,
+      bollinger,
+      keltner,
+    },
+  );
+  const stats = {
+    ...baseStats,
+    box,
+    rangePct: computeRangePctFromBox(box) ?? baseStats.rangePct,
+  };
   const ctx: ConsensusContext = {
     rsi: indicators.rsi,
     bbPosition: bollinger?.position ?? null,
@@ -244,11 +278,14 @@ function candleSeries(candles: ReadonlyArray<DailyCandle>) {
 function computeBaseStats(candles: ReadonlyArray<DailyCandle>, T: AlgoThresholds) {
   const c60 = candles.slice(-60);
   const c120 = candles.slice(-Math.min(120, candles.length));
+  const percentileBox = computePercentileBox(c120, T.boxLowPct, T.boxHighPct);
   return {
     volPct: annualizedVolPct(c60),
     avgVol: avgVolume(c60),
     rangePct: percentileRangePct(c120, T.boxLowPct, T.boxHighPct),
-    box: computePercentileBox(c120, T.boxLowPct, T.boxHighPct),
+    percentileBox,
+    box: percentileBox,
+    donchian: computeDonchianBox(c60),
     momentum: momentum20d(candles.slice(-20)),
     spike: volumeSpikeRatio(candles.slice(-5), c60),
   };
@@ -259,6 +296,10 @@ function computeIndicators(series: ReturnType<typeof candleSeries>, enoughForFul
   const macd = enoughForFull && series.closes.length >= 26 ? safeMacd(series.closes) : null;
   const rsi = series.closes.length >= 15 ? safeRsi(series.closes) : null;
   const atr = series.closes.length >= 15 ? safeAtr(series.highs, series.lows, series.closes) : null;
+  const kc =
+    enoughForFull && series.closes.length >= 20
+      ? safeKc(series.highs, series.lows, series.closes)
+      : null;
   const stoch =
     series.closes.length >= 17 ? safeStoch(series.highs, series.lows, series.closes) : null;
   const aroon = series.closes.length >= 25 ? safeAroon(series.highs, series.lows) : null;
@@ -274,6 +315,7 @@ function computeIndicators(series: ReturnType<typeof candleSeries>, enoughForFul
     macd,
     rsi,
     atr,
+    kc,
     stoch,
     aroon,
     mfi,
@@ -287,14 +329,21 @@ function buildSupportResistance(
   candles: ReadonlyArray<DailyCandle>,
   T: AlgoThresholds,
   lastClose: number | null,
+  options: {
+    atr14: number | null;
+    percentileBox: ReturnType<typeof computePercentileBox>;
+    bollinger: { upper: number; middle: number; lower: number } | null;
+    donchian: { high: number; low: number } | null;
+    keltner: { upper: number; middle: number; lower: number } | null;
+  },
 ) {
-  const sr = candles.length >= 30 ? detectSupportResistance(candles, T) : null;
-  return sr && lastClose !== null
-    ? {
-        supports: sr.supports,
-        resistances: sr.resistances,
-        nearestSupportPct: nearestPct(lastClose, sr.supports, 'below'),
-        nearestResistancePct: nearestPct(lastClose, sr.resistances, 'above'),
-      }
-    : null;
+  if (candles.length < 30 || lastClose === null) return null;
+  return detectSupportResistance(candles, T, {
+    atr14: options.atr14,
+    percentileBox: options.percentileBox,
+    bollinger: options.bollinger,
+    donchian: options.donchian,
+    keltner: options.keltner,
+    lastClose,
+  });
 }

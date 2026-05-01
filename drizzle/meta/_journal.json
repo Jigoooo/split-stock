@@ -120,6 +120,13 @@
       "when": 1782200000000,
       "tag": "0016_trading_calendar",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1782250000000,
+      "tag": "0017_upbit_crypto_exchange",
+      "breakpoints": true
     }
   ]
 }

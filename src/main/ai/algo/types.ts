@@ -44,7 +44,7 @@ export interface AlgoSignals {
     trendNeutrality: number | null;
     oversoldConsensus: number | null;
   };
-  box: { high: number; low: number; mid: number } | null;
+  box: RangeBox | null;
   bollinger: {
     upper: number;
     middle: number;
@@ -70,12 +70,7 @@ export interface AlgoSignals {
   mfi14: number | null;
   cci20: number | null;
   psarSignal: { value: number; trend: 1 | -1 } | null;
-  supportResistance: {
-    supports: number[];
-    resistances: number[];
-    nearestSupportPct: number | null;
-    nearestResistancePct: number | null;
-  } | null;
+  supportResistance: SupportResistanceAnalysis | null;
   volumeSpikeRatio: number | null;
   momentum20d: number | null;
   consensusCount: number;
@@ -86,6 +81,55 @@ export interface AlgoSignals {
   lastClose: number | null;
   labels: string[];
   indicatorReasons: Array<{ indicator: string; value: string; meaning: string }>;
+}
+
+export type RangeBoxConfidence = 'high' | 'med' | 'low';
+export type RangeBoxMethod = 'percentile' | 'confluence';
+
+export interface RangeBox {
+  high: number;
+  low: number;
+  mid: number;
+  confidence: RangeBoxConfidence;
+  touchesLow: number;
+  touchesHigh: number;
+  method: RangeBoxMethod;
+}
+
+export type SupportResistanceKind = 'support' | 'resistance';
+export type SupportResistanceSource =
+  | 'pivot'
+  | 'repeat-touch'
+  | 'bounce'
+  | 'volume'
+  | 'box'
+  | 'bollinger'
+  | 'donchian'
+  | 'keltner';
+
+export interface SupportResistanceLevel {
+  kind: SupportResistanceKind;
+  price: number;
+  zoneLow: number;
+  zoneHigh: number;
+  strength: number;
+  touchCount: number;
+  lastTouchedDate: string;
+  ageBars: number;
+  bouncePct: number;
+  volumeRatio: number;
+  invalidated: boolean;
+  sources: SupportResistanceSource[];
+}
+
+export interface SupportResistanceAnalysis {
+  supports: number[];
+  resistances: number[];
+  nearestSupportPct: number | null;
+  nearestResistancePct: number | null;
+  nearestSupport: SupportResistanceLevel | null;
+  nearestResistance: SupportResistanceLevel | null;
+  levels: SupportResistanceLevel[];
 }
 
 export type AlgoThresholds = { -readonly [K in keyof typeof ALGO_THRESHOLDS]: number };

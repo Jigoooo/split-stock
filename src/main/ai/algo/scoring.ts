@@ -1,5 +1,5 @@
 import { round, round1 } from './math-utils';
-import type { AlgoThresholds } from './types';
+import type { AlgoThresholds, SupportResistanceAnalysis } from './types';
 
 export function scoreVolatility(volPct: number | null): number | null {
   if (volPct === null) return null;
@@ -35,16 +35,19 @@ export function scoreBbPosition(position: number | null): number | null {
   return Math.round(100 - 70 * position);
 }
 
-export function scoreSupportProx(
-  sr: { nearestSupportPct: number | null; nearestResistancePct: number | null } | null,
-): number | null {
+export function scoreSupportProx(sr: SupportResistanceAnalysis | null): number | null {
   if (!sr || sr.nearestSupportPct === null) return null;
   const pct = sr.nearestSupportPct;
-  if (pct <= 1) return 100;
-  if (pct <= 3) return 90 - Math.round(((pct - 1) / 2) * 20);
-  if (pct <= 7) return 70 - Math.round(((pct - 3) / 4) * 30);
-  if (pct <= 15) return 40 - Math.round(((pct - 7) / 8) * 30);
-  return Math.max(0, 10 - Math.round((pct - 15) / 5));
+  let distanceScore: number;
+  if (pct <= 1) distanceScore = 100;
+  else if (pct <= 3) distanceScore = 90 - Math.round(((pct - 1) / 2) * 20);
+  else if (pct <= 7) distanceScore = 70 - Math.round(((pct - 3) / 4) * 30);
+  else if (pct <= 15) distanceScore = 40 - Math.round(((pct - 7) / 8) * 30);
+  else distanceScore = Math.max(0, 10 - Math.round((pct - 15) / 5));
+
+  const strength = sr.nearestSupport?.strength ?? 50;
+  const strengthAdjustment = Math.round((strength - 50) * 0.35);
+  return Math.max(0, Math.min(100, distanceScore + strengthAdjustment));
 }
 
 export function scoreTrendNeutrality(
@@ -188,6 +191,8 @@ export function buildIndicatorReasons(args: {
   supportResistance: {
     nearestSupportPct: number | null;
     nearestResistancePct: number | null;
+    nearestSupport?: { strength: number; touchCount: number } | null;
+    nearestResistance?: { strength: number; touchCount: number } | null;
   } | null;
   T: AlgoThresholds;
 }): Array<{ indicator: string; value: string; meaning: string }> {

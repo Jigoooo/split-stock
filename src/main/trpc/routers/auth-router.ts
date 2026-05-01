@@ -1,4 +1,10 @@
-import { type AppEnv, AppEnvSchema, type BrokerId, CredentialsSchema } from '@shared/contracts';
+import {
+  type AppEnv,
+  AppEnvSchema,
+  type BrokerId,
+  CredentialsSchema,
+  getCredentialsAccountRef,
+} from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { repairAccountFromStoredCredentials } from '../../account/repair-stored-accounts';
@@ -20,7 +26,18 @@ export const authRouter = router({
    * 성공 시 lastActiveEnv 영속 + 활성 계좌도 그 env 의 첫 계좌로 자동 전환.
    */
   setEnv: publicProcedure.input(AppEnvSchema).mutation(({ ctx, input }) => {
-    const cred = ctx.credentialsRepo.loadCredentialsByEnv(input);
+    const candidates = ctx.credentialsRepo.listEntries().filter((entry) => entry.env === input);
+    const target =
+      candidates.find((entry) => entry.accountId === ctx.activeAccountId) ??
+      candidates.find((entry) => entry.broker === 'KIS') ??
+      candidates[0];
+    if (!target) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: `${input} 환경의 자격증명이 저장되어 있지 않습니다`,
+      });
+    }
+    const cred = ctx.credentialsRepo.loadCredentials(target.accountId);
     if (cred.isErr()) {
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
@@ -36,16 +53,14 @@ export const authRouter = router({
     const prev = ctx.currentEnv;
     // ── 레이스 방지: env/accountId 가 어긋난 중간 상태가 관측되지 않도록 모든 선결
     // 조건(계좌 해석 + DB 단일성 트랜잭션)을 먼저 끝낸 뒤 factory 상태를 원자 교체.
-    const accId = ctx.credentialsRepo.resolveAccountIdByEnv(input);
-    if (accId !== null) {
-      repairAccountFromStoredCredentials(ctx, accId);
-      const r = ctx.activeAccounts.setActiveAccountId(accId);
-      if (r.isErr()) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: `활성 계좌 전환 실패: ${r.error.kind}`,
-        });
-      }
+    const accId = target.accountId;
+    repairAccountFromStoredCredentials(ctx, accId);
+    const r = ctx.activeAccounts.setActiveAccountId(accId);
+    if (r.isErr()) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: `활성 계좌 전환 실패: ${r.error.kind}`,
+      });
     }
     ctx.setEnvAndAccount({ env: input, accountId: accId });
     ctx.settingsRepo.set(SETTING_KEYS.LAST_ACTIVE_ENV, input);
@@ -53,11 +68,13 @@ export const authRouter = router({
       level: input === 'PROD' ? 'WARN' : 'INFO',
       category: 'AUTH',
       message: input === 'PROD' ? 'env.switch-to-prod' : 'env.switch-to-mock',
-      payload: { from: prev, to: input, accountId: accId },
+      payload: { from: prev, to: input, accountId: accId, broker: target.broker },
     });
     ctx.currentStateSync?.trigger('env-switch');
-    // 로그인 직후 종목 마스터가 비어있거나 24h 초과면 백그라운드 동기화.
-    void ctx.stockMasterSync.syncIfStaleWithLog(ctx.logger);
+    if (target.broker !== 'UPBIT') {
+      // 로그인 직후 종목 마스터가 비어있거나 24h 초과면 백그라운드 동기화.
+      void ctx.stockMasterSync.syncIfStaleWithLog(ctx.logger);
+    }
     return { env: input, accountId: accId };
   }),
 
@@ -69,16 +86,21 @@ export const authRouter = router({
     .input(z.object({ clearStored: z.boolean().default(false) }).default({ clearStored: false }))
     .mutation(({ ctx, input }) => {
       const current = ctx.currentEnv;
-      if (current && input.clearStored) {
-        const r = ctx.credentialsRepo.clearCredentialsByEnv(current);
-        if (r.isErr()) {
+      if (input.clearStored) {
+        const r =
+          ctx.activeAccountId !== null
+            ? ctx.credentialsRepo.clearCredentials(ctx.activeAccountId)
+            : current
+              ? ctx.credentialsRepo.clearCredentialsByEnv(current)
+              : null;
+        if (r?.isErr()) {
           throw new TRPCError({
             code: 'INTERNAL_SERVER_ERROR',
             message: '자격증명 삭제 실패',
           });
         }
       }
-      ctx.setCurrentEnv(null);
+      ctx.setEnvAndAccount({ env: null, accountId: null });
       ctx.settingsRepo.delete(SETTING_KEYS.LAST_ACTIVE_ENV);
       return { ok: true as const };
     }),
@@ -92,11 +114,12 @@ export const authRouter = router({
    * 성공 시 해당 env 로 자동 전환하지 않음. 명시적 setEnv 필요.
    */
   setCredentials: publicProcedure.input(CredentialsSchema).mutation(({ ctx, input }) => {
+    const accountRef = getCredentialsAccountRef(input);
     const accountResult = ctx.activeAccounts.upsertFromCredentials({
       env: input.env,
       broker: input.broker,
-      accountNo8: input.accountNo8,
-      accountProdCd: input.accountProdCd,
+      accountNo8: accountRef.accountNo8,
+      accountProdCd: accountRef.accountProdCd,
     });
     if (accountResult.isErr()) {
       throw new TRPCError({
@@ -144,7 +167,7 @@ export const authRouter = router({
         result.push({
           env: entry.env,
           broker: entry.broker,
-          accountNo8: cred.value.accountNo8,
+          accountNo8: getCredentialsAccountRef(cred.value).accountNo8,
           accountId: entry.accountId,
         });
       }
@@ -156,8 +179,13 @@ export const authRouter = router({
    * 특정 env의 자격증명 삭제. UNIQUE INDEX 로 해당 env 의 단일 계좌 자격증명만 제거.
    */
   clearCredentials: publicProcedure
-    .input(z.object({ env: AppEnvSchema, broker: z.enum(['KIS', 'KIWOOM']).default('KIS') }))
+    .input(
+      z.object({ env: AppEnvSchema, broker: z.enum(['KIS', 'KIWOOM', 'UPBIT']).default('KIS') }),
+    )
     .mutation(({ ctx, input }) => {
+      const target = ctx.credentialsRepo
+        .listEntries()
+        .find((entry) => entry.env === input.env && entry.broker === input.broker);
       const r = ctx.credentialsRepo.clearCredentialsByEnv(input.env, input.broker);
       if (r.isErr()) {
         throw new TRPCError({
@@ -165,10 +193,9 @@ export const authRouter = router({
           message: '자격증명 삭제 실패',
         });
       }
-      // 활성 broker+env 와 동일하면 세션 종료. broker 다르면 활성 env 유지.
-      if (ctx.currentEnv === input.env && input.broker === 'KIS') {
-        // BC: 기존 호출자(KIS-only) 동작 보존. Kiwoom 삭제 시 활성 env 유지.
-        ctx.setCurrentEnv(null);
+      if (target?.accountId === ctx.activeAccountId) {
+        ctx.setEnvAndAccount({ env: null, accountId: null });
+        ctx.settingsRepo.delete(SETTING_KEYS.LAST_ACTIVE_ENV);
       }
       return { ok: true as const };
     }),

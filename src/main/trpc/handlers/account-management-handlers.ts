@@ -1,9 +1,9 @@
-import type { CredentialsSchema } from '@shared/contracts';
+import { type CredentialsSchema, getCredentialsAccountRef } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { and, eq } from 'drizzle-orm';
 import type { z } from 'zod';
 import { repairAccountFromStoredCredentials } from '../../account/repair-stored-accounts';
-import { lots as lotsTable } from '../../db/schema';
+import { cryptoOrders as cryptoOrdersTable, lots as lotsTable } from '../../db/schema';
 import { SETTING_KEYS } from '../../db/settings-repo';
 import type { Context } from '../context';
 import { listAccountsWithActiveRepair } from './account-shared';
@@ -80,11 +80,12 @@ export function setActiveAccountHandler(ctx: Context, input: { accountId: number
 }
 
 export function addAccountHandler(ctx: Context, input: AddAccountInput) {
+  const accountRef = getCredentialsAccountRef(input);
   const accountResult = ctx.activeAccounts.upsertFromCredentials({
     env: input.env,
     broker: input.broker,
-    accountNo8: input.accountNo8,
-    accountProdCd: input.accountProdCd,
+    accountNo8: accountRef.accountNo8,
+    accountProdCd: accountRef.accountProdCd,
   });
   if (accountResult.isErr()) {
     throw new TRPCError({
@@ -126,7 +127,7 @@ export function addAccountHandler(ctx: Context, input: AddAccountInput) {
     level: 'INFO',
     category: 'AUTH',
     message: 'account.added',
-    payload: { accountId, env: input.env, envSwitched },
+    payload: { accountId, env: input.env, broker: input.broker, envSwitched },
   });
   return { ok: true as const, accountId, env: input.env, envSwitched };
 }
@@ -172,6 +173,22 @@ export function deleteAccountHandler(ctx: Context, input: { accountId: number })
       code: 'PRECONDITION_FAILED',
       message: '보유 차수가 남아있어 삭제할 수 없습니다.',
     });
+  }
+  if (target.broker === 'UPBIT') {
+    const openCryptoOrders = ctx.db
+      .select({ id: cryptoOrdersTable.id })
+      .from(cryptoOrdersTable)
+      .where(
+        and(eq(cryptoOrdersTable.accountId, input.accountId), eq(cryptoOrdersTable.state, 'wait')),
+      )
+      .limit(1)
+      .all();
+    if (openCryptoOrders.length > 0) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: '미체결 코인 주문이 남아있어 삭제할 수 없습니다.',
+      });
+    }
   }
   const wasActive = ctx.activeAccountId === input.accountId;
   const nextCandidate = wasActive

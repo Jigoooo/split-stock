@@ -1,4 +1,4 @@
-import { aroon, atr, bb, cci, macd, mfi, obv, psar, rsi, stoch } from 'indicatorts';
+import { aroon, atr, bb, cci, kc, macd, mfi, obv, psar, rsi, stoch } from 'indicatorts';
 import { round } from './math-utils';
 
 export function safeBb(closes: number[]): { upper: number; middle: number; lower: number } | null {
@@ -52,6 +52,24 @@ export function safeAtr(highs: number[], lows: number[], closes: number[]): numb
   try {
     const r = atr(highs, lows, closes, { period: 14 });
     return lastFinite(r.atrLine);
+  } catch {
+    return null;
+  }
+}
+
+export function safeKc(
+  highs: number[],
+  lows: number[],
+  closes: number[],
+): { upper: number; middle: number; lower: number } | null {
+  try {
+    const r = kc(highs, lows, closes, { period: 20 });
+    const u = lastFinite(r.upper);
+    const m = lastFinite(r.middle);
+    const l = lastFinite(r.lower);
+    if (u === null || m === null || l === null) return null;
+    if (u - l < 1e-6) return null;
+    return { upper: u, middle: m, lower: l };
   } catch {
     return null;
   }

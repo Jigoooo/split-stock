@@ -203,6 +203,21 @@ describe('computeAlgoSignals', () => {
     expect(sig.box.high).toBeLessThan(outlierHigh - 20);
   });
 
+  it('반복 터치가 있는 박스권은 confluence box 신뢰도를 올린다', () => {
+    const candles = buildBoxRangeCandles('2025-01-01', 120);
+    const repo = createMockRepo({ '000001': candles });
+    const [sig] = computeAlgoSignals({
+      candlesRepo: repo,
+      pdnos: ['000001'],
+      asOfDate: '2025-05-30',
+    });
+
+    if (!sig?.box) throw new Error('no box');
+    expect(sig.box.confidence).not.toBe('low');
+    expect(sig.box.touchesLow + sig.box.touchesHigh).toBeGreaterThanOrEqual(4);
+    expect(['confluence', 'percentile']).toContain(sig.box.method);
+  });
+
   it('conflicts 배열은 항상 존재하고 string[] 타입', () => {
     const candles = buildUpTrendCandles('2025-01-01', 80);
     const repo = createMockRepo({ '000001': candles });

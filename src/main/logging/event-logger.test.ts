@@ -17,11 +17,15 @@ describe('maskPayload', () => {
     const out = maskPayload({
       appKey: 'ABCDEFGHIJKLMNOP',
       appSecret: 'shortkey',
+      accessKey: 'UPBITACCESSKEY1234',
+      secretKey: 'UPBITSECRETKEY1234',
       other: 'visible',
     });
     expect(out).toEqual({
       appKey: '************MNOP',
       appSecret: '****tkey',
+      accessKey: '**************1234',
+      secretKey: '**************1234',
       other: 'visible',
     });
   });

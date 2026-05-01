@@ -49,7 +49,14 @@ export function createContextBrokerResolver(
         const currentEnv = state.getCurrentEnv();
         if (activeAccountId === null) return null;
         const cred = deps.credentialsRepo.loadCredentials(activeAccountId);
-        if (cred.isErr() || !cred.value || cred.value.env !== currentEnv) return null;
+        if (
+          cred.isErr() ||
+          !cred.value ||
+          cred.value.env !== currentEnv ||
+          cred.value.broker !== 'KIS'
+        ) {
+          return null;
+        }
         return cred.value.htsId?.trim() || null;
       },
     });
@@ -101,7 +108,7 @@ export function createContextBrokerResolver(
           }),
         },
       });
-    } else {
+    } else if (cred.broker === 'KIS') {
       const realtimeAdapter = ensureKisRealtimeAdapter();
       const kisDeps = {
         env: currentEnv,
@@ -121,6 +128,8 @@ export function createContextBrokerResolver(
         brokerId: 'KIS',
         deps: realtimeAdapter !== undefined ? { ...kisDeps, realtime: realtimeAdapter } : kisDeps,
       });
+    } else {
+      return null;
     }
 
     brokerCache.set(key, port);

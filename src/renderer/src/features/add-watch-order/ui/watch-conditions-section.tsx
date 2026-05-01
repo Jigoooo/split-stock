@@ -298,8 +298,12 @@ function PriceContextPanel({
 }): ReactElement | null {
   if (!draft) return null;
   const box = draft.rangeContext.box;
-  const support = draft.rangeContext.supportResistance?.supports.at(-1) ?? null;
-  const resistance = draft.rangeContext.supportResistance?.resistances[0] ?? null;
+  const supportLevel = draft.rangeContext.supportResistance?.nearestSupport ?? null;
+  const resistanceLevel = draft.rangeContext.supportResistance?.nearestResistance ?? null;
+  const support =
+    supportLevel?.price ?? draft.rangeContext.supportResistance?.supports.at(-1) ?? null;
+  const resistance =
+    resistanceLevel?.price ?? draft.rangeContext.supportResistance?.resistances[0] ?? null;
   const selectedCandidate =
     draft.priceCandidates.find((candidate) => candidate.id === selectedPriceCandidateId) ?? null;
   const recommendedCandidate =
@@ -416,11 +420,63 @@ function PriceContextPanel({
           </span>
         </div>
         <div style={metricRailStyle(isPageLayout)}>
-          <Metric label="박스하단" value={box ? formatKrw(box.low) : '-'} />
+          <Metric
+            label="박스하단"
+            value={
+              box ? (
+                <MetricStack
+                  primary={formatKrw(box.low)}
+                  detail={
+                    box.confidence
+                      ? `${box.method ?? 'percentile'} · ${box.confidence} · ${box.touchesLow ?? 0}회`
+                      : undefined
+                  }
+                />
+              ) : (
+                '-'
+              )
+            }
+          />
           <Metric label="박스중앙" value={box ? formatKrw(box.mid) : '-'} />
-          <Metric label="박스상단" value={box ? formatKrw(box.high) : '-'} />
-          <Metric label="지지" value={support ? formatKrw(support) : '-'} />
-          <Metric label="저항" value={resistance ? formatKrw(resistance) : '-'} />
+          <Metric
+            label="박스상단"
+            value={
+              box ? (
+                <MetricStack
+                  primary={formatKrw(box.high)}
+                  detail={box.confidence ? `${box.touchesHigh ?? 0}회 터치` : undefined}
+                />
+              ) : (
+                '-'
+              )
+            }
+          />
+          <Metric
+            label="지지"
+            value={
+              support ? (
+                <MetricStack
+                  primary={formatKrw(support)}
+                  detail={supportLevel ? formatLevelDetail(supportLevel) : undefined}
+                />
+              ) : (
+                '-'
+              )
+            }
+          />
+          <Metric
+            label="저항"
+            value={
+              resistance ? (
+                <MetricStack
+                  primary={formatKrw(resistance)}
+                  detail={resistanceLevel ? formatLevelDetail(resistanceLevel) : undefined}
+                />
+              ) : (
+                '-'
+              )
+            }
+          />
           <Metric
             label="호가"
             value={
@@ -511,7 +567,47 @@ function CandidateButton({
           </span>
         ) : null}
       </span>
+      {candidate.strength !== undefined || candidate.basis ? (
+        <span
+          className="muted"
+          style={{
+            gridColumn: '1 / -1',
+            fontSize: '0.78rem',
+            fontWeight: 650,
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {[
+            candidate.strength !== undefined ? `강도 ${candidate.strength}` : null,
+            candidate.zoneLow !== undefined && candidate.zoneHigh !== undefined
+              ? `${formatKrw(candidate.zoneLow)}~${formatKrw(candidate.zoneHigh)}`
+              : null,
+            candidate.basis ?? null,
+          ]
+            .filter((item): item is string => item !== null)
+            .join(' · ')}
+        </span>
+      ) : null}
     </button>
+  );
+}
+
+function MetricStack({
+  primary,
+  detail,
+}: {
+  primary: string;
+  detail: string | undefined;
+}): ReactElement {
+  return (
+    <span style={{ display: 'grid', gap: '0.12rem' }}>
+      <span>{primary}</span>
+      {detail ? (
+        <span className="muted" style={{ fontSize: '0.74rem', fontWeight: 650 }}>
+          {detail}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -540,6 +636,15 @@ function Metric({ label, value }: { label: string; value: ReactNode }): ReactEle
 
 function formatKrw(value: number): string {
   return value.toLocaleString('ko-KR');
+}
+
+function formatLevelDetail(level: {
+  strength: number;
+  touchCount: number;
+  sources: ReadonlyArray<string>;
+}): string {
+  const source = level.sources.slice(0, 3).join('+') || 'pivot';
+  return `강도 ${level.strength} · ${level.touchCount}회 · ${source}`;
 }
 
 function formatSignedKrw(value: number): string {

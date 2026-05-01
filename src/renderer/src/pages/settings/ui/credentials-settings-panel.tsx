@@ -10,7 +10,11 @@ import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useSt
 import { toast } from 'sonner';
 
 const ENV_LABEL: Record<AppEnv, string> = { MOCK: '모의(MOCK)', PROD: '실전(PROD)' };
-const BROKER_LABEL: Record<BrokerId, string> = { KIS: '한국투자증권', KIWOOM: '키움증권' };
+const BROKER_LABEL: Record<BrokerId, string> = {
+  KIS: '한국투자증권',
+  KIWOOM: '키움증권',
+  UPBIT: '업비트',
+};
 
 /**
  * 설정 → 계좌/보안 탭의 통합 컨테이너.
@@ -181,6 +185,7 @@ function CredentialsListSection(): ReactElement {
 
   const entries = stored.data?.entries ?? [];
   const currentEnv = envQuery.data?.env ?? null;
+  const activeAccountId = envQuery.data?.accountId ?? null;
 
   // PROD/전체 삭제 등 위험 작업은 phrase 모달 게이트로 보호.
   // MOCK 단건 삭제는 표준 confirm 만으로 충분.
@@ -189,7 +194,8 @@ function CredentialsListSection(): ReactElement {
   >(null);
 
   const performDeleteOne = async (env: AppEnv, broker: BrokerId): Promise<void> => {
-    if (currentEnv === env && broker === 'KIS') {
+    const activeEntry = entries.find((entry) => entry.env === env && entry.broker === broker);
+    if (activeEntry && activeEntry.accountId === activeAccountId) {
       await logout.mutateAsync({ clearStored: true });
     } else {
       await clearCredentials.mutateAsync({ env, broker });
@@ -197,8 +203,9 @@ function CredentialsListSection(): ReactElement {
   };
 
   const handleDeleteOne = async (env: AppEnv, broker: BrokerId = 'KIS'): Promise<void> => {
-    // PROD 또는 활성 KIS 자격증명 삭제는 phrase 게이트 강제 — 우발적 손실 방지.
-    if (env === 'PROD' || (currentEnv === env && broker === 'KIS')) {
+    // PROD 또는 활성 자격증명 삭제는 phrase 게이트 강제 — 우발적 손실 방지.
+    const target = entries.find((entry) => entry.env === env && entry.broker === broker);
+    if (env === 'PROD' || (target && target.accountId === activeAccountId)) {
       setPhraseGate({ kind: 'one', env, broker });
       return;
     }
@@ -233,7 +240,7 @@ function CredentialsListSection(): ReactElement {
     if (currentEnv) {
       await logout.mutateAsync({ clearStored: true });
     }
-    const remaining = entries.filter((e) => !(e.env === currentEnv && e.broker === 'KIS'));
+    const remaining = entries.filter((e) => e.accountId !== activeAccountId);
     for (const e of remaining) {
       await clearCredentials.mutateAsync({ env: e.env, broker: e.broker });
     }
@@ -276,7 +283,7 @@ function CredentialsListSection(): ReactElement {
             <TableGrid.Header>
               <TableGrid.Cell width="12rem">증권사</TableGrid.Cell>
               <TableGrid.Cell width="12rem">환경</TableGrid.Cell>
-              <TableGrid.Cell flex={1}>계좌번호</TableGrid.Cell>
+              <TableGrid.Cell flex={1}>계좌/식별자</TableGrid.Cell>
               <TableGrid.Cell width="14rem">상태</TableGrid.Cell>
               <TableGrid.Cell width="5.6rem" style={{ justifyContent: 'center' }}>
                 작업
@@ -284,15 +291,25 @@ function CredentialsListSection(): ReactElement {
             </TableGrid.Header>
             <TableGrid.Body>
               {entries.map((e) => {
-                const isActive = currentEnv === e.env;
+                const isActive = activeAccountId === e.accountId;
                 return (
                   <TableGrid.Row key={`${e.broker}-${e.env}`}>
                     <TableGrid.Cell width="12rem">
                       <span
                         className="chip"
                         style={{
-                          background: e.broker === 'KIWOOM' ? '#ffe6e8' : '#fff7d6',
-                          color: e.broker === 'KIWOOM' ? '#c41e2c' : '#7c5e00',
+                          background:
+                            e.broker === 'UPBIT'
+                              ? '#e8f4ff'
+                              : e.broker === 'KIWOOM'
+                                ? '#ffe6e8'
+                                : '#fff7d6',
+                          color:
+                            e.broker === 'UPBIT'
+                              ? '#165a9f'
+                              : e.broker === 'KIWOOM'
+                                ? '#c41e2c'
+                                : '#7c5e00',
                           fontWeight: 600,
                         }}
                       >
