@@ -173,15 +173,6 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
           setPriceStr={setPriceStr}
           setQtyStr={setQtyStr}
         />
-        <OrderTicketActions
-          canBuy={canBuy}
-          canSell={canSell}
-          holdingQty={holdingQty}
-          maxBuyQty={maxBuyQty}
-          overBuyCap={overBuyCap}
-          overSellCap={overSellCap}
-          submit={submit}
-        />
         <OrderTicketSummary
           division={division}
           holdingQty={holdingQty}
@@ -192,6 +183,16 @@ export const OrderTicket = (props: OrderTicketProps): ReactElement => {
           overSellCap={overSellCap}
           priceStr={priceStr}
           qtyStr={qtyStr}
+          suggestedPrice={selection.suggestedPrice}
+        />
+        <OrderTicketActions
+          canBuy={canBuy}
+          canSell={canSell}
+          holdingQty={holdingQty}
+          maxBuyQty={maxBuyQty}
+          overBuyCap={overBuyCap}
+          overSellCap={overSellCap}
+          submit={submit}
         />
       </div>
     </form>

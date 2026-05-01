@@ -54,11 +54,11 @@ export const PositionChart = ({
 
   return (
     <div
-      className="panel"
+      className="panel position-chart__panel"
       style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}
     >
       <div
-        className="panel__title"
+        className="panel__title position-chart__header"
         style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap' }}
       >
         <span>
@@ -99,7 +99,7 @@ export const PositionChart = ({
         </Button>
       </div>
       <div
-        className="panel__body"
+        className="panel__body position-chart__body"
         style={{
           padding: '0.6rem',
           flex: 1,

@@ -227,9 +227,25 @@ describe('OrderTicket', () => {
       ),
     );
 
-    expect(screen.getByText(/현재 선택: 지정가 · 1주/)).toBeInTheDocument();
+    expect(screen.getByText('현재 선택:')).toBeInTheDocument();
+    expect(screen.getByText(/지정가 ·\s*1주/)).toBeInTheDocument();
     expect(screen.queryByText(/현재 선택: 매도/)).toBeNull();
     expect(screen.queryByText(/현재 선택: BUY/)).toBeNull();
+  });
+
+  it('호가로 채워진 가격은 현재 선택 요약에 반영 상태를 표시한다', () => {
+    render(
+      wrap(
+        <OrderTicket
+          selection={{ pdno: '005930', name: '삼성전자', suggestedPrice: 70000 }}
+          isProd={false}
+          oneClick={false}
+        />,
+      ),
+    );
+
+    expect(screen.getByText('호가 반영')).toBeInTheDocument();
+    expect(screen.getByText(/지정가 · 1주 · 70,000원/)).toBeInTheDocument();
   });
 
   it('매수 가능한 주문에서 매도가능 수량 초과는 수량 입력 보정 CTA로 노출하지 않는다', () => {

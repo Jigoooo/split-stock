@@ -239,8 +239,14 @@ const OrderbookRow = ({
   const priceColorClass = side === 'SELL' ? 'num-down' : 'num-up';
   return (
     <TableGrid.Row
+      className={[
+        'orderbook-row',
+        `orderbook-row--${side.toLowerCase()}`,
+        current ? 'orderbook-row--current' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       onClick={onClick}
-      style={{ background: current ? 'rgba(45, 79, 202, 0.12)' : undefined }}
     >
       {/* 매도잔량 — bar 오른쪽 정렬 */}
       <TableGrid.Cell
