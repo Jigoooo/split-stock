@@ -49,7 +49,8 @@
 }
 
 .table-grid-root[data-variant="hts"] .table-grid-row {
-  --table-grid-row-bg: var(--bg);
+  --table-grid-row-base-bg: var(--bg);
+  --table-grid-row-bg: var(--table-grid-row-custom-bg, var(--table-grid-row-base-bg));
   background: var(--table-grid-row-bg);
   min-height: var(--hts-row-height);
 }
@@ -92,7 +93,7 @@
 .table-grid-root[data-variant="hts"][data-zebra="true"]
   .table-grid-body
   .table-grid-row:nth-child(even):not([data-expanded="true"]):not([data-selected="true"]) {
-  --table-grid-row-bg: var(--table-row-zebra);
+  --table-grid-row-base-bg: var(--table-row-zebra);
 }
 
 .table-grid-root[data-variant="hts"] .table-grid-body .table-grid-row[data-selected="true"] {
@@ -119,6 +120,28 @@
 .table-grid-root[data-column-dividers="true"] .table-grid-header .table-grid-cell:not(:last-child),
 .table-grid-root[data-column-dividers="true"] .table-grid-row .table-grid-cell:not(:last-child) {
   border-right: 0.1rem solid var(--border);
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-cell__resizer {
+  opacity: 0.72;
+}
+
+.table-grid-root[data-variant="hts"]
+  .table-grid-header
+  .table-grid-cell:hover
+  .table-grid-cell__resizer-line {
+  --table-grid-resizer-color: var(--border-strong);
+}
+
+.table-grid-root[data-variant="hts"]
+  .table-grid-header
+  .table-grid-cell__resizer:hover
+  .table-grid-cell__resizer-line,
+.table-grid-root[data-variant="hts"]
+  .table-grid-header
+  .table-grid-cell__resizer:focus-visible
+  .table-grid-cell__resizer-line {
+  --table-grid-resizer-color: var(--accent);
 }
 
 /* overflow scroll 모드 — 셀 내부 가로 스크롤 시 스크롤바 숨김 */

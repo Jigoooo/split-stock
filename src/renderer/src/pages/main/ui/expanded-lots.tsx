@@ -55,7 +55,9 @@ export const ExpandedLots = ({ lots }: ExpandedLotsProps): ReactElement => {
         style={{ height: 'auto', width: '100%' }}
       >
         <TableGrid.Header>
-          <TableGrid.Cell width={EXPANDED_LOTS_COLS.nth}>차수</TableGrid.Cell>
+          <TableGrid.Cell width={EXPANDED_LOTS_COLS.nth} numeric>
+            차수
+          </TableGrid.Cell>
           <TableGrid.Cell width={EXPANDED_LOTS_COLS.buyPrice} numeric>
             매입가
           </TableGrid.Cell>
@@ -73,7 +75,9 @@ export const ExpandedLots = ({ lots }: ExpandedLotsProps): ReactElement => {
         <TableGrid.Body>
           {lots.map((lot) => (
             <TableGrid.Row key={`${lot.nth}-${lot.boughtAt}`}>
-              <TableGrid.Cell width={EXPANDED_LOTS_COLS.nth}>{lot.nth}차</TableGrid.Cell>
+              <TableGrid.Cell width={EXPANDED_LOTS_COLS.nth} numeric>
+                {lot.nth}차
+              </TableGrid.Cell>
               <TableGrid.Cell width={EXPANDED_LOTS_COLS.buyPrice} numeric>
                 {formatKrw(lot.buyPrice)}
               </TableGrid.Cell>

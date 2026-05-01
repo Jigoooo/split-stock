@@ -1,6 +1,7 @@
 import {
   formatDateOnly,
   formatDateTimeLongKo,
+  formatStockLabel,
   thousandSeparator,
 } from '@renderer/shared/lib/formatter';
 
@@ -42,8 +43,7 @@ export interface AllTradeHistoryRow {
   nthText: string;
   dateText: string;
   dateTitleText: string;
-  nameText: string;
-  pdnoText: string;
+  stockLabelText: string;
   qtyText: string;
   buyPriceText: string;
   sideText: '매수' | '매도';
@@ -107,15 +107,13 @@ export function buildTradeHistoryRows(lots: readonly TradeHistoryLot[]): AllTrad
   const rows: AllTradeHistoryRow[] = [];
 
   for (const lot of lots) {
-    const nameText = lot.name !== '' ? lot.name : lot.pdno;
-    const pdnoText = lot.name !== '' ? lot.pdno : '';
+    const stockLabelText = formatStockLabel(lot.name, lot.pdno);
     rows.push({
       key: `${lot.id}:buy`,
       nthText: `${lot.nth}차`,
       dateText: formatDateOnly(lot.boughtAt),
       dateTitleText: formatDateTimeLongKo(lot.boughtAt),
-      nameText,
-      pdnoText,
+      stockLabelText,
       qtyText: thousandSeparator(lot.qty),
       buyPriceText: formatKrw(lot.buyPrice),
       sideText: '매수',
@@ -136,8 +134,7 @@ export function buildTradeHistoryRows(lots: readonly TradeHistoryLot[]): AllTrad
       nthText: `${lot.nth}차`,
       dateText: formatDateOnly(lot.soldAt ?? lot.boughtAt),
       dateTitleText: formatDateTimeLongKo(lot.soldAt ?? lot.boughtAt),
-      nameText,
-      pdnoText,
+      stockLabelText,
       qtyText: thousandSeparator(lot.qty),
       buyPriceText: formatKrw(lot.buyPrice),
       sideText: '매도',

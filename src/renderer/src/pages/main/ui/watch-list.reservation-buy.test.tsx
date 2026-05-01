@@ -68,8 +68,31 @@ describe('WatchList reservation buy contraction', () => {
 
     expect(screen.queryByText('방향')).not.toBeInTheDocument();
     expect(screen.queryByText('비교')).not.toBeInTheDocument();
+    expect(screen.queryByText('수량')).not.toBeInTheDocument();
+    expect(screen.getByText('주문 기준')).toBeInTheDocument();
     expect(screen.getByText('예약매수')).toBeInTheDocument();
     expect(screen.getByText('삼성전자 (005930)')).toBeInTheDocument();
+    expect(screen.getByText('10주')).toBeInTheDocument();
+  });
+
+  it('금액 모드 예약매수는 수량이 아니라 주문 기준 금액으로 표시한다', () => {
+    render(
+      <WatchList
+        orders={[
+          makeOrder({
+            qtyOrAmountMode: 'AMOUNT',
+            qty: null,
+            amountKrw: 1_000_000,
+          }),
+        ]}
+        isPending={false}
+        error={null}
+        allowMutations={false}
+      />,
+    );
+
+    expect(screen.getByText('주문 기준')).toBeInTheDocument();
+    expect(screen.getByText('1,000,000원')).toBeInTheDocument();
   });
 
   it('읽기 전용 탭은 선택 checkbox와 작업 컬럼 없이 고정 요약 툴바만 표시', () => {
@@ -125,6 +148,27 @@ describe('WatchList reservation buy contraction', () => {
     expect(start).toBeDisabled();
     expect(stop).toBeDisabled();
     expect(deleteButton).toBeEnabled();
+  });
+
+  it('현황 row에 감시/중지 상태 class를 붙인다', () => {
+    render(
+      <WatchList
+        orders={[
+          makeOrder({ id: 1, pdno: '005930', status: 'WATCHING' }),
+          makeOrder({ id: 2, pdno: '000660', status: 'PAUSED' }),
+        ]}
+        isPending={false}
+        error={null}
+        allowMutations
+      />,
+    );
+
+    expect(screen.getByText('삼성전자 (005930)').closest('[data-grid-role="row"]')).toHaveClass(
+      'watch-order-row--watching',
+    );
+    expect(screen.getByText('SK하이닉스 (000660)').closest('[data-grid-role="row"]')).toHaveClass(
+      'watch-order-row--paused',
+    );
   });
 
   it('현황 row 클릭으로 checkbox 선택을 토글한다', () => {

@@ -48,8 +48,7 @@ describe('WatchHistoryList', () => {
     expect(timeCell).toBeInTheDocument();
     expect(timeCell.getAttribute('title')).toMatch(/2026년 4월 25일/);
     expect(screen.getByText('등록')).toBeInTheDocument();
-    expect(screen.getByText('삼성전자')).toBeInTheDocument();
-    expect(screen.getByText('005930')).toBeInTheDocument();
+    expect(screen.getByText('삼성전자 (005930)')).toBeInTheDocument();
     expect(screen.getByText('#33')).toBeInTheDocument();
     expect(screen.getByText('테스트 사유')).toBeInTheDocument();
   });

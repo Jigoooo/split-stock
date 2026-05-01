@@ -270,7 +270,7 @@ export const StrategyPreviewModal = ({
                       style={{ height: 'auto', '--hts-row-height': '3rem' } as CSSProperties}
                     >
                       <TableGrid.Header>
-                        <TableGrid.Cell width="7rem" style={{ justifyContent: 'center' }}>
+                        <TableGrid.Cell width="7rem" numeric>
                           차수
                         </TableGrid.Cell>
                         <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
@@ -279,7 +279,7 @@ export const StrategyPreviewModal = ({
                         <TableGrid.Cell flex={1} numeric>
                           매수 금액
                         </TableGrid.Cell>
-                        <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
+                        <TableGrid.Cell flex={1} numeric>
                           익절률
                         </TableGrid.Cell>
                       </TableGrid.Header>
@@ -417,7 +417,7 @@ function StageRow({ nth, profile }: { nth: number; profile: StrategyProfile }): 
   const sell = profile.sellRules[nth - 1];
   return (
     <TableGrid.Row>
-      <TableGrid.Cell width="7rem" style={{ justifyContent: 'center', fontWeight: 700 }}>
+      <TableGrid.Cell width="7rem" numeric style={{ fontWeight: 700 }}>
         {nth}차
       </TableGrid.Cell>
       <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
@@ -432,7 +432,7 @@ function StageRow({ nth, profile }: { nth: number; profile: StrategyProfile }): 
       <TableGrid.Cell flex={1} numeric>
         {buy ? `${buy.amountKrw.toLocaleString()}원` : '—'}
       </TableGrid.Cell>
-      <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
+      <TableGrid.Cell flex={1} numeric>
         {sell ? (
           <span style={{ color: 'var(--up)' }}>+{(sell.targetProfitPct * 100).toFixed(2)}%</span>
         ) : (

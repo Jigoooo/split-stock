@@ -56,11 +56,15 @@ export const ActivePendingList = (): ReactElement => {
             <TableGrid.Header>
               <TableGrid.Cell width="9rem">종목</TableGrid.Cell>
               <TableGrid.Cell width="8rem">구분</TableGrid.Cell>
-              <TableGrid.Cell width="7rem">차수</TableGrid.Cell>
+              <TableGrid.Cell width="7rem" numeric>
+                차수
+              </TableGrid.Cell>
               <TableGrid.Cell flex={1} minWidth="12rem">
                 주문번호
               </TableGrid.Cell>
-              <TableGrid.Cell width="7rem">시도</TableGrid.Cell>
+              <TableGrid.Cell width="7rem" numeric>
+                시도
+              </TableGrid.Cell>
               <TableGrid.Cell width="7.2rem" align="right" resizable={false}>
                 액션
               </TableGrid.Cell>
@@ -76,11 +80,15 @@ export const ActivePendingList = (): ReactElement => {
                       {SIDE_LABEL[item.side]}
                     </span>
                   </TableGrid.Cell>
-                  <TableGrid.Cell width="7rem">{item.nth}차</TableGrid.Cell>
+                  <TableGrid.Cell width="7rem" numeric>
+                    {item.nth}차
+                  </TableGrid.Cell>
                   <TableGrid.Cell flex={1} minWidth="12rem" className="num" overflow="ellipsis">
                     {item.odno}
                   </TableGrid.Cell>
-                  <TableGrid.Cell width="7rem">{item.attempts}회</TableGrid.Cell>
+                  <TableGrid.Cell width="7rem" numeric>
+                    {item.attempts}회
+                  </TableGrid.Cell>
                   <TableGrid.Cell width="7.2rem" align="right" resizable={false}>
                     <Button
                       dense

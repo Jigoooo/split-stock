@@ -102,8 +102,12 @@ const StageRowsTable = ({ rows }: { rows: StageRow[] }): ReactElement => (
       style={{ height: 'auto', maxWidth: '40rem', fontSize: '1.05rem' }}
     >
       <TableGrid.Header>
-        <TableGrid.Cell width="4.8rem">차수</TableGrid.Cell>
-        <TableGrid.Cell flex={1}>하향 감지%</TableGrid.Cell>
+        <TableGrid.Cell width="4.8rem" numeric>
+          차수
+        </TableGrid.Cell>
+        <TableGrid.Cell flex={1} numeric>
+          하향 감지%
+        </TableGrid.Cell>
         <TableGrid.Cell flex={2} numeric>
           매수금액 (원)
         </TableGrid.Cell>
@@ -111,8 +115,12 @@ const StageRowsTable = ({ rows }: { rows: StageRow[] }): ReactElement => (
       <TableGrid.Body>
         {rows.map((row) => (
           <TableGrid.Row key={row.stage}>
-            <TableGrid.Cell width="4.8rem">{row.stage}차</TableGrid.Cell>
-            <TableGrid.Cell flex={1}>{row.dropPct}%</TableGrid.Cell>
+            <TableGrid.Cell width="4.8rem" numeric>
+              {row.stage}차
+            </TableGrid.Cell>
+            <TableGrid.Cell flex={1} numeric>
+              {row.dropPct}%
+            </TableGrid.Cell>
             <TableGrid.Cell flex={2} numeric>
               {row.amountKrw !== '' ? Number(row.amountKrw).toLocaleString() : '-'}
             </TableGrid.Cell>

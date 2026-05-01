@@ -220,7 +220,9 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
           style={{ height: 'auto', fontSize: '0.95rem' }}
         >
           <TableGrid.Header>
-            <TableGrid.Cell width="6.4rem">차수</TableGrid.Cell>
+            <TableGrid.Cell width="6.4rem" numeric>
+              차수
+            </TableGrid.Cell>
             <TableGrid.Cell width="7.6rem">상태</TableGrid.Cell>
             <TableGrid.Cell width="10.4rem" numeric>
               매입가
@@ -241,7 +243,9 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
           <TableGrid.Body>
             {rows.map((r) => (
               <TableGrid.Row key={r.id}>
-                <TableGrid.Cell width="6.4rem">{r.nth}차</TableGrid.Cell>
+                <TableGrid.Cell width="6.4rem" numeric>
+                  {r.nth}차
+                </TableGrid.Cell>
                 <TableGrid.Cell width="7.6rem">{r.status}</TableGrid.Cell>
                 <TableGrid.Cell width="10.4rem" numeric>
                   {r.buyPrice.toLocaleString()}

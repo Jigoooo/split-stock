@@ -16,10 +16,10 @@ vi.mock('./ui/trade-history-panel', () => ({
 }));
 
 describe('MainTradeHistoryPane', () => {
-  it('선택 종목 탭 라벨을 종목명(종목코드) 매매내역 형식으로 렌더링', () => {
+  it('선택 종목 탭 라벨을 종목명 (종목코드) 매매내역 형식으로 렌더링', () => {
     render(<MainTradeHistoryPane accountId={1} selectedPdno="005930" selectedName="삼성전자" />);
 
-    expect(screen.getByRole('tab', { name: '삼성전자(005930) 매매내역' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '삼성전자 (005930) 매매내역' })).toBeInTheDocument();
   });
 
   it('종목명이 없으면 종목코드 매매내역으로 폴백', () => {

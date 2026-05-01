@@ -1,5 +1,6 @@
 import type { WatchHistoryItem } from '@renderer/entities/watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
+import { formatStockLabel } from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
 import { type ReactElement, useMemo } from 'react';
 import { formatWatchDate, formatWatchDateTitle } from '../lib/watch-list-format';
@@ -106,10 +107,7 @@ const WatchHistoryRow = ({
     <TableGrid.Cell width="10.8rem">{historyLabel(item.message)}</TableGrid.Cell>
     <TableGrid.Cell width="16rem" {...(item.pdno ? { title: item.pdno } : {})}>
       {item.pdno ? (
-        <span style={{ display: 'inline-flex', gap: '0.45rem', minWidth: 0 }}>
-          <span style={{ fontWeight: 700 }}>{stockName ?? item.pdno}</span>
-          <span className="num muted">{item.pdno}</span>
-        </span>
+        <span style={{ fontWeight: 700 }}>{formatStockLabel(stockName, item.pdno)}</span>
       ) : (
         <span className="muted">전체 자동감시</span>
       )}

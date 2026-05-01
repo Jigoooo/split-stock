@@ -36,7 +36,9 @@ export const PriceRatioPreviewTable = ({ entries, originals }: Props): ReactElem
       style={{ height: 'auto', '--hts-row-height': '3rem' } as CSSProperties}
     >
       <TableGrid.Header>
-        <TableGrid.Cell width="7.2rem">차수</TableGrid.Cell>
+        <TableGrid.Cell width="7.2rem" numeric>
+          차수
+        </TableGrid.Cell>
         <TableGrid.Cell width="11rem" numeric>
           변경 전
         </TableGrid.Cell>
@@ -59,7 +61,9 @@ export const PriceRatioPreviewTable = ({ entries, originals }: Props): ReactElem
               key={entry.nth}
               style={{ backgroundColor: changed ? 'var(--warning-soft)' : undefined }}
             >
-              <TableGrid.Cell width="7.2rem">{entry.nth}차</TableGrid.Cell>
+              <TableGrid.Cell width="7.2rem" numeric>
+                {entry.nth}차
+              </TableGrid.Cell>
               <TableGrid.Cell width="11rem" numeric>
                 {original?.buyPrice.toLocaleString()}원
               </TableGrid.Cell>

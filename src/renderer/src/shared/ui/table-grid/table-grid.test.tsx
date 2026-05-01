@@ -181,6 +181,60 @@ describe('TableGrid', () => {
       expect(content.style.width).toBe('max-content');
       expect(content.style.minWidth).toBe('100%');
     });
+
+    it('헤더 리사이저 드래그 시 같은 컬럼 전체 너비가 갱신된다', async () => {
+      render(
+        <TableGrid.Root variant="hts">
+          <TableGrid.Header>
+            <TableGrid.Cell width={100} className="resize-col">
+              이름
+            </TableGrid.Cell>
+            <TableGrid.Cell width={80}>상태</TableGrid.Cell>
+          </TableGrid.Header>
+          <TableGrid.Body>
+            <TableGrid.Row>
+              <TableGrid.Cell width={100} className="resize-col">
+                A
+              </TableGrid.Cell>
+              <TableGrid.Cell width={80}>감시중</TableGrid.Cell>
+            </TableGrid.Row>
+          </TableGrid.Body>
+        </TableGrid.Root>,
+      );
+
+      const cells = Array.from(document.querySelectorAll('.resize-col')) as HTMLElement[];
+      const [headerCell, bodyCell] = cells;
+      if (headerCell === undefined || bodyCell === undefined) {
+        throw new Error('Expected resize column cells to be rendered');
+      }
+      const resizer = headerCell.querySelector('[data-grid-role="column-resizer"]') as HTMLElement;
+      headerCell.getBoundingClientRect = vi.fn(
+        () =>
+          ({
+            width: 100,
+            height: 30,
+            top: 0,
+            right: 100,
+            bottom: 30,
+            left: 0,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          }) as DOMRect,
+      );
+      resizer.setPointerCapture = vi.fn();
+      resizer.hasPointerCapture = vi.fn(() => true);
+      resizer.releasePointerCapture = vi.fn();
+
+      fireEvent.pointerDown(resizer, { clientX: 100, pointerId: 1 });
+      fireEvent.pointerMove(window, { clientX: 145, pointerId: 1 });
+      fireEvent.pointerUp(window, { pointerId: 1 });
+
+      await waitFor(() => {
+        expect(headerCell.style.width).toBe('145px');
+        expect(bodyCell.style.width).toBe('145px');
+      });
+    });
   });
 
   describe('Cell overflow modes', () => {
@@ -301,7 +355,7 @@ describe('TableGrid', () => {
   });
 
   describe('Numeric cell', () => {
-    it('numeric=true 면 num 클래스 + align right 가 적용된다', () => {
+    it('numeric=true 면 num 클래스 + align right + flex end 가 적용된다', () => {
       render(
         <TableGrid.Root>
           <TableGrid.Body>
@@ -317,6 +371,7 @@ describe('TableGrid', () => {
       const cell = document.querySelector('.num-cell') as HTMLElement;
       expect(cell.className).toContain('table-grid-cell--num');
       expect(cell.style.textAlign).toBe('right');
+      expect(cell.style.justifyContent).toBe('flex-end');
       expect(cell).toHaveAttribute('data-numeric', 'true');
     });
   });

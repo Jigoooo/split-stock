@@ -2,6 +2,7 @@ import { type CycleStatusFilter, useTradeCycles } from '@renderer/entities/trade
 import {
   formatDateOnly,
   formatDateTimeLongKo,
+  formatStockLabel,
   thousandSeparator,
 } from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
@@ -104,10 +105,7 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
                 </TableGrid.Cell>
                 {showSymbolColumn ? (
                   <TableGrid.Cell width={TRADE_HISTORY_COLS.symbol}>
-                    <span className="num">{cycle.pdno}</span>
-                    <span className="muted" style={{ marginLeft: '0.4rem' }}>
-                      {cycle.name}
-                    </span>
+                    {formatStockLabel(cycle.name, cycle.pdno)}
                   </TableGrid.Cell>
                 ) : null}
                 <TableGrid.Cell width={TRADE_HISTORY_COLS.buyPrice} numeric>

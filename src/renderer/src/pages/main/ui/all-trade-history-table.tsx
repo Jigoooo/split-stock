@@ -20,7 +20,9 @@ export const AllTradeHistoryTable = ({
     style={{ flex: 1, minHeight: 0 }}
   >
     <TableGrid.Header>
-      <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.nth}>차수</TableGrid.Cell>
+      <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.nth} numeric>
+        차수
+      </TableGrid.Cell>
       <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.date} className="date-time-cell">
         날짜
       </TableGrid.Cell>
@@ -60,7 +62,9 @@ export const AllTradeHistoryTable = ({
 
 const AllTradeHistoryRowView = ({ row }: { row: AllTradeHistoryRow }): ReactElement => (
   <TableGrid.Row>
-    <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.nth}>{row.nthText}</TableGrid.Cell>
+    <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.nth} numeric>
+      {row.nthText}
+    </TableGrid.Cell>
     <TableGrid.Cell
       width={ALL_TRADE_HISTORY_COLS.date}
       className="muted date-time-cell"
@@ -68,14 +72,7 @@ const AllTradeHistoryRowView = ({ row }: { row: AllTradeHistoryRow }): ReactElem
     >
       {row.dateText}
     </TableGrid.Cell>
-    <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.name}>
-      {row.nameText}
-      {row.pdnoText !== '' ? (
-        <span className="muted" style={{ marginLeft: '0.35rem' }}>
-          {row.pdnoText}
-        </span>
-      ) : null}
-    </TableGrid.Cell>
+    <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.name}>{row.stockLabelText}</TableGrid.Cell>
     <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.qty} numeric>
       {row.qtyText}
     </TableGrid.Cell>

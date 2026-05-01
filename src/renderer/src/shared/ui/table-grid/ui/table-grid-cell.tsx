@@ -21,7 +21,7 @@ const overflowClass = (mode: OverflowMode): string => `table-grid-cell--ovf-${mo
  * TableGrid.Cell — flex item.
  * - width 는 컬럼 기준 폭(number→px, string→CSS length). 실제 콘텐츠가 더 넓으면 컬럼 전체가 함께 확장.
  * - align/overflow/numeric 옵션.
- * - numeric=true → align right + mono + tabular-nums.
+ * - numeric=true → align right + justify end + mono + tabular-nums.
  * - sticky="right" → 가로 스크롤 시 우측 고정 (액션 컬럼 등)
  *
  * 셀 내부 인터랙션이 필요하면 children 에 <button> 등 시맨틱 요소를 직접 배치.
@@ -78,6 +78,8 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
         : { flex: '1 1 0%', minWidth: 0 };
 
   const finalAlign = align ?? (numeric ? 'right' : undefined);
+  const finalJustifyContent =
+    finalAlign === 'right' ? 'flex-end' : finalAlign === 'center' ? 'center' : undefined;
 
   const stickyStyle: CSSProperties = sticky
     ? {
@@ -126,9 +128,18 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
     e.preventDefault();
     e.stopPropagation();
 
-    el.setPointerCapture(e.pointerId);
+    const dragTarget = e.currentTarget;
+    if (typeof dragTarget.setPointerCapture === 'function') {
+      dragTarget.setPointerCapture(e.pointerId);
+    }
     startXRef.current = e.clientX;
-    startWidthRef.current = el.getBoundingClientRect().width;
+    startWidthRef.current =
+      el.getBoundingClientRect().width ||
+      el.offsetWidth ||
+      (typeof resolvedWidth === 'number'
+        ? resolvedWidth
+        : Number.parseFloat(String(resolvedWidth))) ||
+      30;
 
     const onPointerMove = (moveEvent: PointerEvent) => {
       const deltaX = moveEvent.clientX - startXRef.current;
@@ -139,14 +150,22 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
       );
     };
 
-    const onPointerUp = (upEvent: PointerEvent) => {
-      el.releasePointerCapture(upEvent.pointerId);
+    const stopDragging = (upEvent: PointerEvent) => {
+      if (
+        typeof dragTarget.hasPointerCapture === 'function' &&
+        dragTarget.hasPointerCapture(upEvent.pointerId) &&
+        typeof dragTarget.releasePointerCapture === 'function'
+      ) {
+        dragTarget.releasePointerCapture(upEvent.pointerId);
+      }
       window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointerup', stopDragging);
+      window.removeEventListener('pointercancel', stopDragging);
     };
 
     window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointerup', stopDragging);
+    window.addEventListener('pointercancel', stopDragging);
   };
 
   const cellClassName = [
@@ -165,6 +184,7 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
     ...(width === undefined && minWidth !== undefined ? { minWidth } : {}),
     ...(maxWidth !== undefined ? { maxWidth } : {}),
     ...(finalAlign ? { textAlign: finalAlign } : {}),
+    ...(finalJustifyContent ? { justifyContent: finalJustifyContent } : {}),
     ...overflowStyle(overflow),
     ...stickyStyle,
     ...style,
@@ -173,6 +193,9 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
   const resizer = isResizable ? (
     <button
       type="button"
+      aria-label="컬럼 너비 조절"
+      data-grid-role="column-resizer"
+      className="table-grid-cell__resizer"
       onPointerDown={handlePointerDown}
       style={{
         appearance: 'none',
@@ -182,26 +205,21 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
         position: 'absolute',
         top: 0,
         right: 0,
-        width: '8px',
+        width: '1rem',
         height: '100%',
         cursor: 'col-resize',
         zIndex: 10,
         touchAction: 'none',
         background: 'transparent',
       }}
-      onMouseEnter={(e) => {
-        (e.currentTarget.firstChild as HTMLDivElement).style.background = 'var(--accent, #3b82f6)';
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget.firstChild as HTMLDivElement).style.background = 'transparent';
-      }}
     >
       <div
+        className="table-grid-cell__resizer-line"
         style={{
           width: '2px',
           height: '100%',
           marginLeft: 'auto',
-          background: 'transparent',
+          background: 'var(--table-grid-resizer-color, transparent)',
           transition: 'background 0.2s',
         }}
       />

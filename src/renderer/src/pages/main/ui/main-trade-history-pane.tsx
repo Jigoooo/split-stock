@@ -1,3 +1,4 @@
+import { formatStockLabel } from '@renderer/shared/lib/formatter';
 import { type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
 import { type ReactElement, useState, useTransition } from 'react';
 import { AllTradeHistoryPanel } from './all-trade-history-panel';
@@ -36,11 +37,7 @@ export const MainTradeHistoryPane = (props: MainTradeHistoryPaneProps): ReactEle
   const effectiveR1: R1 = selectedPdno === null ? 'all' : r1;
 
   const symbolTradeTabLabel =
-    selectedPdno === null
-      ? null
-      : selectedName !== null && selectedName !== selectedPdno
-        ? `${selectedName}(${selectedPdno}) 매매내역`
-        : `${selectedPdno} 매매내역`;
+    selectedPdno === null ? null : `${formatStockLabel(selectedName, selectedPdno)} 매매내역`;
 
   const tabs: ReadonlyArray<HtsTabItem<R1>> =
     selectedPdno !== null

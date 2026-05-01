@@ -79,7 +79,7 @@ describe('PastTradesPane', () => {
 
     expect(screen.getByText('과거 거래 종목 (현재 미보유 1종목)')).toBeInTheDocument();
     expect(screen.queryByText('삼성전자')).toBeNull();
-    expect(screen.getByText('SK하이닉스')).toBeInTheDocument();
+    expect(screen.getByText('SK하이닉스 (000660)')).toBeInTheDocument();
   });
 
   it('미보유 과거 종목은 키보드로 상세 진입하고 목록으로 돌아올 수 있다', () => {

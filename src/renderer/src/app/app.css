@@ -1901,7 +1901,7 @@ body {
   background: transparent;
 }
 
-.hts-choice--standalone:hover {
+.hts-choice.hts-choice--standalone:hover:not(.hts-choice--disabled) {
   border: none;
   background: transparent;
   transform: none;
@@ -1939,6 +1939,14 @@ body {
   border-color: var(--accent);
   background: var(--accent);
   box-shadow: 0 0 0 0.25rem var(--accent-tint-12);
+}
+
+.table-grid-root[data-variant="hts"]
+  .table-grid-row
+  .hts-choice--standalone
+  .hts-choice__native:checked
+  + .hts-choice__control {
+  box-shadow: none;
 }
 
 .table-grid-root[data-variant="hts"]
@@ -3803,4 +3811,8 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.watch-orders-table.table-grid-root[data-variant="hts"] .table-grid-body .watch-order-row--paused {
+  --table-grid-row-custom-bg: rgba(234, 179, 8, 0.085);
 }

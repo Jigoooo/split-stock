@@ -3,6 +3,7 @@ import { type TradeCycle, useTradeCycles } from '@renderer/entities/trade-cycle'
 import {
   formatDateOnly,
   formatDateTimeLongKo,
+  formatStockLabel,
   thousandSeparator,
 } from '@renderer/shared/lib/formatter';
 import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
@@ -161,10 +162,7 @@ export const PastTradesPane = ({ accountId }: PastTradesPaneProps): ReactElement
             return (
               <TableGrid.Row key={g.pdno} onClick={() => setSelectedPdno(g.pdno)}>
                 <TableGrid.Cell width={PAST_TRADES_COLS.name}>
-                  {g.name}{' '}
-                  <span className="muted" style={{ fontSize: '0.9em' }}>
-                    {g.pdno}
-                  </span>
+                  {formatStockLabel(g.name, g.pdno)}
                 </TableGrid.Cell>
                 <TableGrid.Cell
                   width={PAST_TRADES_COLS.date}

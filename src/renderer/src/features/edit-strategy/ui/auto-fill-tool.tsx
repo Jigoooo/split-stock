@@ -160,7 +160,9 @@ const PreviewTable = ({ rows, baseline }: PreviewTableProps): ReactElement => {
         }}
       >
         <TableGrid.Header>
-          <TableGrid.Cell width="7.2rem">차수</TableGrid.Cell>
+          <TableGrid.Cell width="7.2rem" numeric>
+            차수
+          </TableGrid.Cell>
           <TableGrid.Cell width="10rem" numeric>
             하향 감지%
           </TableGrid.Cell>
@@ -192,7 +194,9 @@ const PreviewTable = ({ rows, baseline }: PreviewTableProps): ReactElement => {
 
 const PreviewGridRow = ({ row }: { row: PreviewRow }): ReactElement => (
   <TableGrid.Row>
-    <TableGrid.Cell width="7.2rem">{row.stage}차</TableGrid.Cell>
+    <TableGrid.Cell width="7.2rem" numeric>
+      {row.stage}차
+    </TableGrid.Cell>
     <TableGrid.Cell width="10rem" numeric>
       {row.dropPct.toFixed(2)}%
     </TableGrid.Cell>

@@ -49,6 +49,6 @@ describe('TradeHistoryList', () => {
     render(<TradeHistoryList accountId={1} pdno={null} status="all" />);
 
     expect(screen.getByText('종목')).toBeInTheDocument();
-    expect(screen.getByText('삼성전자')).toBeInTheDocument();
+    expect(screen.getByText('삼성전자 (005930)')).toBeInTheDocument();
   });
 });

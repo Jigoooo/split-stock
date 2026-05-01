@@ -40,7 +40,7 @@ export const WatchTable = ({
         목표가
       </TableGrid.Cell>
       <TableGrid.Cell width="9rem" numeric>
-        수량
+        주문 기준
       </TableGrid.Cell>
       <TableGrid.Cell width="7.2rem">주문</TableGrid.Cell>
       <TableGrid.Cell width="7.2rem">상태</TableGrid.Cell>

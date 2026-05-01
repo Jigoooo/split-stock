@@ -1,5 +1,5 @@
 import type { WatchOrder } from '@renderer/entities/watch-order';
-import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { formatStockLabel, thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Checkbox, TableGrid } from '@renderer/shared/ui';
 import type { MouseEvent, ReactElement } from 'react';
 import {
@@ -16,6 +16,10 @@ interface WatchListRowProps {
   order: WatchOrder;
   selected: boolean;
   stockName: string | null;
+}
+
+function statusClass(status: WatchOrder['status']): string {
+  return `watch-order-row watch-order-row--${status.toLowerCase()}`;
 }
 
 export const WatchListRow = ({
@@ -36,10 +40,14 @@ export const WatchListRow = ({
         onContextMenu: (event: MouseEvent<HTMLDivElement>) => onContextMenu(event, order.id),
       }
     : {};
-  const stockLabel = stockName ? `${stockName} (${order.pdno})` : order.pdno;
+  const stockLabel = formatStockLabel(stockName, order.pdno);
 
   return (
-    <TableGrid.Row selected={allowMutations && selected} {...rowInteractionProps}>
+    <TableGrid.Row
+      selected={allowMutations && selected}
+      className={statusClass(order.status)}
+      {...rowInteractionProps}
+    >
       {allowMutations ? (
         <TableGrid.Cell width="4.2rem">
           <Checkbox
@@ -59,7 +67,7 @@ export const WatchListRow = ({
       </TableGrid.Cell>
       <TableGrid.Cell width="9rem" numeric>
         {order.qtyOrAmountMode === 'QTY'
-          ? thousandSeparator(order.qty ?? 0)
+          ? `${thousandSeparator(order.qty ?? 0)}주`
           : `${thousandSeparator(order.amountKrw ?? 0)}원`}
       </TableGrid.Cell>
       <TableGrid.Cell width="7.2rem">{order.orderType}</TableGrid.Cell>

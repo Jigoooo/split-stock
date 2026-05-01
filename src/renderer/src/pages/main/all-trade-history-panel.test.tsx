@@ -140,6 +140,8 @@ describe('AllTradeHistoryPanel', () => {
     expect(screen.getByText('2026.04.05')).toBeInTheDocument();
     expect(screen.getByText('+60,000')).toBeInTheDocument();
     expect(screen.getByText('7.69%')).toBeInTheDocument();
+    expect(screen.getAllByText('삼성전자 (005930)')).toHaveLength(2);
+    expect(screen.getByText('SK하이닉스 (000660)')).toBeInTheDocument();
 
     const rows = document.querySelectorAll('[data-grid-role="row"]');
     expect(rows).toHaveLength(3);
