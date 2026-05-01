@@ -36,17 +36,17 @@ export const PriceRatioPreviewTable = ({ entries, originals }: Props): ReactElem
       style={{ height: 'auto', '--hts-row-height': '3rem' } as CSSProperties}
     >
       <TableGrid.Header>
-        <TableGrid.Cell width={72}>차수</TableGrid.Cell>
-        <TableGrid.Cell width={110} numeric>
+        <TableGrid.Cell width="7.2rem">차수</TableGrid.Cell>
+        <TableGrid.Cell width="11rem" numeric>
           변경 전
         </TableGrid.Cell>
-        <TableGrid.Cell width={110} numeric>
+        <TableGrid.Cell width="11rem" numeric>
           변경 후
         </TableGrid.Cell>
-        <TableGrid.Cell width={90} numeric>
+        <TableGrid.Cell width="9rem" numeric>
           수량
         </TableGrid.Cell>
-        <TableGrid.Cell width={120} numeric>
+        <TableGrid.Cell width="12rem" numeric>
           소계
         </TableGrid.Cell>
       </TableGrid.Header>
@@ -59,17 +59,17 @@ export const PriceRatioPreviewTable = ({ entries, originals }: Props): ReactElem
               key={entry.nth}
               style={{ backgroundColor: changed ? 'var(--warning-soft)' : undefined }}
             >
-              <TableGrid.Cell width={72}>{entry.nth}차</TableGrid.Cell>
-              <TableGrid.Cell width={110} numeric>
+              <TableGrid.Cell width="7.2rem">{entry.nth}차</TableGrid.Cell>
+              <TableGrid.Cell width="11rem" numeric>
                 {original?.buyPrice.toLocaleString()}원
               </TableGrid.Cell>
-              <TableGrid.Cell width={110} numeric style={{ fontWeight: 700 }}>
+              <TableGrid.Cell width="11rem" numeric style={{ fontWeight: 700 }}>
                 {entry.buyPrice.toLocaleString()}원
               </TableGrid.Cell>
-              <TableGrid.Cell width={90} numeric>
+              <TableGrid.Cell width="9rem" numeric>
                 {entry.qty.toLocaleString()}주
               </TableGrid.Cell>
-              <TableGrid.Cell width={120} numeric>
+              <TableGrid.Cell width="12rem" numeric>
                 {entry.amountKrw.toLocaleString()}원
               </TableGrid.Cell>
             </TableGrid.Row>

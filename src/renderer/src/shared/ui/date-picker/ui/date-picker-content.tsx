@@ -71,7 +71,7 @@ export function DatePickerContent({ children, style }: DatePickerContentProps) {
                   style={{
                     width: '4.8rem',
                     height: '0.5rem',
-                    borderRadius: '999px',
+                    borderRadius: 'var(--radius-pill, 999rem)',
                     backgroundColor: colors.border.default,
                     margin: '0 auto 1.2rem',
                   }}

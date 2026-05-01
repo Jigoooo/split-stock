@@ -270,7 +270,7 @@ export const StrategyPreviewModal = ({
                       style={{ height: 'auto', '--hts-row-height': '3rem' } as CSSProperties}
                     >
                       <TableGrid.Header>
-                        <TableGrid.Cell width={70} style={{ justifyContent: 'center' }}>
+                        <TableGrid.Cell width="7rem" style={{ justifyContent: 'center' }}>
                           차수
                         </TableGrid.Cell>
                         <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>
@@ -417,7 +417,7 @@ function StageRow({ nth, profile }: { nth: number; profile: StrategyProfile }): 
   const sell = profile.sellRules[nth - 1];
   return (
     <TableGrid.Row>
-      <TableGrid.Cell width={70} style={{ justifyContent: 'center', fontWeight: 700 }}>
+      <TableGrid.Cell width="7rem" style={{ justifyContent: 'center', fontWeight: 700 }}>
         {nth}차
       </TableGrid.Cell>
       <TableGrid.Cell flex={1} style={{ justifyContent: 'center' }}>

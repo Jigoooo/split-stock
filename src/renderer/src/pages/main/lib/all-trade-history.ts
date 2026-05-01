@@ -1,4 +1,8 @@
-import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import {
+  formatDateOnly,
+  formatDateTimeLongKo,
+  thousandSeparator,
+} from '@renderer/shared/lib/formatter';
 
 export type TradeHistoryStatus = 'OPEN' | 'BUYING' | 'SELLING' | 'SOLD';
 
@@ -37,6 +41,7 @@ export interface AllTradeHistoryRow {
   key: string;
   nthText: string;
   dateText: string;
+  dateTitleText: string;
   nameText: string;
   pdnoText: string;
   qtyText: string;
@@ -107,7 +112,8 @@ export function buildTradeHistoryRows(lots: readonly TradeHistoryLot[]): AllTrad
     rows.push({
       key: `${lot.id}:buy`,
       nthText: `${lot.nth}차`,
-      dateText: formatTradeDate(lot.boughtAt),
+      dateText: formatDateOnly(lot.boughtAt),
+      dateTitleText: formatDateTimeLongKo(lot.boughtAt),
       nameText,
       pdnoText,
       qtyText: thousandSeparator(lot.qty),
@@ -128,7 +134,8 @@ export function buildTradeHistoryRows(lots: readonly TradeHistoryLot[]): AllTrad
     rows.push({
       key: `${lot.id}:sell`,
       nthText: `${lot.nth}차`,
-      dateText: formatTradeDate(lot.soldAt ?? lot.boughtAt),
+      dateText: formatDateOnly(lot.soldAt ?? lot.boughtAt),
+      dateTitleText: formatDateTimeLongKo(lot.soldAt ?? lot.boughtAt),
       nameText,
       pdnoText,
       qtyText: thousandSeparator(lot.qty),
@@ -164,14 +171,6 @@ export function buildTradeHistoryDayOptions(year: number, month: number): number
 
 export function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
-}
-
-function formatTradeDate(epochMs: number): string {
-  const date = new Date(epochMs);
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  return `${year}.${month}.${day}`;
 }
 
 function formatKrw(value: number): string {

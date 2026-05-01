@@ -1,5 +1,9 @@
 import { type CycleStatusFilter, useTradeCycles } from '@renderer/entities/trade-cycle';
-import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import {
+  formatDateOnly,
+  formatDateTimeLongKo,
+  thousandSeparator,
+} from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
@@ -10,16 +14,16 @@ export interface TradeHistoryListProps {
 }
 
 const TRADE_HISTORY_COLS = {
-  nth: 52,
-  symbol: 176,
-  buyPrice: 96,
-  qty: 84,
-  sellPrice: 96,
-  pnl: 104,
-  pnlRate: 88,
-  status: 88,
-  boughtAt: 116,
-  soldAt: 116,
+  nth: '5.2rem',
+  symbol: '17.6rem',
+  buyPrice: '9.6rem',
+  qty: '8.4rem',
+  sellPrice: '9.6rem',
+  pnl: '10.4rem',
+  pnlRate: '8.8rem',
+  status: '8.8rem',
+  boughtAt: '11.6rem',
+  soldAt: '11.6rem',
 } as const;
 
 /**
@@ -72,10 +76,10 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
           수익률
         </TableGrid.Cell>
         <TableGrid.Cell width={TRADE_HISTORY_COLS.status}>상태</TableGrid.Cell>
-        <TableGrid.Cell width={TRADE_HISTORY_COLS.boughtAt} className="muted">
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.boughtAt} className="muted date-time-cell">
           매수일
         </TableGrid.Cell>
-        <TableGrid.Cell width={TRADE_HISTORY_COLS.soldAt} className="muted">
+        <TableGrid.Cell width={TRADE_HISTORY_COLS.soldAt} className="muted date-time-cell">
           매도일
         </TableGrid.Cell>
       </TableGrid.Header>
@@ -122,13 +126,21 @@ export const TradeHistoryList = (props: TradeHistoryListProps): ReactElement => 
                   {cycle.pnlRate !== undefined ? `${cycle.pnlRate.toFixed(2)}%` : '-'}
                 </TableGrid.Cell>
                 <TableGrid.Cell width={TRADE_HISTORY_COLS.status}>{cycle.status}</TableGrid.Cell>
-                <TableGrid.Cell width={TRADE_HISTORY_COLS.boughtAt} className="muted">
-                  {new Date(cycle.boughtAt).toLocaleDateString('ko-KR')}
+                <TableGrid.Cell
+                  width={TRADE_HISTORY_COLS.boughtAt}
+                  className="muted date-time-cell"
+                  title={formatDateTimeLongKo(cycle.boughtAt)}
+                >
+                  {formatDateOnly(cycle.boughtAt)}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={TRADE_HISTORY_COLS.soldAt} className="muted">
-                  {cycle.soldAt !== undefined
-                    ? new Date(cycle.soldAt).toLocaleDateString('ko-KR')
-                    : '-'}
+                <TableGrid.Cell
+                  width={TRADE_HISTORY_COLS.soldAt}
+                  className="muted date-time-cell"
+                  {...(cycle.soldAt !== undefined
+                    ? { title: formatDateTimeLongKo(cycle.soldAt) }
+                    : {})}
+                >
+                  {cycle.soldAt !== undefined ? formatDateOnly(cycle.soldAt) : '-'}
                 </TableGrid.Cell>
               </TableGrid.Row>
             );

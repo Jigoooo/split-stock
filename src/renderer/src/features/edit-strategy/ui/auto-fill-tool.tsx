@@ -156,15 +156,15 @@ const PreviewTable = ({ rows, baseline }: PreviewTableProps): ReactElement => {
           height: 'auto',
           fontSize: '1.05rem',
           width: '100%',
-          maxWidth: 360,
+          maxWidth: '36rem',
         }}
       >
         <TableGrid.Header>
-          <TableGrid.Cell width={72}>차수</TableGrid.Cell>
-          <TableGrid.Cell width={100} numeric>
+          <TableGrid.Cell width="7.2rem">차수</TableGrid.Cell>
+          <TableGrid.Cell width="10rem" numeric>
             하향 감지%
           </TableGrid.Cell>
-          <TableGrid.Cell width={120} numeric>
+          <TableGrid.Cell width="12rem" numeric>
             예상 매수가
           </TableGrid.Cell>
         </TableGrid.Header>
@@ -192,11 +192,11 @@ const PreviewTable = ({ rows, baseline }: PreviewTableProps): ReactElement => {
 
 const PreviewGridRow = ({ row }: { row: PreviewRow }): ReactElement => (
   <TableGrid.Row>
-    <TableGrid.Cell width={72}>{row.stage}차</TableGrid.Cell>
-    <TableGrid.Cell width={100} numeric>
+    <TableGrid.Cell width="7.2rem">{row.stage}차</TableGrid.Cell>
+    <TableGrid.Cell width="10rem" numeric>
       {row.dropPct.toFixed(2)}%
     </TableGrid.Cell>
-    <TableGrid.Cell width={120} numeric>
+    <TableGrid.Cell width="12rem" numeric>
       {Math.round(row.examplePrice).toLocaleString()}원
     </TableGrid.Cell>
   </TableGrid.Row>

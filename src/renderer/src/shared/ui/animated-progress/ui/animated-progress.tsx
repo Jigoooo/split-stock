@@ -54,7 +54,7 @@ export function AnimatedProgress({
         style={{
           width: '100%',
           height: '0.7rem',
-          borderRadius: '999px',
+          borderRadius: 'var(--radius-pill, 999rem)',
           overflow: 'hidden',
           backgroundColor: 'var(--border)',
         }}
@@ -66,7 +66,7 @@ export function AnimatedProgress({
           style={{
             width: `${boundedPercent}%`,
             height: '100%',
-            borderRadius: '999px',
+            borderRadius: 'var(--radius-pill, 999rem)',
             backgroundColor: color,
           }}
         />

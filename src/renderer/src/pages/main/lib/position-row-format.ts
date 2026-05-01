@@ -1,6 +1,10 @@
 import type { LotEntry } from '@renderer/entities/account';
 import type { BalanceStageCellMode } from '@renderer/entities/display-settings';
-import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import {
+  formatDateOnly,
+  formatDateTimeLongKo,
+  thousandSeparator,
+} from '@renderer/shared/lib/formatter';
 
 export function formatSigned(value: number): string {
   if (!Number.isFinite(value)) return '-';
@@ -29,10 +33,7 @@ export function formatStageCell(
   }
   switch (mode) {
     case 'DATE':
-      return new Date(lot.boughtAt).toLocaleDateString('ko-KR', {
-        month: '2-digit',
-        day: '2-digit',
-      });
+      return formatDateOnly(lot.boughtAt);
     case 'QTY':
       return thousandSeparator(lot.qty);
     case 'PERCENT':
@@ -44,7 +45,7 @@ export function formatStageTitle(nth: number, lot: LotEntry, stagePnlRate: numbe
   return [
     `${nth}차`,
     lot.status === 'SELLING' ? '매도중/체결 반영 중' : lot.status,
-    `매수일 ${new Date(lot.boughtAt).toLocaleDateString('ko-KR')}`,
+    `매수일 ${formatDateTimeLongKo(lot.boughtAt)}`,
     `수량 ${thousandSeparator(lot.qty)}주`,
     `수익률 ${stagePnlRate === null ? '-' : `${stagePnlRate.toFixed(2)}%`}`,
   ].join(' · ');

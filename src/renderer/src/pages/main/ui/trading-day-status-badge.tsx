@@ -1,4 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { formatDateOnly } from '@renderer/shared/lib/formatter';
 import type { TradingDayVerdict } from '@shared/contracts';
 import type { ReactElement } from 'react';
 
@@ -29,7 +30,10 @@ const REASON_LABELS: Record<string, string> = {
 };
 
 function formatDate(yyyymmdd: string): string {
-  return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
+  const year = Number(yyyymmdd.slice(0, 4));
+  const month = Number(yyyymmdd.slice(4, 6));
+  const day = Number(yyyymmdd.slice(6, 8));
+  return formatDateOnly(new Date(year, month - 1, day));
 }
 
 function getReasonLabel(reason: string): string {

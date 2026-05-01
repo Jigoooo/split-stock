@@ -19,7 +19,7 @@ const overflowClass = (mode: OverflowMode): string => `table-grid-cell--ovf-${mo
 
 /**
  * TableGrid.Cell — flex item.
- * - width 는 컬럼 기준 폭(number→px). 실제 콘텐츠가 더 넓으면 컬럼 전체가 함께 확장.
+ * - width 는 컬럼 기준 폭(number→px, string→CSS length). 실제 콘텐츠가 더 넓으면 컬럼 전체가 함께 확장.
  * - align/overflow/numeric 옵션.
  * - numeric=true → align right + mono + tabular-nums.
  * - sticky="right" → 가로 스크롤 시 우측 고정 (액션 컬럼 등)
@@ -59,8 +59,15 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
   const cellRef = useRef<HTMLDivElement | null>(null);
 
   const manualWidth = columnIndex !== undefined ? manualColumnWidths[columnIndex] : undefined;
+  const reportedWidth = columnIndex !== undefined ? columnWidths[columnIndex] : undefined;
   const calculatedWidth =
-    width !== undefined ? Math.max(width, columnWidths[columnIndex ?? -1] ?? 0) : undefined;
+    width !== undefined
+      ? reportedWidth !== undefined
+        ? typeof width === 'number'
+          ? Math.max(width, reportedWidth)
+          : reportedWidth
+        : width
+      : undefined;
   const resolvedWidth = manualWidth !== undefined ? manualWidth : calculatedWidth;
 
   const flexBasis: CSSProperties =
@@ -95,6 +102,14 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
     const el = cellRef.current;
     if (!el) return;
 
+    if (typeof width === 'string') {
+      const renderedWidth = el.getBoundingClientRect().width;
+      if (el.scrollWidth > renderedWidth) {
+        reportColumnWidth(columnIndex, el.scrollWidth);
+      }
+      return;
+    }
+
     reportColumnWidth(columnIndex, Math.max(width, el.scrollWidth));
   }, [width, columnIndex, manualWidth, reportColumnWidth]);
 
@@ -118,7 +133,10 @@ export function TableGridCell(props: TableGridCellInternalProps): ReactElement {
     const onPointerMove = (moveEvent: PointerEvent) => {
       const deltaX = moveEvent.clientX - startXRef.current;
       const newWidth = startWidthRef.current + deltaX;
-      setManualColumnWidth(columnIndex, Math.max(minWidth ?? 30, newWidth));
+      setManualColumnWidth(
+        columnIndex,
+        Math.max(typeof minWidth === 'number' ? minWidth : 30, newWidth),
+      );
     };
 
     const onPointerUp = (upEvent: PointerEvent) => {

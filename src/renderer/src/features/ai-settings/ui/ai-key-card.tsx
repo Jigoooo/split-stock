@@ -1,3 +1,4 @@
+import { formatDateOnly, formatDateTimeLongKo } from '@renderer/shared/lib/formatter';
 import { Button } from '@renderer/shared/ui';
 import { motion } from 'framer-motion';
 import { KeyRound, Pencil, Trash2, Zap } from 'lucide-react';
@@ -192,16 +193,22 @@ export const AiKeyCard = ({
               <div style={{ fontSize: '1.05rem', color: 'var(--fg-2)', marginBottom: '0.2rem' }}>
                 생성
               </div>
-              <div style={{ fontSize: '1.1rem', color: 'var(--fg)' }}>
-                {config.createdAt.toLocaleDateString('ko-KR')}
+              <div
+                style={{ fontSize: '1.1rem', color: 'var(--fg)' }}
+                title={formatDateTimeLongKo(config.createdAt)}
+              >
+                {formatDateOnly(config.createdAt)}
               </div>
             </div>
             <div>
               <div style={{ fontSize: '1.05rem', color: 'var(--fg-2)', marginBottom: '0.2rem' }}>
                 수정
               </div>
-              <div style={{ fontSize: '1.1rem', color: 'var(--fg)' }}>
-                {config.updatedAt.toLocaleDateString('ko-KR')}
+              <div
+                style={{ fontSize: '1.1rem', color: 'var(--fg)' }}
+                title={formatDateTimeLongKo(config.updatedAt)}
+              >
+                {formatDateOnly(config.updatedAt)}
               </div>
             </div>
           </div>

@@ -1,16 +1,20 @@
-import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import {
+  formatDateTimeLongKo,
+  formatTimeOnly,
+  thousandSeparator,
+} from '@renderer/shared/lib/formatter';
 import { Button, Checkbox, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { useActiveOrders } from '../model/use-active-orders';
 
 const ACTIVE_ORDER_COLUMN_WIDTHS = {
-  select: 52,
-  symbol: 110,
-  side: 124,
-  quantity: 148,
-  price: 100,
-  status: 96,
-  time: 108,
+  select: '5.2rem',
+  symbol: '11rem',
+  side: '12.4rem',
+  quantity: '14.8rem',
+  price: '10rem',
+  status: '9.6rem',
+  time: '11.2rem',
 } as const;
 
 export interface ActiveOrdersPanelProps {
@@ -80,7 +84,11 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
           <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.status}>
             상태
           </TableGrid.Cell>
-          <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.time}>
+          <TableGrid.Cell
+            flex={1}
+            minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.time}
+            className="date-time-cell"
+          >
             접수시각
           </TableGrid.Cell>
         </TableGrid.Header>
@@ -151,10 +159,10 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
               <TableGrid.Cell
                 flex={1}
                 minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.time}
-                numeric
-                className="muted"
+                className="muted date-time-cell"
+                title={formatDateTimeLongKo(o.placedAt)}
               >
-                {formatTs(o.placedAt)}
+                {formatTimeOnly(o.placedAt)}
               </TableGrid.Cell>
             </TableGrid.Row>
           ))}
@@ -163,9 +171,3 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
     </div>
   );
 };
-
-function formatTs(ts: Date | number | string): string {
-  const d = ts instanceof Date ? ts : new Date(ts);
-  if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleTimeString('ko-KR', { hour12: false });
-}

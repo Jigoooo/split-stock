@@ -91,6 +91,26 @@ describe('TableGrid', () => {
       expect(flexInline).toMatch(/min-width:\s*0/);
     });
 
+    it('width 문자열 지정 시 rem 같은 CSS length 를 그대로 적용한다', () => {
+      render(
+        <TableGrid.Root>
+          <TableGrid.Body>
+            <TableGrid.Row>
+              <TableGrid.Cell width="17.6rem" className="cell-rem">
+                datetime
+              </TableGrid.Cell>
+            </TableGrid.Row>
+          </TableGrid.Body>
+        </TableGrid.Root>,
+      );
+
+      const cell = document.querySelector('.cell-rem') as HTMLElement;
+
+      expect(cell.style.width).toBe('17.6rem');
+      expect(cell.style.minWidth).toBe('17.6rem');
+      expect(cell.style.flex).toBe('0 0 auto');
+    });
+
     it('width 지정 컬럼은 긴 내용이 나타나면 같은 컬럼 전체가 함께 확장된다', async () => {
       const scrollWidthSpy = vi
         .spyOn(HTMLElement.prototype, 'scrollWidth', 'get')

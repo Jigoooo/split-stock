@@ -8,14 +8,16 @@ export type Variant = 'hts' | 'plain';
 
 export type FlashDirection = 'up' | 'down';
 
+export type CssLength = number | string;
+
 /** Cell 공통 props — Header/Body 모두 사용 */
 export interface CellProps {
-  /** 컬럼 기준 폭 (px). 실제 내용이 더 길면 같은 컬럼 전체가 함께 확장된다. */
-  width?: number;
+  /** 컬럼 기준 폭. number는 기존 호환용 px, string은 rem 등 CSS length 그대로 사용한다. */
+  width?: CssLength;
   /** flex grow 비율. width 미지정 시 적용. */
   flex?: number;
-  minWidth?: number;
-  maxWidth?: number;
+  minWidth?: CssLength;
+  maxWidth?: CssLength;
   align?: Align;
   /** overflow 모드 — nowrap/ellipsis/wrap/scroll */
   overflow?: OverflowMode;

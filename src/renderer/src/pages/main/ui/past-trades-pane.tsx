@@ -1,6 +1,10 @@
 import { useBalanceWithLots } from '@renderer/entities/account';
 import { type TradeCycle, useTradeCycles } from '@renderer/entities/trade-cycle';
-import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import {
+  formatDateOnly,
+  formatDateTimeLongKo,
+  thousandSeparator,
+} from '@renderer/shared/lib/formatter';
 import { LOADING_MESSAGES } from '@renderer/shared/lib/loading-messages';
 import { Button, TableGrid } from '@renderer/shared/ui';
 import { type ReactElement, useState } from 'react';
@@ -20,22 +24,22 @@ interface PdnoGroup {
 }
 
 const PAST_TRADES_COLS = {
-  name: 168,
-  date: 124,
-  buyAmount: 126,
-  sellAmount: 126,
-  pnlRate: 84,
+  name: '16.8rem',
+  date: '11.6rem',
+  buyAmount: '12.6rem',
+  sellAmount: '12.6rem',
+  pnlRate: '8.4rem',
 } as const;
 
 const PAST_DETAIL_COLS = {
-  nth: 56,
-  boughtAt: 116,
-  soldAt: 116,
-  buyPrice: 96,
-  qty: 84,
-  sellPrice: 96,
-  pnl: 104,
-  pnlRate: 84,
+  nth: '5.6rem',
+  boughtAt: '11.6rem',
+  soldAt: '11.6rem',
+  buyPrice: '9.6rem',
+  qty: '8.4rem',
+  sellPrice: '9.6rem',
+  pnl: '10.4rem',
+  pnlRate: '8.4rem',
 } as const;
 
 /**
@@ -162,8 +166,12 @@ export const PastTradesPane = ({ accountId }: PastTradesPaneProps): ReactElement
                     {g.pdno}
                   </span>
                 </TableGrid.Cell>
-                <TableGrid.Cell width={PAST_TRADES_COLS.date} numeric className="muted">
-                  {formatDate(g.lastTradedAt)}
+                <TableGrid.Cell
+                  width={PAST_TRADES_COLS.date}
+                  className="muted date-time-cell"
+                  title={formatDateTimeLongKo(g.lastTradedAt)}
+                >
+                  {formatDateOnly(g.lastTradedAt)}
                 </TableGrid.Cell>
                 <TableGrid.Cell width={PAST_TRADES_COLS.buyAmount} numeric>
                   {thousandSeparator(Math.round(g.totalBuyKrw))}
@@ -235,7 +243,9 @@ const PastTradeDetail = ({ group, onBack }: PastTradeDetailProps): ReactElement 
         }}
         aria-label={`${group.name} 과거 거래 요약`}
       >
-        <span className="chip">마지막 거래일 {formatDate(group.lastTradedAt)}</span>
+        <span className="chip" title={formatDateTimeLongKo(group.lastTradedAt)}>
+          마지막 거래일 {formatDateOnly(group.lastTradedAt)}
+        </span>
         <span className="chip">총 매수 {formatKrw(group.totalBuyKrw)}</span>
         <span className="chip">총 매도 {formatKrw(group.totalSellKrw)}</span>
         <span className={`chip ${rateClass}`}>수익률 {group.pnlRate.toFixed(2)}%</span>
@@ -251,8 +261,12 @@ const PastTradeDetail = ({ group, onBack }: PastTradeDetailProps): ReactElement 
           <TableGrid.Cell width={PAST_DETAIL_COLS.nth} numeric>
             차수
           </TableGrid.Cell>
-          <TableGrid.Cell width={PAST_DETAIL_COLS.boughtAt}>매수일</TableGrid.Cell>
-          <TableGrid.Cell width={PAST_DETAIL_COLS.soldAt}>매도일</TableGrid.Cell>
+          <TableGrid.Cell width={PAST_DETAIL_COLS.boughtAt} className="date-time-cell">
+            매수일
+          </TableGrid.Cell>
+          <TableGrid.Cell width={PAST_DETAIL_COLS.soldAt} className="date-time-cell">
+            매도일
+          </TableGrid.Cell>
           <TableGrid.Cell width={PAST_DETAIL_COLS.buyPrice} numeric>
             매수가
           </TableGrid.Cell>
@@ -279,11 +293,21 @@ const PastTradeDetail = ({ group, onBack }: PastTradeDetailProps): ReactElement 
                 <TableGrid.Cell width={PAST_DETAIL_COLS.nth} numeric>
                   {cycle.nth}차
                 </TableGrid.Cell>
-                <TableGrid.Cell width={PAST_DETAIL_COLS.boughtAt} className="muted">
-                  {formatDate(cycle.boughtAt)}
+                <TableGrid.Cell
+                  width={PAST_DETAIL_COLS.boughtAt}
+                  className="muted date-time-cell"
+                  title={formatDateTimeLongKo(cycle.boughtAt)}
+                >
+                  {formatDateOnly(cycle.boughtAt)}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={PAST_DETAIL_COLS.soldAt} className="muted">
-                  {formatDate(cycle.soldAt ?? 0)}
+                <TableGrid.Cell
+                  width={PAST_DETAIL_COLS.soldAt}
+                  className="muted date-time-cell"
+                  {...(cycle.soldAt !== undefined
+                    ? { title: formatDateTimeLongKo(cycle.soldAt) }
+                    : {})}
+                >
+                  {formatDateOnly(cycle.soldAt ?? 0)}
                 </TableGrid.Cell>
                 <TableGrid.Cell width={PAST_DETAIL_COLS.buyPrice} numeric>
                   {formatKrw(cycle.buyPrice)}
@@ -308,12 +332,6 @@ const PastTradeDetail = ({ group, onBack }: PastTradeDetailProps): ReactElement 
     </div>
   );
 };
-
-function formatDate(epochMs: number): string {
-  if (epochMs === 0) return '-';
-  const d = new Date(epochMs);
-  return d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
-}
 
 function formatKrw(value: number): string {
   return thousandSeparator(Math.round(value));

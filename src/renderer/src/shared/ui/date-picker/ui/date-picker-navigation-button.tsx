@@ -23,7 +23,7 @@ export function DatePickerNavigationButton({
       style={{
         width: '2.8rem',
         height: '2.8rem',
-        borderRadius: '999px',
+        borderRadius: '50%',
         border: `1px solid ${colors.border.default}`,
         backgroundColor: disabled ? colors.bg.subtle : colors.bg.elevated,
         display: 'flex',

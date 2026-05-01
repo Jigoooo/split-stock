@@ -39,8 +39,8 @@ describe('TradeFeedPanel', () => {
 
     expect(region.querySelector('.table-grid-hscroll-wrapper')).toBeInTheDocument();
     expect(headerCells).toHaveLength(4);
-    expect(headerCells[0]).toHaveStyle({ minWidth: '100px' });
-    expect(headerCells[1]).toHaveStyle({ minWidth: '112px' });
-    expect(headerCells[3]).toHaveStyle({ minWidth: '200px' });
+    expect(headerCells[0]).toHaveStyle({ minWidth: '11.2rem' });
+    expect(headerCells[1]).toHaveStyle({ minWidth: '11.2rem' });
+    expect(headerCells[3]).toHaveStyle({ minWidth: '20rem' });
   });
 });

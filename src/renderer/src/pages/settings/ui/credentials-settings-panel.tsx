@@ -274,11 +274,11 @@ function CredentialsListSection(): ReactElement {
             style={{ height: 'auto', '--hts-row-height': '3.4rem' } as CSSProperties}
           >
             <TableGrid.Header>
-              <TableGrid.Cell width={120}>증권사</TableGrid.Cell>
-              <TableGrid.Cell width={120}>환경</TableGrid.Cell>
+              <TableGrid.Cell width="12rem">증권사</TableGrid.Cell>
+              <TableGrid.Cell width="12rem">환경</TableGrid.Cell>
               <TableGrid.Cell flex={1}>계좌번호</TableGrid.Cell>
-              <TableGrid.Cell width={140}>상태</TableGrid.Cell>
-              <TableGrid.Cell width={56} style={{ justifyContent: 'center' }}>
+              <TableGrid.Cell width="14rem">상태</TableGrid.Cell>
+              <TableGrid.Cell width="5.6rem" style={{ justifyContent: 'center' }}>
                 작업
               </TableGrid.Cell>
             </TableGrid.Header>
@@ -287,7 +287,7 @@ function CredentialsListSection(): ReactElement {
                 const isActive = currentEnv === e.env;
                 return (
                   <TableGrid.Row key={`${e.broker}-${e.env}`}>
-                    <TableGrid.Cell width={120}>
+                    <TableGrid.Cell width="12rem">
                       <span
                         className="chip"
                         style={{
@@ -299,7 +299,7 @@ function CredentialsListSection(): ReactElement {
                         {BROKER_LABEL[e.broker]}
                       </span>
                     </TableGrid.Cell>
-                    <TableGrid.Cell width={120}>
+                    <TableGrid.Cell width="12rem">
                       <span className={`chip ${e.env === 'PROD' ? 'chip--down' : 'chip--up'}`}>
                         {ENV_LABEL[e.env]}
                       </span>
@@ -307,7 +307,7 @@ function CredentialsListSection(): ReactElement {
                     <TableGrid.Cell flex={1} numeric>
                       {e.accountNo8}
                     </TableGrid.Cell>
-                    <TableGrid.Cell width={140} style={{ justifyContent: 'center' }}>
+                    <TableGrid.Cell width="14rem" style={{ justifyContent: 'center' }}>
                       {isActive ? (
                         <span
                           className="chip chip--live"
@@ -341,7 +341,7 @@ function CredentialsListSection(): ReactElement {
                         </Button>
                       )}
                     </TableGrid.Cell>
-                    <TableGrid.Cell width={56} style={{ justifyContent: 'center' }}>
+                    <TableGrid.Cell width="5.6rem" style={{ justifyContent: 'center' }}>
                       <Button
                         variant="ghost-danger"
                         iconLeading={<Trash2 size={14} />}

@@ -1,4 +1,5 @@
 import { Z_INDEX } from '@renderer/shared/config';
+import { formatDateOnly } from '@renderer/shared/lib/formatter';
 import { useMediaQuery } from '@renderer/shared/lib/interaction';
 import { AnimatedProgress, Button } from '@renderer/shared/ui';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -52,7 +53,7 @@ function DistributionChips({ distribution }: { distribution: TierDistribution })
               alignItems: 'center',
               gap: '0.2rem',
               padding: '0.1rem 0.55rem',
-              borderRadius: '999px',
+              borderRadius: 'var(--radius-pill, 999rem)',
               fontSize: '0.9rem',
               fontWeight: 700,
               color: '#ffffff',
@@ -67,12 +68,7 @@ function DistributionChips({ distribution }: { distribution: TierDistribution })
 }
 
 function formatRecommendationDate(ts: number): string {
-  const date = new Date(ts);
-  if (Number.isNaN(date.getTime())) return '-';
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return formatDateOnly(ts);
 }
 
 function formatElapsed(ms: number): string {
@@ -178,7 +174,7 @@ function DiscoveryStatus({
         display: 'inline-flex',
         alignItems: 'center',
         padding: '0.25rem 0.6rem',
-        borderRadius: '999px',
+        borderRadius: 'var(--radius-pill, 999rem)',
         border: '0.1rem solid var(--border)',
         fontSize: '0.95rem',
         whiteSpace: 'nowrap',
@@ -547,7 +543,7 @@ export const RecommendModal = ({
                     style={{
                       fontSize: '1rem',
                       padding: '0.2rem 0.55rem',
-                      borderRadius: '999px',
+                      borderRadius: 'var(--radius-pill, 999rem)',
                       border: '0.1rem dashed var(--border)',
                     }}
                   >

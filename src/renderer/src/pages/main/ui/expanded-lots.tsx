@@ -1,5 +1,9 @@
 import type { LotEntry } from '@renderer/entities/account';
-import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import {
+  formatDateOnly,
+  formatDateTimeLongKo,
+  thousandSeparator,
+} from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { formatKrw } from '../lib/position-row-format';
@@ -9,12 +13,12 @@ interface ExpandedLotsProps {
 }
 
 const EXPANDED_LOTS_COLS = {
-  nth: 52,
-  buyPrice: 100,
-  qty: 80,
-  amount: 120,
-  status: 96,
-  boughtAt: 116,
+  nth: '5.2rem',
+  buyPrice: '10rem',
+  qty: '8rem',
+  amount: '12rem',
+  status: '9.6rem',
+  boughtAt: '11.6rem',
 } as const;
 
 export const ExpandedLots = ({ lots }: ExpandedLotsProps): ReactElement => {
@@ -62,7 +66,9 @@ export const ExpandedLots = ({ lots }: ExpandedLotsProps): ReactElement => {
             투입금액
           </TableGrid.Cell>
           <TableGrid.Cell width={EXPANDED_LOTS_COLS.status}>상태</TableGrid.Cell>
-          <TableGrid.Cell width={EXPANDED_LOTS_COLS.boughtAt}>매수일</TableGrid.Cell>
+          <TableGrid.Cell width={EXPANDED_LOTS_COLS.boughtAt} className="date-time-cell">
+            매수일
+          </TableGrid.Cell>
         </TableGrid.Header>
         <TableGrid.Body>
           {lots.map((lot) => (
@@ -78,8 +84,12 @@ export const ExpandedLots = ({ lots }: ExpandedLotsProps): ReactElement => {
                 {thousandSeparator(Math.round(lot.amountKrw))}
               </TableGrid.Cell>
               <TableGrid.Cell width={EXPANDED_LOTS_COLS.status}>{lot.status}</TableGrid.Cell>
-              <TableGrid.Cell width={EXPANDED_LOTS_COLS.boughtAt} className="muted">
-                {new Date(lot.boughtAt).toLocaleDateString('ko-KR')}
+              <TableGrid.Cell
+                width={EXPANDED_LOTS_COLS.boughtAt}
+                className="muted date-time-cell"
+                title={formatDateTimeLongKo(lot.boughtAt)}
+              >
+                {formatDateOnly(lot.boughtAt)}
               </TableGrid.Cell>
             </TableGrid.Row>
           ))}

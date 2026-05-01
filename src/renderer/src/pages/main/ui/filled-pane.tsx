@@ -1,5 +1,9 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import {
+  formatDateTimeLongKo,
+  formatTimeOnly,
+  thousandSeparator,
+} from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 
@@ -8,12 +12,12 @@ export interface FilledPaneProps {
 }
 
 const FILLED_PANE_COLS = {
-  time: 84,
-  symbol: 90,
-  side: 64,
-  quantity: 96,
-  price: 110,
-  status: 88,
+  time: '11.2rem',
+  symbol: '9rem',
+  side: '6.4rem',
+  quantity: '9.6rem',
+  price: '11rem',
+  status: '8.8rem',
 } as const;
 
 /**
@@ -74,7 +78,9 @@ export const FilledPane = ({ selectedPdno }: FilledPaneProps): ReactElement => {
           style={{ flex: 1, minHeight: 0 }}
         >
           <TableGrid.Header>
-            <TableGrid.Cell width={FILLED_PANE_COLS.time}>시각</TableGrid.Cell>
+            <TableGrid.Cell width={FILLED_PANE_COLS.time} className="date-time-cell">
+              시각
+            </TableGrid.Cell>
             <TableGrid.Cell width={FILLED_PANE_COLS.symbol}>종목</TableGrid.Cell>
             <TableGrid.Cell width={FILLED_PANE_COLS.side}>구분</TableGrid.Cell>
             <TableGrid.Cell width={FILLED_PANE_COLS.quantity} numeric>
@@ -89,11 +95,14 @@ export const FilledPane = ({ selectedPdno }: FilledPaneProps): ReactElement => {
             {rows.map((row) => {
               const sideClass = row.side === 'BUY' ? 'num-up' : 'num-down';
               const t = row.filledAt ?? row.placedAt;
-              const time = t ? new Date(t).toLocaleTimeString('ko-KR', { hour12: false }) : '-';
               return (
                 <TableGrid.Row key={row.id}>
-                  <TableGrid.Cell width={FILLED_PANE_COLS.time} numeric>
-                    {time}
+                  <TableGrid.Cell
+                    width={FILLED_PANE_COLS.time}
+                    className="muted date-time-cell"
+                    title={formatDateTimeLongKo(t)}
+                  >
+                    {formatTimeOnly(t)}
                   </TableGrid.Cell>
                   <TableGrid.Cell width={FILLED_PANE_COLS.symbol}>{row.pdno}</TableGrid.Cell>
                   <TableGrid.Cell width={FILLED_PANE_COLS.side} className={sideClass}>

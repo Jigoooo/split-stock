@@ -5,10 +5,10 @@ import type { ReactElement } from 'react';
 import type { LiveTick } from '../model/use-live-feed';
 
 const TRADE_FEED_COLUMN_WIDTHS = {
-  time: 100,
-  price: 112,
-  volume: 104,
-  accumVolume: 200,
+  time: '11.2rem',
+  price: '11.2rem',
+  volume: '10.4rem',
+  accumVolume: '20rem',
 } as const;
 
 function flashKindFromTick(direction: LiveTick['tickDirection']): 'up' | 'down' | undefined {
@@ -63,7 +63,9 @@ export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
         style={{ flex: 1, minHeight: 0 }}
       >
         <TableGrid.Header>
-          <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.time}>시각</TableGrid.Cell>
+          <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.time} className="date-time-cell">
+            시각
+          </TableGrid.Cell>
           <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.price} numeric>
             체결가
           </TableGrid.Cell>
@@ -86,7 +88,7 @@ export const TradeFeedPanel = (props: TradeFeedPanelProps): ReactElement => {
             const flashKind = flashSet.has(key) ? flashKindFromTick(t.tickDirection) : null;
             return (
               <TableGrid.Row key={key} flash={flashKind ?? null}>
-                <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.time} numeric>
+                <TableGrid.Cell width={TRADE_FEED_COLUMN_WIDTHS.time} className="date-time-cell">
                   {formatTime(t.time)}
                 </TableGrid.Cell>
                 <TableGrid.Cell

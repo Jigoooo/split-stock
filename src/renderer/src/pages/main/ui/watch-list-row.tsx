@@ -2,7 +2,12 @@ import type { WatchOrder } from '@renderer/entities/watch-order';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Checkbox, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
-import { formatWatchDate, sourceLabel, statusLabel } from '../lib/watch-list-format';
+import {
+  formatWatchDate,
+  formatWatchDateTitle,
+  sourceLabel,
+  statusLabel,
+} from '../lib/watch-list-format';
 
 interface WatchListRowProps {
   allowMutations: boolean;
@@ -29,7 +34,7 @@ export const WatchListRow = ({
   return (
     <TableGrid.Row selected={allowMutations && selected} {...contextMenuProps}>
       {allowMutations ? (
-        <TableGrid.Cell width={42}>
+        <TableGrid.Cell width="4.2rem">
           <Checkbox
             checked={selected}
             onChange={() => onToggle(order.id)}
@@ -38,24 +43,28 @@ export const WatchListRow = ({
           />
         </TableGrid.Cell>
       ) : null}
-      <TableGrid.Cell width={168} title={stockLabel}>
+      <TableGrid.Cell width="16.8rem" title={stockLabel}>
         {stockLabel}
       </TableGrid.Cell>
-      <TableGrid.Cell width={72}>{sourceLabel(order.source)}</TableGrid.Cell>
-      <TableGrid.Cell width={90} numeric>
+      <TableGrid.Cell width="7.2rem">{sourceLabel(order.source)}</TableGrid.Cell>
+      <TableGrid.Cell width="9rem" numeric>
         {thousandSeparator(order.targetPrice)}
       </TableGrid.Cell>
-      <TableGrid.Cell width={90} numeric>
+      <TableGrid.Cell width="9rem" numeric>
         {order.qtyOrAmountMode === 'QTY'
           ? thousandSeparator(order.qty ?? 0)
           : `${thousandSeparator(order.amountKrw ?? 0)}원`}
       </TableGrid.Cell>
-      <TableGrid.Cell width={72}>{order.orderType}</TableGrid.Cell>
-      <TableGrid.Cell width={72}>{statusLabel(order.status)}</TableGrid.Cell>
-      <TableGrid.Cell width={148} className="muted">
+      <TableGrid.Cell width="7.2rem">{order.orderType}</TableGrid.Cell>
+      <TableGrid.Cell width="7.2rem">{statusLabel(order.status)}</TableGrid.Cell>
+      <TableGrid.Cell
+        width="17.6rem"
+        className="muted date-time-cell"
+        title={formatWatchDateTitle(order.createdAt)}
+      >
         {formatWatchDate(order.createdAt)}
       </TableGrid.Cell>
-      <TableGrid.Cell width={120} className="muted">
+      <TableGrid.Cell width="12rem" className="muted">
         {order.lastFailureReason ?? ''}
       </TableGrid.Cell>
     </TableGrid.Row>

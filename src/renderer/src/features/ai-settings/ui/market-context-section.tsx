@@ -1,4 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { formatDateOnly } from '@renderer/shared/lib/formatter';
 import { Button } from '@renderer/shared/ui';
 import { Activity, RefreshCw } from 'lucide-react';
 import type { ReactElement } from 'react';
@@ -105,6 +106,6 @@ function statusLabel(status: SourceStatus | undefined): string {
   if (!status.isAvailable) return '키 없음';
   if (status.lastError) return '오류';
   if (status.isStale) return '갱신 필요';
-  if (status.lastSuccessAt) return `최신 ${new Date(status.lastSuccessAt).toLocaleDateString()}`;
+  if (status.lastSuccessAt) return `최신 ${formatDateOnly(status.lastSuccessAt)}`;
   return '대기';
 }

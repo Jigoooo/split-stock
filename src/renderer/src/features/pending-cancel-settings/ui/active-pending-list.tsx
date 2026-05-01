@@ -54,34 +54,34 @@ export const ActivePendingList = (): ReactElement => {
             style={{ height: 'auto' }}
           >
             <TableGrid.Header>
-              <TableGrid.Cell width={90}>종목</TableGrid.Cell>
-              <TableGrid.Cell width={80}>구분</TableGrid.Cell>
-              <TableGrid.Cell width={70}>차수</TableGrid.Cell>
-              <TableGrid.Cell flex={1} minWidth={120}>
+              <TableGrid.Cell width="9rem">종목</TableGrid.Cell>
+              <TableGrid.Cell width="8rem">구분</TableGrid.Cell>
+              <TableGrid.Cell width="7rem">차수</TableGrid.Cell>
+              <TableGrid.Cell flex={1} minWidth="12rem">
                 주문번호
               </TableGrid.Cell>
-              <TableGrid.Cell width={70}>시도</TableGrid.Cell>
-              <TableGrid.Cell width={72} align="right" resizable={false}>
+              <TableGrid.Cell width="7rem">시도</TableGrid.Cell>
+              <TableGrid.Cell width="7.2rem" align="right" resizable={false}>
                 액션
               </TableGrid.Cell>
             </TableGrid.Header>
             <TableGrid.Body>
               {items.map((item) => (
                 <TableGrid.Row key={`${item.pdno}:${item.side}:${item.nth}`}>
-                  <TableGrid.Cell width={90} numeric>
+                  <TableGrid.Cell width="9rem" numeric>
                     {item.pdno}
                   </TableGrid.Cell>
-                  <TableGrid.Cell width={80}>
+                  <TableGrid.Cell width="8rem">
                     <span className={item.side === 'BUY' ? 'chip chip--up' : 'chip chip--down'}>
                       {SIDE_LABEL[item.side]}
                     </span>
                   </TableGrid.Cell>
-                  <TableGrid.Cell width={70}>{item.nth}차</TableGrid.Cell>
-                  <TableGrid.Cell flex={1} minWidth={120} className="num" overflow="ellipsis">
+                  <TableGrid.Cell width="7rem">{item.nth}차</TableGrid.Cell>
+                  <TableGrid.Cell flex={1} minWidth="12rem" className="num" overflow="ellipsis">
                     {item.odno}
                   </TableGrid.Cell>
-                  <TableGrid.Cell width={70}>{item.attempts}회</TableGrid.Cell>
-                  <TableGrid.Cell width={72} align="right" resizable={false}>
+                  <TableGrid.Cell width="7rem">{item.attempts}회</TableGrid.Cell>
+                  <TableGrid.Cell width="7.2rem" align="right" resizable={false}>
                     <Button
                       dense
                       variant="danger"

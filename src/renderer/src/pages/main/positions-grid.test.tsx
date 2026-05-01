@@ -273,7 +273,7 @@ describe('PositionsGrid', () => {
     render(<PositionsGrid accountId={1} />);
 
     expect(
-      screen.getByTitle('1차 · OPEN · 매수일 2025. 1. 2. · 수량 6주 · 수익률 4.00%'),
+      screen.getByTitle(/1차 · OPEN · 매수일 2025년 1월 2일 .* · 수량 6주 · 수익률 4.00%/),
     ).toHaveTextContent('4.00%');
   });
 

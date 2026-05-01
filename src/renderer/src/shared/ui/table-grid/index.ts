@@ -32,13 +32,13 @@ export { useTableGridVirtual } from './model/use-table-grid-virtual';
  * ```tsx
  * <TableGrid.Root variant="hts" stickyHeader zebra>
  *   <TableGrid.Header>
- *     <TableGrid.Cell width={120}>종목명</TableGrid.Cell>
+ *     <TableGrid.Cell width="12rem">종목명</TableGrid.Cell>
  *     <TableGrid.Cell flex={1} numeric>현재가</TableGrid.Cell>
  *   </TableGrid.Header>
  *   <TableGrid.Body>
  *     {rows.map((r) => (
  *       <TableGrid.Row key={r.id} selected={r.id === selectedId} onClick={...}>
- *         <TableGrid.Cell width={120}>{r.name}</TableGrid.Cell>
+ *         <TableGrid.Cell width="12rem">{r.name}</TableGrid.Cell>
  *         <TableGrid.Cell flex={1} numeric>{r.price}</TableGrid.Cell>
  *       </TableGrid.Row>
  *     ))}

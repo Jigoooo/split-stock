@@ -21,7 +21,9 @@ export const AllTradeHistoryTable = ({
   >
     <TableGrid.Header>
       <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.nth}>차수</TableGrid.Cell>
-      <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.date}>날짜</TableGrid.Cell>
+      <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.date} className="date-time-cell">
+        날짜
+      </TableGrid.Cell>
       <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.name}>종목명</TableGrid.Cell>
       <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.qty} numeric>
         수량
@@ -59,7 +61,11 @@ export const AllTradeHistoryTable = ({
 const AllTradeHistoryRowView = ({ row }: { row: AllTradeHistoryRow }): ReactElement => (
   <TableGrid.Row>
     <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.nth}>{row.nthText}</TableGrid.Cell>
-    <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.date} className="muted">
+    <TableGrid.Cell
+      width={ALL_TRADE_HISTORY_COLS.date}
+      className="muted date-time-cell"
+      title={row.dateTitleText}
+    >
       {row.dateText}
     </TableGrid.Cell>
     <TableGrid.Cell width={ALL_TRADE_HISTORY_COLS.name}>

@@ -58,11 +58,11 @@ export const MaSettingsSection = ({
       style={{ height: 'auto', '--hts-row-height': '3.6rem' } as React.CSSProperties}
     >
       <TableGrid.Header>
-        <TableGrid.Cell width={56}>표시</TableGrid.Cell>
-        <TableGrid.Cell width={64}>기간</TableGrid.Cell>
-        <TableGrid.Cell width={56}>색상</TableGrid.Cell>
-        <TableGrid.Cell width={88}>두께</TableGrid.Cell>
-        <TableGrid.Cell width={120}>스타일</TableGrid.Cell>
+        <TableGrid.Cell width="5.6rem">표시</TableGrid.Cell>
+        <TableGrid.Cell width="6.4rem">기간</TableGrid.Cell>
+        <TableGrid.Cell width="5.6rem">색상</TableGrid.Cell>
+        <TableGrid.Cell width="8.8rem">두께</TableGrid.Cell>
+        <TableGrid.Cell width="12rem">스타일</TableGrid.Cell>
         <TableGrid.Cell flex={1}> </TableGrid.Cell>
       </TableGrid.Header>
       <TableGrid.Body>
@@ -70,7 +70,7 @@ export const MaSettingsSection = ({
           const ma = resolvedMa(period);
           return (
             <TableGrid.Row key={period}>
-              <TableGrid.Cell width={56}>
+              <TableGrid.Cell width="5.6rem">
                 <input
                   type="checkbox"
                   checked={ma.enabled}
@@ -79,8 +79,8 @@ export const MaSettingsSection = ({
                   aria-label={`${MA_LABEL[period]} 표시`}
                 />
               </TableGrid.Cell>
-              <TableGrid.Cell width={64}>{MA_LABEL[period]}</TableGrid.Cell>
-              <TableGrid.Cell width={56} style={CELL_FLUSH_STYLE}>
+              <TableGrid.Cell width="6.4rem">{MA_LABEL[period]}</TableGrid.Cell>
+              <TableGrid.Cell width="5.6rem" style={CELL_FLUSH_STYLE}>
                 <input
                   type="color"
                   value={colorToHex(ma.color)}
@@ -90,7 +90,7 @@ export const MaSettingsSection = ({
                   style={colorInputStyle}
                 />
               </TableGrid.Cell>
-              <TableGrid.Cell width={88} style={CELL_FLUSH_STYLE}>
+              <TableGrid.Cell width="8.8rem" style={CELL_FLUSH_STYLE}>
                 <NumberInput
                   dense
                   showSpinner
@@ -108,7 +108,7 @@ export const MaSettingsSection = ({
                   aria-label={`${MA_LABEL[period]} 두께`}
                 />
               </TableGrid.Cell>
-              <TableGrid.Cell width={120} style={CELL_FLUSH_STYLE}>
+              <TableGrid.Cell width="12rem" style={CELL_FLUSH_STYLE}>
                 <Select
                   dense
                   value={ma.style}

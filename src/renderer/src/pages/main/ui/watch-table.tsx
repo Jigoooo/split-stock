@@ -33,21 +33,21 @@ export const WatchTable = ({
     style={{ flex: 1, minHeight: 0 }}
   >
     <TableGrid.Header>
-      {allowMutations ? <TableGrid.Cell width={42} /> : null}
-      <TableGrid.Cell width={168}>종목</TableGrid.Cell>
-      <TableGrid.Cell width={72}>구분</TableGrid.Cell>
-      <TableGrid.Cell width={90} numeric>
+      {allowMutations ? <TableGrid.Cell width="4.2rem" /> : null}
+      <TableGrid.Cell width="16.8rem">종목</TableGrid.Cell>
+      <TableGrid.Cell width="7.2rem">구분</TableGrid.Cell>
+      <TableGrid.Cell width="9rem" numeric>
         목표가
       </TableGrid.Cell>
-      <TableGrid.Cell width={90} numeric>
+      <TableGrid.Cell width="9rem" numeric>
         수량
       </TableGrid.Cell>
-      <TableGrid.Cell width={72}>주문</TableGrid.Cell>
-      <TableGrid.Cell width={72}>상태</TableGrid.Cell>
-      <TableGrid.Cell width={148} className="muted">
+      <TableGrid.Cell width="7.2rem">주문</TableGrid.Cell>
+      <TableGrid.Cell width="7.2rem">상태</TableGrid.Cell>
+      <TableGrid.Cell width="17.6rem" className="muted date-time-cell">
         등록
       </TableGrid.Cell>
-      <TableGrid.Cell width={120} className="muted">
+      <TableGrid.Cell width="12rem" className="muted">
         실패사유
       </TableGrid.Cell>
     </TableGrid.Header>

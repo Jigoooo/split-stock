@@ -44,7 +44,9 @@ describe('WatchHistoryList', () => {
     expect(screen.getByText('레벨')).toBeInTheDocument();
     expect(screen.getByText('이벤트')).toBeInTheDocument();
     expect(document.querySelector('article')).not.toBeInTheDocument();
-    expect(screen.getByText(/2026년 .*월 .*일/)).toBeInTheDocument();
+    const timeCell = screen.getByText(/2026\.04\.25 \d{2}:\d{2}:\d{2}/);
+    expect(timeCell).toBeInTheDocument();
+    expect(timeCell.getAttribute('title')).toMatch(/2026년 4월 25일/);
     expect(screen.getByText('등록')).toBeInTheDocument();
     expect(screen.getByText('삼성전자')).toBeInTheDocument();
     expect(screen.getByText('005930')).toBeInTheDocument();

@@ -78,8 +78,8 @@ describe('ActiveOrdersPanel', () => {
 
     expect(region.querySelector('.table-grid-hscroll-wrapper')).toBeInTheDocument();
     expect(headerCells).toHaveLength(7);
-    expect(headerCells[1]).toHaveStyle({ minWidth: '110px' });
-    expect(headerCells[3]).toHaveStyle({ minWidth: '148px' });
-    expect(headerCells[6]).toHaveStyle({ minWidth: '108px' });
+    expect(headerCells[1]).toHaveStyle({ minWidth: '11rem' });
+    expect(headerCells[3]).toHaveStyle({ minWidth: '14.8rem' });
+    expect(headerCells[6]).toHaveStyle({ minWidth: '11.2rem' });
   });
 });

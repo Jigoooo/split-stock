@@ -145,7 +145,7 @@ export const ExtraPdnoPicker = ({
                 gap: '0.3rem',
                 padding: '0.25rem 0.6rem',
                 fontSize: '1.05rem',
-                borderRadius: '999px',
+                borderRadius: 'var(--radius-pill, 999rem)',
                 border: '0.1rem solid #D97757',
                 backgroundColor: 'rgba(217, 119, 87, 0.08)',
                 color: '#D97757',

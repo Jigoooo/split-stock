@@ -100,6 +100,7 @@
   /* Focus ring */
   --focus-ring: var(--accent);
   --focus-ring-offset: 2px;
+  --radius-pill: 999rem;
 
   /* Flash feedback (체결 side 기반) */
   --flash-up-bg: rgba(220, 38, 38, 0.22);
@@ -404,6 +405,13 @@ body {
   font-feature-settings: "tnum";
 }
 
+.date-time-cell {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: 0;
+}
+
 .cell-right {
   text-align: right;
 }
@@ -628,7 +636,7 @@ body {
   padding: 0.2rem;
   box-sizing: border-box;
   border: 0.1rem solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-pill, 999rem);
   background: var(--bg-3);
   transition:
     background-color var(--motion-fast) var(--motion-crisp),
@@ -640,7 +648,7 @@ body {
   display: block;
   width: 1.45rem;
   height: 1.45rem;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--bg);
   border: 0.1rem solid var(--border);
   box-shadow: 0 0.1rem 0.35rem rgba(15, 23, 42, 0.2);
@@ -1819,7 +1827,7 @@ body {
 }
 
 .hts-choice:not(.hts-choice--checkbox) .hts-choice__control {
-  border-radius: 999px;
+  border-radius: 50%;
 }
 
 .hts-choice--checkbox .hts-choice__control {
@@ -1851,7 +1859,7 @@ body {
   left: 50%;
   width: 0.6rem;
   height: 0.6rem;
-  border-radius: 999px;
+  border-radius: 50%;
   background: #fff;
   transform: translate(-50%, -50%);
   animation: hts-choice-dot-in 120ms var(--motion-crisp);
@@ -3374,7 +3382,7 @@ body {
   justify-content: center;
   width: 1.6rem;
   height: 1.6rem;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--accent);
   color: #fff;
   font-size: 0.85rem;

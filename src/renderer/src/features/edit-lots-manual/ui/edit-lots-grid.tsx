@@ -1,4 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
+import { formatDateOnly, formatDateTimeLongKo } from '@renderer/shared/lib/formatter';
 import {
   alertDialog,
   Button,
@@ -219,40 +220,46 @@ export const EditLotsGrid = (props: EditLotsGridProps): ReactElement => {
           style={{ height: 'auto', fontSize: '0.95rem' }}
         >
           <TableGrid.Header>
-            <TableGrid.Cell width={64}>차수</TableGrid.Cell>
-            <TableGrid.Cell width={76}>상태</TableGrid.Cell>
-            <TableGrid.Cell width={104} numeric>
+            <TableGrid.Cell width="6.4rem">차수</TableGrid.Cell>
+            <TableGrid.Cell width="7.6rem">상태</TableGrid.Cell>
+            <TableGrid.Cell width="10.4rem" numeric>
               매입가
             </TableGrid.Cell>
-            <TableGrid.Cell width={86} numeric>
+            <TableGrid.Cell width="8.6rem" numeric>
               수량
             </TableGrid.Cell>
-            <TableGrid.Cell width={110} numeric>
+            <TableGrid.Cell width="11rem" numeric>
               금액
             </TableGrid.Cell>
-            <TableGrid.Cell width={108}>매수일</TableGrid.Cell>
-            <TableGrid.Cell width={156} align="right" sticky="right">
+            <TableGrid.Cell width="11.6rem" className="date-time-cell">
+              매수일
+            </TableGrid.Cell>
+            <TableGrid.Cell width="15.6rem" align="right" sticky="right">
               액션
             </TableGrid.Cell>
           </TableGrid.Header>
           <TableGrid.Body>
             {rows.map((r) => (
               <TableGrid.Row key={r.id}>
-                <TableGrid.Cell width={64}>{r.nth}차</TableGrid.Cell>
-                <TableGrid.Cell width={76}>{r.status}</TableGrid.Cell>
-                <TableGrid.Cell width={104} numeric>
+                <TableGrid.Cell width="6.4rem">{r.nth}차</TableGrid.Cell>
+                <TableGrid.Cell width="7.6rem">{r.status}</TableGrid.Cell>
+                <TableGrid.Cell width="10.4rem" numeric>
                   {r.buyPrice.toLocaleString()}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={86} numeric>
+                <TableGrid.Cell width="8.6rem" numeric>
                   {r.qty.toLocaleString()}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={110} numeric>
+                <TableGrid.Cell width="11rem" numeric>
                   {r.amountKrw.toLocaleString()}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={108}>
-                  {new Date(r.boughtAtMs).toISOString().slice(0, 10)}
+                <TableGrid.Cell
+                  width="11.6rem"
+                  className="muted date-time-cell"
+                  title={formatDateTimeLongKo(r.boughtAtMs)}
+                >
+                  {formatDateOnly(r.boughtAtMs)}
                 </TableGrid.Cell>
-                <TableGrid.Cell width={156} sticky="right">
+                <TableGrid.Cell width="15.6rem" sticky="right">
                   <div style={{ display: 'flex', gap: '0.3rem', justifyContent: 'flex-end' }}>
                     <Button onClick={() => setModal({ kind: 'edit', row: r })} dense>
                       수정

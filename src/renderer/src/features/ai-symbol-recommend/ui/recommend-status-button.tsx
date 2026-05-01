@@ -1,22 +1,16 @@
+import { formatDateOnly } from '@renderer/shared/lib/formatter';
 import { AlertTriangle, LoaderCircle, Sparkles } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useOptionalSymbolRecommendationSession } from '../model/recommendation-session';
 
 function formatStatusDate(ts: number): string {
-  const date = new Date(ts);
-  if (Number.isNaN(date.getTime())) return '확인';
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${month}.${day}`;
+  const formatted = formatDateOnly(ts);
+  return formatted === '-' ? '확인' : formatted;
 }
 
 function formatTitleDate(ts: number): string {
-  const date = new Date(ts);
-  if (Number.isNaN(date.getTime())) return '날짜 확인 필요';
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  const formatted = formatDateOnly(ts);
+  return formatted === '-' ? '날짜 확인 필요' : formatted;
 }
 
 export const RecommendStatusButton = (): ReactElement | null => {
