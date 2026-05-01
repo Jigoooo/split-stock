@@ -61,6 +61,7 @@
     "@trpc/client": "^11.16.0",
     "@trpc/react-query": "^11.16.0",
     "@trpc/server": "^11.16.0",
+    "@upbit-official/upbit-sdk": "^0.9.0",
     "adm-zip": "^0.5.17",
     "better-sqlite3": "^12.9.0",
     "bottleneck": "^2.19.5",
