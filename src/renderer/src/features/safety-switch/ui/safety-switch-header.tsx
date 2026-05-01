@@ -43,8 +43,6 @@ export const SafetySwitchHeader = (): ReactElement => {
   const snap = snapshot;
   const errorLocked = snap.errorLock.active;
 
-  const killHotkey = navigator.platform.includes('Mac') ? '⌘⇧K' : 'Ctrl+Shift+K';
-
   return (
     <div className="header-toggle-control header-toggle-control--order">
       <span className="header-toggle-control__label">주문</span>
@@ -52,8 +50,7 @@ export const SafetySwitchHeader = (): ReactElement => {
         checked={snap.master}
         disabled={errorLocked || setMasterPending}
         onChange={setMaster}
-        aria-label={`주문 ${snap.master ? '가능' : '차단'} (즉시 중지: ${killHotkey})`}
-        title={`즉시 중지: ${killHotkey}`}
+        aria-label={`주문 ${snap.master ? '가능' : '차단'}`}
         tone={snap.master ? 'success' : 'danger'}
       />
       <span
@@ -65,20 +62,6 @@ export const SafetySwitchHeader = (): ReactElement => {
       >
         {snap.master ? '가능' : '차단'}
       </span>
-      <kbd
-        title="즉시 중지 단축키"
-        style={{
-          fontFamily: 'inherit',
-          fontSize: '0.85em',
-          padding: '0.1rem 0.4rem',
-          border: '1px solid var(--border)',
-          borderRadius: '0.3rem',
-          color: 'var(--fg-2)',
-          background: 'var(--bg-2)',
-        }}
-      >
-        {killHotkey}
-      </kbd>
       {errorLocked ? (
         <>
           <span className="chip chip--down" role="status">

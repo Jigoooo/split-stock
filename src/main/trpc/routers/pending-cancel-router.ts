@@ -11,7 +11,7 @@ const PendingCancelSettingsSchema = z.object({
 });
 
 /**
- * 미체결 자동취소(F6) 설정 + 활성 감시 목록 라우터.
+ * 미체결 자동취소 설정 + 활성 감시 목록 라우터.
  *
  * - getSettings: 현재 설정 조회 (public — 환경 선택 전에도 설정 확인 가능)
  * - updateSettings: 설정 변경 (authed — 환경 선택 후)

@@ -45,16 +45,8 @@ void app.whenReady().then(async () => {
   });
 
   const userDataDir = app.getPath('userData');
-  const {
-    factory,
-    safetyRegistry,
-    eventLogger,
-    settingsRepo,
-    prebuyWatchers,
-    balanceSync,
-    dbPath,
-    bootStatus,
-  } = bootstrapDeps(userDataDir);
+  const { factory, eventLogger, settingsRepo, prebuyWatchers, balanceSync, dbPath, bootStatus } =
+    bootstrapDeps(userDataDir);
 
   const backupScheduler = new BackupScheduler({
     dbPath,
@@ -90,17 +82,6 @@ void app.whenReady().then(async () => {
     bootStatus.setFlags({ backupReady: true });
   }, 0);
 
-  void import('electron').then(({ globalShortcut }) => {
-    const acc = 'CommandOrControl+Shift+K';
-    const registered = globalShortcut.register(acc, () => {
-      // 등록된 모든 계좌의 master OFF + errorLock 활성. 가장 강한 차단.
-      safetyRegistry.triggerKillSwitchAll('글로벌 단축키');
-    });
-    if (!registered) {
-      // 다른 앱이 단축키를 점유 중이면 무시
-    }
-  });
-
   void initAutoUpdater(app.isPackaged, eventLogger);
 
   // BalanceSync / BackupScheduler 종료 시 타이머 해제
@@ -114,12 +95,6 @@ void app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createAttachedMainWindow(ipcHandler);
     }
-  });
-});
-
-app.on('will-quit', () => {
-  void import('electron').then(({ globalShortcut }) => {
-    globalShortcut.unregisterAll();
   });
 });
 

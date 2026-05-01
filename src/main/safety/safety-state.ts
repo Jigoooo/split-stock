@@ -209,7 +209,7 @@ export class SafetyStateRegistry {
   }
 
   /**
-   * 모든 계좌에 동시에 킬 스위치 — 글로벌 단축키 등에서 호출.
+   * 모든 계좌에 동시에 킬 스위치.
    * 등록되지 않은 계좌는 영향 없음 (lazy 생성도 안 함).
    */
   triggerKillSwitchAll(reason: string): void {

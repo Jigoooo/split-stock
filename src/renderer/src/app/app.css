@@ -3312,42 +3312,6 @@ body {
   gap: 0.8rem;
 }
 
-/* ===== kbd 단축키 배지 ===== */
-.kbd {
-  display: inline-block;
-  min-width: 1.8rem;
-  padding: 0.1rem 0.4rem;
-  font-family: var(--mono);
-  font-size: 1rem;
-  font-weight: 500;
-  line-height: 1.3;
-  color: var(--fg-2);
-  background: var(--bg-2);
-  border: 0.1rem solid var(--border);
-  border-radius: 0.3rem;
-  text-align: center;
-  vertical-align: baseline;
-  box-shadow: inset 0 -0.1rem 0 var(--border-strong);
-}
-
-.hts-btn .kbd {
-  margin-left: 0.6rem;
-  /* primary/danger/down 등 색상 버튼의 kbd는 흰색 계열로 */
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: none;
-}
-
-.hts-btn:not(.hts-btn--primary):not(.hts-btn--danger):not(.hts-btn--down):not(.hts-btn--active)
-  .kbd {
-  /* 기본 회색 버튼에서는 다시 본 색 */
-  color: var(--fg-2);
-  background: var(--bg-2);
-  border-color: var(--border);
-  box-shadow: inset 0 -0.1rem 0 var(--border-strong);
-}
-
 /* ===== 체결 flash 피드백 (TradeFeedPanel / FilledPane) ===== */
 @keyframes flash-up {
   0% {

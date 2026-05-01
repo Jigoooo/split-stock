@@ -138,7 +138,7 @@ describe('SafetyStateRegistry — per-account 격리', () => {
     a.setMaster(true);
     b.setMaster(true);
 
-    reg.triggerKillSwitchAll('글로벌 단축키');
+    reg.triggerKillSwitchAll('사용자 전체 중지');
     expect(a.getSnapshot().master).toBe(false);
     expect(a.getSnapshot().errorLock.active).toBe(true);
     expect(b.getSnapshot().master).toBe(false);

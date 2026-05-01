@@ -30,6 +30,9 @@ describe('SafetySwitchHeader', () => {
 
     const switchControl = screen.getByRole('switch', { name: /주문 가능/ });
     expect(switchControl).toHaveAttribute('aria-checked', 'true');
+    expect(switchControl).not.toHaveAccessibleName(/즉시 중지/);
+    expect(screen.queryByTitle('즉시 중지 단축키')).toBeNull();
+    expect(screen.queryByText(/Ctrl|⌘/)).toBeNull();
     fireEvent.click(switchControl);
     expect(setMaster).toHaveBeenCalledWith(false);
   });

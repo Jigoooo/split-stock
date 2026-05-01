@@ -11,7 +11,6 @@ import {
   useRoutingMode,
   useTradeFeed,
 } from '../model/use-live-feed';
-import { useOrderHotkeys } from '../model/use-order-hotkeys';
 import { ActiveOrdersPanel } from './active-orders-panel';
 import { ORDERBOOK_PANEL_MIN_WIDTH, OrderbookPanel } from './orderbook-panel';
 import { TradeFeedPanel } from './trade-feed-panel';
@@ -30,8 +29,6 @@ export interface TradingPanelProps {
   isProd: boolean;
   /** 사용자가 원터치 설정을 켰는지 (PROD에서는 무시). */
   oneClick?: boolean;
-  /** 단축키 활성 여부 (PROD 기본 OFF). */
-  hotkeys?: boolean;
 }
 
 /**
@@ -156,7 +153,6 @@ const RealtimeStatusBar = ({
 export const TradingPanel = (props: TradingPanelProps): ReactElement => {
   const { pdno, name, isProd } = props;
   const oneClick = !isProd && (props.oneClick ?? false);
-  const hotkeysEnabled = !isProd && (props.hotkeys ?? false);
 
   // 사용자가 보고 있는 종목 — priority=100 으로 끌어올려 WS 슬롯 우선 배정.
   useFocusedSubscription(pdno);
@@ -176,14 +172,6 @@ export const TradingPanel = (props: TradingPanelProps): ReactElement => {
   const onPriceClick = (price: number, side: 'BUY' | 'SELL'): void => {
     setSelection({ pdno, name, suggestedPrice: price, suggestedSide: side });
   };
-
-  useOrderHotkeys(
-    {
-      onBuy: () => setSelection((s) => ({ ...s, pdno, name, suggestedSide: 'BUY' })),
-      onSell: () => setSelection((s) => ({ ...s, pdno, name, suggestedSide: 'SELL' })),
-    },
-    hotkeysEnabled,
-  );
 
   return (
     <div

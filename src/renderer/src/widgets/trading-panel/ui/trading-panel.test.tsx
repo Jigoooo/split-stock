@@ -101,10 +101,6 @@ vi.mock('../model/use-live-feed', () => ({
   useTradeFeed: () => [],
 }));
 
-vi.mock('../model/use-order-hotkeys', () => ({
-  useOrderHotkeys: () => undefined,
-}));
-
 vi.mock('./active-orders-panel', () => ({
   ActiveOrdersPanel: (): ReactElement => <div>active-orders</div>,
 }));

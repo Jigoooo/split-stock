@@ -1,4 +1,3 @@
-import { useKillSwitchHotkey } from '@renderer/features/safety-switch';
 import { trpc } from '@renderer/shared/api/trpc';
 import type { AppEnv } from '@shared/contracts';
 import { useQueryClient } from '@tanstack/react-query';
@@ -36,8 +35,6 @@ export function useAppShell(): UseAppShellReturn {
     staleTime: 60_000,
   });
   const [pendingEnv, setPendingEnv] = useState<EnvValue | null>(null);
-
-  useKillSwitchHotkey();
 
   const setEnv = trpc.auth.setEnv.useMutation({
     // 전환 시작 직전 인플라이트 쿼리 전부 취소 — 이전 env 의 accountId 를 담은

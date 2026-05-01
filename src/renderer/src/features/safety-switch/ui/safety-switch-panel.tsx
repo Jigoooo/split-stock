@@ -57,9 +57,6 @@ export const SafetySwitchPanel = (): ReactElement => {
             잠금 해제
           </Button>
         )}
-        <span className="muted" style={{ marginLeft: 'auto', fontSize: '1.1rem' }}>
-          Ctrl/Cmd+Shift+K 로 즉시 전체 중지
-        </span>
       </div>
     </div>
   );

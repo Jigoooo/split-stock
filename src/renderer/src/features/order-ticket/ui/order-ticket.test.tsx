@@ -134,6 +134,23 @@ function wrap(ui: ReactElement): ReactElement {
 }
 
 describe('OrderTicket', () => {
+  it('매수/매도 버튼에 명령 단축키 배지를 표시하지 않는다', () => {
+    render(
+      wrap(
+        <OrderTicket
+          selection={{ pdno: '005930', name: '삼성전자', suggestedPrice: 70000 }}
+          isProd={false}
+          oneClick={false}
+        />,
+      ),
+    );
+
+    expect(screen.getByRole('button', { name: '매수 주문' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '매도 주문' })).toBeInTheDocument();
+    expect(screen.queryByText('F3')).toBeNull();
+    expect(screen.queryByText('F4')).toBeNull();
+  });
+
   it('콤마 표시 상태에서도 숫자 payload로 주문한다 (확인 다이얼로그 통과)', async () => {
     placeMock.mockReset();
     placeMock.mockResolvedValue({ odno: 'ODN1' });

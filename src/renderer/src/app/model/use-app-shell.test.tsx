@@ -12,10 +12,6 @@ const invalidate = vi.fn();
 const invalidateEnv = vi.fn();
 const cancelQueries = vi.fn();
 
-vi.mock('@renderer/features/safety-switch', () => ({
-  useKillSwitchHotkey: () => undefined,
-}));
-
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ cancelQueries }),
 }));
