@@ -1,6 +1,12 @@
 import type { DisplaySettings, MaPeriod } from '@renderer/entities/display-settings';
 import { MA_PERIODS } from '@renderer/entities/display-settings';
-import { CrosshairMode, LineStyle, TickMarkType, type Time } from 'lightweight-charts';
+import {
+  CrosshairMode,
+  LineStyle,
+  TickMarkType,
+  type Time,
+  type UTCTimestamp,
+} from 'lightweight-charts';
 import type { Candle } from '../model/use-position-chart';
 
 type LineStyleMap = { solid: number; dashed: number; dotted: number };
@@ -15,6 +21,7 @@ export const MA_PERIODS_CONST = MA_PERIODS as MaPeriod[];
 
 function timeToDate(time: Time): Date | null {
   if (typeof time === 'string') {
+    if (time.includes('T')) return new Date(time);
     return new Date(`${time}T00:00:00`);
   }
   if (typeof time === 'number') {
@@ -24,6 +31,17 @@ function timeToDate(time: Time): Date | null {
     return new Date(time.year, time.month - 1, time.day);
   }
   return null;
+}
+
+export function candleDateToTime(date: string): Time {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  const parsed = Date.parse(date);
+  if (Number.isFinite(parsed)) return Math.floor(parsed / 1000) as UTCTimestamp;
+  return date;
+}
+
+export function candleDateToTimeKey(date: string): string {
+  return String(candleDateToTime(date));
 }
 
 export function formatTickKr(time: Time, tickType: TickMarkType): string {
@@ -50,7 +68,10 @@ export function formatCrosshairDateKr(time: Time): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  if (hour === '00' && minute === '00') return `${year}-${month}-${day}`;
+  return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
 export function formatOverlayLineTitle(line: {
@@ -67,8 +88,8 @@ export function formatOverlayLineTitle(line: {
 export function computeMa(
   candles: Candle[],
   period: MaPeriod,
-): Array<{ time: string; value: number }> {
-  const result: Array<{ time: string; value: number }> = [];
+): Array<{ time: Time; value: number }> {
+  const result: Array<{ time: Time; value: number }> = [];
   for (let i = period - 1; i < candles.length; i++) {
     let sum = 0;
     for (let j = 0; j < period; j++) {
@@ -76,7 +97,7 @@ export function computeMa(
     }
     const date = candles[i]?.date;
     if (date !== undefined) {
-      result.push({ time: date, value: sum / period });
+      result.push({ time: candleDateToTime(date), value: sum / period });
     }
   }
   return result;

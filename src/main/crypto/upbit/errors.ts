@@ -21,10 +21,20 @@ function retryAfterMs(headers: Headers | undefined): number | undefined {
 
 function errorCode(error: unknown): string | undefined {
   if (error instanceof APIError && error.name) return error.name;
+  const raw = (error as { error?: unknown }).error;
+  if (raw && typeof raw === 'object') {
+    const name =
+      (raw as { name?: unknown; code?: unknown }).name ?? (raw as { code?: unknown }).code;
+    if (typeof name === 'string' && name.length > 0) return name;
+  }
   return undefined;
 }
 
 function classifyApiError(error: APIError): CryptoExchangeErrorKind {
+  const code = errorCode(error);
+  if (code === 'out_of_scope') return 'PERMISSION_DENIED';
+  if (code === 'INVALID_AUTH' || code?.includes('INVALID_AUTH')) return 'AUTH_FAILED';
+  if (code === 'invalid_price_bid' || code === 'invalid_price_ask') return 'VALIDATION';
   if (error instanceof RateLimitPenaltyError) return 'RATE_LIMIT_PENALTY';
   if (error instanceof RateLimitError) return 'RATE_LIMITED';
   if (error instanceof AuthenticationError) return 'AUTH_FAILED';
@@ -32,7 +42,6 @@ function classifyApiError(error: APIError): CryptoExchangeErrorKind {
   if (error instanceof NotFoundError) return 'NOT_FOUND';
   if (error instanceof UnprocessableEntityError) return 'VALIDATION';
   if (error instanceof BadRequestError) {
-    const code = errorCode(error);
     if (code?.includes('insufficient_funds') || code?.includes('under_min_total')) {
       return 'BUSINESS';
     }

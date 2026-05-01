@@ -11,7 +11,12 @@ import {
   DEFAULT_VISIBLE_BARS,
   HISTORY_FETCH_TRIGGER_BARS,
 } from '../config/candlestick-chart-config';
-import { computeMa, LINE_STYLE_MAP, MA_PERIODS_CONST } from '../lib/candlestick-chart-format';
+import {
+  candleDateToTime,
+  computeMa,
+  LINE_STYLE_MAP,
+  MA_PERIODS_CONST,
+} from '../lib/candlestick-chart-format';
 import type { CandlestickChartRefs } from './candlestick-chart-types';
 import type { Candle } from './use-position-chart';
 
@@ -26,6 +31,7 @@ interface UseCandlestickDataParams extends CandlestickChartRefs {
   disconnectDrawingHost: () => void;
   displaySettings: DisplaySettings | null | undefined;
   enableDrawingTools: boolean;
+  priceFormatter?: (price: number) => string;
 }
 
 export function useCandlestickData({
@@ -36,6 +42,7 @@ export function useCandlestickData({
   displaySettings,
   enableDrawingTools,
   maSeriesRef,
+  priceFormatter,
   prevLengthRef,
   priceLinesRef,
   seriesRef,
@@ -64,6 +71,10 @@ export function useCandlestickData({
     const volumeSettings = displaySettings?.chart.volume;
     const heightPercent = volumeSettings?.heightPercent ?? 30;
     const volumeBottom = heightPercent / 100;
+    const formatPrice =
+      priceFormatter ??
+      ((price: number): string =>
+        thousandSeparator(Math.round(price), { allowNegative: true, allowDecimal: false }));
 
     let series = seriesRef.current;
     if (!series) {
@@ -76,11 +87,14 @@ export function useCandlestickData({
         priceScaleId: 'right',
         priceFormat: {
           type: 'custom',
-          formatter: (price: number): string =>
-            thousandSeparator(Math.round(price), { allowNegative: true, allowDecimal: false }),
+          formatter: formatPrice,
         },
       });
       seriesRef.current = series;
+    } else {
+      series.applyOptions({
+        priceFormat: { type: 'custom', formatter: formatPrice },
+      });
     }
 
     series.priceScale().applyOptions({
@@ -88,7 +102,7 @@ export function useCandlestickData({
     });
 
     const data: CandlestickData[] = candles.map((candle) => ({
-      time: candle.date,
+      time: candleDateToTime(candle.date),
       open: candle.open,
       high: candle.high,
       low: candle.low,
@@ -114,7 +128,7 @@ export function useCandlestickData({
     });
     volumeSeries.setData(
       candles.map((candle) => ({
-        time: candle.date,
+        time: candleDateToTime(candle.date),
         value: candle.volume,
         color: candle.close >= candle.open ? upColor : downColor,
       })),
@@ -147,8 +161,7 @@ export function useCandlestickData({
           crosshairMarkerVisible: false,
           priceFormat: {
             type: 'custom',
-            formatter: (price: number): string =>
-              thousandSeparator(Math.round(price), { allowNegative: true, allowDecimal: false }),
+            formatter: formatPrice,
           },
         });
         maSeriesRef.current[period] = maSeries;
@@ -195,6 +208,7 @@ export function useCandlestickData({
     displaySettings,
     enableDrawingTools,
     maSeriesRef,
+    priceFormatter,
     prevLengthRef,
     priceLinesRef,
     seriesRef,

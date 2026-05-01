@@ -45,6 +45,7 @@ function setup() {
     bootStatus: { isRuntimeReady: () => true },
     currentEnv: null,
     credentialsRepo,
+    cryptoRealtime: null,
     db,
     logger: { log: vi.fn() },
     settingsRepo,
@@ -193,5 +194,76 @@ describe('cryptoRouter session boundary', () => {
 
     expect(result.uuid).toBe('upbit-order-uuid');
     expect(adapterMocks.createOrder).toHaveBeenCalledOnce();
+  });
+
+  it('returns crypto realtime service status without requiring a private session', async () => {
+    const deps = setup();
+    deps.ctx.cryptoRealtime = {
+      getStatus: () => ({
+        publicSessions: [
+          {
+            key: 'KRW-BTC|1m',
+            kind: 'public',
+            state: 'open',
+            refs: 1,
+            market: 'KRW-BTC',
+            candleUnit: '1m',
+            lastMessageAt: 1,
+            lastError: null,
+            reconnectAttempts: 0,
+            reconnectDelayMs: null,
+            staleAfterMs: 15000,
+          },
+        ],
+        privateSessions: [],
+      }),
+    } as never;
+
+    const result = await createCaller(deps.ctx).getRealtimeStatus();
+
+    expect(result.status.publicSessions[0]?.state).toBe('open');
+  });
+
+  it('runs manual order reconciliation through the crypto realtime service', async () => {
+    const deps = setup();
+    const upbitAccountId = seedCredential(
+      deps,
+      {
+        env: 'PROD',
+        broker: 'UPBIT',
+        accessKey: 'upbit-access-key-12345678',
+        secretKey: 'upbit-secret-key-12345678',
+      },
+      { accountNo8: 'UPBIT***', accountProdCd: 'CRYPTO' },
+    );
+    deps.ctx.activeAccountId = upbitAccountId;
+    deps.ctx.currentEnv = 'PROD';
+    const reconcilePrivate = vi.fn(async () =>
+      ok({
+        accountId: upbitAccountId,
+        exchange: 'UPBIT',
+        reason: 'manual',
+        openOrders: 1,
+        closedOrders: 1,
+        detailedOrders: 1,
+        persistedFills: 1,
+        checkpointAt: 1,
+      }),
+    );
+    deps.ctx.cryptoRealtime = { reconcilePrivate } as never;
+
+    const result = await createCaller(deps.ctx).reconcileOrders({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+    });
+
+    expect(result.persistedFills).toBe(1);
+    expect(reconcilePrivate).toHaveBeenCalledWith({
+      accountId: upbitAccountId,
+      accessKey: 'upbit-access-key-12345678',
+      secretKey: 'upbit-secret-key-12345678',
+      market: 'KRW-BTC',
+      reason: 'manual',
+    });
   });
 });

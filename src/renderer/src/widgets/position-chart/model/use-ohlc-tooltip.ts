@@ -6,6 +6,7 @@ import type {
   Time,
 } from 'lightweight-charts';
 import { type RefObject, useEffect, useRef, useState } from 'react';
+import { candleDateToTimeKey, formatCrosshairDateKr } from '../lib/candlestick-chart-format';
 import type { Candle } from './use-position-chart';
 
 export interface OhlcTooltipPayload {
@@ -47,10 +48,16 @@ function isBarLike(
   );
 }
 
-function findPrevClose(candles: readonly Candle[], targetDate: string): number | null {
+function findCandleIndex(candles: readonly Candle[], targetKey: string): number {
+  return candles.findIndex((candle) => candleDateToTimeKey(candle.date) === targetKey);
+}
+
+function findPrevClose(candles: readonly Candle[], targetKey: string): number | null {
+  const index = findCandleIndex(candles, targetKey);
+  if (index > 0) return candles[index - 1]?.close ?? null;
   for (let i = candles.length - 1; i >= 0; i--) {
     const candle = candles[i];
-    if (candle && candle.date < targetDate) return candle.close;
+    if (candle && candleDateToTimeKey(candle.date) < targetKey) return candle.close;
   }
   return null;
 }
@@ -58,12 +65,12 @@ function findPrevClose(candles: readonly Candle[], targetDate: string): number |
 function findVolume(
   candles: readonly Candle[],
   liveCandle: Candle | null,
-  targetDate: string,
+  targetKey: string,
 ): number {
-  if (liveCandle && liveCandle.date === targetDate) return liveCandle.volume;
+  if (liveCandle && candleDateToTimeKey(liveCandle.date) === targetKey) return liveCandle.volume;
   for (let i = candles.length - 1; i >= 0; i--) {
     const candle = candles[i];
-    if (candle && candle.date === targetDate) return candle.volume;
+    if (candle && candleDateToTimeKey(candle.date) === targetKey) return candle.volume;
   }
   return 0;
 }
@@ -119,7 +126,7 @@ export function useOhlcTooltip({
         visible: true,
         point: { x: point.x, y: point.y },
         payload: {
-          date: dateKey,
+          date: formatCrosshairDateKr(time),
           open: bar.open,
           high: bar.high,
           low: bar.low,

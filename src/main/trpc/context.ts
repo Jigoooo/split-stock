@@ -13,6 +13,7 @@ import type { WsFactory } from '../brokers/core/types';
 import type { KiwoomHttpClient } from '../brokers/kiwoom/http-client';
 import type { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
 import type { BrokerPort } from '../brokers/ports/broker-port';
+import type { CryptoRealtimeService } from '../crypto/crypto-realtime-service';
 import type { Db } from '../db/client';
 import type { SettingsRepo } from '../db/settings-repo';
 import { readWatchGlobalEnabled } from '../db/settings-repo';
@@ -84,6 +85,8 @@ export interface Context {
   /** 미체결 자동취소 감시 인스턴스 — 부팅 시 주입, 미활성화 시 null. */
   pendingOrderWatcher: PendingOrderWatcher | null;
   realtime: RealtimeService | null;
+  /** 코인 거래소 public/private WS fanout 서비스. */
+  cryptoRealtime: CryptoRealtimeService | null;
   bus: FeedBus | null;
   /** 차수 수동편집(A7) 등 위험 변경 직후 즉시 백업을 트리거하기 위한 핸들. 부팅 시 주입, 미설정 시 null. */
   backupScheduler: BackupScheduler | null;

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CredentialsSchema, CryptoOrderIntentSchema, UpbitCredentialsSchema } from './index';
+import {
+  CredentialsSchema,
+  CryptoCandleUnitSchema,
+  CryptoOrderIntentSchema,
+  UpbitCredentialsSchema,
+} from './index';
 
 describe('crypto contracts', () => {
   it('Upbit credentials require accessKey and secretKey in PROD', () => {
@@ -67,5 +72,13 @@ describe('crypto contracts', () => {
         smpType: 'reduce',
       }).success,
     ).toBe(false);
+  });
+
+  it('validates supported Upbit candle units', () => {
+    expect(CryptoCandleUnitSchema.safeParse('1m').success).toBe(true);
+    expect(CryptoCandleUnitSchema.safeParse('240m').success).toBe(true);
+    expect(CryptoCandleUnitSchema.safeParse('D').success).toBe(true);
+    expect(CryptoCandleUnitSchema.safeParse('2m').success).toBe(false);
+    expect(CryptoCandleUnitSchema.safeParse('Y').success).toBe(false);
   });
 });

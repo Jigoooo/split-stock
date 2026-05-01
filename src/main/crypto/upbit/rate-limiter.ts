@@ -23,7 +23,16 @@ function limiterFor(group: UpbitRateLimitGroup): Bottleneck {
   if (group === 'exchange-default') {
     return new Bottleneck({ minTime: 34, maxConcurrent: 1 });
   }
-  if (group === 'websocket-connect' || group === 'websocket-message') {
+  if (group === 'websocket-message') {
+    return new Bottleneck({
+      minTime: 200,
+      maxConcurrent: 1,
+      reservoir: 100,
+      reservoirRefreshAmount: 100,
+      reservoirRefreshInterval: 60_000,
+    });
+  }
+  if (group === 'websocket-connect') {
     return new Bottleneck({ minTime: 200, maxConcurrent: 1 });
   }
   return new Bottleneck({ minTime: 100, maxConcurrent: 1 });

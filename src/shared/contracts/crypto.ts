@@ -11,6 +11,22 @@ export const CryptoMarketCodeSchema = z
   .regex(/^(KRW|BTC|USDT)-[A-Z0-9]{2,20}$/, 'Upbit market code');
 export type CryptoMarketCode = z.infer<typeof CryptoMarketCodeSchema>;
 
+export const CRYPTO_CANDLE_UNITS = [
+  '1m',
+  '3m',
+  '5m',
+  '10m',
+  '15m',
+  '30m',
+  '60m',
+  '240m',
+  'D',
+  'W',
+  'M',
+] as const;
+export const CryptoCandleUnitSchema = z.enum(CRYPTO_CANDLE_UNITS);
+export type CryptoCandleUnit = z.infer<typeof CryptoCandleUnitSchema>;
+
 export const DecimalStringSchema = z
   .string()
   .trim()
@@ -185,6 +201,28 @@ export interface CryptoTicker {
   timestamp: number;
 }
 
+export interface CryptoCandle {
+  exchange: CryptoExchangeId;
+  market: CryptoMarketCode;
+  unit: CryptoCandleUnit;
+  candleAt: number;
+  open: DecimalString;
+  high: DecimalString;
+  low: DecimalString;
+  close: DecimalString;
+  volume: DecimalString;
+  tradePrice: DecimalString;
+  raw?: unknown;
+}
+
+export interface CryptoOrderbookInstrument {
+  exchange: CryptoExchangeId;
+  market: CryptoMarketCode;
+  quoteCurrency: string;
+  tickSize: DecimalString;
+  supportedLevels: DecimalString[];
+}
+
 export interface CryptoOrderbookLevel {
   askPrice: DecimalString;
   askSize: DecimalString;
@@ -206,4 +244,151 @@ export interface CryptoBalance {
   locked: DecimalString;
   avgBuyPrice: DecimalString;
   unitCurrency: string;
+}
+
+export interface CryptoRealtimeTicker extends CryptoTicker {
+  exchange: CryptoExchangeId;
+  receivedAt: number;
+  streamType?: 'SNAPSHOT' | 'REALTIME';
+  change?: 'RISE' | 'EVEN' | 'FALL';
+}
+
+export interface CryptoRealtimeTrade {
+  exchange: CryptoExchangeId;
+  market: CryptoMarketCode;
+  tradePrice: DecimalString;
+  tradeVolume: DecimalString;
+  askBid: 'ASK' | 'BID' | string;
+  change?: 'RISE' | 'EVEN' | 'FALL';
+  sequentialId?: number;
+  tradeTimestamp: number;
+  timestamp: number;
+  receivedAt: number;
+  streamType?: 'SNAPSHOT' | 'REALTIME';
+}
+
+export interface CryptoRealtimeOrderbook extends CryptoOrderbook {
+  exchange: CryptoExchangeId;
+  level?: DecimalString;
+  receivedAt: number;
+  streamType?: 'SNAPSHOT' | 'REALTIME';
+}
+
+export interface CryptoRealtimeCandle extends CryptoCandle {
+  receivedAt: number;
+  streamType?: 'SNAPSHOT' | 'REALTIME';
+}
+
+export interface CryptoPrivateOrderEvent {
+  exchange: CryptoExchangeId;
+  accountId: number;
+  market: CryptoMarketCode;
+  uuid: string;
+  identifier?: string | null;
+  side: UpbitOrderSide | string;
+  ordType: UpbitOrderType | string;
+  state: UpbitOrderState | 'trade' | 'prevented' | string;
+  price: DecimalString;
+  volume: DecimalString;
+  remainingVolume: DecimalString;
+  executedVolume: DecimalString;
+  paidFee: DecimalString;
+  locked: DecimalString;
+  tradeUuid?: string | null;
+  tradeFee?: DecimalString | null;
+  executedFunds?: DecimalString;
+  orderTimestamp: number;
+  tradeTimestamp?: number | null;
+  timestamp: number;
+  raw?: unknown;
+}
+
+export interface CryptoPrivateAssetEvent {
+  exchange: CryptoExchangeId;
+  accountId: number;
+  assets: Array<{
+    currency: string;
+    balance: DecimalString;
+    locked: DecimalString;
+  }>;
+  timestamp: number;
+  raw?: unknown;
+}
+
+export interface CryptoOrderTrade {
+  uuid: string;
+  market?: CryptoMarketCode | string;
+  side?: string;
+  price: DecimalString;
+  volume: DecimalString;
+  funds: DecimalString;
+  fee?: DecimalString;
+  createdAt: number;
+  raw?: unknown;
+}
+
+export interface CryptoOrderSnapshot {
+  uuid: string;
+  identifier?: string;
+  market: CryptoMarketCode;
+  side: UpbitOrderSide | string;
+  ordType: UpbitOrderType | string;
+  state: UpbitOrderState | string;
+  price?: DecimalString;
+  volume?: DecimalString;
+  remainingVolume: DecimalString;
+  executedVolume: DecimalString;
+  paidFee: DecimalString;
+  locked: DecimalString;
+  placedAt: number;
+  trades?: CryptoOrderTrade[];
+  raw?: unknown;
+}
+
+export type CryptoRealtimeSessionState =
+  | 'connecting'
+  | 'open'
+  | 'stale'
+  | 'reconnecting'
+  | 'failed'
+  | 'closed';
+
+export interface CryptoRealtimeSessionStatus {
+  key: string;
+  kind: 'public' | 'private';
+  state: CryptoRealtimeSessionState;
+  refs: number;
+  market?: CryptoMarketCode | string;
+  candleUnit?: CryptoCandleUnit;
+  accountId?: number;
+  lastMessageAt: number | null;
+  lastError: string | null;
+  reconnectAttempts: number;
+  reconnectDelayMs: number | null;
+  staleAfterMs: number;
+}
+
+export interface CryptoRealtimeStatus {
+  publicSessions: CryptoRealtimeSessionStatus[];
+  privateSessions: CryptoRealtimeSessionStatus[];
+}
+
+export interface CryptoRealtimeCheckpoint {
+  accountId: number;
+  exchange: CryptoExchangeId;
+  stream: string;
+  lastEventAt: number;
+  cursor: unknown;
+  updatedAt: number;
+}
+
+export interface CryptoReconcileResult {
+  accountId: number;
+  exchange: CryptoExchangeId;
+  reason: 'startup' | 'watch-private' | 'reconnect' | 'manual';
+  openOrders: number;
+  closedOrders: number;
+  detailedOrders: number;
+  persistedFills: number;
+  checkpointAt: number;
 }

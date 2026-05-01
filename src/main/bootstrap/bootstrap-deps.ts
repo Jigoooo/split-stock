@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { AppEnv } from '@shared/contracts';
+import { type AppEnv, isUpbitCredentials } from '@shared/contracts';
 import WebSocket from 'ws';
 import { ActiveAccountRepo } from '../account/active-account';
 import { repairAccountFromStoredCredentials } from '../account/repair-stored-accounts';
@@ -17,6 +17,7 @@ import { BootStatusService } from '../boot/boot-status';
 import { KiwoomHttpClient } from '../brokers/kiwoom/http-client';
 import { KIWOOM_BASE_URL } from '../brokers/kiwoom/metadata/endpoints';
 import { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
+import { CryptoRealtimeService } from '../crypto/crypto-realtime-service';
 import { defaultDbPath, migrate, openDb } from '../db/client';
 import {
   repairAccountsRuntimeSchema,
@@ -309,6 +310,10 @@ export function bootstrapDeps(userDataDir: string) {
   const { bus, watchEngine, strategyEngine, pendingOrderWatcher, prebuyWatchers } = tradingRuntime;
   markStartup('trading-runtime.create.end');
 
+  markStartup('crypto-realtime.create.start');
+  const cryptoRealtime = new CryptoRealtimeService(db, eventLogger);
+  markStartup('crypto-realtime.create.end');
+
   markStartup('context-factory.create.start');
   const factory = createContextFactory({
     bootStatus,
@@ -337,6 +342,7 @@ export function bootstrapDeps(userDataDir: string) {
     strategyEngine,
     pendingOrderWatcher,
     bus,
+    cryptoRealtime,
     aiCredentialsRepo,
     llmClient,
     dartClient,
@@ -372,7 +378,14 @@ export function bootstrapDeps(userDataDir: string) {
           message: 'auth.env.restored',
           payload: { env: savedEnv, accountId: active.id, broker: active.broker },
         });
-        if (active.broker !== 'UPBIT') {
+        if (active.broker === 'UPBIT' && savedEnv === 'PROD' && isUpbitCredentials(cred.value)) {
+          void cryptoRealtime.reconcilePrivate({
+            accountId: active.id,
+            accessKey: cred.value.accessKey,
+            secretKey: cred.value.secretKey,
+            reason: 'startup',
+          });
+        } else if (active.broker !== 'UPBIT') {
           stockMasterSync.syncIfStaleWithLog(eventLogger);
         }
         restored = true;

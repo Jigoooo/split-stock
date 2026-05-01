@@ -31,7 +31,10 @@ export interface CandlestickChartProps {
   lines: Array<{ kind: 'buy' | 'sell-target'; nth: number; label: string; price: number }>;
   markers?: SeriesMarker<Time>[];
   onFetchMore: () => Promise<void>;
-  pdno: string;
+  chartKey?: string;
+  pdno?: string;
+  priceFormatter?: (price: number) => string;
+  volumeFormatter?: (volume: number) => string;
   reachedEnd: boolean;
   displaySettings?: DisplaySettings | null;
 }
@@ -43,8 +46,11 @@ export const CandlestickChart = ({
   lines,
   markers,
   onFetchMore,
+  chartKey,
   pdno,
+  priceFormatter,
   reachedEnd,
+  volumeFormatter,
   displaySettings,
 }: CandlestickChartProps): ReactElement => {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -56,7 +62,7 @@ export const CandlestickChart = ({
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const maSeriesRef = useRef<Partial<Record<MaPeriod, ISeriesApi<'Line'>>>>({});
   const [axisRightInset, setAxisRightInset] = useState(72);
-  const drawingTools = useDrawingTools(pdno);
+  const drawingTools = useDrawingTools(chartKey ?? pdno ?? 'default');
 
   useChartInstance({
     chartRef,
@@ -84,6 +90,7 @@ export const CandlestickChart = ({
     priceLinesRef,
     seriesRef,
     volumeSeriesRef,
+    ...(priceFormatter !== undefined ? { priceFormatter } : {}),
   });
   useOverlayPriceLines({ candles, lines, priceLinesRef, seriesRef });
   useTradeMarkers({ markers: markers ?? [], seriesRef });
@@ -123,7 +130,12 @@ export const CandlestickChart = ({
   return (
     <div style={{ position: 'relative', flex: 1, minHeight: 240, width: '100%', display: 'flex' }}>
       <div ref={ref} style={{ flex: 1, minHeight: 240, width: '100%' }} />
-      <OhlcTooltip axisRightInset={axisRightInset} state={tooltipState} />
+      <OhlcTooltip
+        axisRightInset={axisRightInset}
+        state={tooltipState}
+        {...(priceFormatter !== undefined ? { priceFormatter } : {})}
+        {...(volumeFormatter !== undefined ? { volumeFormatter } : {})}
+      />
       {enableDrawingTools ? (
         <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 2 }}>
           <DrawingToolbar

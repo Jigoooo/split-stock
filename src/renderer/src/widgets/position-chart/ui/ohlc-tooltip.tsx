@@ -5,6 +5,8 @@ import type { OhlcTooltipState } from '../model/use-ohlc-tooltip';
 interface OhlcTooltipProps {
   axisRightInset: number;
   state: OhlcTooltipState;
+  priceFormatter?: (value: number) => string;
+  volumeFormatter?: (value: number) => string;
 }
 
 const ROI_W = 200;
@@ -31,9 +33,16 @@ const Row = ({
   </div>
 );
 
-export const OhlcTooltip = ({ axisRightInset, state }: OhlcTooltipProps): ReactElement | null => {
+export const OhlcTooltip = ({
+  axisRightInset,
+  priceFormatter,
+  state,
+  volumeFormatter,
+}: OhlcTooltipProps): ReactElement | null => {
   const { visible, point, payload } = state;
   if (!visible || !payload || !point) return null;
+  const formatPrice = priceFormatter ?? fmt;
+  const formatVolume = volumeFormatter ?? ((value: number) => thousandSeparator(value));
 
   const dockRight = point.x < ROI_W && point.y < ROI_H;
   const positionStyle: CSSProperties = dockRight
@@ -68,22 +77,22 @@ export const OhlcTooltip = ({ axisRightInset, state }: OhlcTooltipProps): ReactE
       }}
     >
       <div style={{ fontWeight: 700, marginBottom: 4 }}>{payload.date}</div>
-      <Row label="시가" value={fmt(payload.open)} />
-      <Row label="고가" value={fmt(payload.high)} color={UP_COLOR} />
-      <Row label="저가" value={fmt(payload.low)} color={DOWN_COLOR} />
+      <Row label="시가" value={formatPrice(payload.open)} />
+      <Row label="고가" value={formatPrice(payload.high)} color={UP_COLOR} />
+      <Row label="저가" value={formatPrice(payload.low)} color={DOWN_COLOR} />
       {closeColor !== undefined ? (
-        <Row label="종가" value={fmt(payload.close)} color={closeColor} />
+        <Row label="종가" value={formatPrice(payload.close)} color={closeColor} />
       ) : (
-        <Row label="종가" value={fmt(payload.close)} />
+        <Row label="종가" value={formatPrice(payload.close)} />
       )}
       {delta !== null && rate !== null ? (
         <Row
           label="등락"
-          value={`${sign}${fmt(Math.abs(delta))} (${sign}${rate.toFixed(2)}%)`}
+          value={`${sign}${formatPrice(Math.abs(delta))} (${sign}${rate.toFixed(2)}%)`}
           color={deltaColor}
         />
       ) : null}
-      <Row label="거래량" value={thousandSeparator(payload.volume)} />
+      <Row label="거래량" value={formatVolume(payload.volume)} />
     </div>
   );
 };
