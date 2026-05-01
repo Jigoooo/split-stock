@@ -16,6 +16,7 @@ import {
 import { createPortal } from 'react-dom';
 import type {
   DiscoveryConditionKey,
+  ExtraStock,
   RecommendationDiagnostics,
   RecommendationProgressState,
   RecommendationViewState,
@@ -214,8 +215,8 @@ function DiscoveryDebugPanel({
         borderRadius: '0.65rem',
         background: 'var(--bg)',
         color: 'var(--fg-2)',
-        fontSize: '0.85rem',
-        lineHeight: 1.45,
+        fontSize: '1.08rem',
+        lineHeight: 1.55,
       }}
     >
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -365,8 +366,8 @@ export interface RecommendModalProps {
   onAnalyze: () => void;
   onPick: (pdno: string, name: string) => void;
   activeWatchPdnos?: ReadonlySet<string>;
-  extras: ReadonlyArray<string>;
-  onAddExtra: (pdno: string) => void;
+  extras: ReadonlyArray<ExtraStock>;
+  onAddExtra: (stock: ExtraStock) => void;
   onRemoveExtra: (pdno: string) => void;
   aiOff: boolean;
   onToggleAiOff: (next: boolean) => void;

@@ -13,9 +13,10 @@ describe('HeaderPopoutButtons', () => {
 
     render(<HeaderPopoutButtons popout={popout} />);
 
-    for (const label of ['트레이드', '수익률 계산기', '이벤트 로그', '리포트', '설정']) {
+    for (const label of ['트레이드', '이벤트 로그', '리포트', '설정']) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
     }
+    expect(screen.queryByRole('button', { name: '수익률 계산기' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '종목 선택' })).not.toBeInTheDocument();
 
     expect(screen.getByRole('button', { name: '리포트' })).toHaveAttribute('aria-pressed', 'true');

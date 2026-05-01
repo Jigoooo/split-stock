@@ -297,6 +297,10 @@ body {
   text-align: center;
 }
 
+.popout-route-loading--quiet {
+  min-height: 100vh;
+}
+
 .popout-route-loading__title {
   font-size: 1.35rem;
   font-weight: 800;
@@ -306,6 +310,25 @@ body {
   color: var(--fg-2);
   font-size: 1rem;
   font-weight: 600;
+}
+
+.popout-route-loading__progress {
+  width: min(18rem, 64vw);
+  height: 0.4rem;
+  overflow: hidden;
+  border: 0.1rem solid var(--border);
+  border-radius: 999rem;
+  background: var(--bg-3);
+}
+
+.popout-route-loading__progress span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: shell-loading-progress 1.15s ease-in-out infinite;
+  transform: translateX(-105%);
 }
 
 .shell-loading__surface {
@@ -390,7 +413,8 @@ body {
     animation: none;
   }
 
-  .shell-loading__progress span {
+  .shell-loading__progress span,
+  .popout-route-loading__progress span {
     width: 100%;
     opacity: 0.45;
     animation: none;
@@ -469,11 +493,12 @@ body {
 }
 
 .trading-day-status-badge {
-  margin: 0 0.5rem 0.25rem 0;
-  min-height: 1.7rem;
-  padding: 0.08rem 0.45rem;
-  font-size: 1rem;
-  line-height: 1.2;
+  flex: 0 0 auto;
+  margin: 0;
+  min-height: 2rem;
+  padding: 0.15rem 0.65rem;
+  font-size: 1.15rem;
+  line-height: 1.25;
 }
 
 .header-toggle-control {
@@ -1582,6 +1607,25 @@ body {
   color: var(--up);
 }
 
+.ai-recommend-trigger.hts-btn--ghost {
+  --ai-recommend-accent: #d97757;
+  --ai-recommend-tint: rgba(217, 119, 87, 0.12);
+  color: var(--ai-recommend-accent);
+  border-color: var(--ai-recommend-accent);
+}
+
+.ai-recommend-trigger.hts-btn--ghost:hover:not(:disabled) {
+  background: var(--ai-recommend-tint);
+  border-color: var(--ai-recommend-accent);
+  color: var(--ai-recommend-accent);
+  box-shadow: 0 0 0 0.1rem rgba(217, 119, 87, 0.18);
+}
+
+.ai-recommend-trigger.hts-btn--ghost:focus-visible {
+  border-color: var(--ai-recommend-accent);
+  box-shadow: 0 0 0 0.2rem rgba(217, 119, 87, 0.25);
+}
+
 /* ── loading: 좌측 스피너 + 자동 disabled. 텍스트 옆에 자연스럽게 정렬되며,
        wait 커서로 진행 중임을 명확히 표시. 스피너 등장/소멸 + 라벨 전환 모두 트랜지션.
        애니메이션 길이는 CSS 변수로 토큰화 — reduced-motion 미디어쿼리에서 변수만 줄여
@@ -1895,6 +1939,14 @@ body {
   border-color: var(--accent);
   background: var(--accent);
   box-shadow: 0 0 0 0.25rem var(--accent-tint-12);
+}
+
+.table-grid-root[data-variant="hts"]
+  .table-grid-row
+  .hts-choice--standalone
+  .hts-choice__native:not(:checked)
+  + .hts-choice__control {
+  background: var(--table-grid-row-bg, var(--bg));
 }
 
 .hts-choice--checkbox .hts-choice__native:checked + .hts-choice__control::after {

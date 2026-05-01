@@ -152,6 +152,9 @@ function Harness(): ReactElement {
       <span data-testid="lastFetchedAt">{session.view.lastFetchedAt ?? 'none'}</span>
       <span data-testid="fromCache">{session.view.fromCache ? 'cache' : 'fresh'}</span>
       <span data-testid="extraPdnos">{session.extraPdnos.join(',')}</span>
+      <span data-testid="extraStocks">
+        {session.extraStocks.map((stock) => `${stock.name}:${stock.pdno}`).join(',')}
+      </span>
       <span data-testid="aiOff">{session.aiOff ? 'off' : 'on'}</span>
       <span data-testid="autoDiscovery">
         {session.includeAutoDiscovery ? 'enabled' : 'disabled'}
@@ -178,6 +181,7 @@ describe('useSymbolRecommendations', () => {
     expect(screen.getByTestId('lastFetchedAt')).toHaveTextContent('1777777777000');
     expect(screen.getByTestId('fromCache')).toHaveTextContent('cache');
     expect(screen.getByTestId('extraPdnos')).toHaveTextContent('005930');
+    expect(screen.getByTestId('extraStocks')).toHaveTextContent('005930:005930');
     expect(screen.getByTestId('aiOff')).toHaveTextContent('off');
     expect(screen.getByTestId('autoDiscovery')).toHaveTextContent('disabled');
   });

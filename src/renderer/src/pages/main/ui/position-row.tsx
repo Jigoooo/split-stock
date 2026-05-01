@@ -69,7 +69,6 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
           {...(isSelected
             ? {
                 style: {
-                  background: 'var(--accent-tint-12)',
                   boxShadow: 'inset 0.2rem 0 0 0 var(--accent)',
                 },
               }
@@ -167,9 +166,10 @@ export const PositionRow = forwardRef<HTMLDivElement, PositionRowProps>(
 );
 
 const expandBtnFullStyle: CSSProperties = {
-  background: 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(232,236,242,0.95))',
+  background: 'transparent',
   border: 'none',
   borderRadius: 0,
+  color: 'var(--fg-2)',
   width: '100%',
   height: '100%',
   cursor: 'pointer',

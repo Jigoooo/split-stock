@@ -43,8 +43,8 @@ const StandaloneRecommendButton = (props: RecommendButtonProps): ReactElement =>
         onAnalyze={session.analyze}
         onPick={(pdno, name) => session.pick(pdno, name, props.onPick)}
         activeWatchPdnos={session.activeWatchPdnos}
-        extras={session.extraPdnos}
-        onAddExtra={session.addExtraPdno}
+        extras={session.extraStocks}
+        onAddExtra={session.addExtraStock}
         onRemoveExtra={session.removeExtraPdno}
         aiOff={session.aiOff}
         onToggleAiOff={session.toggleAiOff}
@@ -77,6 +77,7 @@ const RecommendButtonTrigger = ({
   return (
     <Button
       variant="ghost"
+      className="ai-recommend-trigger"
       dense={dense ?? false}
       iconLeading={<Sparkles size={14} />}
       disabled={disabled}

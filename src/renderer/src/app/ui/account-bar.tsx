@@ -1,7 +1,9 @@
+import { useActiveAccountId } from '@renderer/entities/account';
 import { StrategyRecommendStatusButton } from '@renderer/features/ai-strategy-recommend';
 import { RecommendStatusButton } from '@renderer/features/ai-symbol-recommend';
 import { SafetySwitchHeader } from '@renderer/features/safety-switch';
 import { AccountSelector } from '@renderer/features/switch-account';
+import { TradingDayStatusBadge } from '@renderer/features/trading-day-status';
 import { WatchGlobalToggle } from '@renderer/features/watch-global-toggle';
 import { trpc } from '@renderer/shared/api/trpc';
 import type { AppEnv } from '@shared/contracts';
@@ -36,20 +38,25 @@ export interface AccountBarProps {
  *
  * 환경(MOCK/PROD) 표시는 계좌 셀렉터의 EnvDot 이 담당 — 별도 배지 없음.
  */
-export const AccountBar = ({ env }: AccountBarProps): ReactElement => (
-  <div className="app-header__cluster app-header__cluster--account">
-    <div className="app-header__section">
-      <span className="app-header__section-label">계좌</span>
-      <AccountSelector />
-      {env === null ? <span className="chip">연결 안 됨</span> : null}
+export const AccountBar = ({ env }: AccountBarProps): ReactElement => {
+  const { accountId } = useActiveAccountId();
+
+  return (
+    <div className="app-header__cluster app-header__cluster--account">
+      <div className="app-header__section">
+        <span className="app-header__section-label">계좌</span>
+        <AccountSelector />
+        {env === null ? <span className="chip">연결 안 됨</span> : null}
+      </div>
+      <div className="app-header__section app-header__section--status">
+        <span className="app-header__section-label">상태</span>
+        <SafetySwitchHeader />
+        <WatchGlobalToggle />
+        {accountId !== null ? <TradingDayStatusBadge accountId={accountId} /> : null}
+        <RealtimeFallbackChip />
+        <RecommendStatusButton />
+        <StrategyRecommendStatusButton />
+      </div>
     </div>
-    <div className="app-header__section app-header__section--status">
-      <span className="app-header__section-label">상태</span>
-      <SafetySwitchHeader />
-      <WatchGlobalToggle />
-      <RealtimeFallbackChip />
-      <RecommendStatusButton />
-      <StrategyRecommendStatusButton />
-    </div>
-  </div>
-);
+  );
+};

@@ -49,10 +49,13 @@
 }
 
 .table-grid-root[data-variant="hts"] .table-grid-row {
+  --table-grid-row-bg: var(--bg);
+  background: var(--table-grid-row-bg);
   min-height: var(--hts-row-height);
 }
 
 .table-grid-root[data-variant="hts"] .table-grid-row .table-grid-cell {
+  background: var(--table-grid-row-bg);
   height: var(--hts-row-height);
   display: flex;
   align-items: center;
@@ -89,15 +92,22 @@
 .table-grid-root[data-variant="hts"][data-zebra="true"]
   .table-grid-body
   .table-grid-row:nth-child(even):not([data-expanded="true"]):not([data-selected="true"]) {
-  background: var(--table-row-zebra);
-}
-
-.table-grid-root[data-variant="hts"] .table-grid-body .table-grid-row:hover {
-  background: var(--table-row-hover);
+  --table-grid-row-bg: var(--table-row-zebra);
 }
 
 .table-grid-root[data-variant="hts"] .table-grid-body .table-grid-row[data-selected="true"] {
-  background: var(--table-row-selected);
+  --table-grid-row-bg: var(--table-row-selected);
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-body .table-grid-row:hover,
+.table-grid-root[data-variant="hts"][data-zebra="true"]
+  .table-grid-body
+  .table-grid-row:nth-child(even):not([data-expanded="true"]):not([data-selected="true"]):hover {
+  --table-grid-row-bg: var(--table-row-hover);
+}
+
+.table-grid-root[data-variant="hts"] .table-grid-body .table-grid-row[data-selected="true"]:hover {
+  --table-grid-row-bg: var(--accent-tint-12);
 }
 
 .table-grid-root[data-variant="hts"] .table-grid-cell--num {
@@ -146,28 +156,28 @@
 .table-grid-root[data-variant="hts"] .table-grid-body
   .table-grid-row
   .table-grid-cell[data-sticky] {
-  background: var(--bg);
+  background: var(--table-grid-row-bg);
 }
 
 /* zebra 짝수 행 sticky 셀 */
 .table-grid-root[data-variant="hts"][data-zebra="true"] .table-grid-body
   .table-grid-row:nth-child(even):not([data-expanded="true"]):not([data-selected="true"])
   .table-grid-cell[data-sticky] {
-  background: var(--table-row-zebra);
+  background: var(--table-grid-row-bg);
 }
 
 /* hover 행 sticky 셀 */
 .table-grid-root[data-variant="hts"] .table-grid-body
   .table-grid-row:hover
   .table-grid-cell[data-sticky] {
-  background: var(--table-row-hover);
+  background: var(--table-grid-row-bg);
 }
 
 /* selected 행 sticky 셀 */
 .table-grid-root[data-variant="hts"] .table-grid-body
   .table-grid-row[data-selected="true"]
   .table-grid-cell[data-sticky] {
-  background: var(--table-row-selected);
+  background: var(--table-grid-row-bg);
 }
 
 /* ── 가로 스크롤 wrapper 기본 스크롤바 숨김 (webkit) ── */

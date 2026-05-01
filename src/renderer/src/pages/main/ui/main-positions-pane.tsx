@@ -5,7 +5,6 @@ import { type PaneL1, type PaneL2, usePaneTabs } from '../model/use-pane-tabs';
 import { FilledPane } from './filled-pane';
 import { PastTradesPane } from './past-trades-pane';
 import { PositionsGrid } from './positions-grid';
-import { TradingDayStatusBadge } from './trading-day-status-badge';
 import { WatchBoard } from './watch-board';
 
 export interface MainPositionsPaneProps {
@@ -51,13 +50,7 @@ export const MainPositionsPane = (props: MainPositionsPaneProps): ReactElement =
       }}
       aria-label="좌측 메인 패널"
     >
-      <HtsTabs
-        tabs={L1_TABS}
-        active={l1}
-        onChange={setL1}
-        ariaLabel="좌측 외부 탭"
-        trailing={<TradingDayStatusBadge accountId={accountId} />}
-      />
+      <HtsTabs tabs={L1_TABS} active={l1} onChange={setL1} ariaLabel="좌측 외부 탭" />
 
       {l1 === 'positions' ? (
         <>

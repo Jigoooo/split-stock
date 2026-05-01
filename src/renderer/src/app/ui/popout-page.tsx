@@ -55,10 +55,29 @@ export interface PopoutPageProps {
   popout: PopoutApi;
 }
 
-const PopoutRouteLoading = ({ route }: { route: PopoutRoute }): ReactElement => (
-  <div className="popout-route-loading" role="status" aria-live="polite">
-    <div className="popout-route-loading__title">{getPopoutLabel(route)}</div>
-    <div className="popout-route-loading__body">{LOADING_MESSAGES.ROUTE_LOADING}</div>
+const PopoutRouteLoading = ({
+  quiet = false,
+  route,
+}: {
+  quiet?: boolean;
+  route: PopoutRoute;
+}): ReactElement => (
+  <div
+    className={quiet ? 'popout-route-loading popout-route-loading--quiet' : 'popout-route-loading'}
+    role="status"
+    aria-live="polite"
+    aria-label={`${getPopoutLabel(route)} ${LOADING_MESSAGES.ROUTE_LOADING}`}
+  >
+    {quiet ? (
+      <div className="popout-route-loading__progress" aria-hidden="true">
+        <span />
+      </div>
+    ) : (
+      <>
+        <div className="popout-route-loading__title">{getPopoutLabel(route)}</div>
+        <div className="popout-route-loading__body">{LOADING_MESSAGES.ROUTE_LOADING}</div>
+      </>
+    )}
   </div>
 );
 
@@ -111,7 +130,9 @@ export const PopoutPage = ({ activationKey, route, popout }: PopoutPageProps): R
         minHeight: 0,
       }}
     >
-      <Suspense fallback={<PopoutRouteLoading route={route} />}>{content}</Suspense>
+      <Suspense fallback={<PopoutRouteLoading route={route} quiet={route === 'settings'} />}>
+        {content}
+      </Suspense>
     </div>
   );
 };

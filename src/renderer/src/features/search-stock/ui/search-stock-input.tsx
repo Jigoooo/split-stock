@@ -9,6 +9,7 @@ import { useStockSearch } from '../model/use-stock-search';
 export interface SearchStockInputProps {
   placeholder?: string;
   limit?: number;
+  disabled?: boolean;
   onSelect: (hit: StockHit) => void;
 }
 
@@ -20,7 +21,7 @@ export interface SearchStockInputProps {
  * - 로딩/빈 결과/정상 결과 상태 구분
  */
 export const SearchStockInput = (props: SearchStockInputProps): ReactElement => {
-  const { placeholder = '종목명 또는 코드 검색', limit = 20, onSelect } = props;
+  const { placeholder = '종목명 또는 코드 검색', limit = 20, disabled = false, onSelect } = props;
   const listboxId = useId();
   const [term, setTerm] = useState('');
   // 검색에 실제 사용되는 query — IME 조합 중에는 직전 commit 값을 유지해
@@ -33,11 +34,12 @@ export const SearchStockInput = (props: SearchStockInputProps): ReactElement => 
   const pendingEnterSelectionRef = useRef<StockHit | null>(null);
   const search = useStockSearch(committedTerm, { limit });
 
-  const open = focused && committedTerm.trim().length > 0;
+  const open = !disabled && focused && committedTerm.trim().length > 0;
   const list = search.results;
 
   const commit = (hit: StockHit): void => {
     pendingEnterSelectionRef.current = null;
+    if (disabled) return;
     onSelect(hit);
     setTerm('');
     setCommittedTerm('');
@@ -107,6 +109,7 @@ export const SearchStockInput = (props: SearchStockInputProps): ReactElement => 
         }}
         onKeyDown={onKey}
         placeholder={placeholder}
+        disabled={disabled}
         aria-label="종목 검색 입력"
         aria-autocomplete="list"
         aria-controls={open ? listboxId : undefined}

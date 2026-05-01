@@ -1,7 +1,7 @@
 import type { WatchOrder } from '@renderer/entities/watch-order';
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Checkbox, TableGrid } from '@renderer/shared/ui';
-import type { ReactElement } from 'react';
+import type { MouseEvent, ReactElement } from 'react';
 import {
   formatWatchDate,
   formatWatchDateTitle,
@@ -26,13 +26,20 @@ export const WatchListRow = ({
   selected,
   stockName,
 }: WatchListRowProps): ReactElement => {
-  const contextMenuProps = allowMutations
-    ? { onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => onContextMenu(event, order.id) }
+  const handleRowClick = (event: MouseEvent<HTMLDivElement>): void => {
+    if ((event.target as HTMLElement).closest('.hts-choice')) return;
+    onToggle(order.id);
+  };
+  const rowInteractionProps = allowMutations
+    ? {
+        onClick: handleRowClick,
+        onContextMenu: (event: MouseEvent<HTMLDivElement>) => onContextMenu(event, order.id),
+      }
     : {};
   const stockLabel = stockName ? `${stockName} (${order.pdno})` : order.pdno;
 
   return (
-    <TableGrid.Row selected={allowMutations && selected} {...contextMenuProps}>
+    <TableGrid.Row selected={allowMutations && selected} {...rowInteractionProps}>
       {allowMutations ? (
         <TableGrid.Cell width="4.2rem">
           <Checkbox

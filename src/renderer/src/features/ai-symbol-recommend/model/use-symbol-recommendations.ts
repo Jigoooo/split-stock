@@ -7,6 +7,11 @@ export interface OpenRecommendationOptions {
   onPick?: RecommendationPickHandler | undefined;
 }
 
+export interface ExtraStock {
+  pdno: string;
+  name: string;
+}
+
 interface ProgressStage {
   key: string;
   atMs: number;
@@ -121,14 +126,14 @@ interface RecommendCache {
   emptyReason: string | null;
   rejectedCount: number;
   durationMs: number;
-  extras: ReadonlyArray<string>;
+  extras: ReadonlyArray<ExtraStock>;
   aiOff: boolean;
   includeAutoDiscovery: boolean;
   fetchedAt: number;
 }
 
 interface ActiveRecommendRequest {
-  extras: string[];
+  extras: ExtraStock[];
   aiOff: boolean;
   includeAutoDiscovery: boolean;
   startedAt: number;
@@ -417,7 +422,7 @@ function readPersistedRecommendCache(): RecommendCache | null {
     const raw = window.localStorage.getItem(SYMBOL_RECOMMENDATION_CACHE_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    return isRecommendCache(parsed) ? parsed : null;
+    return parseRecommendCache(parsed);
   } catch {
     return null;
   }
@@ -431,9 +436,11 @@ function writePersistedRecommendCache(cache: RecommendCache): void {
   }
 }
 
-function isRecommendCache(value: unknown): value is RecommendCache {
-  if (!isRecord(value)) return false;
-  return (
+function parseRecommendCache(value: unknown): RecommendCache | null {
+  if (!isRecord(value)) return null;
+  const extras = parseExtraStocks(value.extras);
+  if (!extras) return null;
+  const valid =
     Array.isArray(value.ranked) &&
     Array.isArray(value.userInputResults) &&
     isTierDistribution(value.distribution) &&
@@ -441,13 +448,49 @@ function isRecommendCache(value: unknown): value is RecommendCache {
     (typeof value.emptyReason === 'string' || value.emptyReason === null) &&
     typeof value.rejectedCount === 'number' &&
     typeof value.durationMs === 'number' &&
-    Array.isArray(value.extras) &&
-    value.extras.every((item) => typeof item === 'string') &&
     typeof value.aiOff === 'boolean' &&
     typeof value.includeAutoDiscovery === 'boolean' &&
     typeof value.fetchedAt === 'number' &&
-    Number.isFinite(value.fetchedAt)
-  );
+    Number.isFinite(value.fetchedAt);
+  if (!valid) return null;
+  return {
+    ranked: value.ranked as RecommendedItem[],
+    userInputResults: value.userInputResults as RecommendedItem[],
+    distribution: value.distribution as TierDistribution,
+    diagnostics: value.diagnostics as RecommendationDiagnostics,
+    emptyReason: value.emptyReason as string | null,
+    rejectedCount: value.rejectedCount as number,
+    durationMs: value.durationMs as number,
+    extras,
+    aiOff: value.aiOff as boolean,
+    includeAutoDiscovery: value.includeAutoDiscovery as boolean,
+    fetchedAt: value.fetchedAt as number,
+  };
+}
+
+function parseExtraStocks(value: unknown): ExtraStock[] | null {
+  if (!Array.isArray(value)) return null;
+  const extras: ExtraStock[] = [];
+  for (const item of value) {
+    const extra = normalizeExtraStock(item);
+    if (!extra) return null;
+    if (!extras.some((existing) => existing.pdno === extra.pdno)) extras.push(extra);
+  }
+  return extras;
+}
+
+function normalizeExtraStock(value: unknown): ExtraStock | null {
+  if (typeof value === 'string') return normalizeExtraStockFields(value, value);
+  if (!isRecord(value)) return null;
+  if (typeof value.pdno !== 'string' || typeof value.name !== 'string') return null;
+  return normalizeExtraStockFields(value.pdno, value.name);
+}
+
+function normalizeExtraStockFields(pdno: string, name: string): ExtraStock | null {
+  const padded = pdno.trim().padStart(6, '0');
+  if (!/^\d{6}$/.test(padded)) return null;
+  const trimmedName = name.trim();
+  return { pdno: padded, name: trimmedName.length > 0 ? trimmedName : padded };
 }
 
 function isTierDistribution(value: unknown): value is TierDistribution {
@@ -570,8 +613,10 @@ export function useSymbolRecommendations() {
     [activeWatchList.data?.orders],
   );
 
-  // 모달 세션 동안 사용자가 stock-picker 로 추가한 pdno 목록 (max 10).
-  const [extraPdnos, setExtraPdnos] = useState<string[]>(() => [...(initialCache?.extras ?? [])]);
+  // 모달 세션 동안 사용자가 stock-picker 로 추가한 종목 목록 (max 10).
+  const [extraStocks, setExtraStocks] = useState<ExtraStock[]>(() =>
+    (initialCache?.extras ?? []).map((extra) => ({ ...extra })),
+  );
   // AI 끄기 모드 — LLM 호출 없이 알고리즘 신호만으로 ranking. 키 미설정 시 자동 fallback.
   const [aiOff, setAiOff] = useState(() => initialCache?.aiOff ?? false);
   // D 풀 (자동 발굴) 활성화 — A∪B∪C 외에도 박스권 분할매매 사전 스크리닝 통과 종목 포함.
@@ -609,7 +654,7 @@ export function useSymbolRecommendations() {
         emptyReason,
         rejectedCount,
         durationMs,
-        extras: request?.extras ?? [...extraPdnos],
+        extras: request?.extras ?? extraStocks.map((extra) => ({ ...extra })),
         aiOff: request?.aiOff ?? aiOff,
         includeAutoDiscovery: request?.includeAutoDiscovery ?? includeAutoDiscovery,
         fetchedAt,
@@ -668,7 +713,7 @@ export function useSymbolRecommendations() {
 
   const syncPendingOpen = (): void => {
     const request = activeRequestRef.current ?? {
-      extras: [...extraPdnos],
+      extras: extraStocks.map((extra) => ({ ...extra })),
       aiOff,
       includeAutoDiscovery,
       startedAt: Date.now(),
@@ -727,11 +772,12 @@ export function useSymbolRecommendations() {
     }
 
     const request: ActiveRecommendRequest = {
-      extras: [...extraPdnos],
+      extras: extraStocks.map((extra) => ({ ...extra })),
       aiOff,
       includeAutoDiscovery,
       startedAt: Date.now(),
     };
+    const requestExtraPdnos = request.extras.map((extra) => extra.pdno);
     activeRequestRef.current = request;
     cacheRef.current = null;
     setView((prev) => ({
@@ -743,7 +789,7 @@ export function useSymbolRecommendations() {
     }));
     mut.mutate({
       topN: 12,
-      ...(request.extras.length > 0 ? { extraPdnos: request.extras } : {}),
+      ...(requestExtraPdnos.length > 0 ? { extraPdnos: requestExtraPdnos } : {}),
       ...(request.aiOff ? { aiOff: true } : {}),
       includeAutoDiscovery: request.includeAutoDiscovery,
     });
@@ -772,25 +818,32 @@ export function useSymbolRecommendations() {
     cacheRef.current = null;
   };
 
-  const addExtraPdno = (pdno: string): void => {
-    setExtraPdnos((prev) => {
+  const addExtraStock = (stock: ExtraStock): void => {
+    const normalized = normalizeExtraStock(stock);
+    if (!normalized) return;
+    setExtraStocks((prev) => {
       if (prev.length >= 10) return prev;
-      const padded = pdno.padStart(6, '0');
-      if (!/^\d{6}$/.test(padded)) return prev;
-      if (prev.includes(padded)) return prev;
-      return [...prev, padded];
+      if (prev.some((extra) => extra.pdno === normalized.pdno)) return prev;
+      return [...prev, normalized];
     });
   };
 
-  const removeExtraPdno = (pdno: string): void => {
-    setExtraPdnos((prev) => prev.filter((p) => p !== pdno));
+  const addExtraPdno = (pdno: string, name = pdno): void => {
+    addExtraStock({ pdno, name });
   };
+
+  const removeExtraPdno = (pdno: string): void => {
+    setExtraStocks((prev) => prev.filter((extra) => extra.pdno !== pdno));
+  };
+
+  const extraPdnos = extraStocks.map((extra) => extra.pdno);
 
   return {
     view,
     hasDefaultKey,
     isAiListLoading: aiList.isLoading,
     activeWatchPdnos,
+    extraStocks,
     extraPdnos,
     aiOff,
     includeAutoDiscovery,
@@ -798,6 +851,7 @@ export function useSymbolRecommendations() {
     close,
     pick,
     analyze,
+    addExtraStock,
     addExtraPdno,
     removeExtraPdno,
     toggleAiOff,

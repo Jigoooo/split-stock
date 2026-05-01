@@ -1,7 +1,7 @@
 import { Button } from '@renderer/shared/ui';
 import { getPopoutLabel } from '@shared/popout';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Activity, BarChart3, Calculator, ScrollText, Settings2 } from 'lucide-react';
+import { Activity, BarChart3, ScrollText, Settings2 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
 import type { PopoutRoute } from '../model/popout-route';
@@ -16,7 +16,6 @@ const BUTTONS: Array<{
   icon: ReactElement;
 }> = [
   { route: 'trade', icon: <Activity size={14} /> },
-  { route: 'profit-calculator', icon: <Calculator size={14} /> },
   { route: 'logs', icon: <ScrollText size={14} /> },
   { route: 'reports', icon: <BarChart3 size={14} /> },
   { route: 'settings', icon: <Settings2 size={14} /> },
