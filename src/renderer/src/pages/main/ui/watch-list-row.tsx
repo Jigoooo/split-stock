@@ -8,6 +8,7 @@ import {
   sourceLabel,
   statusLabel,
 } from '../lib/watch-list-format';
+import { WATCH_TABLE_COLS } from './watch-table-columns';
 
 interface WatchListRowProps {
   allowMutations: boolean;
@@ -49,7 +50,7 @@ export const WatchListRow = ({
       {...rowInteractionProps}
     >
       {allowMutations ? (
-        <TableGrid.Cell width="4.2rem">
+        <TableGrid.Cell width={WATCH_TABLE_COLS.select}>
           <Checkbox
             checked={selected}
             onChange={() => onToggle(order.id)}
@@ -58,28 +59,28 @@ export const WatchListRow = ({
           />
         </TableGrid.Cell>
       ) : null}
-      <TableGrid.Cell width="16.8rem" title={stockLabel}>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.stock} title={stockLabel}>
         {stockLabel}
       </TableGrid.Cell>
-      <TableGrid.Cell width="7.2rem">{sourceLabel(order.source)}</TableGrid.Cell>
-      <TableGrid.Cell width="9rem" numeric>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.source}>{sourceLabel(order.source)}</TableGrid.Cell>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.targetPrice} numeric>
         {thousandSeparator(order.targetPrice)}
       </TableGrid.Cell>
-      <TableGrid.Cell width="9rem" numeric>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.orderBasis} numeric>
         {order.qtyOrAmountMode === 'QTY'
           ? `${thousandSeparator(order.qty ?? 0)}주`
           : `${thousandSeparator(order.amountKrw ?? 0)}원`}
       </TableGrid.Cell>
-      <TableGrid.Cell width="7.2rem">{order.orderType}</TableGrid.Cell>
-      <TableGrid.Cell width="7.2rem">{statusLabel(order.status)}</TableGrid.Cell>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.orderType}>{order.orderType}</TableGrid.Cell>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.status}>{statusLabel(order.status)}</TableGrid.Cell>
       <TableGrid.Cell
-        width="17.6rem"
+        width={WATCH_TABLE_COLS.createdAt}
         className="muted date-time-cell"
         title={formatWatchDateTitle(order.createdAt)}
       >
         {formatWatchDate(order.createdAt)}
       </TableGrid.Cell>
-      <TableGrid.Cell width="12rem" className="muted">
+      <TableGrid.Cell width={WATCH_TABLE_COLS.failureReason} className="muted">
         {order.lastFailureReason ?? ''}
       </TableGrid.Cell>
     </TableGrid.Row>

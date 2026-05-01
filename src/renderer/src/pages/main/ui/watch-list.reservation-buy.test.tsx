@@ -196,6 +196,35 @@ describe('WatchList reservation buy contraction', () => {
     expect(checkbox).not.toBeChecked();
   });
 
+  it('현황 헤더 checkbox로 전체 row 선택을 토글한다', () => {
+    render(
+      <WatchList
+        orders={[
+          makeOrder({ id: 1, pdno: '005930', status: 'WATCHING' }),
+          makeOrder({ id: 2, pdno: '000660', status: 'WATCHING' }),
+        ]}
+        isPending={false}
+        error={null}
+        allowMutations
+      />,
+    );
+
+    const toolbar = screen.getByRole('toolbar', { name: '선택한 자동감시 작업' });
+    const allCheckbox = screen.getByRole('checkbox', { name: '자동감시 전체 선택' });
+
+    expect(toolbar).toHaveTextContent('0건 선택');
+
+    fireEvent.click(allCheckbox);
+    expect(toolbar).toHaveTextContent('2건 선택');
+    expect(screen.getByRole('checkbox', { name: '자동감시 삼성전자 (005930) 선택' })).toBeChecked();
+    expect(
+      screen.getByRole('checkbox', { name: '자동감시 SK하이닉스 (000660) 선택' }),
+    ).toBeChecked();
+
+    fireEvent.click(allCheckbox);
+    expect(toolbar).toHaveTextContent('0건 선택');
+  });
+
   it('우클릭 메뉴는 대상 종목을 헤더에 표시하고 선택 row 우클릭은 선택 묶음을 대상으로 함', () => {
     render(
       <WatchList

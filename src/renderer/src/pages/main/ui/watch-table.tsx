@@ -1,27 +1,34 @@
 import type { WatchOrder } from '@renderer/entities/watch-order';
-import { TableGrid } from '@renderer/shared/ui';
+import { Checkbox, TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { WatchListRow } from './watch-list-row';
+import { WATCH_TABLE_COLS } from './watch-table-columns';
 
 interface WatchTableProps {
+  allSelected: boolean;
   allowMutations: boolean;
   emptyMessage?: string;
   isPending: boolean;
   onContextMenu: (event: React.MouseEvent, fallbackId: number) => void;
+  onToggleAll: () => void;
   onToggle: (id: number) => void;
   orders: WatchOrder[];
   selected: Set<number>;
+  someSelected: boolean;
   stockNameByPdno: Map<string, string>;
 }
 
 export const WatchTable = ({
+  allSelected,
   allowMutations,
   emptyMessage = '자동감시 종목이 없습니다. 상단 "+ 추가" 버튼으로 시작하세요.',
   isPending,
   onContextMenu,
+  onToggleAll,
   onToggle,
   orders,
   selected,
+  someSelected,
   stockNameByPdno,
 }: WatchTableProps): ReactElement => (
   <TableGrid.Root
@@ -33,21 +40,32 @@ export const WatchTable = ({
     style={{ flex: 1, minHeight: 0 }}
   >
     <TableGrid.Header>
-      {allowMutations ? <TableGrid.Cell width="4.2rem" /> : null}
-      <TableGrid.Cell width="16.8rem">종목</TableGrid.Cell>
-      <TableGrid.Cell width="7.2rem">구분</TableGrid.Cell>
-      <TableGrid.Cell width="9rem" numeric>
+      {allowMutations ? (
+        <TableGrid.Cell width={WATCH_TABLE_COLS.select} resizable={false}>
+          <Checkbox
+            checked={allSelected}
+            indeterminate={someSelected}
+            onChange={onToggleAll}
+            aria-label="자동감시 전체 선택"
+            disabled={isPending || orders.length === 0}
+            dense
+          />
+        </TableGrid.Cell>
+      ) : null}
+      <TableGrid.Cell width={WATCH_TABLE_COLS.stock}>종목</TableGrid.Cell>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.source}>구분</TableGrid.Cell>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.targetPrice} numeric>
         목표가
       </TableGrid.Cell>
-      <TableGrid.Cell width="9rem" numeric>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.orderBasis} numeric>
         주문 기준
       </TableGrid.Cell>
-      <TableGrid.Cell width="7.2rem">주문</TableGrid.Cell>
-      <TableGrid.Cell width="7.2rem">상태</TableGrid.Cell>
-      <TableGrid.Cell width="17.6rem" className="muted date-time-cell">
+      <TableGrid.Cell width={WATCH_TABLE_COLS.orderType}>주문</TableGrid.Cell>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.status}>상태</TableGrid.Cell>
+      <TableGrid.Cell width={WATCH_TABLE_COLS.createdAt} className="muted date-time-cell">
         등록
       </TableGrid.Cell>
-      <TableGrid.Cell width="12rem" className="muted">
+      <TableGrid.Cell width={WATCH_TABLE_COLS.failureReason} className="muted">
         실패사유
       </TableGrid.Cell>
     </TableGrid.Header>

@@ -89,10 +89,23 @@ export const WatchList = (props: WatchListProps): ReactElement => {
     () => orders.filter((order) => selected.has(order.id)),
     [orders, selected],
   );
+  const allRowsSelected = orders.length > 0 && orders.every((order) => selected.has(order.id));
+  const someRowsSelected = !allRowsSelected && orders.some((order) => selected.has(order.id));
   const menuAction = buildWatchActionState(selectedRows, allowMutations);
   const selectedAction = buildWatchActionState(selectedOrderRows, allowMutations);
 
   const closeMenu = (): void => setMenu(null);
+  const toggleAllRows = (): void => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allRowsSelected) {
+        for (const order of orders) next.delete(order.id);
+      } else {
+        for (const order of orders) next.add(order.id);
+      }
+      return next;
+    });
+  };
   const clearAndRun = (run: (ids: number[]) => Promise<void>, ids: number[]): void => {
     closeMenu();
     setSelected(new Set());
@@ -187,13 +200,16 @@ export const WatchList = (props: WatchListProps): ReactElement => {
         )}
       </div>
       <WatchTable
+        allSelected={allRowsSelected}
         allowMutations={allowMutations}
         isPending={isPending}
         {...(emptyMessage ? { emptyMessage } : {})}
         onContextMenu={onContextMenu}
+        onToggleAll={toggleAllRows}
         onToggle={toggle}
         orders={orders}
         selected={selected}
+        someSelected={someRowsSelected}
         stockNameByPdno={stockNameByPdno}
       />
       {menu ? (
