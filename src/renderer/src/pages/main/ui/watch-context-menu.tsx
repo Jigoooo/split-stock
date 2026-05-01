@@ -4,6 +4,7 @@ export interface WatchContextMenuState {
   x: number;
   y: number;
   ids: number[];
+  targetLabel: string;
 }
 
 const MENU_VIEWPORT_PADDING = 8;
@@ -11,8 +12,10 @@ const MENU_VIEWPORT_PADDING = 8;
 interface WatchContextMenuProps {
   allowEdit: boolean;
   allowMutations: boolean;
+  canDelete: boolean;
   canPause: boolean;
   canResume: boolean;
+  helpText?: string;
   menu: WatchContextMenuState;
   mutationPending: boolean;
   onClose: () => void;
@@ -53,8 +56,10 @@ const MenuItem = ({ disabled = false, label, onSelect }: MenuItemProps): ReactEl
 export const WatchContextMenu = ({
   allowEdit,
   allowMutations,
+  canDelete,
   canPause,
   canResume,
+  helpText,
   menu,
   mutationPending,
   onClose,
@@ -108,7 +113,7 @@ export const WatchContextMenu = ({
         ref={menuRef}
         data-testid="watch-context-menu"
         role="menu"
-        aria-label={`자동감시 작업 (${menu.ids.length}건)`}
+        aria-label={`자동감시 작업: ${menu.targetLabel}`}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.preventDefault();
@@ -142,6 +147,41 @@ export const WatchContextMenu = ({
           flexDirection: 'column',
         }}
       >
+        <div
+          style={{
+            borderBottom: '1px solid var(--border)',
+            display: 'grid',
+            gap: '0.15rem',
+            marginBottom: '0.2rem',
+            maxWidth: '20rem',
+            padding: '0.45rem 0.8rem 0.5rem',
+          }}
+        >
+          <strong
+            style={{
+              color: 'var(--fg)',
+              fontSize: '1rem',
+              fontWeight: 800,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title={menu.targetLabel}
+          >
+            {menu.targetLabel}
+          </strong>
+          {helpText ? (
+            <span
+              className="muted"
+              style={{
+                fontSize: '0.95rem',
+                lineHeight: 1.35,
+              }}
+            >
+              {helpText}
+            </span>
+          ) : null}
+        </div>
         <MenuItem
           disabled={!allowMutations || !canResume || mutationPending}
           label={`시작 (${menu.ids.length}건)`}
@@ -154,7 +194,7 @@ export const WatchContextMenu = ({
         />
         {allowEdit ? <MenuItem disabled={mutationPending} label="수정" onSelect={onEdit} /> : null}
         <MenuItem
-          disabled={!allowMutations || mutationPending}
+          disabled={!allowMutations || !canDelete || mutationPending}
           label={`삭제 (${menu.ids.length}건)`}
           onSelect={() => onDelete(menu.ids)}
         />

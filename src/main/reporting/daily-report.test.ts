@@ -3,8 +3,10 @@ import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
 import { eventLogs, lots, orders, trades } from '../db/schema';
 import {
+  computeDailyPnlPoints,
   computeDailyReport,
   computeDailyReportFromLots,
+  computePnlByLotNth,
   exportEventsCsv,
   exportLotsCsv,
   exportTradesCsv,
@@ -115,6 +117,27 @@ describe('computeDailyReportFromLots', () => {
       range,
     );
     expect(summary.realizedPnlKrw).toBe(0);
+  });
+
+  it('실현손익은 부동소수 오차 없이 KRW 정수로 반올림한다', () => {
+    const soldLots = [
+      {
+        nth: 1,
+        buyPrice: 100.1,
+        sellPrice: 101.250002,
+        qty: 2_000,
+        boughtAt: new Date('2026-04-01'),
+        soldAt: new Date('2026-04-02'),
+      },
+    ];
+    const summary = computeDailyReportFromLots(soldLots, 1, range);
+    const dailyPnl = computeDailyPnlPoints(soldLots);
+    const nthPnl = computePnlByLotNth(soldLots);
+
+    expect(summary.realizedPnlKrw).toBe(2_300);
+    expect(summary.maxDrawdownKrw).toBe(0);
+    expect(dailyPnl[0]?.cumulativePnlKrw).toBe(2_300);
+    expect(nthPnl[0]?.pnlKrw).toBe(2_300);
   });
 });
 

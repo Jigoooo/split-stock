@@ -180,10 +180,16 @@ export const RecommendCard = ({
 export function RecommendDetail({
   item,
   onPick,
+  isPickDisabled = false,
+  pickDisabledReason,
 }: {
   item: RecommendedItem;
   onPick: (pdno: string, name: string) => void;
+  isPickDisabled?: boolean;
+  pickDisabledReason?: string;
 }): ReactElement {
+  const disabledDescriptionId = isPickDisabled ? `recommend-pick-disabled-${item.pdno}` : undefined;
+
   return (
     <div style={{ display: 'grid', gap: '1rem' }}>
       <div
@@ -204,20 +210,40 @@ export function RecommendDetail({
         </div>
         <button
           type="button"
+          disabled={isPickDisabled}
+          aria-describedby={disabledDescriptionId}
           onClick={() => onPick(item.pdno, item.name)}
+          title={isPickDisabled ? pickDisabledReason : '자동감시 추가 폼으로 이동'}
           style={{
-            border: '0.1rem solid #D97757',
-            background: '#D97757',
-            color: '#fff',
+            border: isPickDisabled ? '0.1rem solid var(--border)' : '0.1rem solid #D97757',
+            background: isPickDisabled ? 'var(--bg-2, rgba(0,0,0,0.04))' : '#D97757',
+            color: isPickDisabled ? 'var(--fg-2)' : '#fff',
             borderRadius: '0.5rem',
             padding: '0.55rem 0.9rem',
             fontWeight: 700,
-            cursor: 'pointer',
+            cursor: isPickDisabled ? 'not-allowed' : 'pointer',
           }}
         >
-          이 종목 선택
+          {isPickDisabled ? '감시중' : '이 종목 선택'}
         </button>
       </div>
+      {isPickDisabled && pickDisabledReason ? (
+        <div
+          id={disabledDescriptionId}
+          role="status"
+          className="muted"
+          style={{
+            marginTop: '-0.35rem',
+            padding: '0.45rem 0.6rem',
+            borderRadius: '0.4rem',
+            border: '0.1rem solid var(--border)',
+            background: 'var(--bg)',
+            fontSize: '0.98rem',
+          }}
+        >
+          {pickDisabledReason} 자동감시 현황에서 기존 조건을 확인하거나 수정하세요.
+        </div>
+      ) : null}
       <div style={{ fontSize: '1.12rem', lineHeight: 1.55, color: 'var(--fg)' }}>
         {item.summary}
       </div>

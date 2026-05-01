@@ -34,6 +34,7 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       },
     }),
     watch: {
+      list: { useQuery: () => ({ data: { orders: [] }, isPending: false, error: null }) },
       cancel: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       pause: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
       resume: { useMutation: () => ({ mutateAsync: vi.fn(), isPending: false }) },
@@ -42,6 +43,9 @@ vi.mock('@renderer/shared/api/trpc', () => ({
     ai: {
       listConfigs: { useQuery: () => ({ data: { configs: [] }, isLoading: false }) },
       suggestSymbols: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+    },
+    market: {
+      listAllStock: { useQuery: () => ({ data: { entries: [] }, isLoading: false }) },
     },
   },
 }));
@@ -57,6 +61,19 @@ describe('WatchBoard', () => {
 
     // 초기 탭은 '현황' active
     expect(screen.getByRole('tab', { name: '현황' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('toolbar', { name: '선택한 자동감시 작업' })).toHaveTextContent(
+      '0건 선택',
+    );
+  });
+
+  it('현황 외 탭은 같은 위치의 읽기 전용 요약 툴바를 사용한다', () => {
+    render(<WatchBoard accountId={1} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: '실행내역' }));
+
+    expect(screen.getByRole('tab', { name: '실행내역' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('toolbar', { name: '자동감시 탭 요약' })).toHaveTextContent('실행내역');
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
   it('추가 버튼 클릭 시 prefill을 저장하고 add-watch-order 팝아웃을 연다', () => {

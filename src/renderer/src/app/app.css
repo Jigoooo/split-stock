@@ -3477,3 +3477,39 @@ body {
   display: inline-flex;
   align-items: center;
 }
+
+/* 자동감시 하위탭: 고정 툴바 + 공통 테이블 셸 */
+.watch-table-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  flex-direction: column;
+}
+
+.watch-table-toolbar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0.5rem;
+  min-height: 3.2rem;
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid var(--hts-line);
+  background: var(--bg);
+}
+
+.watch-table-toolbar__count {
+  color: var(--fg);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  min-width: 7rem;
+  white-space: nowrap;
+}
+
+.watch-table-toolbar__hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

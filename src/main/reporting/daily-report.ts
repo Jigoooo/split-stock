@@ -29,6 +29,15 @@ interface SoldLot {
   soldAt: Date | null;
 }
 
+function toKrw(value: number): number {
+  return Math.round(value);
+}
+
+function computeSoldLotPnlKrw(lot: Pick<SoldLot, 'buyPrice' | 'sellPrice' | 'qty'>): number {
+  if (lot.sellPrice === null) return 0;
+  return toKrw((lot.sellPrice - lot.buyPrice) * lot.qty);
+}
+
 /**
  * 실현손익/승률/최대 drawdown 등 핵심 KPI 계산.
  * SOLD 상태 차수만 대상 (확정 거래).
@@ -39,10 +48,7 @@ export function computeDailyReportFromLots(
   range: DailyReportInput,
 ): DailyReportSummary {
   const winners = soldLots.filter((l) => l.sellPrice !== null && l.sellPrice > l.buyPrice);
-  const pnl = soldLots.reduce((sum, l) => {
-    if (l.sellPrice === null) return sum;
-    return sum + (l.sellPrice - l.buyPrice) * l.qty;
-  }, 0);
+  const pnl = soldLots.reduce((sum, l) => sum + computeSoldLotPnlKrw(l), 0);
   const winRate = soldLots.length === 0 ? 0 : winners.length / soldLots.length;
 
   // 평균 보유일 — soldAt - boughtAt
@@ -63,7 +69,7 @@ export function computeDailyReportFromLots(
   let peak = 0;
   let maxDrawdown = 0;
   for (const l of sorted) {
-    cumulative += (l.sellPrice - l.buyPrice) * l.qty;
+    cumulative += computeSoldLotPnlKrw(l);
     if (cumulative > peak) peak = cumulative;
     const dd = peak - cumulative;
     if (dd > maxDrawdown) maxDrawdown = dd;
@@ -100,7 +106,7 @@ export function computeDailyPnlPoints(soldLots: SoldLot[]): DailyPnlPoint[] {
   const dailyMap = new Map<string, number>();
   for (const l of sorted) {
     const date = l.soldAt.toISOString().slice(0, 10);
-    const pnl = (l.sellPrice - l.buyPrice) * l.qty;
+    const pnl = computeSoldLotPnlKrw(l);
     dailyMap.set(date, (dailyMap.get(date) ?? 0) + pnl);
   }
   let cumulative = 0;
@@ -126,7 +132,7 @@ export function computePnlByLotNth(soldLots: SoldLot[]): BarChartItem[] {
   const grouped = new Map<number, { pnl: number; count: number }>();
   for (const l of soldLots) {
     if (l.sellPrice === null) continue;
-    const pnl = (l.sellPrice - l.buyPrice) * l.qty;
+    const pnl = computeSoldLotPnlKrw(l);
     const cur = grouped.get(l.nth) ?? { pnl: 0, count: 0 };
     grouped.set(l.nth, { pnl: cur.pnl + pnl, count: cur.count + 1 });
   }

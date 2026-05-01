@@ -66,12 +66,13 @@ function DistributionChips({ distribution }: { distribution: TierDistribution })
   );
 }
 
-function formatRelative(ts: number): string {
-  const elapsedSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
-  if (elapsedSec < 60) return `${elapsedSec}초 전`;
-  const min = Math.floor(elapsedSec / 60);
-  if (min < 60) return `${min}분 전`;
-  return `${Math.floor(min / 60)}시간 전`;
+function formatRecommendationDate(ts: number): string {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return '-';
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatElapsed(ms: number): string {
@@ -367,6 +368,7 @@ export interface RecommendModalProps {
   onClose: () => void;
   onAnalyze: () => void;
   onPick: (pdno: string, name: string) => void;
+  activeWatchPdnos?: ReadonlySet<string>;
   extras: ReadonlyArray<string>;
   onAddExtra: (pdno: string) => void;
   onRemoveExtra: (pdno: string) => void;
@@ -386,12 +388,14 @@ const TIER_COLORS: Record<'top' | 'strong' | 'moderate' | 'watch' | 'avoid', str
 };
 
 const OVERLAY_CLICK_DRAG_TOLERANCE_PX = 4;
+const EMPTY_ACTIVE_WATCH_PDNOS = new Set<string>();
 
 export const RecommendModal = ({
   view,
   onClose,
   onAnalyze,
   onPick,
+  activeWatchPdnos = EMPTY_ACTIVE_WATCH_PDNOS,
   extras,
   onAddExtra,
   onRemoveExtra,
@@ -428,6 +432,7 @@ export const RecommendModal = ({
   const hasResults = !view.isPending && !view.error && allItems.length > 0;
   const [selectedPdno, setSelectedPdno] = useState<string | null>(null);
   const selectedItem = allItems.find((item) => item.pdno === selectedPdno) ?? allItems[0] ?? null;
+  const isSelectedAlreadyWatched = selectedItem !== null && activeWatchPdnos.has(selectedItem.pdno);
 
   useEffect(() => {
     if (allItems.length === 0) {
@@ -535,10 +540,10 @@ export const RecommendModal = ({
                 >
                   AI 추천
                 </h2>
-                {view.fromCache && view.lastFetchedAt !== null ? (
+                {!view.isPending && view.lastFetchedAt !== null ? (
                   <span
                     className="muted"
-                    title="마지막 추천 결과를 유지합니다. 새 결과가 필요하면 '다시 분석' 버튼을 누르세요."
+                    title="저장된 마지막 추천 결과입니다. 새 결과가 필요하면 '다시 분석' 버튼을 누르세요."
                     style={{
                       fontSize: '1rem',
                       padding: '0.2rem 0.55rem',
@@ -546,7 +551,7 @@ export const RecommendModal = ({
                       border: '0.1rem dashed var(--border)',
                     }}
                   >
-                    캐시됨 · {formatRelative(view.lastFetchedAt)}
+                    추천일 {formatRecommendationDate(view.lastFetchedAt)}
                   </span>
                 ) : null}
               </div>
@@ -881,7 +886,14 @@ export const RecommendModal = ({
                     boxSizing: 'border-box',
                   }}
                 >
-                  {selectedItem ? <RecommendDetail item={selectedItem} onPick={onPick} /> : null}
+                  {selectedItem ? (
+                    <RecommendDetail
+                      item={selectedItem}
+                      onPick={onPick}
+                      isPickDisabled={isSelectedAlreadyWatched}
+                      pickDisabledReason="이미 자동감시에 등록된 종목입니다."
+                    />
+                  ) : null}
                 </section>
                 <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center' }}>
                   <Button

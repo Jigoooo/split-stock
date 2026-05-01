@@ -39,6 +39,12 @@ describe('WatchHistoryList', () => {
       />,
     );
 
+    expect(screen.getByRole('region', { name: '자동감시 히스토리' })).toBeInTheDocument();
+    expect(screen.getByText('시각')).toBeInTheDocument();
+    expect(screen.getByText('레벨')).toBeInTheDocument();
+    expect(screen.getByText('이벤트')).toBeInTheDocument();
+    expect(document.querySelector('article')).not.toBeInTheDocument();
+    expect(screen.getByText(/2026년 .*월 .*일/)).toBeInTheDocument();
     expect(screen.getByText('등록')).toBeInTheDocument();
     expect(screen.getByText('삼성전자')).toBeInTheDocument();
     expect(screen.getByText('005930')).toBeInTheDocument();

@@ -2,6 +2,23 @@ import { AlertTriangle, LoaderCircle, Sparkles } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useOptionalSymbolRecommendationSession } from '../model/recommendation-session';
 
+function formatStatusDate(ts: number): string {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return '확인';
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${month}.${day}`;
+}
+
+function formatTitleDate(ts: number): string {
+  const date = new Date(ts);
+  if (Number.isNaN(date.getTime())) return '날짜 확인 필요';
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export const RecommendStatusButton = (): ReactElement | null => {
   const session = useOptionalSymbolRecommendationSession();
   if (!session) return null;
@@ -15,12 +32,18 @@ export const RecommendStatusButton = (): ReactElement | null => {
   const percent = Math.round(view.progress?.percent ?? 0);
   const isError = !view.isPending && view.error !== null;
   const label = view.isPending ? '종목 발굴' : isError ? '발굴 오류' : '발굴 결과';
-  const detail = view.isPending ? `${percent}%` : `${resultCount}개`;
+  const detail = view.isPending
+    ? `${percent}%`
+    : view.lastFetchedAt !== null
+      ? formatStatusDate(view.lastFetchedAt)
+      : `${resultCount}개`;
   const title = view.isPending
     ? '진행 중인 AI 추천 분석 창 열기'
     : isError
       ? 'AI 추천 오류 창 열기'
-      : '최근 AI 추천 결과 창 열기';
+      : view.lastFetchedAt !== null
+        ? `최근 AI 추천 결과 창 열기 · ${resultCount}개 · 추천일 ${formatTitleDate(view.lastFetchedAt)}`
+        : '최근 AI 추천 결과 창 열기';
   const className = [
     'ai-recommend-status',
     view.isPending ? 'ai-recommend-status--pending' : '',

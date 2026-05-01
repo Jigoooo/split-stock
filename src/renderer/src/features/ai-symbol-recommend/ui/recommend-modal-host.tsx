@@ -19,6 +19,7 @@ export const RecommendModalHost = ({ onPick }: RecommendModalHostProps): ReactEl
       onClose={session.close}
       onAnalyze={session.analyze}
       onPick={(pdno, name) => session.pick(pdno, name, onPick)}
+      activeWatchPdnos={session.activeWatchPdnos}
       extras={session.extraPdnos}
       onAddExtra={session.addExtraPdno}
       onRemoveExtra={session.removeExtraPdno}

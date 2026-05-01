@@ -42,6 +42,7 @@ const StandaloneRecommendButton = (props: RecommendButtonProps): ReactElement =>
         onClose={session.close}
         onAnalyze={session.analyze}
         onPick={(pdno, name) => session.pick(pdno, name, props.onPick)}
+        activeWatchPdnos={session.activeWatchPdnos}
         extras={session.extraPdnos}
         onAddExtra={session.addExtraPdno}
         onRemoveExtra={session.removeExtraPdno}

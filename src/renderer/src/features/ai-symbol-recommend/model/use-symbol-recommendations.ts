@@ -1,5 +1,5 @@
 import { trpc } from '@renderer/shared/api/trpc';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export type RecommendationPickHandler = (pdno: string, name: string) => void;
 
@@ -133,6 +133,8 @@ interface ActiveRecommendRequest {
   includeAutoDiscovery: boolean;
   startedAt: number;
 }
+
+export const SYMBOL_RECOMMENDATION_CACHE_KEY = 'split-stock.ai-symbol-recommendation-cache.v1';
 
 export interface RecommendedNewsItem {
   publishedAt: string;
@@ -371,6 +373,142 @@ const EMPTY_DIAGNOSTICS: RecommendationDiagnostics = {
   sources: [],
 };
 
+function createEmptyRecommendationView(): RecommendationViewState {
+  return {
+    isOpen: false,
+    isPending: false,
+    progress: null,
+    ranked: [],
+    userInputResults: [],
+    distribution: EMPTY_DIST,
+    diagnostics: EMPTY_DIAGNOSTICS,
+    emptyReason: null,
+    rejectedCount: 0,
+    durationMs: 0,
+    error: null,
+    lastFetchedAt: null,
+    fromCache: false,
+  };
+}
+
+function createRecommendationViewFromCache(
+  cache: RecommendCache,
+  isOpen: boolean,
+): RecommendationViewState {
+  return {
+    isOpen,
+    isPending: false,
+    progress: null,
+    ranked: cache.ranked,
+    userInputResults: cache.userInputResults,
+    distribution: cache.distribution,
+    diagnostics: cache.diagnostics,
+    emptyReason: cache.emptyReason,
+    rejectedCount: cache.rejectedCount,
+    durationMs: cache.durationMs,
+    error: null,
+    lastFetchedAt: cache.fetchedAt,
+    fromCache: true,
+  };
+}
+
+function readPersistedRecommendCache(): RecommendCache | null {
+  try {
+    const raw = window.localStorage.getItem(SYMBOL_RECOMMENDATION_CACHE_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return isRecommendCache(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedRecommendCache(cache: RecommendCache): void {
+  try {
+    window.localStorage.setItem(SYMBOL_RECOMMENDATION_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // Storage quota/private-mode failures should not break the in-memory recommendation flow.
+  }
+}
+
+function isRecommendCache(value: unknown): value is RecommendCache {
+  if (!isRecord(value)) return false;
+  return (
+    Array.isArray(value.ranked) &&
+    Array.isArray(value.userInputResults) &&
+    isTierDistribution(value.distribution) &&
+    isRecommendationDiagnostics(value.diagnostics) &&
+    (typeof value.emptyReason === 'string' || value.emptyReason === null) &&
+    typeof value.rejectedCount === 'number' &&
+    typeof value.durationMs === 'number' &&
+    Array.isArray(value.extras) &&
+    value.extras.every((item) => typeof item === 'string') &&
+    typeof value.aiOff === 'boolean' &&
+    typeof value.includeAutoDiscovery === 'boolean' &&
+    typeof value.fetchedAt === 'number' &&
+    Number.isFinite(value.fetchedAt)
+  );
+}
+
+function isTierDistribution(value: unknown): value is TierDistribution {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.top === 'number' &&
+    typeof value.strong === 'number' &&
+    typeof value.moderate === 'number' &&
+    typeof value.watch === 'number' &&
+    typeof value.avoid === 'number'
+  );
+}
+
+function isRecommendationDiagnostics(value: unknown): value is RecommendationDiagnostics {
+  if (!isRecord(value)) return false;
+  const discovery = value.discovery;
+  return (
+    isRecord(discovery) &&
+    typeof discovery.enabled === 'boolean' &&
+    typeof discovery.universeCount === 'number' &&
+    (typeof discovery.basisDate === 'string' || discovery.basisDate === null) &&
+    typeof discovery.seedCount === 'number' &&
+    typeof discovery.candlesFetched === 'number' &&
+    typeof discovery.candlesFailed === 'number' &&
+    typeof discovery.candlesSkipped === 'boolean' &&
+    typeof discovery.screenedCount === 'number' &&
+    typeof discovery.addedCount === 'number' &&
+    typeof discovery.blockedCount === 'number' &&
+    isDiscoveryConditionPassCounts(discovery.conditionPassCounts) &&
+    isTierDistribution(discovery.tierCounts) &&
+    (typeof discovery.lowestIncludedScore === 'number' || discovery.lowestIncludedScore === null) &&
+    (typeof discovery.emptyReason === 'string' || discovery.emptyReason === null) &&
+    Array.isArray(discovery.sources) &&
+    Array.isArray(value.sources)
+  );
+}
+
+function isDiscoveryConditionPassCounts(value: unknown): value is DiscoveryConditionPassCounts {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.score === 'number' &&
+    typeof value.volatility === 'number' &&
+    typeof value.range === 'number' &&
+    typeof value.liquidity === 'number' &&
+    typeof value.trendNeutrality === 'number'
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isActiveWatchOrder(
+  value: unknown,
+): value is { pdno: string; status: 'WATCHING' | 'PAUSED' } {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.pdno === 'string' && (value.status === 'WATCHING' || value.status === 'PAUSED')
+  );
+}
+
 function buildProgress(elapsedMs: number, aiOff: boolean): RecommendationProgressState {
   const stages = aiOff ? ALGO_PROGRESS_STAGES : AI_PROGRESS_STAGES;
   let stageIndex = 0;
@@ -406,34 +544,40 @@ function buildProgress(elapsedMs: number, aiOff: boolean): RecommendationProgres
  * mutation 으로 사용 (idempotent X) — 매번 LLM 호출. 사용자가 재실행 명시.
  */
 export function useSymbolRecommendations() {
-  const [view, setView] = useState<RecommendationViewState>({
-    isOpen: false,
-    isPending: false,
-    progress: null,
-    ranked: [],
-    userInputResults: [],
-    distribution: EMPTY_DIST,
-    diagnostics: EMPTY_DIAGNOSTICS,
-    emptyReason: null,
-    rejectedCount: 0,
-    durationMs: 0,
-    error: null,
-    lastFetchedAt: null,
-    fromCache: false,
-  });
-  const cacheRef = useRef<RecommendCache | null>(null);
+  const [initialCache] = useState<RecommendCache | null>(() => readPersistedRecommendCache());
+  const [view, setView] = useState<RecommendationViewState>(() =>
+    initialCache
+      ? createRecommendationViewFromCache(initialCache, false)
+      : createEmptyRecommendationView(),
+  );
+  const cacheRef = useRef<RecommendCache | null>(initialCache);
   const activeRequestRef = useRef<ActiveRecommendRequest | null>(null);
   const pickHandlerRef = useRef<RecommendationPickHandler | null>(null);
 
   const aiList = trpc.ai.listConfigs.useQuery();
   const hasDefaultKey = (aiList.data?.configs ?? []).some((c) => c.isDefault);
+  const activeWatchList = trpc.watch.list.useQuery(
+    {},
+    {
+      enabled: view.isOpen,
+    },
+  );
+  const activeWatchPdnos = useMemo(
+    () =>
+      new Set(
+        (activeWatchList.data?.orders ?? []).filter(isActiveWatchOrder).map((order) => order.pdno),
+      ),
+    [activeWatchList.data?.orders],
+  );
 
   // 모달 세션 동안 사용자가 stock-picker 로 추가한 pdno 목록 (max 10).
-  const [extraPdnos, setExtraPdnos] = useState<string[]>([]);
+  const [extraPdnos, setExtraPdnos] = useState<string[]>(() => [...(initialCache?.extras ?? [])]);
   // AI 끄기 모드 — LLM 호출 없이 알고리즘 신호만으로 ranking. 키 미설정 시 자동 fallback.
-  const [aiOff, setAiOff] = useState(false);
+  const [aiOff, setAiOff] = useState(() => initialCache?.aiOff ?? false);
   // D 풀 (자동 발굴) 활성화 — A∪B∪C 외에도 박스권 분할매매 사전 스크리닝 통과 종목 포함.
-  const [includeAutoDiscovery, setIncludeAutoDiscovery] = useState(true);
+  const [includeAutoDiscovery, setIncludeAutoDiscovery] = useState(
+    () => initialCache?.includeAutoDiscovery ?? true,
+  );
 
   const mut = trpc.ai.suggestSymbols.useMutation({
     onSuccess: (res) => {
@@ -445,28 +589,33 @@ export function useSymbolRecommendations() {
         (res as { diagnostics?: RecommendationDiagnostics }).diagnostics ?? EMPTY_DIAGNOSTICS;
       const userInputResults: RecommendedItem[] =
         (res as { userInputResults?: RecommendedItem[] }).userInputResults ?? [];
+      const emptyReason = res.emptyReason ?? null;
+      const rejectedCount = res.rejectedCount ?? 0;
+      const durationMs = res.durationMs ?? 0;
       console.info('[ai-symbol-recommend] result', {
         ranked: res.ranked.length,
         userInputResults: userInputResults.length,
-        emptyReason: res.emptyReason,
-        rejectedCount: res.rejectedCount,
-        durationMs: res.durationMs,
+        emptyReason,
+        rejectedCount,
+        durationMs,
         discovery: diagnostics.discovery,
         sources: diagnostics.sources,
       });
-      cacheRef.current = {
+      const nextCache: RecommendCache = {
         ranked: res.ranked,
         userInputResults,
         distribution,
         diagnostics,
-        emptyReason: res.emptyReason,
-        rejectedCount: res.rejectedCount,
-        durationMs: res.durationMs,
+        emptyReason,
+        rejectedCount,
+        durationMs,
         extras: request?.extras ?? [...extraPdnos],
         aiOff: request?.aiOff ?? aiOff,
         includeAutoDiscovery: request?.includeAutoDiscovery ?? includeAutoDiscovery,
         fetchedAt,
       };
+      cacheRef.current = nextCache;
+      writePersistedRecommendCache(nextCache);
       activeRequestRef.current = null;
       setView((prev) => ({
         ...prev,
@@ -476,9 +625,9 @@ export function useSymbolRecommendations() {
         userInputResults,
         distribution,
         diagnostics,
-        emptyReason: res.emptyReason,
-        rejectedCount: res.rejectedCount,
-        durationMs: res.durationMs,
+        emptyReason,
+        rejectedCount,
+        durationMs,
         lastFetchedAt: fetchedAt,
         fromCache: false,
         error: null,
@@ -558,21 +707,7 @@ export function useSymbolRecommendations() {
 
     const cached = cacheRef.current;
     if (cached && view.ranked.length === 0 && view.userInputResults.length === 0) {
-      setView({
-        isOpen: true,
-        isPending: false,
-        progress: null,
-        ranked: cached.ranked,
-        userInputResults: cached.userInputResults,
-        distribution: cached.distribution,
-        diagnostics: cached.diagnostics,
-        emptyReason: cached.emptyReason,
-        rejectedCount: cached.rejectedCount,
-        durationMs: cached.durationMs,
-        lastFetchedAt: cached.fetchedAt,
-        fromCache: true,
-        error: null,
-      });
+      setView(createRecommendationViewFromCache(cached, true));
       return;
     }
     setView((prev) => ({
@@ -580,7 +715,7 @@ export function useSymbolRecommendations() {
       isOpen: true,
       isPending: false,
       progress: null,
-      fromCache: false,
+      fromCache: prev.fromCache,
       error: null,
     }));
   };
@@ -655,6 +790,7 @@ export function useSymbolRecommendations() {
     view,
     hasDefaultKey,
     isAiListLoading: aiList.isLoading,
+    activeWatchPdnos,
     extraPdnos,
     aiOff,
     includeAutoDiscovery,

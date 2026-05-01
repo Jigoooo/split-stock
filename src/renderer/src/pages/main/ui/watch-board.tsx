@@ -129,7 +129,9 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
           isPending={query.isPending}
           error={query.error}
           allowMutations={tab === 'watching'}
+          emptyMessage={tabEmptyMessage(tab)}
           onEditOrder={onEditOrder}
+          summaryLabel={tabSummaryLabel(tab)}
         />
       )}
     </section>
@@ -160,5 +162,31 @@ function filterByTab(tab: WatchTabKey, orders: WatchOrder[]): WatchOrder[] {
       return [];
     default:
       return orders;
+  }
+}
+
+function tabSummaryLabel(tab: WatchTabKey): string {
+  switch (tab) {
+    case 'watching':
+      return '현황';
+    case 'executed':
+      return '실행내역';
+    case 'failed':
+      return '실패';
+    case 'history':
+      return '히스토리';
+  }
+}
+
+function tabEmptyMessage(tab: WatchTabKey): string {
+  switch (tab) {
+    case 'watching':
+      return '자동감시 종목이 없습니다. 상단 "+ 추가" 버튼으로 시작하세요.';
+    case 'executed':
+      return '실행된 자동감시가 없습니다.';
+    case 'failed':
+      return '실패한 자동감시가 없습니다.';
+    case 'history':
+      return '히스토리 없음';
   }
 }

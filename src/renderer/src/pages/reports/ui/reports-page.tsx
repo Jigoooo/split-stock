@@ -280,13 +280,15 @@ const ChartStatus = ({
 );
 
 function formatKrwSigned(v: number): string {
-  const sign = v > 0 ? '+' : v < 0 ? '-' : '';
-  return `${sign}${thousandSeparator(Math.abs(v))}원`;
+  const rounded = Math.round(v);
+  const sign = rounded > 0 ? '+' : rounded < 0 ? '-' : '';
+  return `${sign}${thousandSeparator(Math.abs(rounded), { allowDecimal: false })}원`;
 }
 
 function toneForSignedValue(v: number): 'default' | 'up' | 'down' {
-  if (v > 0) return 'up';
-  if (v < 0) return 'down';
+  const rounded = Math.round(v);
+  if (rounded > 0) return 'up';
+  if (rounded < 0) return 'down';
   return 'default';
 }
 

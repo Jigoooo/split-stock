@@ -30,5 +30,5 @@ export function sourceLabel(source: WatchOrder['source']): string {
 export function formatWatchDate(d: Date | string | number): string {
   const date = d instanceof Date ? d : new Date(d);
   if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('ko-KR', { hour12: false });
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일 ${date.getHours()}시 ${date.getMinutes()}분 ${date.getSeconds()}초`;
 }

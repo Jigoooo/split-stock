@@ -86,4 +86,24 @@ describe('RecommendCard market context', () => {
     expect(screen.getByText('ECOS USD/KRW')).toBeInTheDocument();
     expect(screen.getByText('1,381.2원 (20260428)')).toBeInTheDocument();
   });
+
+  it('이미 자동감시에 있는 종목은 선택 버튼을 비활성화하고 이유를 표시한다', () => {
+    const onPick = vi.fn();
+    render(
+      <RecommendDetail
+        item={baseItem()}
+        onPick={onPick}
+        isPickDisabled
+        pickDisabledReason="이미 자동감시에 등록된 종목입니다."
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: '감시중' });
+    expect(button).toBeDisabled();
+    expect(screen.getByText(/이미 자동감시에 등록된 종목입니다/)).toBeInTheDocument();
+
+    fireEvent.click(button);
+
+    expect(onPick).not.toHaveBeenCalled();
+  });
 });

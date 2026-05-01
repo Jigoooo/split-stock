@@ -1,7 +1,8 @@
 import type { WatchOrder } from '@renderer/entities/watch-order';
 import type { WatchOrderFormPrefill } from '@renderer/features/add-watch-order';
+import { trpc } from '@renderer/shared/api/trpc';
 import { Button, DialogType, dialog } from '@renderer/shared/ui';
-import { type ReactElement, useEffectEvent, useMemo, useState } from 'react';
+import { type ReactElement, useEffect, useEffectEvent, useMemo, useState } from 'react';
 import { useWatchOrderActions } from '../model/use-watch-order-actions';
 import { WatchContextMenu, type WatchContextMenuState } from './watch-context-menu';
 import { WatchTable } from './watch-table';
@@ -11,14 +12,47 @@ export interface WatchListProps {
   isPending: boolean;
   error: { message: string } | null;
   allowMutations: boolean;
+  emptyMessage?: string;
   onEditOrder?: (prefill: WatchOrderFormPrefill) => void;
+  summaryLabel?: string;
+}
+
+interface WatchActionState {
+  canDelete: boolean;
+  canEdit: boolean;
+  canPause: boolean;
+  canResume: boolean;
+  helpText: string;
 }
 
 export const WatchList = (props: WatchListProps): ReactElement => {
-  const { allowMutations, error, isPending, onEditOrder, orders } = props;
+  const { allowMutations, emptyMessage, error, isPending, onEditOrder, orders, summaryLabel } =
+    props;
   const actions = useWatchOrderActions();
+  const stockMaster = trpc.market.listAllStock.useQuery(undefined, {
+    staleTime: 10 * 60 * 1000,
+  });
   const [selected, setSelected] = useState<Set<number>>(() => new Set());
   const [menu, setMenu] = useState<WatchContextMenuState | null>(null);
+
+  const stockNameByPdno = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of stockMaster.data?.entries ?? []) {
+      map.set(entry.pdno, entry.name);
+    }
+    return map;
+  }, [stockMaster.data?.entries]);
+
+  useEffect(() => {
+    setSelected((prev) => {
+      if (!allowMutations) return prev.size === 0 ? prev : new Set();
+      if (prev.size === 0) return prev;
+      const liveIds = new Set(orders.map((order) => order.id));
+      const next = new Set(Array.from(prev).filter((id) => liveIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    if (!allowMutations) setMenu(null);
+  }, [allowMutations, orders]);
 
   const toggle = (id: number): void => {
     setSelected((prev) => {
@@ -29,10 +63,22 @@ export const WatchList = (props: WatchListProps): ReactElement => {
     });
   };
 
+  const targetIdsForRow = useEffectEvent((fallbackId: number): number[] => {
+    if (selected.has(fallbackId) && selected.size > 0) return Array.from(selected);
+    return [fallbackId];
+  });
+
   const onContextMenu = useEffectEvent((event: React.MouseEvent, fallbackId: number) => {
+    if (!allowMutations) return;
     event.preventDefault();
-    const ids = selected.size > 0 ? Array.from(selected) : [fallbackId];
-    setMenu({ ids, x: event.clientX, y: event.clientY });
+    const ids = targetIdsForRow(fallbackId);
+    const rows = orders.filter((order) => ids.includes(order.id));
+    setMenu({
+      ids,
+      targetLabel: formatWatchMenuTarget(rows, stockNameByPdno),
+      x: event.clientX,
+      y: event.clientY,
+    });
   });
 
   const selectedRows = useMemo(
@@ -43,12 +89,8 @@ export const WatchList = (props: WatchListProps): ReactElement => {
     () => orders.filter((order) => selected.has(order.id)),
     [orders, selected],
   );
-  const canPause =
-    selectedRows.length > 0 && selectedRows.every((order) => order.status === 'WATCHING');
-  const canResume =
-    selectedRows.length > 0 && selectedRows.every((order) => order.status === 'PAUSED');
-  const allowEdit =
-    allowMutations && menu?.ids.length === 1 && selectedRows[0]?.source === 'CUSTOM';
+  const menuAction = buildWatchActionState(selectedRows, allowMutations);
+  const selectedAction = buildWatchActionState(selectedOrderRows, allowMutations);
 
   const closeMenu = (): void => setMenu(null);
   const clearAndRun = (run: (ids: number[]) => Promise<void>, ids: number[]): void => {
@@ -94,83 +136,74 @@ export const WatchList = (props: WatchListProps): ReactElement => {
   };
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        flex: 1,
-        minHeight: 0,
-        overflow: 'hidden',
-        position: 'relative',
-      }}
-    >
+    <div className="watch-table-shell">
       {error ? (
         <div className="chip chip--down" role="alert" style={{ margin: '0.5rem' }}>
           {error.message}
         </div>
       ) : null}
-      {allowMutations && selected.size > 0 ? (
-        <div
-          role="toolbar"
-          aria-label="선택한 자동감시 작업"
-          style={{
-            alignItems: 'center',
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '0.5rem',
-            padding: '0.5rem',
-            borderBottom: '1px solid var(--hts-line, rgba(0,0,0,0.12))',
-          }}
-        >
-          <span className="muted">{selected.size}건 선택</span>
-          <Button
-            dense
-            disabled={
-              actions.mutationPending ||
-              selectedOrderRows.length === 0 ||
-              !selectedOrderRows.every((order) => order.status === 'PAUSED')
-            }
-            onClick={() => clearAndRun(actions.resumeSelected, Array.from(selected))}
-          >
-            시작
-          </Button>
-          <Button
-            dense
-            disabled={
-              actions.mutationPending ||
-              selectedOrderRows.length === 0 ||
-              !selectedOrderRows.every((order) => order.status === 'WATCHING')
-            }
-            onClick={() => clearAndRun(actions.pauseSelected, Array.from(selected))}
-          >
-            중지
-          </Button>
-          <Button
-            dense
-            variant="danger"
-            disabled={actions.mutationPending}
-            onClick={() => {
-              void confirmAndDelete(Array.from(selected));
-            }}
-          >
-            삭제
-          </Button>
-        </div>
-      ) : null}
+      <div
+        className="watch-table-toolbar"
+        role="toolbar"
+        aria-label={allowMutations ? '선택한 자동감시 작업' : '자동감시 탭 요약'}
+      >
+        {allowMutations ? (
+          <>
+            <span className="watch-table-toolbar__count">{selected.size}건 선택</span>
+            <Button
+              dense
+              disabled={actions.mutationPending || !selectedAction.canResume}
+              title={selectedAction.canResume ? '선택한 자동감시 시작' : selectedAction.helpText}
+              onClick={() => clearAndRun(actions.resumeSelected, Array.from(selected))}
+            >
+              시작
+            </Button>
+            <Button
+              dense
+              disabled={actions.mutationPending || !selectedAction.canPause}
+              title={selectedAction.canPause ? '선택한 자동감시 중지' : selectedAction.helpText}
+              onClick={() => clearAndRun(actions.pauseSelected, Array.from(selected))}
+            >
+              중지
+            </Button>
+            <Button
+              dense
+              variant="danger"
+              disabled={actions.mutationPending || !selectedAction.canDelete}
+              title={selectedAction.canDelete ? '선택한 자동감시 삭제' : selectedAction.helpText}
+              onClick={() => {
+                void confirmAndDelete(Array.from(selected));
+              }}
+            >
+              삭제
+            </Button>
+            <span className="muted watch-table-toolbar__hint">{selectedAction.helpText}</span>
+          </>
+        ) : (
+          <>
+            <span className="watch-table-toolbar__count">{summaryLabel ?? '조회 결과'}</span>
+            <span className="muted watch-table-toolbar__hint">{orders.length}건</span>
+          </>
+        )}
+      </div>
       <WatchTable
         allowMutations={allowMutations}
         isPending={isPending}
+        {...(emptyMessage ? { emptyMessage } : {})}
         onContextMenu={onContextMenu}
         onToggle={toggle}
         orders={orders}
         selected={selected}
+        stockNameByPdno={stockNameByPdno}
       />
       {menu ? (
         <WatchContextMenu
-          allowEdit={allowEdit}
+          allowEdit={menuAction.canEdit}
           allowMutations={allowMutations}
-          canPause={canPause}
-          canResume={canResume}
+          canDelete={menuAction.canDelete}
+          canPause={menuAction.canPause}
+          canResume={menuAction.canResume}
+          helpText={menuAction.helpText}
           menu={menu}
           mutationPending={actions.mutationPending}
           onClose={closeMenu}
@@ -185,6 +218,42 @@ export const WatchList = (props: WatchListProps): ReactElement => {
     </div>
   );
 };
+
+function buildWatchActionState(rows: WatchOrder[], allowMutations: boolean): WatchActionState {
+  const hasRows = rows.length > 0;
+  const allWatching = hasRows && rows.every((order) => order.status === 'WATCHING');
+  const allPaused = hasRows && rows.every((order) => order.status === 'PAUSED');
+  const canPause = allowMutations && allWatching;
+  const canResume = allowMutations && allPaused;
+  const canDelete = allowMutations && hasRows;
+  const canEdit = allowMutations && rows.length === 1 && rows[0]?.source === 'CUSTOM';
+
+  let helpText = '작업할 자동감시를 선택하세요.';
+  if (hasRows && allWatching) helpText = '선택한 항목은 중지할 수 있습니다.';
+  else if (hasRows && allPaused) helpText = '선택한 항목은 시작할 수 있습니다.';
+  else if (hasRows) helpText = '상태가 섞인 항목은 시작/중지를 한 번에 실행할 수 없습니다.';
+
+  return {
+    canDelete,
+    canEdit,
+    canPause,
+    canResume,
+    helpText,
+  };
+}
+
+function formatWatchStockLabel(order: WatchOrder, stockNameByPdno: Map<string, string>): string {
+  const name = stockNameByPdno.get(order.pdno);
+  return name ? `${name} (${order.pdno})` : order.pdno;
+}
+
+function formatWatchMenuTarget(rows: WatchOrder[], stockNameByPdno: Map<string, string>): string {
+  if (rows.length === 0) return '자동감시';
+  const first = rows[0];
+  if (!first) return '자동감시';
+  const firstLabel = formatWatchStockLabel(first, stockNameByPdno);
+  return rows.length === 1 ? firstLabel : `${firstLabel} 외 ${rows.length - 1}건`;
+}
 
 function toWatchOrderFormPrefill(order: WatchOrder): WatchOrderFormPrefill {
   return {

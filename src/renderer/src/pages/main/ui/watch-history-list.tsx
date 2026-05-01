@@ -1,6 +1,8 @@
 import type { WatchHistoryItem } from '@renderer/entities/watch-order';
 import { trpc } from '@renderer/shared/api/trpc';
+import { TableGrid } from '@renderer/shared/ui';
 import { type ReactElement, useMemo } from 'react';
+import { formatWatchDate } from '../lib/watch-list-format';
 
 export interface WatchHistoryListProps {
   items: WatchHistoryItem[];
@@ -24,39 +26,59 @@ export const WatchHistoryList = ({
     return map;
   }, [stockMaster.data?.entries]);
 
-  if (error) {
-    return (
-      <div className="chip chip--down" role="alert" style={{ margin: '0.5rem' }}>
-        {error.message}
-      </div>
-    );
-  }
-
-  if (isPending) {
-    return (
-      <div className="muted" style={{ padding: '0.8rem' }}>
-        히스토리 로드 중…
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
-    return (
-      <div className="muted" style={{ padding: '0.8rem' }}>
-        히스토리 없음
-      </div>
-    );
-  }
-
   return (
-    <div style={{ display: 'grid', gap: '0.5rem', padding: '0.3rem 0.1rem', overflow: 'auto' }}>
-      {items.map((item) => (
-        <WatchHistoryRow
-          key={item.id}
-          item={item}
-          stockName={resolveStockName(item, stockNameByPdno)}
-        />
-      ))}
+    <div className="watch-table-shell">
+      <div className="watch-table-toolbar" role="toolbar" aria-label="자동감시 히스토리 요약">
+        <span className="watch-table-toolbar__count">히스토리</span>
+        <span className="muted watch-table-toolbar__hint">{items.length}건</span>
+      </div>
+      <TableGrid.Root
+        variant="hts"
+        stickyHeader
+        horizontalScroll
+        aria-label="자동감시 히스토리"
+        className="watch-history-table"
+        style={{ flex: 1, minHeight: 0 }}
+      >
+        <TableGrid.Header>
+          <TableGrid.Cell width={170}>시각</TableGrid.Cell>
+          <TableGrid.Cell width={76}>레벨</TableGrid.Cell>
+          <TableGrid.Cell width={108}>이벤트</TableGrid.Cell>
+          <TableGrid.Cell width={160}>종목</TableGrid.Cell>
+          <TableGrid.Cell width={90}>출처</TableGrid.Cell>
+          <TableGrid.Cell width={88} numeric>
+            Watch ID
+          </TableGrid.Cell>
+          <TableGrid.Cell width={360}>사유</TableGrid.Cell>
+        </TableGrid.Header>
+        <TableGrid.Body>
+          {error ? (
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell>
+                <span className="chip chip--down" role="alert">
+                  {error.message}
+                </span>
+              </TableGrid.Cell>
+            </TableGrid.Row>
+          ) : isPending ? (
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell className="muted">히스토리 로드 중…</TableGrid.Cell>
+            </TableGrid.Row>
+          ) : items.length === 0 ? (
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell className="muted">히스토리 없음</TableGrid.Cell>
+            </TableGrid.Row>
+          ) : (
+            items.map((item) => (
+              <WatchHistoryRow
+                key={item.id}
+                item={item}
+                stockName={resolveStockName(item, stockNameByPdno)}
+              />
+            ))
+          )}
+        </TableGrid.Body>
+      </TableGrid.Root>
     </div>
   );
 };
@@ -68,37 +90,37 @@ const WatchHistoryRow = ({
   item: WatchHistoryItem;
   stockName: string | null;
 }): ReactElement => (
-  <article
-    style={{
-      display: 'grid',
-      gap: '0.4rem',
-      padding: '0.7rem 0.85rem',
-      border: '1px solid var(--border)',
-      borderRadius: '0.55rem',
-      background: 'var(--bg)',
-    }}
-  >
-    <div style={{ display: 'flex', gap: '0.55rem', alignItems: 'center', flexWrap: 'wrap' }}>
-      <strong>{historyLabel(item.message)}</strong>
+  <TableGrid.Row>
+    <TableGrid.Cell width={170} className="muted">
+      {formatWatchDate(item.at)}
+    </TableGrid.Cell>
+    <TableGrid.Cell width={76}>
       <span className={levelClassName(item.level)}>{levelLabel(item.level)}</span>
-      {item.source ? <span className="chip">{sourceLabel(item.source)}</span> : null}
-      <span className="muted" style={{ marginLeft: 'auto' }}>
-        {formatDate(item.at)}
-      </span>
-    </div>
-    <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+    </TableGrid.Cell>
+    <TableGrid.Cell width={108}>{historyLabel(item.message)}</TableGrid.Cell>
+    <TableGrid.Cell width={160} {...(item.pdno ? { title: item.pdno } : {})}>
       {item.pdno ? (
-        <>
+        <span style={{ display: 'inline-flex', gap: '0.45rem', minWidth: 0 }}>
           <span style={{ fontWeight: 700 }}>{stockName ?? item.pdno}</span>
           <span className="num muted">{item.pdno}</span>
-        </>
+        </span>
       ) : (
         <span className="muted">전체 자동감시</span>
       )}
-      {item.watchId ? <span className="muted">#{item.watchId}</span> : null}
-    </div>
-    {item.reason ? <div className="muted">{item.reason}</div> : null}
-  </article>
+    </TableGrid.Cell>
+    <TableGrid.Cell width={90}>{item.source ? sourceLabel(item.source) : '-'}</TableGrid.Cell>
+    <TableGrid.Cell width={88} numeric>
+      {item.watchId ? `#${item.watchId}` : '-'}
+    </TableGrid.Cell>
+    <TableGrid.Cell
+      width={360}
+      className="muted"
+      overflow="ellipsis"
+      {...(item.reason ? { title: item.reason } : {})}
+    >
+      {item.reason ?? '-'}
+    </TableGrid.Cell>
+  </TableGrid.Row>
 );
 
 function resolveStockName(
@@ -168,10 +190,4 @@ function sourceLabel(source: NonNullable<WatchHistoryItem['source']>): string {
     case 'CUSTOM':
       return '예약매수';
   }
-}
-
-function formatDate(d: Date | string | number): string {
-  const date = d instanceof Date ? d : new Date(d);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString('ko-KR', { hour12: false });
 }
