@@ -1,5 +1,5 @@
 import { Button } from '@renderer/shared/ui';
-import type { ReactElement } from 'react';
+import { memo, type ReactElement } from 'react';
 import { LOG_DETAIL_PANEL_HEIGHT, levelClass } from '../config/log-table';
 import type { LogPayloadView } from '../lib/log-payload';
 import type { LogEntry } from '../model/use-log-tail';
@@ -11,82 +11,84 @@ interface LogDetailPanelProps {
   selectedSummary: string;
 }
 
-export const LogDetailPanel = ({
+export const LogDetailPanel = memo(function LogDetailPanel({
   onCopyPayload,
   payload,
   selectedEntry,
   selectedSummary,
-}: LogDetailPanelProps): ReactElement => (
-  <div
-    className="panel__body"
-    style={{
-      borderTop: '0.1rem solid var(--border, rgba(0,0,0,0.12))',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '0.8rem',
-      flexShrink: 0,
-      minHeight: LOG_DETAIL_PANEL_HEIGHT,
-    }}
-  >
+}: LogDetailPanelProps): ReactElement {
+  return (
     <div
+      className="panel__body"
       style={{
-        alignItems: 'center',
-        display: 'grid',
+        borderTop: '0.1rem solid var(--border, rgba(0,0,0,0.12))',
+        display: 'flex',
+        flexDirection: 'column',
         gap: '0.8rem',
-        gridTemplateColumns: 'minmax(0, 1fr) auto',
-        minHeight: '2.8rem',
+        flexShrink: 0,
+        minHeight: LOG_DETAIL_PANEL_HEIGHT,
       }}
     >
       <div
         style={{
           alignItems: 'center',
-          display: 'flex',
-          gap: '0.5rem',
-          minWidth: 0,
-          overflow: 'hidden',
+          display: 'grid',
+          gap: '0.8rem',
+          gridTemplateColumns: 'minmax(0, 1fr) auto',
+          minHeight: '2.8rem',
         }}
       >
-        <span className="muted" style={{ flexShrink: 0 }}>
-          선택 로그
-        </span>
-        {selectedEntry ? (
-          <span className={levelClass(selectedEntry.level)}>{selectedEntry.level}</span>
-        ) : null}
-        <span
+        <div
           style={{
-            color: 'var(--fg-2)',
+            alignItems: 'center',
+            display: 'flex',
+            gap: '0.5rem',
             minWidth: 0,
             overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
           }}
         >
-          {selectedSummary}
-        </span>
+          <span className="muted" style={{ flexShrink: 0 }}>
+            선택 로그
+          </span>
+          {selectedEntry ? (
+            <span className={levelClass(selectedEntry.level)}>{selectedEntry.level}</span>
+          ) : null}
+          <span
+            style={{
+              color: 'var(--fg-2)',
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {selectedSummary}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+          <Button dense onClick={onCopyPayload} disabled={!selectedEntry?.payloadJson}>
+            payload 복사
+          </Button>
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-        <Button dense onClick={onCopyPayload} disabled={!selectedEntry?.payloadJson}>
-          payload 복사
-        </Button>
-      </div>
-    </div>
 
-    <div
-      style={{
-        display: 'grid',
-        flex: 1,
-        gap: '0.8rem',
-        gridTemplateColumns: 'minmax(0, 0.92fr) minmax(0, 1.08fr)',
-        minHeight: 0,
-      }}
-    >
-      <LogDetailCard label="message">{selectedEntry?.message ?? '-'}</LogDetailCard>
-      <LogDetailCard label="payload" mono preformatted>
-        {payload.pretty}
-      </LogDetailCard>
+      <div
+        style={{
+          display: 'grid',
+          flex: 1,
+          gap: '0.8rem',
+          gridTemplateColumns: 'minmax(0, 0.92fr) minmax(0, 1.08fr)',
+          minHeight: 0,
+        }}
+      >
+        <LogDetailCard label="message">{selectedEntry?.message ?? '-'}</LogDetailCard>
+        <LogDetailCard label="payload" mono preformatted>
+          {payload.pretty}
+        </LogDetailCard>
+      </div>
     </div>
-  </div>
-);
+  );
+});
 
 function LogDetailCard(props: {
   children: string;

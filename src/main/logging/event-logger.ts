@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { EventLogPush } from '@shared/contracts';
 import { lt } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { eventLogs } from '../db/schema';
@@ -23,6 +24,10 @@ export interface EventLogEntry {
 
 export interface EventLogger {
   log(entry: EventLogEntry): void;
+}
+
+export interface EventLoggerOptions {
+  onInserted?: (entry: EventLogPush) => void;
 }
 
 const DEFAULT_SECRET_KEYS = [
@@ -204,7 +209,7 @@ export function cleanupOldEventLogs(
   }
 }
 
-export function createEventLogger(db: Db): EventLogger {
+export function createEventLogger(db: Db, options: EventLoggerOptions = {}): EventLogger {
   return {
     log(entry: EventLogEntry): void {
       const secretKeys = entry.secretKeys ?? DEFAULT_SECRET_KEYS;
@@ -213,9 +218,11 @@ export function createEventLogger(db: Db): EventLogger {
       const cleanedAudit = entry.audit ? maskPayload(entry.audit, secretKeys) : null;
       const auditPayload = cleanedAudit === null ? null : JSON.stringify(cleanedAudit);
       try {
-        db.insert(eventLogs)
+        const ts = new Date();
+        const result = db
+          .insert(eventLogs)
           .values({
-            ts: new Date(),
+            ts,
             level: entry.level,
             category: entry.category,
             message: entry.message,
@@ -223,6 +230,20 @@ export function createEventLogger(db: Db): EventLogger {
             auditPayload,
           })
           .run();
+        if (options.onInserted) {
+          try {
+            options.onInserted({
+              id: Number(result.lastInsertRowid),
+              ts: ts.getTime(),
+              level: entry.level,
+              category: entry.category,
+              message: entry.message,
+              payloadJson,
+            });
+          } catch {
+            // logger callback 실패는 업무 흐름에 영향을 주면 안 된다.
+          }
+        }
       } catch (cause) {
         console.error('[event-logger] insert failed', {
           entry: { level: entry.level, category: entry.category, message: entry.message },

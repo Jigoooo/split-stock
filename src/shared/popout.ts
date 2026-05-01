@@ -23,9 +23,9 @@ export const POPOUT_ROUTE_CONFIG = {
     // 로그는 timestamp + payload preview 를 한 화면에서 비교해야 하므로
     // 일반 팝아웃보다 넓은 기본 폭을 사용한다.
     defaultWidth: 1280,
-    defaultHeight: 760,
+    defaultHeight: 860,
     minWidth: 900,
-    minHeight: 540,
+    minHeight: 640,
   },
   reports: {
     label: '리포트',

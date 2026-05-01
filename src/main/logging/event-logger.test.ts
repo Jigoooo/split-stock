@@ -103,6 +103,54 @@ describe('createEventLogger', () => {
     expect(row.payloadJson).not.toContain('SUPERSECRETKEY1234');
     expect(row.payloadJson).toContain('1234'); // 마지막 4자리 유지
   });
+
+  it('DB insert 성공 후 onInserted에 renderer push payload를 전달한다', () => {
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const inserted: unknown[] = [];
+    const logger = createEventLogger(db, { onInserted: (entry) => inserted.push(entry) });
+
+    logger.log({
+      level: 'WARN',
+      category: 'SYS',
+      message: 'sys.warn',
+      payload: { token: 'SECRET_TOKEN_1234', ok: true },
+    });
+
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]).toMatchObject({
+      id: 1,
+      level: 'WARN',
+      category: 'SYS',
+      message: 'sys.warn',
+    });
+    expect(inserted[0]).toEqual(
+      expect.objectContaining({
+        payloadJson: expect.stringContaining('"ok":true'),
+        ts: expect.any(Number),
+      }),
+    );
+    expect(JSON.stringify(inserted[0])).not.toContain('SECRET_TOKEN_1234');
+  });
+
+  it('onInserted가 실패해도 logger.log는 예외를 던지지 않는다', () => {
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const logger = createEventLogger(db, {
+      onInserted: () => {
+        throw new Error('listener failed');
+      },
+    });
+
+    expect(() =>
+      logger.log({
+        level: 'INFO',
+        category: 'SYS',
+        message: 'sys.ok',
+      }),
+    ).not.toThrow();
+    expect(db.select().from(eventLogs).all()).toHaveLength(1);
+  });
 });
 
 describe('createApiFailureLogger', () => {

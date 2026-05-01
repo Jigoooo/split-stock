@@ -1,5 +1,5 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { Button, Select, TextInput } from '@renderer/shared/ui';
+import { Button, SegmentedToggle, Select, TextInput } from '@renderer/shared/ui';
 import { Search, X } from 'lucide-react';
 import type { ReactElement } from 'react';
 import {
@@ -10,6 +10,7 @@ import {
   type LogExportFormat,
   type LogLevel,
   type LogStream,
+  type LogViewMode,
 } from '../model/use-log-tail';
 
 interface LogsToolbarProps {
@@ -21,11 +22,18 @@ interface LogsToolbarProps {
   onExport: (format: LogExportFormat) => void;
   search: string;
   stream: LogStream;
+  viewMode: LogViewMode;
   setDateRange: (range: LogDateRange) => void;
   setLevel: (level: LogLevel) => void;
   setSearch: (search: string) => void;
   setStream: (stream: LogStream) => void;
+  setViewMode: (viewMode: LogViewMode) => void;
 }
+
+const LOG_VIEW_MODE_ITEMS: Array<{ label: string; value: LogViewMode }> = [
+  { label: '목록', value: 'list' },
+  { label: '실시간', value: 'live' },
+];
 
 export const LogsToolbar = ({
   dateRange,
@@ -36,15 +44,27 @@ export const LogsToolbar = ({
   onExport,
   search,
   stream,
+  viewMode,
   setDateRange,
   setLevel,
   setSearch,
   setStream,
+  setViewMode,
 }: LogsToolbarProps): ReactElement => (
   <div
     className="panel__body logs-toolbar"
     style={{ alignItems: 'end', display: 'flex', flexShrink: 0, flexWrap: 'wrap', gap: '0.8rem' }}
   >
+    <div style={{ display: 'grid', flex: '0 0 auto', gap: '0.25rem' }}>
+      <span className="muted">보기</span>
+      <SegmentedToggle
+        value={viewMode}
+        items={LOG_VIEW_MODE_ITEMS}
+        onChange={setViewMode}
+        ariaLabel="로그 보기 방식"
+        dense
+      />
+    </div>
     <label htmlFor="logs-level" style={{ display: 'grid', flex: '0 0 9rem', gap: '0.25rem' }}>
       <span className="muted">레벨</span>
       <Select

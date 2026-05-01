@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { basename } from 'node:path';
-import { desc, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, or, type SQL, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { type CsvColumn, toCsv } from '../../../shared/reporting/csv';
 import type { Db } from '../../db/client';
@@ -44,6 +44,8 @@ export interface LogRow {
   payloadJson: string | null;
 }
 
+type LogReadInput = z.infer<typeof TailInputSchema> | z.infer<typeof ExportInputSchema>;
+
 function electronDialog(): typeof import('electron').dialog {
   const req = createRequire(import.meta.url);
   const mod = req('electron') as { dialog: typeof import('electron').dialog };
@@ -72,10 +74,52 @@ function resolveLogStartDate(
   }
 }
 
-export function readFilteredLogs(
-  db: Db,
-  input: z.infer<typeof TailInputSchema> | z.infer<typeof ExportInputSchema>,
-): LogRow[] {
+function escapeLikePattern(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
+}
+
+function buildLogWhere(input: LogReadInput): SQL | undefined {
+  const conditions: SQL[] = [];
+  const search = input.search?.trim();
+
+  if ('beforeId' in input && input.beforeId !== undefined) {
+    conditions.push(lt(eventLogs.id, input.beforeId));
+  }
+
+  if (input.level) {
+    conditions.push(eq(eventLogs.level, input.level));
+  }
+
+  if (input.stream === 'error') {
+    conditions.push(eq(eventLogs.level, 'ERROR'));
+  } else if (input.stream === 'normal') {
+    conditions.push(sql`${eventLogs.level} <> 'ERROR'`);
+  }
+
+  if (input.categories && input.categories.length > 0) {
+    conditions.push(inArray(eventLogs.category, input.categories));
+  }
+
+  if (search) {
+    const pattern = `%${escapeLikePattern(search.toLowerCase())}%`;
+    conditions.push(
+      or(
+        sql`lower(${eventLogs.message}) LIKE ${pattern} ESCAPE '\\'`,
+        sql`lower(coalesce(${eventLogs.payloadJson}, '')) LIKE ${pattern} ESCAPE '\\'`,
+      ) as SQL,
+    );
+  }
+
+  const startDate = resolveLogStartDate(input.dateRange);
+  if (startDate) {
+    conditions.push(gte(eventLogs.ts, startDate));
+  }
+
+  return conditions.length > 0 ? and(...conditions) : undefined;
+}
+
+export function readFilteredLogs(db: Db, input: LogReadInput): LogRow[] {
+  const where = buildLogWhere(input);
   const baseQuery = db
     .select({
       id: eventLogs.id,
@@ -87,50 +131,11 @@ export function readFilteredLogs(
     })
     .from(eventLogs);
 
-  const filtered =
-    'beforeId' in input && input.beforeId !== undefined
-      ? baseQuery.where(lt(eventLogs.id, input.beforeId))
-      : baseQuery;
+  const filtered = where ? baseQuery.where(where) : baseQuery;
+  const ordered = filtered.orderBy(desc(eventLogs.id));
+  const rows = 'limit' in input ? ordered.limit(input.limit).all() : ordered.all();
 
-  let rows = filtered.orderBy(desc(eventLogs.id)).all();
-
-  if (input.level) {
-    rows = rows.filter((row) => row.level === input.level);
-  }
-
-  if (input.stream === 'error') {
-    rows = rows.filter((row) => row.level === 'ERROR');
-  } else if (input.stream === 'normal') {
-    rows = rows.filter((row) => row.level !== 'ERROR');
-  }
-
-  if (input.categories && input.categories.length > 0) {
-    rows = rows.filter((row) =>
-      input.categories?.includes(row.category as (typeof input.categories)[number]),
-    );
-  }
-
-  if (input.search) {
-    const searchLower = input.search.toLowerCase();
-    rows = rows.filter((row) => {
-      const payload = row.payloadJson ?? '';
-      return (
-        row.message.toLowerCase().includes(searchLower) ||
-        payload.toLowerCase().includes(searchLower)
-      );
-    });
-  }
-
-  const startDate = resolveLogStartDate(input.dateRange);
-  if (startDate) {
-    rows = rows.filter((row) => {
-      const ts = row.ts instanceof Date ? row.ts : new Date(row.ts);
-      return ts >= startDate;
-    });
-  }
-
-  const limited = 'limit' in input ? rows.slice(0, input.limit) : rows;
-  return limited.map((row) => ({
+  return rows.map((row) => ({
     ...row,
     ts: row.ts instanceof Date ? row.ts : new Date(row.ts),
   }));

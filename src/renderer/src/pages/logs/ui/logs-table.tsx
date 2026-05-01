@@ -1,5 +1,5 @@
 import { TableGrid, useTableGridVirtual } from '@renderer/shared/ui';
-import { type ReactElement, useCallback, useRef } from 'react';
+import { memo, type ReactElement, useCallback, useMemo, useRef } from 'react';
 import {
   formatLogTs,
   LOG_TABLE_COLUMN_WIDTHS,
@@ -7,6 +7,7 @@ import {
   LOG_TABLE_TOTAL_WIDTH,
 } from '../config/log-table';
 import { buildLogPayloadPreview } from '../lib/log-payload';
+import { groupLogEntries } from '../model/group-log-entries';
 import type { LogEntry } from '../model/use-log-tail';
 import { LogTableRow } from './log-table-row';
 
@@ -30,18 +31,19 @@ interface LogsTableProps {
   selectedId: LogEntry['id'] | null;
 }
 
-export const LogsTable = ({
+export const LogsTable = memo(function LogsTable({
   entries,
   error,
   isFilterSettling,
   isPending,
   onSelect,
   selectedId,
-}: LogsTableProps): ReactElement => {
+}: LogsTableProps): ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const getItemKey = useCallback((index: number) => entries[index]?.id ?? index, [entries]);
+  const groups = useMemo(() => groupLogEntries(entries, 'desc'), [entries]);
+  const getItemKey = useCallback((index: number) => groups[index]?.key ?? index, [groups]);
   const virtual = useTableGridVirtual({
-    count: entries.length,
+    count: groups.length,
     estimateSize: () => LOG_TABLE_ROW_ESTIMATE,
     getItemKey,
     parentRef: scrollRef,
@@ -95,7 +97,7 @@ export const LogsTable = ({
             <TableGrid.Cell className="muted">기록된 로그가 없습니다.</TableGrid.Cell>
           </TableGrid.Row>
         ) : null}
-        {entries.length > 0 ? (
+        {groups.length > 0 ? (
           <div
             style={{
               height: virtual.totalSize,
@@ -105,8 +107,14 @@ export const LogsTable = ({
             }}
           >
             {virtual.items.map((vItem) => {
-              const entry = entries[vItem.index];
-              if (!entry) return null;
+              const group = groups[vItem.index];
+              if (!group) return null;
+              const entry = group.latest;
+              const timestampLabel = formatLogTs(group.newestTs);
+              const timestampTitle =
+                group.count > 1
+                  ? `${formatLogTs(group.oldestTs)} - ${formatLogTs(group.newestTs)}`
+                  : timestampLabel;
 
               return (
                 <LogTableRow
@@ -119,8 +127,10 @@ export const LogsTable = ({
                   measureElement={virtual.measureElement}
                   onSelect={onSelect}
                   payload={buildLogPayloadPreview(entry.payloadJson)}
+                  repeatCount={group.count}
                   rowId={entry.id}
-                  timestampLabel={formatLogTs(entry.ts)}
+                  timestampLabel={timestampLabel}
+                  timestampTitle={timestampTitle}
                   top={vItem.start}
                 />
               );
@@ -130,7 +140,7 @@ export const LogsTable = ({
       </TableGrid.Body>
     </TableGrid.Root>
   );
-};
+});
 
 function LogsTableSkeleton(): ReactElement {
   return (

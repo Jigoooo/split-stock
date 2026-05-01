@@ -95,7 +95,9 @@ export function bootstrapDeps(userDataDir: string) {
     decryptString: (encrypted) => safeStorage.decryptString(encrypted),
   });
   const tokenStore = new TokenStore(db);
-  const dbLogger = createEventLogger(db);
+  const dbLogger = createEventLogger(db, {
+    onInserted: (entry) => broadcastToAllWindows('appShell:event-log-appended', entry),
+  });
   if (!isDev) app.setAppLogsPath();
   const logsRoot = isDev ? join(process.cwd(), 'logs', 'dev') : app.getPath('logs');
   const fileLogger = createFileLogger({ dir: logsRoot, retentionDays: 40 });

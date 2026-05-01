@@ -1,5 +1,6 @@
 import type {
   AutoOrderRetryEvent,
+  EventLogPush,
   TradeExecutionEvent,
   WatchOutcomeEvent,
 } from '@shared/contracts';
@@ -89,6 +90,11 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:quote-feed-cooldown', handler);
     return () => ipcRenderer.off('appShell:quote-feed-cooldown', handler);
   },
+  onEventLogAppended: (listener: (entry: EventLogPush) => void): (() => void) => {
+    const handler = (_: unknown, entry: EventLogPush): void => listener(entry);
+    ipcRenderer.on('appShell:event-log-appended', handler);
+    return () => ipcRenderer.off('appShell:event-log-appended', handler);
+  },
   setAlwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('appShell:setAlwaysOnTop', on),
   fitContentHeight: (height: number): Promise<void> =>
     ipcRenderer.invoke('appShell:fitContentHeight', height),
@@ -135,6 +141,7 @@ export type AppShellBridge = {
   onQuoteFeedCooldown?: (
     listener: (event: { pdno: string; failures: number; reason: string }) => void,
   ) => () => void;
+  onEventLogAppended?: (listener: (entry: EventLogPush) => void) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;
   fitContentHeight: (height: number) => Promise<void>;
   markPopoutShellReady?: (route: string) => void;

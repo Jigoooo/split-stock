@@ -14,8 +14,10 @@ interface LogTableRowProps {
   measureElement: (el: Element | null) => void;
   onSelect: (id: LogEntry['id']) => void;
   payload: LogPayloadPreview;
+  repeatCount?: number;
   rowId: LogEntry['id'];
   timestampLabel: string;
+  timestampTitle?: string;
   top: number;
 }
 
@@ -29,10 +31,19 @@ export const LogTableRow = memo(function LogTableRow(props: LogTableRowProps): R
     measureElement,
     onSelect,
     payload,
+    repeatCount = 1,
     rowId,
     timestampLabel,
+    timestampTitle = timestampLabel,
     top,
   } = props;
+  const contentTitle = [
+    payload.summary === '-' ? message : `${message} · ${payload.summary}`,
+    repeatCount > 1 ? `x${repeatCount}` : '',
+    timestampTitle,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <TableGrid.Row
@@ -47,7 +58,7 @@ export const LogTableRow = memo(function LogTableRow(props: LogTableRowProps): R
         width={LOG_TABLE_COLUMN_WIDTHS.timestamp}
         numeric
         className="logs-table-row__timestamp"
-        title={timestampLabel}
+        title={timestampTitle}
       >
         {timestampLabel}
       </TableGrid.Cell>
@@ -58,10 +69,13 @@ export const LogTableRow = memo(function LogTableRow(props: LogTableRowProps): R
       <TableGrid.Cell
         width={LOG_TABLE_COLUMN_WIDTHS.content}
         overflow="nowrap"
-        title={payload.summary === '-' ? message : `${message} · ${payload.summary}`}
+        title={contentTitle}
       >
         <div className="logs-table-row__content">
-          <span className="logs-table-row__message">{message}</span>
+          <span className="logs-table-row__message">
+            {message}
+            {repeatCount > 1 ? <span className="logs-repeat-badge">x{repeatCount}</span> : null}
+          </span>
           <PayloadSummary payload={payload} />
         </div>
       </TableGrid.Cell>

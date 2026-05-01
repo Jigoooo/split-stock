@@ -77,7 +77,7 @@ describe('LogsTable', () => {
     const options = virtualizerMock.useVirtualizer.mock.calls.at(-1)?.[0] as {
       getItemKey: (index: number) => string | number;
     };
-    expect(options.getItemKey(1)).toBe(2);
+    expect(options.getItemKey(1)).toBe('desc:2:1');
   });
 
   it('message와 payload preview를 행 안에 함께 표시하고 선택 상태를 유지한다', () => {
@@ -128,5 +128,25 @@ describe('LogsTable', () => {
 
     expect(screen.getByText('필터 반영 중...')).toBeInTheDocument();
     expect(screen.getByText('order.accepted')).toBeInTheDocument();
+  });
+
+  it('반복 로그 그룹은 최신 row를 선택 대상으로 유지하고 count badge를 표시한다', () => {
+    render(
+      <LogsTable
+        entries={[
+          entries[0] as LogEntry,
+          { ...(entries[0] as LogEntry), id: 3, ts: '2026-04-10T08:59:30Z' },
+        ]}
+        error={null}
+        isFilterSettling={false}
+        isPending={false}
+        selectedId={1}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('x2')).toBeInTheDocument();
+    const selectedRow = screen.getByText('order.accepted').closest('[data-grid-role="row"]');
+    expect(selectedRow).toHaveAttribute('data-selected', 'true');
   });
 });

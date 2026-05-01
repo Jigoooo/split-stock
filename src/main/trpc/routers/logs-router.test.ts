@@ -96,6 +96,64 @@ describe('logs-router', () => {
     expect(error.entries.map((entry) => entry.message)).toEqual(['sys.error']);
   });
 
+  it('tail: 필터를 먼저 적용한 뒤 limit을 적용한다', async () => {
+    const db = setupDb();
+    db.insert(eventLogs)
+      .values([
+        {
+          ts: new Date('2026-04-10T00:00:00Z'),
+          level: 'WARN',
+          category: 'CANCEL',
+          message: 'watch.cancelled',
+          payloadJson: null,
+          auditPayload: null,
+        },
+        {
+          ts: new Date('2026-04-10T00:01:00Z'),
+          level: 'INFO',
+          category: 'SYS',
+          message: 'sys.newer',
+          payloadJson: null,
+          auditPayload: null,
+        },
+      ])
+      .run();
+
+    const caller = createCaller(ctxFor(db));
+    const result = await caller.tail({ categories: ['CANCEL'], limit: 1 });
+
+    expect(result.entries.map((entry) => entry.message)).toEqual(['watch.cancelled']);
+  });
+
+  it('tail: 검색어의 LIKE wildcard 문자는 일반 문자로 처리한다', async () => {
+    const db = setupDb();
+    db.insert(eventLogs)
+      .values([
+        {
+          ts: new Date('2026-04-10T00:00:00Z'),
+          level: 'INFO',
+          category: 'SYS',
+          message: 'progress 100 percent',
+          payloadJson: null,
+          auditPayload: null,
+        },
+        {
+          ts: new Date('2026-04-10T00:01:00Z'),
+          level: 'INFO',
+          category: 'SYS',
+          message: 'progress 100%',
+          payloadJson: null,
+          auditPayload: null,
+        },
+      ])
+      .run();
+
+    const caller = createCaller(ctxFor(db));
+    const result = await caller.tail({ limit: 10, search: '100%' });
+
+    expect(result.entries.map((entry) => entry.message)).toEqual(['progress 100%']);
+  });
+
   it('buildLogsCsv/buildLogsJson: payload를 사람이 읽기 쉬운 파일 형태로 직렬화한다', () => {
     const rows = [
       {

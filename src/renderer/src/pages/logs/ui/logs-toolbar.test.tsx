@@ -16,7 +16,9 @@ function renderToolbar(overrides: Partial<Parameters<typeof LogsToolbar>[0]> = {
     setLevel: vi.fn(),
     setSearch: vi.fn(),
     setStream: vi.fn(),
+    setViewMode: vi.fn(),
     stream: '' as const,
+    viewMode: 'list' as const,
     ...overrides,
   };
 
@@ -51,5 +53,14 @@ describe('LogsToolbar', () => {
 
     expect(screen.getByRole('button', { name: 'CSV 저장' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'JSON 저장' })).toBeDisabled();
+  });
+
+  it('목록/실시간 보기 전환 segmented control을 제공한다', () => {
+    const props = renderToolbar();
+
+    expect(screen.getByRole('radio', { name: '목록' })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByRole('radio', { name: '실시간' }));
+
+    expect(props.setViewMode).toHaveBeenCalledWith('live');
   });
 });

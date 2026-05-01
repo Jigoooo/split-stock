@@ -156,3 +156,13 @@ export const TradeExecutionEventSchema = z.object({
   occurredAt: z.number().int().positive(),
 });
 export type TradeExecutionEvent = z.infer<typeof TradeExecutionEventSchema>;
+
+export const EventLogPushSchema = z.object({
+  id: z.number().int().positive(),
+  ts: z.number().int().positive(),
+  level: z.enum(['INFO', 'WARN', 'ERROR']),
+  category: z.string().min(1),
+  message: z.string().min(1),
+  payloadJson: z.string().nullable(),
+});
+export type EventLogPush = z.infer<typeof EventLogPushSchema>;
