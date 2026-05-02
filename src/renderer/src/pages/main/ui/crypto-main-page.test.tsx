@@ -4,9 +4,205 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildBalanceSummaries,
   CryptoAutoPanel,
+  CryptoMainPage,
   CryptoOrderbookPanel,
   CryptoTransfersPanel,
 } from './crypto-main-page';
+
+const mockMutation = vi.hoisted(() => () => ({
+  mutate: vi.fn(),
+  mutateAsync: vi.fn().mockResolvedValue(undefined),
+  isPending: false,
+  error: null,
+}));
+
+vi.mock('@renderer/shared/api/trpc', () => ({
+  trpc: {
+    useUtils: () => ({
+      crypto: {
+        getAutoStatus: { invalidate: vi.fn() },
+        getBalances: { invalidate: vi.fn() },
+        listRecentOrders: { invalidate: vi.fn() },
+      },
+    }),
+    auth: {
+      getEnv: { useQuery: () => ({ data: { env: 'PROD' }, isPending: false }) },
+    },
+    crypto: {
+      cancelOrder: { useMutation: mockMutation },
+      getAutoStatus: {
+        useQuery: () => ({
+          data: {
+            config: {
+              mode: 'disabled',
+              emergencyDisabled: true,
+              baseOrderKrw: '5000',
+              maxOrderKrw: '5000',
+              maxTotalExposureKrw: '50000',
+              addTriggerPct: '0.03',
+              takeProfitPct: '0.02',
+              lastDryRunAt: null,
+              lastLiveActionAt: null,
+              lastReadonlySmokeAt: null,
+            },
+            gate: { ok: false, blockedReasons: ['성공한 read-only smoke 기록이 없습니다.'] },
+            dryRunLots: [],
+            liveLots: [],
+            openLots: [],
+            recentEvents: [],
+            runtimeRunning: false,
+          },
+        }),
+      },
+      getBalances: {
+        useQuery: () => ({
+          data: {
+            balances: [
+              {
+                currency: 'BTC',
+                balance: '0.01',
+                locked: '0',
+                avgBuyPrice: '100000000',
+                unitCurrency: 'KRW',
+              },
+            ],
+          },
+        }),
+      },
+      getOrderDetail: { useQuery: () => ({ data: null, isFetching: false }) },
+      getOrderbook: {
+        useQuery: () => ({
+          data: {
+            totalAskSize: '1',
+            totalBidSize: '1',
+            levels: [{ askPrice: '101', askSize: '1', bidPrice: '100', bidSize: '1' }],
+          },
+        }),
+      },
+      getOrderbookInstruments: {
+        useQuery: () => ({ data: { entries: [{ market: 'KRW-BTC', tickSize: '1' }] } }),
+      },
+      getRealtimeStatus: {
+        useQuery: () => ({
+          data: {
+            status: {
+              publicSessions: [],
+              privateSessions: [{ accountId: 7, state: 'open', lastError: null }],
+            },
+          },
+        }),
+      },
+      getTicker: {
+        useQuery: () => ({
+          data: {
+            market: 'KRW-BTC',
+            tradePrice: '100',
+            signedChangePrice: '1',
+            signedChangeRate: '0.01',
+          },
+        }),
+      },
+      getTransfer: { useQuery: () => ({ data: null, isFetching: false }) },
+      listMarkets: {
+        useQuery: () => ({
+          data: { entries: [{ market: 'KRW-BTC', koreanName: '비트코인' }] },
+        }),
+      },
+      listRecentOrders: {
+        useQuery: () => ({
+          data: {
+            orders: [
+              {
+                id: 1,
+                uuid: 'done-uuid',
+                market: 'KRW-BTC',
+                side: 'bid',
+                state: 'done',
+                price: '100',
+                volume: '0.01',
+                executedVolume: '0.01',
+                remainingVolume: '0',
+                paidFee: '1',
+              },
+              {
+                id: 2,
+                uuid: 'wait-uuid',
+                market: 'KRW-BTC',
+                side: 'ask',
+                state: 'wait',
+                price: '101',
+                volume: '0.01',
+                executedVolume: '0',
+                remainingVolume: '0.01',
+                paidFee: '0',
+              },
+            ],
+          },
+        }),
+      },
+      listTransfers: { useQuery: () => ({ data: { transfers: [] } }) },
+      listWalletStatuses: { useQuery: () => ({ data: { statuses: [] } }) },
+      onOrderbook: { useSubscription: () => ({ data: null, status: 'idle' }) },
+      onPrivateAsset: { useSubscription: () => ({ data: null }) },
+      onPrivateOrder: { useSubscription: () => ({ data: null }) },
+      onTicker: { useSubscription: () => ({ data: null, status: 'idle' }) },
+      onTrade: { useSubscription: () => ({ data: null }) },
+      placeOrder: { useMutation: mockMutation },
+      runAutoDryTick: { useMutation: mockMutation },
+      runAutoLiveTick: { useMutation: mockMutation },
+      runReadonlySmoke: { useQuery: () => ({ data: null, isFetching: false, refetch: vi.fn() }) },
+      saveAutoConfig: { useMutation: mockMutation },
+      startAuto: { useMutation: mockMutation },
+      stopAuto: { useMutation: mockMutation },
+      unwatchMarket: { useMutation: mockMutation },
+      unwatchPrivate: { useMutation: mockMutation },
+      watchMarket: { useMutation: mockMutation },
+      watchPrivate: { useMutation: mockMutation },
+    },
+  },
+}));
+
+vi.mock('./crypto-chart-panel', () => ({
+  CryptoChartPanel: ({ market }: { market: string }) => (
+    <section data-testid="crypto-chart-panel">{market} chart</section>
+  ),
+}));
+
+vi.mock('react-resizable-panels', () => ({
+  Group: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Panel: ({ children, id }: { children: React.ReactNode; id?: string }) => (
+    <div data-panel-id={id}>{children}</div>
+  ),
+  Separator: () => <div />,
+  useDefaultLayout: () => ({ defaultLayout: undefined, onLayoutChanged: vi.fn() }),
+}));
+
+describe('CryptoMainPage layout', () => {
+  it('renders crypto panes inside the shared domestic-stock 3-split structure', () => {
+    render(<CryptoMainPage accountId={7} />);
+
+    expect(screen.getByTestId('crypto-main-page')).toBeInTheDocument();
+    expect(screen.getByTestId('main-left')).toBeInTheDocument();
+    expect(screen.getByTestId('main-right')).toBeInTheDocument();
+    expect(screen.getByTestId('main-bottom')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '보유' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '자동매매' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '선택 마켓 주문내역' })).toBeInTheDocument();
+    expect(screen.getByLabelText('코인 검색')).toBeInTheDocument();
+  });
+
+  it('switches crypto left pane between holdings subtabs and automation', () => {
+    render(<CryptoMainPage accountId={7} />);
+
+    expect(screen.getByRole('tab', { name: '잔고' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '미체결' }));
+    expect(screen.getAllByText('대기').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('tab', { name: '자동매매' }));
+    expect(screen.getByText('live gate 차단')).toBeInTheDocument();
+  });
+});
 
 describe('CryptoOrderbookPanel', () => {
   it('shows current price, quantity bars, and pre-fills buy or sell intent from clicked rows', () => {

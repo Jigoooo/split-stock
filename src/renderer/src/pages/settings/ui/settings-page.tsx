@@ -1,3 +1,4 @@
+import { useActiveAccountId } from '@renderer/entities/account';
 import {
   AiKeysSection,
   DartCorpCodeSection,
@@ -41,7 +42,7 @@ const STRATEGY_STICKY_ACTION_BAR_SCROLLBAR_OFFSET_PX = 52;
 // 라벨 정의와 id 유니온을 한 곳에서 동기화 (single source of truth).
 // 'monitoring'(Sentry DSN) 탭은 사용자 facing 가치가 낮아 일시 숨김 — 향후 빌드 환경변수
 // 방식으로 재활성화 시 다시 추가.
-const TOP_TABS = [
+const STOCK_TOP_TABS = [
   { id: 'strategy', label: '매매설정관리' },
   { id: 'display', label: '표시' },
   { id: 'orders', label: '주문/체결' },
@@ -50,8 +51,19 @@ const TOP_TABS = [
   { id: 'backup', label: '백업' },
 ] as const satisfies ReadonlyArray<HtsTabItem<string>>;
 
-type SettingsTopTab = (typeof TOP_TABS)[number]['id'];
-const DEFAULT_TOP_TAB: SettingsTopTab = 'strategy';
+const CRYPTO_TOP_TABS = [
+  { id: 'crypto', label: '코인' },
+  { id: 'display', label: '표시' },
+  { id: 'account', label: '계좌/보안' },
+  { id: 'ai', label: 'AI' },
+  { id: 'backup', label: '백업' },
+] as const satisfies ReadonlyArray<HtsTabItem<string>>;
+
+type StockSettingsTopTab = (typeof STOCK_TOP_TABS)[number]['id'];
+type CryptoSettingsTopTab = (typeof CRYPTO_TOP_TABS)[number]['id'];
+type SettingsTopTab = StockSettingsTopTab | CryptoSettingsTopTab;
+const DEFAULT_STOCK_TOP_TAB: SettingsTopTab = 'strategy';
+const DEFAULT_CRYPTO_TOP_TAB: SettingsTopTab = 'crypto';
 const DEFAULT_STRATEGY_TAB: ExtendedStrategyTab = 'basic';
 const SETTINGS_INITIAL_TAB_STORAGE_KEY = 'popout:settings:initialTab';
 const SETTINGS_STRATEGY_TAB_STORAGE_KEY = 'popout:settings:strategyTab';
@@ -74,8 +86,11 @@ export interface SettingsPageProps {
  * - 기본 자동매매 설정 + 계좌 공통 보호 설정 포함.
  * - 각 섹션은 ErrorBoundary 로 격리해 한 폼이 throw 해도 다른 섹션은 계속 사용 가능하도록 한다 (흰화면 방지).
  */
-function consumeSettingsTabIntent(): SettingsTabIntent {
-  let topTab = DEFAULT_TOP_TAB;
+function consumeSettingsTabIntent(
+  topTabs: ReadonlyArray<HtsTabItem<SettingsTopTab>>,
+  defaultTopTab: SettingsTopTab,
+): SettingsTabIntent {
+  let topTab = defaultTopTab;
   let strategyTab = DEFAULT_STRATEGY_TAB;
 
   try {
@@ -84,10 +99,10 @@ function consumeSettingsTabIntent(): SettingsTabIntent {
     window.localStorage.removeItem(SETTINGS_INITIAL_TAB_STORAGE_KEY);
     window.localStorage.removeItem(SETTINGS_STRATEGY_TAB_STORAGE_KEY);
 
-    const matchedTopTab = TOP_TABS.find((t) => t.id === requestedTopTab);
+    const matchedTopTab = topTabs.find((t) => t.id === requestedTopTab);
     const matchedStrategyTab = STRATEGY_TABS_WITH_FEE.find((t) => t.id === requestedStrategyTab);
 
-    topTab = matchedTopTab?.id ?? DEFAULT_TOP_TAB;
+    topTab = matchedTopTab?.id ?? defaultTopTab;
     strategyTab = matchedStrategyTab?.id ?? DEFAULT_STRATEGY_TAB;
   } catch {
     // localStorage 차단 환경 — 기본값 fallback
@@ -97,7 +112,15 @@ function consumeSettingsTabIntent(): SettingsTabIntent {
 }
 
 export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactElement => {
-  const [initialTabs] = useState<SettingsTabIntent>(consumeSettingsTabIntent);
+  const { account } = useActiveAccountId();
+  const isCrypto = account?.broker === 'UPBIT';
+  const topTabs: ReadonlyArray<HtsTabItem<SettingsTopTab>> = isCrypto
+    ? CRYPTO_TOP_TABS
+    : STOCK_TOP_TABS;
+  const defaultTopTab = isCrypto ? DEFAULT_CRYPTO_TOP_TAB : DEFAULT_STOCK_TOP_TAB;
+  const [initialTabs] = useState<SettingsTabIntent>(() =>
+    consumeSettingsTabIntent(topTabs, defaultTopTab),
+  );
   const [topTab, setTopTab] = useState<SettingsTopTab>(initialTabs.topTab);
   const [strategyTab, setStrategyTab] = useState<ExtendedStrategyTab>(initialTabs.strategyTab);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -116,6 +139,13 @@ export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactEl
   const prevTabKeyRef = useRef<string>(tabKey);
 
   useEffect(() => {
+    if (!topTabs.some((tab) => tab.id === topTab)) {
+      setTopTab(defaultTopTab);
+      return;
+    }
+  }, [defaultTopTab, topTab, topTabs]);
+
+  useEffect(() => {
     if (activationKey === undefined || activationKey === previousActivationKeyRef.current) return;
     previousActivationKeyRef.current = activationKey;
     if (!hasSeenInitialActivationRef.current) {
@@ -123,10 +153,10 @@ export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactEl
       return;
     }
 
-    const next = consumeSettingsTabIntent();
+    const next = consumeSettingsTabIntent(topTabs, defaultTopTab);
     setTopTab(next.topTab);
     setStrategyTab(next.strategyTab);
-  }, [activationKey]);
+  }, [activationKey, defaultTopTab, topTabs]);
 
   // 탭 전환 직전(=현재 탭의 마지막 위치)을 보관, 새 탭 마운트 후 저장된 위치 복원.
   useLayoutEffect(() => {
@@ -176,8 +206,13 @@ export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactEl
           gap: '0.6rem',
         }}
       >
-        <HtsTabs tabs={TOP_TABS} active={topTab} onChange={setTopTab} ariaLabel="설정 상위 탭" />
-        {topTab === 'strategy' ? (
+        <HtsTabs<SettingsTopTab>
+          tabs={topTabs}
+          active={topTab}
+          onChange={setTopTab}
+          ariaLabel="설정 상위 탭"
+        />
+        {!isCrypto && topTab === 'strategy' ? (
           <HtsTabs<ExtendedStrategyTab>
             tabs={STRATEGY_TABS_WITH_FEE}
             active={strategyTab}
@@ -206,14 +241,19 @@ export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactEl
           {...(scrollbarOffset ? { offset: scrollbarOffset } : {})}
         />
         <div style={{ display: 'grid', gap: '1rem', minWidth: 0 }}>
-          {topTab === 'strategy' && strategyTab === 'fee' ? (
+          {!isCrypto && topTab === 'strategy' && strategyTab === 'fee' ? (
             <Section name="수수료">
               <FeeSection />
             </Section>
           ) : null}
-          {topTab === 'strategy' && strategyTab !== 'fee' ? (
+          {!isCrypto && topTab === 'strategy' && strategyTab !== 'fee' ? (
             <Section name="매매설정관리">
               <StrategySection activeTab={strategyTab} onTabChange={(t) => setStrategyTab(t)} />
+            </Section>
+          ) : null}
+          {isCrypto && topTab === 'crypto' ? (
+            <Section name="코인 거래 설정">
+              <CryptoSettingsSection />
             </Section>
           ) : null}
           {topTab === 'display' ? (
@@ -221,7 +261,7 @@ export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactEl
               <DisplaySettingsSection />
             </Section>
           ) : null}
-          {topTab === 'orders' ? (
+          {!isCrypto && topTab === 'orders' ? (
             <div style={{ display: 'grid', gap: '1.2rem' }}>
               <Section name="미체결 자동취소">
                 <PendingCancelForm />
@@ -317,6 +357,30 @@ function FeeSection(): ReactElement {
   // FeeEnv: 'real' | 'mock'. AppEnv: 'PROD' | 'MOCK'. mapping.
   const feeEnv = env === 'PROD' ? 'real' : 'mock';
   return <FeeSettingsForm env={feeEnv} />;
+}
+
+function CryptoSettingsSection(): ReactElement {
+  const envQuery = trpc.auth.getEnv.useQuery();
+  const env = envQuery.data?.env ?? null;
+
+  return (
+    <div className="panel">
+      <div className="panel__title">코인 거래 설정</div>
+      <div className="panel__body" style={{ display: 'grid', gap: '0.8rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span className="chip chip--live">UPBIT</span>
+          <span className="chip">{env ?? '환경 미확인'}</span>
+        </div>
+        <p className="muted" style={{ margin: 0 }}>
+          코인 자동매매, read-only smoke, realtime 상태, live gate는 코인 메인 화면의 자동매매와
+          실시간 상태 패널에서 관리합니다.
+        </p>
+        <p className="muted" style={{ margin: 0 }}>
+          이 설정 화면에서는 국내주식 자동매매/주문 보정 설정을 노출하지 않습니다.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function DisplaySettingsSection(): ReactElement {

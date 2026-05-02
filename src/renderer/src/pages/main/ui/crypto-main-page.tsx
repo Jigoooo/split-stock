@@ -16,6 +16,8 @@ import {
   Button,
   Checkbox,
   dialog,
+  type HtsTabItem,
+  HtsTabs,
   SegmentedToggle,
   Select,
   TableGrid,
@@ -36,15 +38,39 @@ import type {
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { CryptoChartPanel } from './crypto-chart-panel';
+import { MainThreeSplitLayout } from './main-three-split-layout';
 
 interface CryptoMainPageProps {
   accountId: number;
+  variant?: 'main' | 'trade-popout';
 }
 
 type Side = 'bid' | 'ask';
 type Mode = 'limit' | 'market';
 type OrderType = 'limit' | 'price' | 'market';
 type AutoMode = 'disabled' | 'dry-run' | 'live-small';
+type CryptoLeftTab = 'holdings' | 'auto';
+type CryptoHoldingsTab = 'balances' | 'filled' | 'open' | 'transfers';
+type CryptoRightTab = 'selected-orders' | 'all-orders' | 'status';
+type CryptoOrderPanelId = 'left-filled' | 'left-open' | 'right-selected' | 'right-all';
+
+const CRYPTO_LEFT_TABS = [
+  { id: 'holdings', label: '보유' },
+  { id: 'auto', label: '자동매매' },
+] as const satisfies ReadonlyArray<HtsTabItem<CryptoLeftTab>>;
+
+const CRYPTO_HOLDINGS_TABS = [
+  { id: 'balances', label: '잔고' },
+  { id: 'filled', label: '체결' },
+  { id: 'open', label: '미체결' },
+  { id: 'transfers', label: '입출금' },
+] as const satisfies ReadonlyArray<HtsTabItem<CryptoHoldingsTab>>;
+
+const CRYPTO_RIGHT_TABS = [
+  { id: 'selected-orders', label: '선택 마켓 주문내역' },
+  { id: 'all-orders', label: '전체 코인 주문내역' },
+  { id: 'status', label: '실시간/상태' },
+] as const satisfies ReadonlyArray<HtsTabItem<CryptoRightTab>>;
 
 const LIVE_TRADE_LIMIT = 60;
 
@@ -147,7 +173,10 @@ function transferDirectionLabel(direction: CryptoTransferStatus['direction']): s
   return direction === 'deposit' ? '입금' : '출금';
 }
 
-export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement => {
+export const CryptoMainPage = ({
+  accountId,
+  variant = 'main',
+}: CryptoMainPageProps): ReactElement => {
   const utils = trpc.useUtils();
   const [term, setTerm] = useState('KRW-BTC');
   const [market, setMarket] = useState('KRW-BTC');
@@ -159,11 +188,17 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [timeInForce, setTimeInForce] = useState('');
   const [smpType, setSmpType] = useState('');
-  const [selectedOrderUuid, setSelectedOrderUuid] = useState<string | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<{
+    panelId: CryptoOrderPanelId;
+    uuid: string;
+  } | null>(null);
   const [selectedTransfer, setSelectedTransfer] = useState<{
     direction: CryptoTransferStatus['direction'];
     uuid: string;
   } | null>(null);
+  const [leftTab, setLeftTab] = useState<CryptoLeftTab>('holdings');
+  const [holdingsTab, setHoldingsTab] = useState<CryptoHoldingsTab>('balances');
+  const [rightTab, setRightTab] = useState<CryptoRightTab>('selected-orders');
   const [autoMode, setAutoMode] = useState<AutoMode>('disabled');
   const [autoEmergencyDisabled, setAutoEmergencyDisabled] = useState(true);
   const [autoBaseOrderKrw, setAutoBaseOrderKrw] = useState('5000');
@@ -252,8 +287,8 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
     },
   );
   const orderDetailQuery = trpc.crypto.getOrderDetail.useQuery(
-    { accountId, uuid: selectedOrderUuid ?? '' },
-    { enabled: privateEnabled && selectedOrderUuid !== null, staleTime: 5000 },
+    { accountId, uuid: selectedOrder?.uuid ?? '' },
+    { enabled: privateEnabled && selectedOrder !== null, staleTime: 5000 },
   );
   const transferDetailQuery = trpc.crypto.getTransfer.useQuery(
     {
@@ -472,231 +507,458 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
         ? Number(price) > 0
         : Number(volume) > 0);
 
-  return (
-    <div className="main-bottom-section crypto-main-page">
-      <div
-        className="panel crypto-market-bar"
-        style={{
-          padding: '0.7rem',
-          display: 'flex',
-          gap: '0.6rem',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}
-      >
-        <TextInput
-          aria-label="코인 검색"
-          value={term}
-          onChange={(event) => setTerm(event.target.value.toUpperCase())}
-          dense
-          style={{ width: '14rem' }}
-        />
-        <Select
-          aria-label="마켓 선택"
-          value={market}
-          onChange={(event) => {
-            setMarket(event.target.value);
-            setLiveTrades([]);
-          }}
-          dense
-          style={{ width: '16rem' }}
-        >
-          {(marketsQuery.data?.entries ?? []).map((entry) => (
-            <option key={entry.market} value={entry.market}>
-              {entry.market} · {entry.koreanName}
-            </option>
-          ))}
-          {selectedMarket === null ? <option value={market}>{market}</option> : null}
-        </Select>
-        <span className="chip chip--live">UPBIT</span>
-        <span className="muted">{selectedMarket?.koreanName ?? market}</span>
-        <span style={{ flex: 1 }} />
-        <strong className={Number(ticker?.signedChangePrice ?? 0) < 0 ? 'num-down' : 'num-up'}>
-          {formatCryptoPrice(ticker?.tradePrice, market)} {quote}
-        </strong>
-        <span className="muted">
-          {formatSignedPrice(ticker?.signedChangePrice, market)} ·{' '}
-          {formatPercent(ticker?.signedChangeRate)}
-        </span>
-        <span
-          className={tickerSubscription.status === 'error' ? 'chip chip--down' : 'chip chip--live'}
-        >
-          {tickerSubscription.status === 'error' ? 'REST 폴백' : '실시간'}
-        </span>
-      </div>
+  const recentOrders = recentOrdersQuery.data?.orders ?? [];
+  const openOrders = recentOrders.filter((order) => isOpenOrder(order.state));
+  const filledOrders = recentOrders.filter((order) => !isOpenOrder(order.state));
+  const selectedMarketOrders = recentOrders.filter((order) => order.market === market);
 
-      <div className="trade-workspace-grid main-bottom-section__content crypto-trade-workspace-grid">
+  const openOrderDetail = (panelId: CryptoOrderPanelId, uuid: string): void => {
+    setSelectedOrder({ panelId, uuid });
+  };
+  const closeOrderDetail = (): void => setSelectedOrder(null);
+
+  const renderOrdersPanel = (
+    panelId: CryptoOrderPanelId,
+    title: string,
+    orders: typeof recentOrders,
+  ): ReactElement => (
+    <CryptoOrdersPanel
+      cancelPending={cancelOrder.isPending}
+      detail={selectedOrder?.panelId === panelId ? (orderDetailQuery.data?.order ?? null) : null}
+      detailLoading={selectedOrder?.panelId === panelId ? orderDetailQuery.isFetching : false}
+      enabled={privateEnabled}
+      onCloseDetail={closeOrderDetail}
+      onCancel={(uuid) => {
+        cancelOrder.mutate({ accountId, uuid });
+      }}
+      onOpenDetail={(uuid) => openOrderDetail(panelId, uuid)}
+      orders={orders}
+      title={title}
+    />
+  );
+
+  const autoPanel = (
+    <CryptoAutoPanel
+      addTriggerPct={autoAddTriggerPct}
+      baseOrderKrw={autoBaseOrderKrw}
+      enabled={privateEnabled && market.startsWith('KRW-')}
+      emergencyDisabled={autoEmergencyDisabled}
+      events={autoStatusQuery.data?.recentEvents ?? []}
+      gate={autoStatusQuery.data?.gate ?? { ok: false, blockedReasons: ['상태 로드 전'] }}
+      dryRunLots={autoStatusQuery.data?.dryRunLots ?? autoStatusQuery.data?.openLots ?? []}
+      lastDryRunAt={autoStatusQuery.data?.config.lastDryRunAt ?? null}
+      lastLiveActionAt={autoStatusQuery.data?.config.lastLiveActionAt ?? null}
+      lastReadonlySmokeAt={autoStatusQuery.data?.config.lastReadonlySmokeAt ?? null}
+      liveLots={autoStatusQuery.data?.liveLots ?? []}
+      market={market}
+      maxExposureKrw={autoMaxExposureKrw}
+      maxOrderKrw={autoMaxOrderKrw}
+      mode={autoMode}
+      onAddTriggerPctChange={setAutoAddTriggerPct}
+      onBaseOrderKrwChange={(value) => setAutoBaseOrderKrw(sanitizeDecimal(value))}
+      onEmergencyDisabledChange={setAutoEmergencyDisabled}
+      onMaxExposureKrwChange={(value) => setAutoMaxExposureKrw(sanitizeDecimal(value))}
+      onMaxOrderKrwChange={(value) => setAutoMaxOrderKrw(sanitizeDecimal(value))}
+      onModeChange={setAutoMode}
+      onRunDry={() => {
+        runAutoDryTick.mutate({ accountId, market });
+      }}
+      onRunLive={() => {
+        void dialog
+          .openAsync({
+            type: 'WARNING',
+            title: '코인 자동매매 live-small 실행',
+            confirmText: '소액 live 실행',
+            cancelText: '취소',
+            isCancelWith: true,
+            message: `${market} 자동매매 live-small 1 tick을 실행합니다.`,
+          })
+          .then((confirmed) => {
+            if (confirmed) runAutoLiveTick.mutate({ accountId, market });
+          });
+      }}
+      onSave={() => {
+        saveAutoConfig.mutate({
+          accountId,
+          market,
+          config: {
+            mode: autoMode,
+            emergencyDisabled: autoEmergencyDisabled,
+            baseOrderKrw: autoBaseOrderKrw,
+            maxOrderKrw: autoMaxOrderKrw,
+            maxTotalExposureKrw: autoMaxExposureKrw,
+            addTriggerPct: autoAddTriggerPct,
+            takeProfitPct: autoTakeProfitPct,
+          },
+        });
+      }}
+      onStart={() => {
+        startAuto.mutate({ accountId, market });
+      }}
+      onStop={() => {
+        stopAuto.mutate({ accountId, market });
+      }}
+      pending={
+        saveAutoConfig.isPending ||
+        runAutoDryTick.isPending ||
+        runAutoLiveTick.isPending ||
+        startAuto.isPending ||
+        stopAuto.isPending
+      }
+      quote={quote}
+      running={autoStatusQuery.data?.runtimeRunning ?? false}
+      takeProfitPct={autoTakeProfitPct}
+      onTakeProfitPctChange={setAutoTakeProfitPct}
+    />
+  );
+
+  const marketBar = (
+    <CryptoMarketBar
+      market={market}
+      markets={marketsQuery.data?.entries ?? []}
+      onMarketChange={(nextMarket) => {
+        setMarket(nextMarket);
+        setLiveTrades([]);
+      }}
+      onTermChange={setTerm}
+      quote={quote}
+      selectedName={selectedMarket?.koreanName ?? market}
+      term={term}
+      ticker={ticker}
+      tickerFallback={tickerSubscription.status === 'error'}
+    />
+  );
+
+  const realtimeStatusPanel = (
+    <CryptoRealtimeStatus
+      market={market}
+      orderbookFallback={orderbookSubscription.status === 'error'}
+      privateStatus={privateRealtimeStatus}
+      publicStatus={publicRealtimeStatus}
+      smokePending={readonlySmokeQuery.isFetching}
+      smokeResult={readonlySmokeQuery.data ?? null}
+      tickerFallback={tickerSubscription.status === 'error'}
+      tradeTimestamp={liveTrades[0]?.timestamp ?? null}
+      onRunSmoke={() => {
+        void readonlySmokeQuery.refetch();
+      }}
+    />
+  );
+
+  const tradingWorkspace = (
+    <CryptoTradingWorkspace
+      chart={
         <CryptoChartPanel
           market={market}
           name={selectedMarket?.koreanName ?? market}
           unit={unit}
           onUnitChange={setUnit}
         />
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.8rem',
-            minHeight: 0,
-            minWidth: 0,
-          }}
-        >
-          <CryptoRealtimeStatus
-            market={market}
-            orderbookFallback={orderbookSubscription.status === 'error'}
-            privateStatus={privateRealtimeStatus}
-            publicStatus={publicRealtimeStatus}
-            smokePending={readonlySmokeQuery.isFetching}
-            smokeResult={readonlySmokeQuery.data ?? null}
-            tickerFallback={tickerSubscription.status === 'error'}
-            tradeTimestamp={liveTrades[0]?.timestamp ?? null}
-            onRunSmoke={() => {
-              void readonlySmokeQuery.refetch();
-            }}
-          />
-          <div
-            className="trading-panel__grid crypto-trading-panel__grid"
-            style={
-              {
-                '--orderbook-panel-min-width': 'minmax(250px, 1fr)',
-                '--trade-feed-panel-min-width': '280px',
-              } as CSSProperties
-            }
-          >
-            <CryptoOrderbookPanel
-              currentPrice={ticker?.tradePrice}
-              market={market}
-              orderbook={orderbook}
-              onPickPrice={(nextPrice, nextSide) => {
-                setPrice(nextPrice);
-                setSide(nextSide);
-                setMode('limit');
-              }}
-            />
-            <CryptoOrderTicket
-              advancedOpen={advancedOpen}
-              canSubmit={canSubmit}
-              error={priceTickError ?? placeOrder.error?.message ?? null}
-              mode={mode}
-              onAdvancedOpenChange={setAdvancedOpen}
-              onModeChange={setMode}
-              onPriceChange={setPrice}
-              onSideChange={setSide}
-              onSmpTypeChange={setSmpType}
-              onSubmit={submit}
-              onTimeInForceChange={setTimeInForce}
-              onVolumeChange={setVolume}
-              pending={placeOrder.isPending}
-              price={price}
-              side={side}
-              smpType={smpType}
-              timeInForce={timeInForce}
-              volume={volume}
-            />
-            <CryptoTradeFeedPanel market={market} trades={liveTrades} />
-          </div>
-        </div>
-      </div>
-
-      <div className="crypto-account-grid">
-        <CryptoAutoPanel
-          addTriggerPct={autoAddTriggerPct}
-          baseOrderKrw={autoBaseOrderKrw}
-          enabled={privateEnabled && market.startsWith('KRW-')}
-          emergencyDisabled={autoEmergencyDisabled}
-          events={autoStatusQuery.data?.recentEvents ?? []}
-          gate={autoStatusQuery.data?.gate ?? { ok: false, blockedReasons: ['상태 로드 전'] }}
-          dryRunLots={autoStatusQuery.data?.dryRunLots ?? autoStatusQuery.data?.openLots ?? []}
-          lastDryRunAt={autoStatusQuery.data?.config.lastDryRunAt ?? null}
-          lastLiveActionAt={autoStatusQuery.data?.config.lastLiveActionAt ?? null}
-          lastReadonlySmokeAt={autoStatusQuery.data?.config.lastReadonlySmokeAt ?? null}
-          liveLots={autoStatusQuery.data?.liveLots ?? []}
+      }
+      orderbook={
+        <CryptoOrderbookPanel
+          currentPrice={ticker?.tradePrice}
           market={market}
-          maxExposureKrw={autoMaxExposureKrw}
-          maxOrderKrw={autoMaxOrderKrw}
-          mode={autoMode}
-          onAddTriggerPctChange={setAutoAddTriggerPct}
-          onBaseOrderKrwChange={(value) => setAutoBaseOrderKrw(sanitizeDecimal(value))}
-          onEmergencyDisabledChange={setAutoEmergencyDisabled}
-          onMaxExposureKrwChange={(value) => setAutoMaxExposureKrw(sanitizeDecimal(value))}
-          onMaxOrderKrwChange={(value) => setAutoMaxOrderKrw(sanitizeDecimal(value))}
-          onModeChange={setAutoMode}
-          onRunDry={() => {
-            runAutoDryTick.mutate({ accountId, market });
+          orderbook={orderbook}
+          onPickPrice={(nextPrice, nextSide) => {
+            setPrice(nextPrice);
+            setSide(nextSide);
+            setMode('limit');
           }}
-          onRunLive={() => {
-            void dialog
-              .openAsync({
-                type: 'WARNING',
-                title: '코인 자동매매 live-small 실행',
-                confirmText: '소액 live 실행',
-                cancelText: '취소',
-                isCancelWith: true,
-                message: `${market} 자동매매 live-small 1 tick을 실행합니다.`,
-              })
-              .then((confirmed) => {
-                if (confirmed) runAutoLiveTick.mutate({ accountId, market });
-              });
-          }}
-          onSave={() => {
-            saveAutoConfig.mutate({
-              accountId,
-              market,
-              config: {
-                mode: autoMode,
-                emergencyDisabled: autoEmergencyDisabled,
-                baseOrderKrw: autoBaseOrderKrw,
-                maxOrderKrw: autoMaxOrderKrw,
-                maxTotalExposureKrw: autoMaxExposureKrw,
-                addTriggerPct: autoAddTriggerPct,
-                takeProfitPct: autoTakeProfitPct,
-              },
-            });
-          }}
-          onStart={() => {
-            startAuto.mutate({ accountId, market });
-          }}
-          onStop={() => {
-            stopAuto.mutate({ accountId, market });
-          }}
-          pending={
-            saveAutoConfig.isPending ||
-            runAutoDryTick.isPending ||
-            runAutoLiveTick.isPending ||
-            startAuto.isPending ||
-            stopAuto.isPending
-          }
-          quote={quote}
-          running={autoStatusQuery.data?.runtimeRunning ?? false}
-          takeProfitPct={autoTakeProfitPct}
-          onTakeProfitPctChange={setAutoTakeProfitPct}
         />
-        <CryptoBalancesPanel balances={balanceSummaries} enabled={privateEnabled} quote={quote} />
-        <CryptoOrdersPanel
-          cancelPending={cancelOrder.isPending}
-          enabled={privateEnabled}
-          detail={orderDetailQuery.data?.order ?? null}
-          detailLoading={orderDetailQuery.isFetching}
-          onCloseDetail={() => setSelectedOrderUuid(null)}
-          onCancel={(uuid) => {
-            cancelOrder.mutate({ accountId, uuid });
-          }}
-          onOpenDetail={(uuid) => setSelectedOrderUuid(uuid)}
-          orders={recentOrdersQuery.data?.orders ?? []}
+      }
+      ticket={
+        <CryptoOrderTicket
+          advancedOpen={advancedOpen}
+          canSubmit={canSubmit}
+          error={priceTickError ?? placeOrder.error?.message ?? null}
+          mode={mode}
+          onAdvancedOpenChange={setAdvancedOpen}
+          onModeChange={setMode}
+          onPriceChange={setPrice}
+          onSideChange={setSide}
+          onSmpTypeChange={setSmpType}
+          onSubmit={submit}
+          onTimeInForceChange={setTimeInForce}
+          onVolumeChange={setVolume}
+          pending={placeOrder.isPending}
+          price={price}
+          side={side}
+          smpType={smpType}
+          timeInForce={timeInForce}
+          volume={volume}
         />
-        <CryptoTransfersPanel
-          enabled={privateEnabled}
-          onCloseDetail={() => setSelectedTransfer(null)}
-          onOpenDetail={(transfer) =>
-            setSelectedTransfer({ direction: transfer.direction, uuid: transfer.uuid })
-          }
-          selectedTransfer={transferDetailQuery.data?.transfer ?? null}
-          transferDetailLoading={transferDetailQuery.isFetching}
-          transfers={transfersQuery.data?.transfers ?? []}
-          walletStatuses={walletStatusesQuery.data?.statuses ?? []}
-        />
+      }
+      tradeFeed={<CryptoTradeFeedPanel market={market} trades={liveTrades} />}
+    />
+  );
+
+  if (variant === 'trade-popout') {
+    return (
+      <div
+        data-testid="crypto-trade-page"
+        data-variant="trade-popout"
+        className="main-bottom-section crypto-main-page crypto-main-page--popout"
+      >
+        {marketBar}
+        {tradingWorkspace}
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid="crypto-main-page" className="crypto-main-page-shell">
+      <MainThreeSplitLayout
+        layoutIds={{
+          horizontal: 'split-stock.layout.crypto.split',
+          vertical: 'split-stock.layout.crypto.vertical',
+        }}
+        left={
+          <CryptoLeftPane
+            autoPanel={autoPanel}
+            balancesPanel={
+              <CryptoBalancesPanel
+                balances={balanceSummaries}
+                enabled={privateEnabled}
+                quote={quote}
+              />
+            }
+            filledOrdersPanel={renderOrdersPanel('left-filled', '체결', filledOrders)}
+            holdingsTab={holdingsTab}
+            leftTab={leftTab}
+            onHoldingsTabChange={setHoldingsTab}
+            onLeftTabChange={setLeftTab}
+            openOrdersPanel={renderOrdersPanel('left-open', '미체결', openOrders)}
+            transfersPanel={
+              <CryptoTransfersPanel
+                enabled={privateEnabled}
+                onCloseDetail={() => setSelectedTransfer(null)}
+                onOpenDetail={(transfer) =>
+                  setSelectedTransfer({ direction: transfer.direction, uuid: transfer.uuid })
+                }
+                selectedTransfer={transferDetailQuery.data?.transfer ?? null}
+                transferDetailLoading={transferDetailQuery.isFetching}
+                transfers={transfersQuery.data?.transfers ?? []}
+                walletStatuses={walletStatusesQuery.data?.statuses ?? []}
+              />
+            }
+          />
+        }
+        right={
+          <CryptoRightPane
+            allOrdersPanel={renderOrdersPanel('right-all', '전체 코인 주문내역', recentOrders)}
+            onRightTabChange={setRightTab}
+            realtimeStatusPanel={realtimeStatusPanel}
+            rightTab={rightTab}
+            selectedOrdersPanel={renderOrdersPanel(
+              'right-selected',
+              '선택 마켓 주문내역',
+              selectedMarketOrders,
+            )}
+          />
+        }
+        bottom={
+          <div className="main-bottom-section crypto-main-page crypto-main-page__bottom">
+            {marketBar}
+            {tradingWorkspace}
+          </div>
+        }
+      />
+    </div>
+  );
+};
+
+const CryptoMarketBar = ({
+  market,
+  markets,
+  onMarketChange,
+  onTermChange,
+  quote,
+  selectedName,
+  term,
+  ticker,
+  tickerFallback,
+}: {
+  market: string;
+  markets: Array<{ koreanName: string; market: string }>;
+  onMarketChange: (market: string) => void;
+  onTermChange: (term: string) => void;
+  quote: string;
+  selectedName: string;
+  term: string;
+  ticker: { signedChangePrice?: string; signedChangeRate?: string; tradePrice?: string } | null;
+  tickerFallback: boolean;
+}): ReactElement => (
+  <div
+    className="panel crypto-market-bar"
+    style={{
+      padding: '0.7rem',
+      display: 'flex',
+      gap: '0.6rem',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+    }}
+  >
+    <TextInput
+      aria-label="코인 검색"
+      value={term}
+      onChange={(event) => onTermChange(event.target.value.toUpperCase())}
+      dense
+      style={{ width: '14rem' }}
+    />
+    <Select
+      aria-label="마켓 선택"
+      value={market}
+      onChange={(event) => onMarketChange(event.target.value)}
+      dense
+      style={{ width: '16rem' }}
+    >
+      {markets.map((entry) => (
+        <option key={entry.market} value={entry.market}>
+          {entry.market} · {entry.koreanName}
+        </option>
+      ))}
+      {markets.every((entry) => entry.market !== market) ? (
+        <option value={market}>{market}</option>
+      ) : null}
+    </Select>
+    <span className="chip chip--live">UPBIT</span>
+    <span className="muted">{selectedName}</span>
+    <span style={{ flex: 1 }} />
+    <strong className={Number(ticker?.signedChangePrice ?? 0) < 0 ? 'num-down' : 'num-up'}>
+      {formatCryptoPrice(ticker?.tradePrice, market)} {quote}
+    </strong>
+    <span className="muted">
+      {formatSignedPrice(ticker?.signedChangePrice, market)} ·{' '}
+      {formatPercent(ticker?.signedChangeRate)}
+    </span>
+    <span className={tickerFallback ? 'chip chip--down' : 'chip chip--live'}>
+      {tickerFallback ? 'REST 폴백' : '실시간'}
+    </span>
+  </div>
+);
+
+const CryptoTradingWorkspace = ({
+  chart,
+  orderbook,
+  ticket,
+  tradeFeed,
+}: {
+  chart: ReactElement;
+  orderbook: ReactElement;
+  ticket: ReactElement;
+  tradeFeed: ReactElement;
+}): ReactElement => (
+  <div className="trade-workspace-grid main-bottom-section__content crypto-trade-workspace-grid">
+    {chart}
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.8rem',
+        minHeight: 0,
+        minWidth: 0,
+      }}
+    >
+      <div
+        className="trading-panel__grid crypto-trading-panel__grid"
+        style={
+          {
+            '--orderbook-panel-min-width': 'minmax(250px, 1fr)',
+            '--trade-feed-panel-min-width': '280px',
+          } as CSSProperties
+        }
+      >
+        {orderbook}
+        {ticket}
+        {tradeFeed}
       </div>
     </div>
+  </div>
+);
+
+const CryptoLeftPane = ({
+  autoPanel,
+  balancesPanel,
+  filledOrdersPanel,
+  holdingsTab,
+  leftTab,
+  onHoldingsTabChange,
+  onLeftTabChange,
+  openOrdersPanel,
+  transfersPanel,
+}: {
+  autoPanel: ReactElement;
+  balancesPanel: ReactElement;
+  filledOrdersPanel: ReactElement;
+  holdingsTab: CryptoHoldingsTab;
+  leftTab: CryptoLeftTab;
+  onHoldingsTabChange: (tab: CryptoHoldingsTab) => void;
+  onLeftTabChange: (tab: CryptoLeftTab) => void;
+  openOrdersPanel: ReactElement;
+  transfersPanel: ReactElement;
+}): ReactElement => {
+  let content = balancesPanel;
+  if (leftTab === 'auto') content = autoPanel;
+  if (leftTab === 'holdings' && holdingsTab === 'filled') content = filledOrdersPanel;
+  if (leftTab === 'holdings' && holdingsTab === 'open') content = openOrdersPanel;
+  if (leftTab === 'holdings' && holdingsTab === 'transfers') content = transfersPanel;
+
+  return (
+    <section className="crypto-split-pane crypto-split-pane--left" aria-label="코인 좌측 메인 패널">
+      <div className="main-positions-pane__tabs">
+        <HtsTabs<CryptoLeftTab>
+          tabs={CRYPTO_LEFT_TABS}
+          active={leftTab}
+          onChange={onLeftTabChange}
+          ariaLabel="코인 좌측 패널"
+        />
+        {leftTab === 'holdings' ? (
+          <HtsTabs<CryptoHoldingsTab>
+            tabs={CRYPTO_HOLDINGS_TABS}
+            active={holdingsTab}
+            onChange={onHoldingsTabChange}
+            ariaLabel="코인 보유 하위 탭"
+          />
+        ) : null}
+      </div>
+      <div className="crypto-split-pane__content">{content}</div>
+    </section>
+  );
+};
+
+const CryptoRightPane = ({
+  allOrdersPanel,
+  onRightTabChange,
+  realtimeStatusPanel,
+  rightTab,
+  selectedOrdersPanel,
+}: {
+  allOrdersPanel: ReactElement;
+  onRightTabChange: (tab: CryptoRightTab) => void;
+  realtimeStatusPanel: ReactElement;
+  rightTab: CryptoRightTab;
+  selectedOrdersPanel: ReactElement;
+}): ReactElement => {
+  let content = selectedOrdersPanel;
+  if (rightTab === 'all-orders') content = allOrdersPanel;
+  if (rightTab === 'status') content = realtimeStatusPanel;
+
+  return (
+    <section
+      className="crypto-split-pane crypto-split-pane--right"
+      aria-label="코인 우측 매매내역 패널"
+    >
+      <div className="main-positions-pane__tabs">
+        <HtsTabs<CryptoRightTab>
+          tabs={CRYPTO_RIGHT_TABS}
+          active={rightTab}
+          onChange={onRightTabChange}
+          ariaLabel="코인 우측 패널"
+        />
+      </div>
+      <div className="crypto-split-pane__content">{content}</div>
+    </section>
   );
 };
 
@@ -1424,6 +1686,7 @@ export const CryptoOrdersPanel = ({
   onCancel,
   onOpenDetail,
   orders,
+  title = '주문',
 }: {
   cancelPending: boolean;
   detail: CryptoOrderDetail | null;
@@ -1444,9 +1707,10 @@ export const CryptoOrdersPanel = ({
     uuid: string | null;
     volume: string | null;
   }>;
+  title?: string;
 }): ReactElement => (
   <section className="panel crypto-account-panel">
-    <div className="panel__title">주문</div>
+    <div className="panel__title">{title}</div>
     {!enabled ? (
       <div className="panel__body muted">활성 Upbit 실전 계좌에서만 조회됩니다.</div>
     ) : (

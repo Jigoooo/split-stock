@@ -3198,6 +3198,40 @@ body {
   overflow: hidden;
 }
 
+.crypto-main-page-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.crypto-main-page__bottom,
+.crypto-main-page--popout {
+  height: 100%;
+}
+
+.crypto-split-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.crypto-split-pane__content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.crypto-split-pane__content > .panel {
+  flex: 1;
+  min-height: 0;
+}
+
 .crypto-trade-workspace-grid {
   min-height: 0;
 }

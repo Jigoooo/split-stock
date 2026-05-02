@@ -39,7 +39,8 @@ export interface AccountBarProps {
  * 환경(MOCK/PROD) 표시는 계좌 셀렉터의 EnvDot 이 담당 — 별도 배지 없음.
  */
 export const AccountBar = ({ env }: AccountBarProps): ReactElement => {
-  const { accountId } = useActiveAccountId();
+  const { account, accountId } = useActiveAccountId();
+  const isCrypto = account?.broker === 'UPBIT';
 
   return (
     <div className="app-header__cluster app-header__cluster--account">
@@ -50,12 +51,21 @@ export const AccountBar = ({ env }: AccountBarProps): ReactElement => {
       </div>
       <div className="app-header__section app-header__section--status">
         <span className="app-header__section-label">상태</span>
-        <SafetySwitchHeader />
-        <WatchGlobalToggle />
-        {accountId !== null ? <TradingDayStatusBadge accountId={accountId} /> : null}
-        <RealtimeFallbackChip />
-        <RecommendStatusButton />
-        <StrategyRecommendStatusButton />
+        {isCrypto ? (
+          <>
+            <span className="chip chip--live">UPBIT</span>
+            {env ? <span className="chip">{env}</span> : null}
+          </>
+        ) : (
+          <>
+            <SafetySwitchHeader />
+            <WatchGlobalToggle />
+            {accountId !== null ? <TradingDayStatusBadge accountId={accountId} /> : null}
+            <RealtimeFallbackChip />
+            <RecommendStatusButton />
+            <StrategyRecommendStatusButton />
+          </>
+        )}
       </div>
     </div>
   );

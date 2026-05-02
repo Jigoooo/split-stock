@@ -1,7 +1,20 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { SettingsPage } from './ui/settings-page';
+
+const mockUseActiveAccountId = vi.hoisted(() => vi.fn());
+
+vi.mock('@renderer/entities/account', () => ({
+  useActiveAccountId: () => mockUseActiveAccountId(),
+}));
+
+vi.mock('@renderer/shared/api/trpc', () => ({
+  trpc: {
+    auth: {
+      getEnv: { useQuery: () => ({ data: { env: 'PROD' }, isPending: false }) },
+    },
+  },
+}));
 
 vi.mock('@renderer/features/backup-restore', () => ({
   BackupPanel: () => <div data-testid="backup-panel" />,
@@ -52,6 +65,8 @@ vi.mock('@renderer/features/price-correction-settings', () => ({
   PriceCorrectionForm: () => <div data-testid="price-correction-form" />,
 }));
 
+import { SettingsPage } from './ui/settings-page';
+
 function expectTabSelected(name: string): void {
   expect(screen.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
 }
@@ -59,6 +74,12 @@ function expectTabSelected(name: string): void {
 describe('SettingsPage', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    mockUseActiveAccountId.mockReset();
+    mockUseActiveAccountId.mockReturnValue({
+      accountId: 1,
+      account: { broker: 'KIS' },
+      isPending: false,
+    });
   });
 
   it('상위 설정 탭으로 섹션을 분리한다', () => {
@@ -131,5 +152,22 @@ describe('SettingsPage', () => {
     expectTabSelected('기본매매 설정');
     expect(window.localStorage.getItem('popout:settings:initialTab')).toBeNull();
     expect(window.localStorage.getItem('popout:settings:strategyTab')).toBeNull();
+  });
+
+  it('UPBIT 계좌에서는 국내주식 설정 탭을 숨기고 코인 설정 탭을 기본으로 연다', () => {
+    mockUseActiveAccountId.mockReturnValue({
+      accountId: 2,
+      account: { broker: 'UPBIT' },
+      isPending: false,
+    });
+
+    render(<SettingsPage />);
+
+    expectTabSelected('코인');
+    expect(screen.getByText('코인 거래 설정')).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '매매설정관리' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '주문/체결' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('strategy-settings-surface')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('pending-cancel-form')).not.toBeInTheDocument();
   });
 });
