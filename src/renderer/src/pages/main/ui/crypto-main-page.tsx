@@ -22,8 +22,11 @@ import {
   TextInput,
 } from '@renderer/shared/ui';
 import type {
+  CryptoAutoEvent,
+  CryptoAutoGateResult,
   CryptoBalanceSummary,
   CryptoCandleUnit,
+  CryptoLot,
   CryptoOrderDetail,
   CryptoReadonlySmokeResult,
   CryptoRealtimeSessionStatus,
@@ -41,6 +44,7 @@ interface CryptoMainPageProps {
 type Side = 'bid' | 'ask';
 type Mode = 'limit' | 'market';
 type OrderType = 'limit' | 'price' | 'market';
+type AutoMode = 'disabled' | 'dry-run' | 'live-small';
 
 const LIVE_TRADE_LIMIT = 60;
 
@@ -160,6 +164,13 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
     direction: CryptoTransferStatus['direction'];
     uuid: string;
   } | null>(null);
+  const [autoMode, setAutoMode] = useState<AutoMode>('disabled');
+  const [autoEmergencyDisabled, setAutoEmergencyDisabled] = useState(true);
+  const [autoBaseOrderKrw, setAutoBaseOrderKrw] = useState('5000');
+  const [autoMaxOrderKrw, setAutoMaxOrderKrw] = useState('5000');
+  const [autoMaxExposureKrw, setAutoMaxExposureKrw] = useState('50000');
+  const [autoTakeProfitPct, setAutoTakeProfitPct] = useState('0.02');
+  const [autoAddTriggerPct, setAutoAddTriggerPct] = useState('0.03');
   const [liveTrades, setLiveTrades] = useState<
     Array<{
       id: string;
@@ -251,6 +262,14 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
       uuid: selectedTransfer?.uuid ?? '',
     },
     { enabled: privateEnabled && selectedTransfer !== null, staleTime: 5000 },
+  );
+  const autoStatusQuery = trpc.crypto.getAutoStatus.useQuery(
+    { accountId, market },
+    {
+      enabled: privateEnabled && market.startsWith('KRW-'),
+      staleTime: 3000,
+      refetchInterval: privateEnabled && market.startsWith('KRW-') ? 5000 : false,
+    },
   );
   const watchMarket = trpc.crypto.watchMarket.useMutation();
   const unwatchMarket = trpc.crypto.unwatchMarket.useMutation();
@@ -363,6 +382,46 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
       ]);
     },
   });
+  const saveAutoConfig = trpc.crypto.saveAutoConfig.useMutation({
+    onSuccess: () => {
+      void utils.crypto.getAutoStatus.invalidate({ accountId, market });
+    },
+  });
+  const runAutoDryTick = trpc.crypto.runAutoDryTick.useMutation({
+    onSuccess: () => {
+      void utils.crypto.getAutoStatus.invalidate({ accountId, market });
+    },
+  });
+  const runAutoLiveTick = trpc.crypto.runAutoLiveTick.useMutation({
+    onSuccess: () => {
+      void Promise.all([
+        utils.crypto.getAutoStatus.invalidate({ accountId, market }),
+        utils.crypto.listRecentOrders.invalidate({ accountId, limit: 80 }),
+      ]);
+    },
+  });
+  const startAuto = trpc.crypto.startAuto.useMutation({
+    onSuccess: () => {
+      void utils.crypto.getAutoStatus.invalidate({ accountId, market });
+    },
+  });
+  const stopAuto = trpc.crypto.stopAuto.useMutation({
+    onSuccess: () => {
+      void utils.crypto.getAutoStatus.invalidate({ accountId, market });
+    },
+  });
+
+  useEffect(() => {
+    const config = autoStatusQuery.data?.config;
+    if (!config) return;
+    setAutoMode(config.mode);
+    setAutoEmergencyDisabled(config.emergencyDisabled);
+    setAutoBaseOrderKrw(config.baseOrderKrw);
+    setAutoMaxOrderKrw(config.maxOrderKrw);
+    setAutoMaxExposureKrw(config.maxTotalExposureKrw);
+    setAutoTakeProfitPct(config.takeProfitPct);
+    setAutoAddTriggerPct(config.addTriggerPct);
+  }, [autoStatusQuery.data?.config]);
 
   const submit = async (): Promise<void> => {
     if (priceTickError) return;
@@ -540,6 +599,74 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
       </div>
 
       <div className="crypto-account-grid">
+        <CryptoAutoPanel
+          addTriggerPct={autoAddTriggerPct}
+          baseOrderKrw={autoBaseOrderKrw}
+          enabled={privateEnabled && market.startsWith('KRW-')}
+          emergencyDisabled={autoEmergencyDisabled}
+          events={autoStatusQuery.data?.recentEvents ?? []}
+          gate={autoStatusQuery.data?.gate ?? { ok: false, blockedReasons: ['상태 로드 전'] }}
+          lots={autoStatusQuery.data?.openLots ?? []}
+          market={market}
+          maxExposureKrw={autoMaxExposureKrw}
+          maxOrderKrw={autoMaxOrderKrw}
+          mode={autoMode}
+          onAddTriggerPctChange={setAutoAddTriggerPct}
+          onBaseOrderKrwChange={(value) => setAutoBaseOrderKrw(sanitizeDecimal(value))}
+          onEmergencyDisabledChange={setAutoEmergencyDisabled}
+          onMaxExposureKrwChange={(value) => setAutoMaxExposureKrw(sanitizeDecimal(value))}
+          onMaxOrderKrwChange={(value) => setAutoMaxOrderKrw(sanitizeDecimal(value))}
+          onModeChange={setAutoMode}
+          onRunDry={() => {
+            runAutoDryTick.mutate({ accountId, market });
+          }}
+          onRunLive={() => {
+            void dialog
+              .openAsync({
+                type: 'WARNING',
+                title: '코인 자동매매 live-small 실행',
+                confirmText: '소액 live 실행',
+                cancelText: '취소',
+                isCancelWith: true,
+                message: `${market} 자동매매 live-small 1 tick을 실행합니다.`,
+              })
+              .then((confirmed) => {
+                if (confirmed) runAutoLiveTick.mutate({ accountId, market });
+              });
+          }}
+          onSave={() => {
+            saveAutoConfig.mutate({
+              accountId,
+              market,
+              config: {
+                mode: autoMode,
+                emergencyDisabled: autoEmergencyDisabled,
+                baseOrderKrw: autoBaseOrderKrw,
+                maxOrderKrw: autoMaxOrderKrw,
+                maxTotalExposureKrw: autoMaxExposureKrw,
+                addTriggerPct: autoAddTriggerPct,
+                takeProfitPct: autoTakeProfitPct,
+              },
+            });
+          }}
+          onStart={() => {
+            startAuto.mutate({ accountId, market });
+          }}
+          onStop={() => {
+            stopAuto.mutate({ accountId, market });
+          }}
+          pending={
+            saveAutoConfig.isPending ||
+            runAutoDryTick.isPending ||
+            runAutoLiveTick.isPending ||
+            startAuto.isPending ||
+            stopAuto.isPending
+          }
+          quote={quote}
+          running={autoStatusQuery.data?.runtimeRunning ?? false}
+          takeProfitPct={autoTakeProfitPct}
+          onTakeProfitPctChange={setAutoTakeProfitPct}
+        />
         <CryptoBalancesPanel balances={balanceSummaries} enabled={privateEnabled} quote={quote} />
         <CryptoOrdersPanel
           cancelPending={cancelOrder.isPending}
@@ -996,6 +1123,198 @@ const CryptoTradeFeedPanel = ({
         ))}
       </TableGrid.Body>
     </TableGrid.Root>
+  </section>
+);
+
+export const CryptoAutoPanel = ({
+  addTriggerPct,
+  baseOrderKrw,
+  emergencyDisabled,
+  enabled,
+  events,
+  gate,
+  lots,
+  market,
+  maxExposureKrw,
+  maxOrderKrw,
+  mode,
+  onAddTriggerPctChange,
+  onBaseOrderKrwChange,
+  onEmergencyDisabledChange,
+  onMaxExposureKrwChange,
+  onMaxOrderKrwChange,
+  onModeChange,
+  onRunDry,
+  onRunLive,
+  onSave,
+  onStart,
+  onStop,
+  onTakeProfitPctChange,
+  pending,
+  quote,
+  running,
+  takeProfitPct,
+}: {
+  addTriggerPct: string;
+  baseOrderKrw: string;
+  emergencyDisabled: boolean;
+  enabled: boolean;
+  events: CryptoAutoEvent[];
+  gate: CryptoAutoGateResult;
+  lots: CryptoLot[];
+  market: string;
+  maxExposureKrw: string;
+  maxOrderKrw: string;
+  mode: AutoMode;
+  onAddTriggerPctChange: (value: string) => void;
+  onBaseOrderKrwChange: (value: string) => void;
+  onEmergencyDisabledChange: (value: boolean) => void;
+  onMaxExposureKrwChange: (value: string) => void;
+  onMaxOrderKrwChange: (value: string) => void;
+  onModeChange: (mode: AutoMode) => void;
+  onRunDry: () => void;
+  onRunLive: () => void;
+  onSave: () => void;
+  onStart: () => void;
+  onStop: () => void;
+  onTakeProfitPctChange: (value: string) => void;
+  pending: boolean;
+  quote: string;
+  running: boolean;
+  takeProfitPct: string;
+}): ReactElement => (
+  <section className="panel crypto-account-panel crypto-auto-panel">
+    <div className="panel__title">자동매매</div>
+    {!enabled ? (
+      <div className="panel__body muted">Upbit KRW 실전 계좌와 KRW 마켓에서만 동작합니다.</div>
+    ) : (
+      <div className="panel__body crypto-auto-panel__body">
+        <div className="crypto-auto-panel__controls">
+          <SegmentedToggle
+            ariaLabel="코인 자동매매 모드"
+            value={mode}
+            onChange={onModeChange}
+            dense
+            items={[
+              { value: 'disabled', label: 'OFF' },
+              { value: 'dry-run', label: 'Dry' },
+              { value: 'live-small', label: 'Live 소액' },
+            ]}
+          />
+          <Checkbox
+            checked={emergencyDisabled}
+            onChange={(event) => onEmergencyDisabledChange(event.currentTarget.checked)}
+            label="비상 중지"
+          />
+          <span className={running ? 'chip chip--live' : 'chip'}>
+            {running ? 'loop running' : 'loop stopped'}
+          </span>
+          <span className={gate.ok ? 'chip chip--live' : 'chip chip--down'}>
+            {gate.ok ? 'live gate 통과' : 'live gate 차단'}
+          </span>
+        </div>
+        <div className="crypto-auto-panel__settings">
+          <label htmlFor="crypto-auto-base-order-krw">
+            <span className="muted">기본 주문금액</span>
+            <TextInput
+              id="crypto-auto-base-order-krw"
+              aria-label="기본 주문금액"
+              dense
+              value={baseOrderKrw}
+              onChange={(event) => onBaseOrderKrwChange(event.target.value)}
+            />
+          </label>
+          <label htmlFor="crypto-auto-max-order-krw">
+            <span className="muted">주문당 상한</span>
+            <TextInput
+              id="crypto-auto-max-order-krw"
+              aria-label="주문당 상한"
+              dense
+              value={maxOrderKrw}
+              onChange={(event) => onMaxOrderKrwChange(event.target.value)}
+            />
+          </label>
+          <label htmlFor="crypto-auto-max-exposure-krw">
+            <span className="muted">총 노출 상한</span>
+            <TextInput
+              id="crypto-auto-max-exposure-krw"
+              aria-label="총 노출 상한"
+              dense
+              value={maxExposureKrw}
+              onChange={(event) => onMaxExposureKrwChange(event.target.value)}
+            />
+          </label>
+          <label htmlFor="crypto-auto-add-trigger-pct">
+            <span className="muted">추가매수 하락률</span>
+            <TextInput
+              id="crypto-auto-add-trigger-pct"
+              aria-label="추가매수 하락률"
+              dense
+              value={addTriggerPct}
+              onChange={(event) => onAddTriggerPctChange(sanitizeDecimal(event.target.value))}
+            />
+          </label>
+          <label htmlFor="crypto-auto-take-profit-pct">
+            <span className="muted">익절률</span>
+            <TextInput
+              id="crypto-auto-take-profit-pct"
+              aria-label="익절률"
+              dense
+              value={takeProfitPct}
+              onChange={(event) => onTakeProfitPctChange(sanitizeDecimal(event.target.value))}
+            />
+          </label>
+        </div>
+        {gate.blockedReasons.length > 0 ? (
+          <div className="crypto-auto-panel__reasons">
+            {gate.blockedReasons.slice(0, 4).map((reason) => (
+              <span key={reason} className="chip chip--down">
+                {reason}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="crypto-auto-panel__actions">
+          <Button dense loading={pending} onClick={onSave}>
+            설정 저장
+          </Button>
+          <Button dense disabled={pending} onClick={onRunDry}>
+            dry-run 1회
+          </Button>
+          <Button dense disabled={pending || !gate.ok} variant="destructive" onClick={onRunLive}>
+            live-small 1회
+          </Button>
+          <Button dense disabled={pending || running} onClick={onStart}>
+            loop 시작
+          </Button>
+          <Button dense disabled={pending || !running} onClick={onStop}>
+            loop 중지
+          </Button>
+        </div>
+        <div className="crypto-auto-panel__lists">
+          <div>
+            <strong>Open lots</strong>
+            {lots.length === 0 ? <p className="muted">열린 차수 없음</p> : null}
+            {lots.slice(0, 4).map((lot) => (
+              <p key={lot.id}>
+                #{lot.sequence} {formatCryptoVolume(lot.quantity)} · 평단{' '}
+                {formatCryptoPrice(lot.avgEntryKrw, market)} · 배정{' '}
+                {formatCryptoAmount(lot.allocatedKrw, quote)}
+              </p>
+            ))}
+          </div>
+          <div>
+            <strong>최근 판단</strong>
+            {events.length === 0 ? <p className="muted">판단 이력 없음</p> : null}
+            {events.slice(0, 4).map((event) => (
+              <p key={event.id}>
+                {formatDateTime(event.createdAt)} · {event.action} · {event.reason}
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
   </section>
 );
 

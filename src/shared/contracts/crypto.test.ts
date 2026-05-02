@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   CredentialsSchema,
+  CryptoAutoGuardConfigSchema,
+  CryptoAutoIntentSchema,
   CryptoCandleUnitSchema,
+  CryptoKrwMarketCodeSchema,
   CryptoOrderIntentSchema,
   CryptoTransferDirectionSchema,
   DecimalStringSchema,
@@ -95,5 +98,31 @@ describe('crypto contracts', () => {
     expect(CryptoTransferDirectionSchema.safeParse('deposit').success).toBe(true);
     expect(CryptoTransferDirectionSchema.safeParse('withdraw').success).toBe(true);
     expect(CryptoTransferDirectionSchema.safeParse('withdraw-request').success).toBe(false);
+  });
+
+  it('narrows crypto automation to Upbit KRW spot markets', () => {
+    expect(CryptoKrwMarketCodeSchema.safeParse('KRW-BTC').success).toBe(true);
+    expect(CryptoKrwMarketCodeSchema.safeParse('BTC-ETH').success).toBe(false);
+    expect(CryptoKrwMarketCodeSchema.safeParse('USDT-BTC').success).toBe(false);
+  });
+
+  it('validates crypto auto intents and guard defaults', () => {
+    expect(
+      CryptoAutoIntentSchema.safeParse({
+        kind: 'plan-buy',
+        market: 'KRW-BTC',
+        krwAmount: '5000',
+        limitPrice: '100000000',
+      }).success,
+    ).toBe(true);
+    expect(
+      CryptoAutoIntentSchema.safeParse({
+        kind: 'plan-buy',
+        market: 'BTC-BTC',
+        krwAmount: '5000',
+        limitPrice: '100000000',
+      }).success,
+    ).toBe(false);
+    expect(CryptoAutoGuardConfigSchema.parse({}).emergencyDisabled).toBe(true);
   });
 });

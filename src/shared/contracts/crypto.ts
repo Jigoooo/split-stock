@@ -11,6 +11,11 @@ export const CryptoMarketCodeSchema = z
   .regex(/^(KRW|BTC|USDT)-[A-Z0-9]{2,20}$/, 'Upbit market code');
 export type CryptoMarketCode = z.infer<typeof CryptoMarketCodeSchema>;
 
+export const CryptoKrwMarketCodeSchema = z
+  .string()
+  .regex(/^KRW-[A-Z0-9]{2,20}$/, 'Upbit KRW market code');
+export type CryptoKrwMarketCode = z.infer<typeof CryptoKrwMarketCodeSchema>;
+
 export const CRYPTO_CANDLE_UNITS = [
   '1m',
   '3m',
@@ -43,6 +48,122 @@ export const PositiveDecimalStringSchema = DecimalStringSchema.refine(
   (value) => Number(value) > 0,
   'positive decimal string',
 );
+
+export const CryptoAutoModeSchema = z.enum(['disabled', 'dry-run', 'live-small']);
+export type CryptoAutoMode = z.infer<typeof CryptoAutoModeSchema>;
+
+export const CryptoAutoIntentSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('noop'),
+    market: CryptoKrwMarketCodeSchema,
+    reason: z.string().trim().min(1),
+  }),
+  z.object({
+    kind: z.literal('plan-buy'),
+    market: CryptoKrwMarketCodeSchema,
+    krwAmount: PositiveDecimalStringSchema,
+    limitPrice: PositiveDecimalStringSchema,
+  }),
+  z.object({
+    kind: z.literal('plan-sell'),
+    market: CryptoKrwMarketCodeSchema,
+    lotId: z.number().int().positive(),
+    quantity: PositiveDecimalStringSchema,
+    limitPrice: PositiveDecimalStringSchema,
+  }),
+  z.object({
+    kind: z.literal('cancel-stale'),
+    market: CryptoKrwMarketCodeSchema,
+    orderId: z.string().trim().min(1),
+    reason: z.string().trim().min(1),
+  }),
+]);
+export type CryptoAutoIntent = z.infer<typeof CryptoAutoIntentSchema>;
+
+export const CryptoAutoGuardConfigSchema = z.object({
+  exchange: z.literal('UPBIT').default('UPBIT'),
+  accountEnv: z.literal('PROD').default('PROD'),
+  mode: CryptoAutoModeSchema.default('disabled'),
+  emergencyDisabled: z.boolean().default(true),
+  baseOrderKrw: PositiveDecimalStringSchema.default('5000'),
+  maxOrderKrw: PositiveDecimalStringSchema.default('5000'),
+  maxTotalExposureKrw: PositiveDecimalStringSchema.default('50000'),
+  minOrderTotalKrw: PositiveDecimalStringSchema.default('5000'),
+  addTriggerPct: PositiveDecimalStringSchema.default('0.03'),
+  takeProfitPct: PositiveDecimalStringSchema.default('0.02'),
+  maxOpenLots: z.number().int().min(1).max(50).default(3),
+  cooldownMs: z.number().int().min(1000).max(86_400_000).default(60_000),
+  staleCancelCap: z.number().int().min(0).max(20).default(3),
+  requireReadOnlySmoke: z.boolean().default(true),
+  requireDryRunHistoryBeforeLive: z.boolean().default(true),
+});
+export type CryptoAutoGuardConfig = z.infer<typeof CryptoAutoGuardConfigSchema>;
+
+export interface CryptoLot {
+  id: number;
+  accountId: number;
+  exchange: CryptoExchangeId;
+  market: CryptoKrwMarketCode;
+  sequence: number;
+  quantity: DecimalString;
+  avgEntryKrw: DecimalString;
+  allocatedKrw: DecimalString;
+  realizedPnl: SignedDecimalString;
+  feesPaid: DecimalString;
+  status: 'open' | 'reducing' | 'closed';
+  openedAt: number;
+  closedAt: number | null;
+  updatedAt: number;
+}
+
+export interface CryptoAutoConfig extends CryptoAutoGuardConfig {
+  accountId: number;
+  market: CryptoKrwMarketCode;
+  lastDryRunAt: number | null;
+  lastReadonlySmokeAt: number | null;
+  lastLiveActionAt: number | null;
+  updatedAt: number;
+}
+
+export interface CryptoAutoEvent {
+  id: number;
+  accountId: number;
+  exchange: CryptoExchangeId;
+  market: CryptoKrwMarketCode;
+  mode: CryptoAutoMode;
+  kind: 'dry-run' | 'live-place' | 'live-cancel' | 'blocked' | 'smoke' | 'config' | 'decimal-error';
+  action: CryptoAutoIntent['kind'] | 'config' | 'smoke';
+  reason: string;
+  intent: CryptoAutoIntent | null;
+  result: unknown;
+  idempotencyKey: string | null;
+  createdAt: number;
+}
+
+export interface CryptoAutoGateResult {
+  ok: boolean;
+  blockedReasons: string[];
+}
+
+export interface CryptoAutoRunResult {
+  accountId: number;
+  market: CryptoKrwMarketCode;
+  mode: CryptoAutoMode;
+  intent: CryptoAutoIntent;
+  gate: CryptoAutoGateResult;
+  event: CryptoAutoEvent;
+  orderUuid?: string;
+}
+
+export interface CryptoAutoStatus {
+  accountId: number;
+  market: CryptoKrwMarketCode;
+  config: CryptoAutoConfig;
+  openLots: CryptoLot[];
+  recentEvents: CryptoAutoEvent[];
+  gate: CryptoAutoGateResult;
+  runtimeRunning: boolean;
+}
 
 export const UpbitOrderSideSchema = z.enum(['bid', 'ask']);
 export type UpbitOrderSide = z.infer<typeof UpbitOrderSideSchema>;

@@ -13,8 +13,10 @@ import { t } from '../trpc-core';
 import { cryptoRouter } from './crypto-router';
 
 const adapterMocks = vi.hoisted(() => ({
+  cancelOrder: vi.fn(),
   createOrder: vi.fn(),
   getDeposit: vi.fn(),
+  getTicker: vi.fn(),
   getWithdrawal: vi.fn(),
   listBalances: vi.fn(),
   listDeposits: vi.fn(),
@@ -25,8 +27,10 @@ const adapterMocks = vi.hoisted(() => ({
 vi.mock('../../crypto/upbit/adapter', () => ({
   UpbitExchangeAdapter: vi.fn().mockImplementation(function UpbitExchangeAdapter() {
     return {
+      cancelOrder: adapterMocks.cancelOrder,
       createOrder: adapterMocks.createOrder,
       getDeposit: adapterMocks.getDeposit,
+      getTicker: adapterMocks.getTicker,
       getWithdrawal: adapterMocks.getWithdrawal,
       listBalances: adapterMocks.listBalances,
       listDeposits: adapterMocks.listDeposits,
@@ -129,8 +133,42 @@ describe('cryptoRouter session boundary', () => {
         locked: '5000',
       }),
     );
+    adapterMocks.cancelOrder.mockResolvedValue(
+      ok({
+        uuid: 'upbit-order-uuid',
+        side: 'bid',
+        ord_type: 'limit',
+        state: 'cancel',
+        market: 'KRW-BTC',
+        created_at: '2026-05-01T00:00:00+09:00',
+        price: '5000',
+        volume: '1',
+        remaining_volume: '1',
+        executed_volume: '0',
+        paid_fee: '0',
+        locked: '0',
+      }),
+    );
+    adapterMocks.getTicker.mockResolvedValue(
+      ok({
+        market: 'KRW-BTC',
+        tradePrice: '100000000',
+        signedChangePrice: '0',
+        signedChangeRate: '0',
+        accTradePrice24h: '0',
+        accTradeVolume24h: '0',
+        timestamp: 1,
+      }),
+    );
     adapterMocks.listBalances.mockResolvedValue(
       ok([
+        {
+          currency: 'KRW',
+          balance: '100000',
+          locked: '0',
+          avgBuyPrice: '0',
+          unitCurrency: 'KRW',
+        },
         {
           currency: 'BTC',
           balance: '0.1',
@@ -433,7 +471,7 @@ describe('cryptoRouter session boundary', () => {
     });
 
     expect(result.dangerousCallsBlocked).toBe(true);
-    expect(result.balances).toMatchObject({ ok: true, count: 1 });
+    expect(result.balances).toMatchObject({ ok: true, count: 2 });
     expect(result.privateWs.ok).toBe(true);
     expect(result.reconciliation.ok).toBe(true);
     expect(adapterMocks.listBalances).toHaveBeenCalledOnce();
@@ -530,5 +568,139 @@ describe('cryptoRouter session boundary', () => {
       totalFee: '0.01',
       fillCount: 1,
     });
+  });
+
+  it('runs crypto auto dry-run without placing or cancelling live orders', async () => {
+    const deps = setup();
+    const upbitAccountId = seedActiveUpbit(deps);
+    const caller = createCaller(deps.ctx);
+
+    await caller.saveAutoConfig({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      config: { mode: 'dry-run' },
+    });
+    const result = await caller.runAutoDryTick({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      tradePrice: '100000000',
+    });
+    const status = await caller.getAutoStatus({ accountId: upbitAccountId, market: 'KRW-BTC' });
+
+    expect(result.intent.kind).toBe('plan-buy');
+    expect(status.openLots).toHaveLength(1);
+    expect(status.recentEvents[0]?.kind).toBe('dry-run');
+    expect(adapterMocks.listBalances).toHaveBeenCalled();
+    expect(adapterMocks.createOrder).not.toHaveBeenCalled();
+    expect(adapterMocks.cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects crypto auto status for non-KRW automation markets', async () => {
+    const deps = setup();
+    const upbitAccountId = seedActiveUpbit(deps);
+
+    await expect(
+      createCaller(deps.ctx).getAutoStatus({
+        accountId: upbitAccountId,
+        market: 'BTC-ETH',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('blocks crypto auto live-small when required gates are missing', async () => {
+    const deps = setup();
+    const upbitAccountId = seedActiveUpbit(deps);
+    const caller = createCaller(deps.ctx);
+
+    await caller.saveAutoConfig({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      config: { mode: 'live-small', emergencyDisabled: true },
+    });
+    const result = await caller.runAutoLiveTick({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      tradePrice: '100000000',
+    });
+
+    expect(result.gate.ok).toBe(false);
+    expect(result.gate.blockedReasons).toEqual(
+      expect.arrayContaining([
+        '비상 중지 상태입니다.',
+        '성공한 read-only smoke 기록이 없습니다.',
+        'live 전 dry-run 이력이 없습니다.',
+      ]),
+    );
+    expect(adapterMocks.createOrder).not.toHaveBeenCalled();
+  });
+
+  it('allows crypto auto live-small after read-only smoke and dry-run history', async () => {
+    const deps = setup();
+    const upbitAccountId = seedActiveUpbit(deps);
+    const caller = createCaller(deps.ctx);
+    deps.ctx.cryptoRealtime = {
+      getStatus: () => ({
+        publicSessions: [],
+        privateSessions: [
+          {
+            key: String(upbitAccountId),
+            kind: 'private',
+            state: 'open',
+            refs: 1,
+            accountId: upbitAccountId,
+            lastMessageAt: 1,
+            lastError: null,
+            reconnectAttempts: 0,
+            reconnectDelayMs: null,
+            staleAfterMs: 30000,
+          },
+        ],
+      }),
+      reconcilePrivate: vi.fn(async () =>
+        ok({
+          accountId: upbitAccountId,
+          exchange: 'UPBIT',
+          reason: 'manual',
+          openOrders: 0,
+          closedOrders: 0,
+          detailedOrders: 0,
+          persistedFills: 0,
+          checkpointAt: 1,
+        }),
+      ),
+      watchPrivate: vi.fn(),
+    } as never;
+
+    await caller.saveAutoConfig({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      config: { mode: 'dry-run', emergencyDisabled: true },
+    });
+    await caller.runReadonlySmoke({ accountId: upbitAccountId, market: 'KRW-BTC' });
+    await caller.runAutoDryTick({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      tradePrice: '100000000',
+    });
+    await caller.saveAutoConfig({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      config: { mode: 'live-small', emergencyDisabled: false },
+    });
+    const live = await caller.runAutoLiveTick({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      tradePrice: '97000000',
+    });
+
+    expect(live.gate.ok).toBe(true);
+    expect(adapterMocks.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        market: 'KRW-BTC',
+        side: 'bid',
+        ordType: 'price',
+        identifier: expect.stringContaining('crypto-auto:'),
+      }),
+    );
   });
 });

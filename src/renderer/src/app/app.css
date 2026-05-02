@@ -3219,7 +3219,52 @@ body {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
   gap: 0.8rem;
   min-height: 13rem;
-  max-height: 18rem;
+  max-height: 30rem;
+}
+
+.crypto-auto-panel {
+  grid-column: 1 / -1;
+}
+
+.crypto-auto-panel__body {
+  display: grid;
+  gap: 0.55rem;
+  overflow: auto;
+}
+
+.crypto-auto-panel__controls,
+.crypto-auto-panel__actions,
+.crypto-auto-panel__reasons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.crypto-auto-panel__settings {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(8rem, 1fr));
+  gap: 0.5rem;
+}
+
+.crypto-auto-panel__settings label {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.crypto-auto-panel__lists {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.7rem;
+  font-size: 1.1rem;
+}
+
+.crypto-auto-panel__lists p {
+  margin: 0.18rem 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .crypto-wallet-status-strip {
@@ -3287,6 +3332,11 @@ body {
   .crypto-account-grid {
     grid-template-columns: minmax(0, 1fr);
     max-height: none;
+  }
+
+  .crypto-auto-panel__settings,
+  .crypto-auto-panel__lists {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .crypto-account-panel {

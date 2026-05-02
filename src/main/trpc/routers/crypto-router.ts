@@ -1,5 +1,8 @@
 import {
+  type CryptoAutoGuardConfig,
+  CryptoAutoGuardConfigSchema,
   CryptoCandleUnitSchema,
+  CryptoKrwMarketCodeSchema,
   CryptoMarketCodeSchema,
   CryptoOrderIntentSchema,
   type CryptoPrivateAssetEvent,
@@ -15,6 +18,8 @@ import {
 } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+import { CryptoAutoTradingRepo } from '../../crypto/crypto-auto-repo';
+import { CryptoAutoTradingService } from '../../crypto/crypto-auto-service';
 import { CryptoTradingRepo } from '../../crypto/crypto-repo';
 import { UpbitExchangeAdapter } from '../../crypto/upbit/adapter';
 import type { Context } from '../context';
@@ -53,6 +58,33 @@ const TransferDetailInputSchema = z
     message: 'uuid 또는 txid가 필요합니다.',
     path: ['uuid'],
   });
+const AutoMarketInputSchema = z.object({
+  accountId: AccountIdField.optional(),
+  market: CryptoKrwMarketCodeSchema,
+});
+const AutoConfigInputSchema = AutoMarketInputSchema.extend({
+  config: CryptoAutoGuardConfigSchema.partial(),
+});
+const AutoRunInputSchema = AutoMarketInputSchema.extend({
+  tradePrice: z.string().trim().optional(),
+});
+const AutoCancelInputSchema = AutoMarketInputSchema.extend({
+  uuid: z.string().trim().min(1).optional(),
+  identifier: z.string().trim().min(1).optional(),
+}).refine((value) => value.uuid || value.identifier, {
+  message: 'uuid 또는 identifier가 필요합니다.',
+  path: ['uuid'],
+});
+const AutoStartInputSchema = AutoMarketInputSchema.extend({
+  intervalMs: z.number().int().min(5000).max(3_600_000).default(60_000),
+});
+
+type CryptoAutoJob = {
+  timer: ReturnType<typeof setInterval>;
+  running: boolean;
+};
+
+const cryptoAutoJobs = new Map<string, CryptoAutoJob>();
 
 function createPushStream<T>(
   signal: AbortSignal | undefined,
@@ -166,6 +198,13 @@ function createPrivateUpbit(ctx: Context, accountId: number): UpbitExchangeAdapt
   });
 }
 
+function createCryptoAutoService(ctx: Context): CryptoAutoTradingService {
+  return new CryptoAutoTradingService({
+    repo: new CryptoAutoTradingRepo(ctx.db),
+    logger: ctx.logger,
+  });
+}
+
 function activeAccountIdOrThrow(ctx: Context, accountId: number | undefined): number {
   const resolved = accountId ?? ctx.activeAccountId;
   if (resolved === null) {
@@ -176,6 +215,90 @@ function activeAccountIdOrThrow(ctx: Context, accountId: number | undefined): nu
 
 function exchangeErrorMessage(error: { kind: string; message: string; code?: string }): string {
   return `[${error.kind}${error.code ? `/${error.code}` : ''}] ${error.message}`;
+}
+
+function cryptoAutoJobKey(accountId: number, market: string): string {
+  return `${accountId}:${market}`;
+}
+
+function stopCryptoAutoJob(accountId: number, market: string): boolean {
+  const key = cryptoAutoJobKey(accountId, market);
+  const job = cryptoAutoJobs.get(key);
+  if (!job) return false;
+  clearInterval(job.timer);
+  cryptoAutoJobs.delete(key);
+  return true;
+}
+
+async function readAutoTickInputs(ctx: Context, input: z.infer<typeof AutoRunInputSchema>) {
+  const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+  const privateAdapter = createPrivateUpbit(ctx, accountId);
+  const balancesResult = await privateAdapter.listBalances();
+  if (balancesResult.isErr()) throwUpbitError(balancesResult.error);
+  new CryptoTradingRepo(ctx.db).upsertBalances(accountId, 'UPBIT', balancesResult.value);
+
+  const tradePrice =
+    input.tradePrice ??
+    (await (async () => {
+      const tickerResult = await createPublicUpbit().getTicker(input.market);
+      if (tickerResult.isErr()) throwUpbitError(tickerResult.error);
+      return tickerResult.value.tradePrice;
+    })());
+
+  return {
+    accountId,
+    privateAdapter,
+    balances: balancesResult.value,
+    tradePrice,
+  };
+}
+
+function persistAutoOrderIfPresent(ctx: Context, accountId: number, value: unknown): void {
+  if (typeof value !== 'object' || value === null) return;
+  const order = value as {
+    uuid?: string;
+    market?: string;
+    side?: string;
+    ord_type?: string;
+    state?: string;
+    price?: string;
+    volume?: string;
+    remaining_volume?: string;
+    executed_volume?: string;
+    paid_fee?: string;
+    locked?: string;
+    created_at?: string;
+    identifier?: string;
+  };
+  if (
+    !order.uuid ||
+    !order.market ||
+    !order.side ||
+    !order.ord_type ||
+    !order.state ||
+    !order.created_at
+  ) {
+    return;
+  }
+  new CryptoTradingRepo(ctx.db).upsertOrder({
+    accountId,
+    exchange: 'UPBIT',
+    order: {
+      uuid: order.uuid,
+      market: order.market,
+      side: order.side,
+      ord_type: order.ord_type,
+      state: order.state,
+      ...(order.price !== undefined ? { price: order.price } : {}),
+      ...(order.volume !== undefined ? { volume: order.volume } : {}),
+      remaining_volume: order.remaining_volume ?? '0',
+      executed_volume: order.executed_volume ?? '0',
+      paid_fee: order.paid_fee ?? '0',
+      locked: order.locked ?? '0',
+      created_at: order.created_at,
+      ...(order.identifier !== undefined ? { identifier: order.identifier } : {}),
+    },
+  });
 }
 
 export const cryptoRouter = router({
@@ -403,8 +526,162 @@ export const cryptoRouter = router({
         },
         dangerousCallsBlocked: true as const,
       };
+      if (input?.market) {
+        createCryptoAutoService(ctx).markReadonlySmoke({
+          accountId,
+          market: input.market,
+          smoke: smokeResult,
+        });
+      }
       return smokeResult;
     }),
+
+  getAutoStatus: runtimeProcedure.input(AutoMarketInputSchema).query(({ ctx, input }) => {
+    const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+    loadPrivateUpbitCredentials(ctx, accountId);
+    const repo = new CryptoAutoTradingRepo(ctx.db);
+    const service = createCryptoAutoService(ctx);
+    const gate = service.getGate({
+      accountId,
+      market: input.market,
+      requireIdempotency: false,
+    });
+    if (gate.isErr()) throwUpbitError(gate.error);
+    return {
+      accountId,
+      market: input.market,
+      config: repo.getConfig(accountId, input.market),
+      openLots: repo.listOpenLots(accountId, input.market),
+      recentEvents: repo.listRecentEvents(accountId, input.market, 50),
+      gate: gate.value,
+      runtimeRunning: cryptoAutoJobs.has(cryptoAutoJobKey(accountId, input.market)),
+    };
+  }),
+
+  saveAutoConfig: runtimeProcedure.input(AutoConfigInputSchema).mutation(({ ctx, input }) => {
+    const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+    loadPrivateUpbitCredentials(ctx, accountId);
+    const repo = new CryptoAutoTradingRepo(ctx.db);
+    const config = repo.upsertConfig(
+      accountId,
+      input.market,
+      input.config as Partial<CryptoAutoGuardConfig>,
+    );
+    const event = repo.insertEvent({
+      accountId,
+      market: input.market,
+      mode: config.mode,
+      kind: 'config',
+      action: 'config',
+      reason: 'crypto auto config saved',
+      result: config,
+    });
+    return { accountId, market: input.market, config, event };
+  }),
+
+  runAutoDryTick: runtimeProcedure.input(AutoRunInputSchema).mutation(async ({ ctx, input }) => {
+    const tick = await readAutoTickInputs(ctx, input);
+    const result = createCryptoAutoService(ctx).runDryTick({
+      accountId: tick.accountId,
+      market: input.market,
+      balances: tick.balances,
+      tradePrice: tick.tradePrice,
+    });
+    if (result.isErr()) throwUpbitError(result.error);
+    return result.value;
+  }),
+
+  runAutoLiveTick: runtimeProcedure.input(AutoRunInputSchema).mutation(async ({ ctx, input }) => {
+    const tick = await readAutoTickInputs(ctx, input);
+    const result = await createCryptoAutoService(ctx).runLiveTick({
+      accountId: tick.accountId,
+      market: input.market,
+      balances: tick.balances,
+      tradePrice: tick.tradePrice,
+      adapter: tick.privateAdapter,
+    });
+    if (result.isErr()) throwUpbitError(result.error);
+    persistAutoOrderIfPresent(ctx, tick.accountId, result.value.event.result);
+    return result.value;
+  }),
+
+  cancelAutoOrder: runtimeProcedure
+    .input(AutoCancelInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      const adapter = createPrivateUpbit(ctx, accountId);
+      const result = await createCryptoAutoService(ctx).cancelLiveOrder({
+        accountId,
+        market: input.market,
+        adapter,
+        ...(input.uuid !== undefined ? { uuid: input.uuid } : {}),
+        ...(input.identifier !== undefined ? { identifier: input.identifier } : {}),
+      });
+      if (result.isErr()) throwUpbitError(result.error);
+      persistAutoOrderIfPresent(ctx, accountId, result.value.event.result);
+      return result.value;
+    }),
+
+  startAuto: runtimeProcedure.input(AutoStartInputSchema).mutation(({ ctx, input }) => {
+    const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+    loadPrivateUpbitCredentials(ctx, accountId);
+    stopCryptoAutoJob(accountId, input.market);
+    const key = cryptoAutoJobKey(accountId, input.market);
+    const job: CryptoAutoJob = {
+      running: false,
+      timer: setInterval(() => {
+        const current = cryptoAutoJobs.get(key);
+        if (!current || current.running) return;
+        current.running = true;
+        void readAutoTickInputs(ctx, { accountId, market: input.market })
+          .then(async (tick) => {
+            const config = new CryptoAutoTradingRepo(ctx.db).getConfig(accountId, input.market);
+            if (config.mode === 'live-small') {
+              const result = await createCryptoAutoService(ctx).runLiveTick({
+                accountId,
+                market: input.market,
+                balances: tick.balances,
+                tradePrice: tick.tradePrice,
+                adapter: tick.privateAdapter,
+              });
+              if (result.isOk())
+                persistAutoOrderIfPresent(ctx, accountId, result.value.event.result);
+            } else {
+              createCryptoAutoService(ctx).runDryTick({
+                accountId,
+                market: input.market,
+                balances: tick.balances,
+                tradePrice: tick.tradePrice,
+              });
+            }
+          })
+          .catch((cause) => {
+            ctx.logger.log({
+              level: 'ERROR',
+              category: 'ORDER',
+              message: 'crypto.auto.loop.failed',
+              payload: {
+                accountId,
+                market: input.market,
+                cause: cause instanceof Error ? cause.message : String(cause),
+              },
+            });
+          })
+          .finally(() => {
+            const latest = cryptoAutoJobs.get(key);
+            if (latest) latest.running = false;
+          });
+      }, input.intervalMs),
+    };
+    cryptoAutoJobs.set(key, job);
+    return { accountId, market: input.market, running: true as const };
+  }),
+
+  stopAuto: runtimeProcedure.input(AutoMarketInputSchema).mutation(({ ctx, input }) => {
+    const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+    loadPrivateUpbitCredentials(ctx, accountId);
+    return { accountId, market: input.market, stopped: stopCryptoAutoJob(accountId, input.market) };
+  }),
 
   listTransfers: runtimeProcedure.input(TransferListInputSchema).query(async ({ ctx, input }) => {
     const accountId = activeAccountIdOrThrow(ctx, input?.accountId);

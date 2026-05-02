@@ -315,6 +315,75 @@ export const cryptoRealtimeCheckpoints = sqliteTable(
   (t) => [primaryKey({ columns: [t.accountId, t.exchange, t.stream] })],
 );
 
+export const cryptoAutoConfigs = sqliteTable(
+  'crypto_auto_configs',
+  {
+    accountId: integer('account_id').notNull(),
+    exchange: text('exchange').notNull().default('UPBIT'),
+    market: text('market').notNull(),
+    mode: text('mode').notNull().default('disabled'),
+    emergencyDisabled: integer('emergency_disabled', { mode: 'boolean' }).notNull().default(true),
+    baseOrderKrw: text('base_order_krw').notNull().default('5000'),
+    maxOrderKrw: text('max_order_krw').notNull().default('5000'),
+    maxTotalExposureKrw: text('max_total_exposure_krw').notNull().default('50000'),
+    minOrderTotalKrw: text('min_order_total_krw').notNull().default('5000'),
+    addTriggerPct: text('add_trigger_pct').notNull().default('0.03'),
+    takeProfitPct: text('take_profit_pct').notNull().default('0.02'),
+    maxOpenLots: integer('max_open_lots').notNull().default(3),
+    cooldownMs: integer('cooldown_ms').notNull().default(60000),
+    staleCancelCap: integer('stale_cancel_cap').notNull().default(3),
+    requireReadOnlySmoke: integer('require_readonly_smoke', { mode: 'boolean' })
+      .notNull()
+      .default(true),
+    requireDryRunHistoryBeforeLive: integer('require_dry_run_history_before_live', {
+      mode: 'boolean',
+    })
+      .notNull()
+      .default(true),
+    lastDryRunAt: integer('last_dry_run_at', { mode: 'timestamp_ms' }),
+    lastReadonlySmokeAt: integer('last_readonly_smoke_at', { mode: 'timestamp_ms' }),
+    lastLiveActionAt: integer('last_live_action_at', { mode: 'timestamp_ms' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.exchange, t.market] })],
+);
+
+export const cryptoAutoLots = sqliteTable('crypto_auto_lots', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  accountId: integer('account_id').notNull(),
+  exchange: text('exchange').notNull().default('UPBIT'),
+  market: text('market').notNull(),
+  sequence: integer('sequence').notNull(),
+  quantity: text('quantity').notNull(),
+  avgEntryKrw: text('avg_entry_krw').notNull(),
+  allocatedKrw: text('allocated_krw').notNull(),
+  realizedPnl: text('realized_pnl').notNull().default('0'),
+  feesPaid: text('fees_paid').notNull().default('0'),
+  status: text('status').notNull(),
+  openedAt: integer('opened_at', { mode: 'timestamp_ms' }).notNull(),
+  closedAt: integer('closed_at', { mode: 'timestamp_ms' }),
+  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const cryptoAutoEvents = sqliteTable(
+  'crypto_auto_events',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    accountId: integer('account_id').notNull(),
+    exchange: text('exchange').notNull().default('UPBIT'),
+    market: text('market').notNull(),
+    mode: text('mode').notNull(),
+    kind: text('kind').notNull(),
+    action: text('action').notNull(),
+    reason: text('reason').notNull(),
+    intentJson: text('intent_json'),
+    resultJson: text('result_json'),
+    idempotencyKey: text('idempotency_key'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [uniqueIndex('crypto_auto_events_idempotency_uniq').on(t.accountId, t.idempotencyKey)],
+);
+
 /**
  * 잔고(차수) 스냅샷 — 일자별 종목 차수 이력.
  * 장마감 후 스케줄러가 현재 잔고를 기준으로 upsert.

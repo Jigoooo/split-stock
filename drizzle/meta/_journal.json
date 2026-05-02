@@ -127,6 +127,13 @@
       "when": 1782250000000,
       "tag": "0017_upbit_crypto_exchange",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1782260000000,
+      "tag": "0018_crypto_auto_trading",
+      "breakpoints": true
     }
   ]
 }

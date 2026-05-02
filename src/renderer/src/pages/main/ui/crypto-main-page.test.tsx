@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildBalanceSummaries,
+  CryptoAutoPanel,
   CryptoOrderbookPanel,
   CryptoTransfersPanel,
 } from './crypto-main-page';
@@ -111,5 +112,80 @@ describe('CryptoTransfersPanel', () => {
     expect(screen.queryByRole('button', { name: '입금 요청' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '출금 요청' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '출금 취소' })).not.toBeInTheDocument();
+  });
+});
+
+describe('CryptoAutoPanel', () => {
+  it('shows dry-run/live gate state, lots, events, and disables live when blocked', () => {
+    render(
+      <CryptoAutoPanel
+        addTriggerPct="0.03"
+        baseOrderKrw="5000"
+        emergencyDisabled
+        enabled
+        events={[
+          {
+            id: 1,
+            accountId: 1,
+            exchange: 'UPBIT',
+            market: 'KRW-BTC',
+            mode: 'dry-run',
+            kind: 'dry-run',
+            action: 'plan-buy',
+            reason: 'dry-run simulated',
+            intent: null,
+            result: null,
+            idempotencyKey: null,
+            createdAt: 1,
+          },
+        ]}
+        gate={{ ok: false, blockedReasons: ['비상 중지 상태입니다.'] }}
+        lots={[
+          {
+            id: 1,
+            accountId: 1,
+            exchange: 'UPBIT',
+            market: 'KRW-BTC',
+            sequence: 1,
+            quantity: '0.00005',
+            avgEntryKrw: '100000000',
+            allocatedKrw: '5000',
+            realizedPnl: '0',
+            feesPaid: '0',
+            status: 'open',
+            openedAt: 1,
+            closedAt: null,
+            updatedAt: 1,
+          },
+        ]}
+        market="KRW-BTC"
+        maxExposureKrw="50000"
+        maxOrderKrw="5000"
+        mode="dry-run"
+        onAddTriggerPctChange={vi.fn()}
+        onBaseOrderKrwChange={vi.fn()}
+        onEmergencyDisabledChange={vi.fn()}
+        onMaxExposureKrwChange={vi.fn()}
+        onMaxOrderKrwChange={vi.fn()}
+        onModeChange={vi.fn()}
+        onRunDry={vi.fn()}
+        onRunLive={vi.fn()}
+        onSave={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onTakeProfitPctChange={vi.fn()}
+        pending={false}
+        quote="KRW"
+        running={false}
+        takeProfitPct="0.02"
+      />,
+    );
+
+    expect(screen.getByText('자동매매')).toBeInTheDocument();
+    expect(screen.getByText('live gate 차단')).toBeInTheDocument();
+    expect(screen.getByText('비상 중지 상태입니다.')).toBeInTheDocument();
+    expect(screen.getByText(/#1/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'live-small 1회' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'dry-run 1회' })).toBeEnabled();
   });
 });
