@@ -140,12 +140,13 @@ describe('CryptoAutoPanel', () => {
           },
         ]}
         gate={{ ok: false, blockedReasons: ['비상 중지 상태입니다.'] }}
-        lots={[
+        dryRunLots={[
           {
             id: 1,
             accountId: 1,
             exchange: 'UPBIT',
             market: 'KRW-BTC',
+            source: 'dry-run',
             sequence: 1,
             quantity: '0.00005',
             avgEntryKrw: '100000000',
@@ -158,6 +159,10 @@ describe('CryptoAutoPanel', () => {
             updatedAt: 1,
           },
         ]}
+        lastDryRunAt={2}
+        lastLiveActionAt={null}
+        lastReadonlySmokeAt={1}
+        liveLots={[]}
         market="KRW-BTC"
         maxExposureKrw="50000"
         maxOrderKrw="5000"
@@ -182,10 +187,55 @@ describe('CryptoAutoPanel', () => {
     );
 
     expect(screen.getByText('자동매매')).toBeInTheDocument();
+    expect(screen.getByText(/read-only smoke/)).toBeInTheDocument();
+    expect(screen.getByText(/마지막 dry-run/)).toBeInTheDocument();
+    expect(screen.getByText(/마지막 live action/)).toBeInTheDocument();
     expect(screen.getByText('live gate 차단')).toBeInTheDocument();
     expect(screen.getByText('비상 중지 상태입니다.')).toBeInTheDocument();
+    expect(screen.getByText('Dry-run lots')).toBeInTheDocument();
+    expect(screen.getByText('Live lots')).toBeInTheDocument();
     expect(screen.getByText(/#1/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'live-small 1회' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'dry-run 1회' })).toBeEnabled();
+  });
+
+  it('disables loop start for live-small while the gate is blocked', () => {
+    render(
+      <CryptoAutoPanel
+        addTriggerPct="0.03"
+        baseOrderKrw="5000"
+        dryRunLots={[]}
+        emergencyDisabled
+        enabled
+        events={[]}
+        gate={{ ok: false, blockedReasons: ['성공한 read-only smoke 기록이 없습니다.'] }}
+        lastDryRunAt={null}
+        lastLiveActionAt={null}
+        lastReadonlySmokeAt={null}
+        liveLots={[]}
+        market="KRW-BTC"
+        maxExposureKrw="50000"
+        maxOrderKrw="5000"
+        mode="live-small"
+        onAddTriggerPctChange={vi.fn()}
+        onBaseOrderKrwChange={vi.fn()}
+        onEmergencyDisabledChange={vi.fn()}
+        onMaxExposureKrwChange={vi.fn()}
+        onMaxOrderKrwChange={vi.fn()}
+        onModeChange={vi.fn()}
+        onRunDry={vi.fn()}
+        onRunLive={vi.fn()}
+        onSave={vi.fn()}
+        onStart={vi.fn()}
+        onStop={vi.fn()}
+        onTakeProfitPctChange={vi.fn()}
+        pending={false}
+        quote="KRW"
+        running={false}
+        takeProfitPct="0.02"
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'loop 시작' })).toBeDisabled();
   });
 });

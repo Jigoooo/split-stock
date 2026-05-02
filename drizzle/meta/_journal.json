@@ -134,6 +134,13 @@
       "when": 1782260000000,
       "tag": "0018_crypto_auto_trading",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1782265000000,
+      "tag": "0019_crypto_auto_lot_source",
+      "breakpoints": true
     }
   ]
 }

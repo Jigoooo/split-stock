@@ -3,6 +3,7 @@ import {
   CredentialsSchema,
   CryptoAutoGuardConfigSchema,
   CryptoAutoIntentSchema,
+  CryptoAutoLotSourceSchema,
   CryptoCandleUnitSchema,
   CryptoKrwMarketCodeSchema,
   CryptoOrderIntentSchema,
@@ -124,5 +125,11 @@ describe('crypto contracts', () => {
       }).success,
     ).toBe(false);
     expect(CryptoAutoGuardConfigSchema.parse({}).emergencyDisabled).toBe(true);
+  });
+
+  it('keeps simulated and live crypto automation lots distinct', () => {
+    expect(CryptoAutoLotSourceSchema.safeParse('dry-run').success).toBe(true);
+    expect(CryptoAutoLotSourceSchema.safeParse('live').success).toBe(true);
+    expect(CryptoAutoLotSourceSchema.safeParse('paper').success).toBe(false);
   });
 });

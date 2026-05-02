@@ -4,6 +4,7 @@ import {
   CryptoAutoGuardConfigSchema,
   type CryptoAutoIntent,
   CryptoAutoIntentSchema,
+  type CryptoAutoLotSource,
   type CryptoAutoRunResult,
   type CryptoBalance,
   type CryptoExchangeError,
@@ -48,6 +49,7 @@ export interface CryptoAutoTickInput {
   market: string;
   balances: CryptoBalance[];
   tradePrice: string;
+  lotSource?: CryptoAutoLotSource;
 }
 
 export interface CryptoAutoLiveTickInput extends CryptoAutoTickInput {
@@ -189,7 +191,7 @@ export class CryptoAutoTradingService {
         blockedReasons.push('주문 금액이 최소 주문금액 미만입니다.');
       }
       const nextExposure = decimalAddStrict(
-        openExposureKrw(this.repo.listOpenLots(input.accountId, market.value)),
+        openExposureKrw(this.repo.listOpenLots(input.accountId, market.value, 'live')),
         input.intent.krwAmount,
       );
       if (decimalGtStrict(nextExposure, config.maxTotalExposureKrw)) {
@@ -241,7 +243,8 @@ export class CryptoAutoTradingService {
 
     const priceFloor = normalizeUpbitKrwLimitPrice(input.tradePrice, 'floor');
     const priceCeil = normalizeUpbitKrwLimitPrice(input.tradePrice, 'ceil');
-    const lots = this.repo.listOpenLots(input.accountId, market.value);
+    const lotSource = input.lotSource ?? (config.mode === 'live-small' ? 'live' : 'dry-run');
+    const lots = this.repo.listOpenLots(input.accountId, market.value, lotSource);
     const sellLot = lots.find((lot) => {
       const target = decimalMulStrict(lot.avgEntryKrw, decimalAddStrict('1', config.takeProfitPct));
       return decimalGteStrict(input.tradePrice, target);
@@ -305,7 +308,7 @@ export class CryptoAutoTradingService {
   runDryTick(input: CryptoAutoTickInput): Result<CryptoAutoRunResult, CryptoExchangeError> {
     const market = safeKrwMarket(input.market);
     if (market.isErr()) return err(market.error);
-    const planned = this.plan(input);
+    const planned = this.plan({ ...input, lotSource: 'dry-run' });
     if (planned.isErr()) {
       const config = this.repo.getConfig(input.accountId, market.value);
       this.repo.insertEvent({
@@ -326,6 +329,7 @@ export class CryptoAutoTradingService {
       result = this.repo.createLot({
         accountId: input.accountId,
         market: market.value,
+        source: 'dry-run',
         quantity,
         avgEntryKrw: intent.limitPrice,
         allocatedKrw: intent.krwAmount,
@@ -333,7 +337,7 @@ export class CryptoAutoTradingService {
       });
     } else if (intent.kind === 'plan-sell') {
       const lot = this.repo
-        .listOpenLots(input.accountId, market.value)
+        .listOpenLots(input.accountId, market.value, 'dry-run')
         .find((entry) => entry.id === intent.lotId);
       if (lot) {
         const proceeds = decimalMulStrict(intent.quantity, intent.limitPrice);
@@ -375,7 +379,7 @@ export class CryptoAutoTradingService {
   ): Promise<Result<CryptoAutoRunResult, CryptoExchangeError>> {
     const market = safeKrwMarket(input.market);
     if (market.isErr()) return err(market.error);
-    const planned = this.plan(input);
+    const planned = this.plan({ ...input, lotSource: 'live' });
     if (planned.isErr()) return err(planned.error);
     const idempotencyKey = buildIdentifier({
       accountId: input.accountId,

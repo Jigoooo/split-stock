@@ -3,6 +3,7 @@ import type {
   CryptoAutoEvent,
   CryptoAutoGuardConfig,
   CryptoAutoIntent,
+  CryptoAutoLotSource,
   CryptoAutoMode,
   CryptoKrwMarketCode,
   CryptoLot,
@@ -99,6 +100,7 @@ function mapLot(row: typeof cryptoAutoLots.$inferSelect): CryptoLot {
     accountId: row.accountId,
     exchange: 'UPBIT',
     market: row.market as CryptoKrwMarketCode,
+    source: row.source as CryptoAutoLotSource,
     sequence: row.sequence,
     quantity: row.quantity,
     avgEntryKrw: row.avgEntryKrw,
@@ -251,18 +253,22 @@ export class CryptoAutoTradingRepo {
       .run();
   }
 
-  listOpenLots(accountId: number, market: CryptoKrwMarketCode): CryptoLot[] {
+  listOpenLots(
+    accountId: number,
+    market: CryptoKrwMarketCode,
+    source?: CryptoAutoLotSource,
+  ): CryptoLot[] {
+    const filters = [
+      eq(cryptoAutoLots.accountId, accountId),
+      eq(cryptoAutoLots.exchange, 'UPBIT'),
+      eq(cryptoAutoLots.market, market),
+      eq(cryptoAutoLots.status, 'open'),
+    ];
+    if (source !== undefined) filters.push(eq(cryptoAutoLots.source, source));
     return this.db
       .select()
       .from(cryptoAutoLots)
-      .where(
-        and(
-          eq(cryptoAutoLots.accountId, accountId),
-          eq(cryptoAutoLots.exchange, 'UPBIT'),
-          eq(cryptoAutoLots.market, market),
-          eq(cryptoAutoLots.status, 'open'),
-        ),
-      )
+      .where(and(...filters))
       .orderBy(cryptoAutoLots.sequence)
       .all()
       .map(mapLot);
@@ -271,19 +277,22 @@ export class CryptoAutoTradingRepo {
   createLot(input: {
     accountId: number;
     market: CryptoKrwMarketCode;
+    source?: CryptoAutoLotSource;
     quantity: string;
     avgEntryKrw: string;
     allocatedKrw: string;
     openedAt?: number;
   }): CryptoLot {
     const now = new Date(input.openedAt ?? Date.now());
-    const sequence = this.nextLotSequence(input.accountId, input.market);
+    const source = input.source ?? 'dry-run';
+    const sequence = this.nextLotSequence(input.accountId, input.market, source);
     const result = this.db
       .insert(cryptoAutoLots)
       .values({
         accountId: input.accountId,
         exchange: 'UPBIT',
         market: input.market,
+        source,
         sequence,
         quantity: input.quantity,
         avgEntryKrw: input.avgEntryKrw,
@@ -397,7 +406,11 @@ export class CryptoAutoTradingRepo {
     );
   }
 
-  private nextLotSequence(accountId: number, market: CryptoKrwMarketCode): number {
+  private nextLotSequence(
+    accountId: number,
+    market: CryptoKrwMarketCode,
+    source: CryptoAutoLotSource,
+  ): number {
     const row = this.db
       .select({ maxSequence: sql<number>`coalesce(max(${cryptoAutoLots.sequence}), 0)` })
       .from(cryptoAutoLots)
@@ -406,6 +419,7 @@ export class CryptoAutoTradingRepo {
           eq(cryptoAutoLots.accountId, accountId),
           eq(cryptoAutoLots.exchange, 'UPBIT'),
           eq(cryptoAutoLots.market, market),
+          eq(cryptoAutoLots.source, source),
         ),
       )
       .get();

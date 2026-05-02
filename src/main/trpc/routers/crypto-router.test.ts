@@ -634,6 +634,30 @@ describe('cryptoRouter session boundary', () => {
     expect(adapterMocks.createOrder).not.toHaveBeenCalled();
   });
 
+  it('does not start a live-small loop while the live gate is blocked', async () => {
+    const deps = setup();
+    const upbitAccountId = seedActiveUpbit(deps);
+    const caller = createCaller(deps.ctx);
+
+    await caller.saveAutoConfig({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      config: { mode: 'live-small', emergencyDisabled: true },
+    });
+
+    await expect(
+      caller.startAuto({
+        accountId: upbitAccountId,
+        market: 'KRW-BTC',
+        intervalMs: 5000,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    const status = await caller.getAutoStatus({ accountId: upbitAccountId, market: 'KRW-BTC' });
+
+    expect(status.runtimeRunning).toBe(false);
+    expect(adapterMocks.createOrder).not.toHaveBeenCalled();
+  });
+
   it('allows crypto auto live-small after read-only smoke and dry-run history', async () => {
     const deps = setup();
     const upbitAccountId = seedActiveUpbit(deps);

@@ -230,6 +230,7 @@ const CREATE_STATEMENTS: readonly string[] = [
     account_id INTEGER NOT NULL,
     exchange TEXT NOT NULL DEFAULT 'UPBIT',
     market TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'dry-run',
     sequence INTEGER NOT NULL,
     quantity TEXT NOT NULL,
     avg_entry_krw TEXT NOT NULL,

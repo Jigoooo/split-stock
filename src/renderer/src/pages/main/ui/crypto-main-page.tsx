@@ -606,7 +606,11 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
           emergencyDisabled={autoEmergencyDisabled}
           events={autoStatusQuery.data?.recentEvents ?? []}
           gate={autoStatusQuery.data?.gate ?? { ok: false, blockedReasons: ['상태 로드 전'] }}
-          lots={autoStatusQuery.data?.openLots ?? []}
+          dryRunLots={autoStatusQuery.data?.dryRunLots ?? autoStatusQuery.data?.openLots ?? []}
+          lastDryRunAt={autoStatusQuery.data?.config.lastDryRunAt ?? null}
+          lastLiveActionAt={autoStatusQuery.data?.config.lastLiveActionAt ?? null}
+          lastReadonlySmokeAt={autoStatusQuery.data?.config.lastReadonlySmokeAt ?? null}
+          liveLots={autoStatusQuery.data?.liveLots ?? []}
           market={market}
           maxExposureKrw={autoMaxExposureKrw}
           maxOrderKrw={autoMaxOrderKrw}
@@ -1133,7 +1137,11 @@ export const CryptoAutoPanel = ({
   enabled,
   events,
   gate,
-  lots,
+  dryRunLots,
+  lastDryRunAt,
+  lastLiveActionAt,
+  lastReadonlySmokeAt,
+  liveLots,
   market,
   maxExposureKrw,
   maxOrderKrw,
@@ -1161,7 +1169,11 @@ export const CryptoAutoPanel = ({
   enabled: boolean;
   events: CryptoAutoEvent[];
   gate: CryptoAutoGateResult;
-  lots: CryptoLot[];
+  dryRunLots: CryptoLot[];
+  lastDryRunAt: number | null;
+  lastLiveActionAt: number | null;
+  lastReadonlySmokeAt: number | null;
+  liveLots: CryptoLot[];
   market: string;
   maxExposureKrw: string;
   maxOrderKrw: string;
@@ -1267,13 +1279,18 @@ export const CryptoAutoPanel = ({
         </div>
         {gate.blockedReasons.length > 0 ? (
           <div className="crypto-auto-panel__reasons">
-            {gate.blockedReasons.slice(0, 4).map((reason) => (
+            {gate.blockedReasons.map((reason) => (
               <span key={reason} className="chip chip--down">
                 {reason}
               </span>
             ))}
           </div>
         ) : null}
+        <div className="crypto-auto-panel__timestamps">
+          <span>read-only smoke {formatDateTime(lastReadonlySmokeAt)}</span>
+          <span>마지막 dry-run {formatDateTime(lastDryRunAt)}</span>
+          <span>마지막 live action {formatDateTime(lastLiveActionAt)}</span>
+        </div>
         <div className="crypto-auto-panel__actions">
           <Button dense loading={pending} onClick={onSave}>
             설정 저장
@@ -1284,7 +1301,11 @@ export const CryptoAutoPanel = ({
           <Button dense disabled={pending || !gate.ok} variant="destructive" onClick={onRunLive}>
             live-small 1회
           </Button>
-          <Button dense disabled={pending || running} onClick={onStart}>
+          <Button
+            dense
+            disabled={pending || running || (mode === 'live-small' && !gate.ok)}
+            onClick={onStart}
+          >
             loop 시작
           </Button>
           <Button dense disabled={pending || !running} onClick={onStop}>
@@ -1293,9 +1314,20 @@ export const CryptoAutoPanel = ({
         </div>
         <div className="crypto-auto-panel__lists">
           <div>
-            <strong>Open lots</strong>
-            {lots.length === 0 ? <p className="muted">열린 차수 없음</p> : null}
-            {lots.slice(0, 4).map((lot) => (
+            <strong>Dry-run lots</strong>
+            {dryRunLots.length === 0 ? <p className="muted">모의 차수 없음</p> : null}
+            {dryRunLots.slice(0, 4).map((lot) => (
+              <p key={lot.id}>
+                #{lot.sequence} {formatCryptoVolume(lot.quantity)} · 평단{' '}
+                {formatCryptoPrice(lot.avgEntryKrw, market)} · 배정{' '}
+                {formatCryptoAmount(lot.allocatedKrw, quote)}
+              </p>
+            ))}
+          </div>
+          <div>
+            <strong>Live lots</strong>
+            {liveLots.length === 0 ? <p className="muted">실거래 차수 없음</p> : null}
+            {liveLots.slice(0, 4).map((lot) => (
               <p key={lot.id}>
                 #{lot.sequence} {formatCryptoVolume(lot.quantity)} · 평단{' '}
                 {formatCryptoPrice(lot.avgEntryKrw, market)} · 배정{' '}

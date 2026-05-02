@@ -353,6 +353,7 @@ export const cryptoAutoLots = sqliteTable('crypto_auto_lots', {
   accountId: integer('account_id').notNull(),
   exchange: text('exchange').notNull().default('UPBIT'),
   market: text('market').notNull(),
+  source: text('source').notNull().default('dry-run'),
   sequence: integer('sequence').notNull(),
   quantity: text('quantity').notNull(),
   avgEntryKrw: text('avg_entry_krw').notNull(),

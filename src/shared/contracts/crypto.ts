@@ -52,6 +52,9 @@ export const PositiveDecimalStringSchema = DecimalStringSchema.refine(
 export const CryptoAutoModeSchema = z.enum(['disabled', 'dry-run', 'live-small']);
 export type CryptoAutoMode = z.infer<typeof CryptoAutoModeSchema>;
 
+export const CryptoAutoLotSourceSchema = z.enum(['dry-run', 'live']);
+export type CryptoAutoLotSource = z.infer<typeof CryptoAutoLotSourceSchema>;
+
 export const CryptoAutoIntentSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('noop'),
@@ -104,6 +107,7 @@ export interface CryptoLot {
   accountId: number;
   exchange: CryptoExchangeId;
   market: CryptoKrwMarketCode;
+  source: CryptoAutoLotSource;
   sequence: number;
   quantity: DecimalString;
   avgEntryKrw: DecimalString;
@@ -160,6 +164,8 @@ export interface CryptoAutoStatus {
   market: CryptoKrwMarketCode;
   config: CryptoAutoConfig;
   openLots: CryptoLot[];
+  dryRunLots: CryptoLot[];
+  liveLots: CryptoLot[];
   recentEvents: CryptoAutoEvent[];
   gate: CryptoAutoGateResult;
   runtimeRunning: boolean;

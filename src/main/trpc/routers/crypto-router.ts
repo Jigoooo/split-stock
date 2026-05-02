@@ -547,11 +547,15 @@ export const cryptoRouter = router({
       requireIdempotency: false,
     });
     if (gate.isErr()) throwUpbitError(gate.error);
+    const dryRunLots = repo.listOpenLots(accountId, input.market, 'dry-run');
+    const liveLots = repo.listOpenLots(accountId, input.market, 'live');
     return {
       accountId,
       market: input.market,
       config: repo.getConfig(accountId, input.market),
-      openLots: repo.listOpenLots(accountId, input.market),
+      openLots: [...dryRunLots, ...liveLots],
+      dryRunLots,
+      liveLots,
       recentEvents: repo.listRecentEvents(accountId, input.market, 50),
       gate: gate.value,
       runtimeRunning: cryptoAutoJobs.has(cryptoAutoJobKey(accountId, input.market)),
@@ -625,6 +629,22 @@ export const cryptoRouter = router({
   startAuto: runtimeProcedure.input(AutoStartInputSchema).mutation(({ ctx, input }) => {
     const accountId = activeAccountIdOrThrow(ctx, input.accountId);
     loadPrivateUpbitCredentials(ctx, accountId);
+    const repo = new CryptoAutoTradingRepo(ctx.db);
+    const config = repo.getConfig(accountId, input.market);
+    if (config.mode === 'live-small') {
+      const gate = createCryptoAutoService(ctx).getGate({
+        accountId,
+        market: input.market,
+        requireIdempotency: false,
+      });
+      if (gate.isErr()) throwUpbitError(gate.error);
+      if (!gate.value.ok) {
+        throwUpbitError({
+          kind: 'VALIDATION',
+          message: gate.value.blockedReasons.join(', ') || 'live gate가 차단되었습니다.',
+        });
+      }
+    }
     stopCryptoAutoJob(accountId, input.market);
     const key = cryptoAutoJobKey(accountId, input.market);
     const job: CryptoAutoJob = {

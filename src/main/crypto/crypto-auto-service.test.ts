@@ -167,6 +167,83 @@ describe('CryptoAutoTradingService', () => {
     );
   });
 
+  it('keeps dry-run lots out of live planning and exposure gates', async () => {
+    const { repo, service } = setup();
+    const adapter = fakeAdapter();
+    repo.upsertConfig(1, 'KRW-BTC', {
+      mode: 'dry-run',
+      emergencyDisabled: true,
+      maxTotalExposureKrw: '5000',
+    });
+    expect(
+      service
+        .runDryTick({
+          accountId: 1,
+          market: 'KRW-BTC',
+          balances,
+          tradePrice: '100000000',
+        })
+        .isOk(),
+    ).toBe(true);
+    repo.markReadonlySmokeSucceeded(1, 'KRW-BTC', 99_000);
+    repo.upsertConfig(1, 'KRW-BTC', {
+      mode: 'live-small',
+      emergencyDisabled: false,
+      maxTotalExposureKrw: '5000',
+    });
+
+    const plannedAtDryRunTakeProfit = service.plan({
+      accountId: 1,
+      market: 'KRW-BTC',
+      balances,
+      tradePrice: '102000000',
+    });
+    const live = await service.runLiveTick({
+      accountId: 1,
+      market: 'KRW-BTC',
+      balances,
+      tradePrice: '97000000',
+      adapter,
+    });
+
+    expect(repo.listOpenLots(1, 'KRW-BTC')).toHaveLength(1);
+    expect(plannedAtDryRunTakeProfit.isOk()).toBe(true);
+    expect(plannedAtDryRunTakeProfit._unsafeUnwrap().kind).toBe('plan-buy');
+    expect(live.isOk()).toBe(true);
+    expect(live._unsafeUnwrap().gate.ok).toBe(true);
+    expect(adapter.createOrder).toHaveBeenCalledOnce();
+  });
+
+  it('uses live lots, not simulated lots, when planning live-small sells', () => {
+    const { repo, service } = setup();
+    repo.upsertConfig(1, 'KRW-BTC', {
+      mode: 'live-small',
+      emergencyDisabled: false,
+    });
+    const liveLot = repo.createLot({
+      accountId: 1,
+      market: 'KRW-BTC',
+      source: 'live',
+      quantity: '0.00005',
+      avgEntryKrw: '100000000',
+      allocatedKrw: '5000',
+    });
+
+    const planned = service.plan({
+      accountId: 1,
+      market: 'KRW-BTC',
+      balances,
+      tradePrice: '102000000',
+    });
+
+    expect(planned.isOk()).toBe(true);
+    expect(planned._unsafeUnwrap()).toMatchObject({
+      kind: 'plan-sell',
+      lotId: liveLot.id,
+      quantity: '0.00005',
+    });
+  });
+
   it('does not call the exchange when live order placement itself fails validation', async () => {
     const { repo, service } = setup();
     const adapter = fakeAdapter();
