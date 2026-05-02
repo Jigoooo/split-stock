@@ -1,4 +1,10 @@
 import {
+  decimalAdd,
+  decimalDiv,
+  decimalGt,
+  decimalMul,
+  decimalRatioPercent,
+  decimalSub,
   formatCryptoAmount,
   formatCryptoPrice,
   formatCryptoVolume,
@@ -15,7 +21,15 @@ import {
   TableGrid,
   TextInput,
 } from '@renderer/shared/ui';
-import type { CryptoCandleUnit, CryptoRealtimeSessionStatus } from '@shared/contracts';
+import type {
+  CryptoBalanceSummary,
+  CryptoCandleUnit,
+  CryptoOrderDetail,
+  CryptoReadonlySmokeResult,
+  CryptoRealtimeSessionStatus,
+  CryptoTransferStatus,
+  CryptoWalletStatus,
+} from '@shared/contracts';
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { CryptoChartPanel } from './crypto-chart-panel';
@@ -66,6 +80,69 @@ function isOpenOrder(state: string): boolean {
   return state === 'wait' || state === 'watch';
 }
 
+function stateLabel(state: string): string {
+  if (state === 'wait') return '대기';
+  if (state === 'watch') return '예약';
+  if (state === 'done') return '완료';
+  if (state === 'cancel') return '취소';
+  return state;
+}
+
+function formatDateTime(timestamp: number | null | undefined): string {
+  if (!timestamp) return '-';
+  return new Intl.DateTimeFormat('ko-KR', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(new Date(timestamp));
+}
+
+export function buildBalanceSummaries(input: {
+  balances: Array<{
+    avgBuyPrice: string;
+    balance: string;
+    currency: string;
+    locked: string;
+    unitCurrency: string;
+  }>;
+  market: string;
+  tradePrice: string | undefined;
+}): CryptoBalanceSummary[] {
+  const [quoteCurrency = '', baseCurrency = ''] = input.market.split('-');
+  return input.balances.map((balance) => {
+    const total = decimalAdd(balance.balance, balance.locked);
+    const isQuote = balance.currency === quoteCurrency;
+    const canValue = isQuote || balance.currency === baseCurrency;
+    const valuation = isQuote ? total : canValue ? decimalMul(total, input.tradePrice ?? '0') : '0';
+    const costBasis =
+      isQuote || !canValue || !decimalGt(balance.avgBuyPrice, '0')
+        ? '0'
+        : decimalMul(total, balance.avgBuyPrice);
+    const profitLoss =
+      costBasis === '0' || isQuote || !canValue ? '0' : decimalSub(valuation, costBasis);
+    const profitLossRate = costBasis === '0' ? '0' : decimalDiv(profitLoss, costBasis, 8);
+    return {
+      currency: balance.currency,
+      unitCurrency: balance.unitCurrency,
+      available: balance.balance,
+      locked: balance.locked,
+      total,
+      avgBuyPrice: balance.avgBuyPrice,
+      valuation,
+      costBasis,
+      profitLoss,
+      profitLossRate,
+    };
+  });
+}
+
+function transferDirectionLabel(direction: CryptoTransferStatus['direction']): string {
+  return direction === 'deposit' ? '입금' : '출금';
+}
+
 export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement => {
   const utils = trpc.useUtils();
   const [term, setTerm] = useState('KRW-BTC');
@@ -78,6 +155,11 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [timeInForce, setTimeInForce] = useState('');
   const [smpType, setSmpType] = useState('');
+  const [selectedOrderUuid, setSelectedOrderUuid] = useState<string | null>(null);
+  const [selectedTransfer, setSelectedTransfer] = useState<{
+    direction: CryptoTransferStatus['direction'];
+    uuid: string;
+  } | null>(null);
   const [liveTrades, setLiveTrades] = useState<
     Array<{
       id: string;
@@ -138,6 +220,38 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
     refetchInterval: 2500,
     staleTime: 1500,
   });
+  const readonlySmokeQuery = trpc.crypto.runReadonlySmoke.useQuery(
+    { accountId, market },
+    { enabled: false },
+  );
+  const transfersQuery = trpc.crypto.listTransfers.useQuery(
+    { accountId, limit: 40 },
+    {
+      enabled: privateEnabled,
+      staleTime: 15_000,
+      refetchInterval: privateEnabled ? 30_000 : false,
+    },
+  );
+  const walletStatusesQuery = trpc.crypto.listWalletStatuses.useQuery(
+    { accountId },
+    {
+      enabled: privateEnabled,
+      staleTime: 30_000,
+      refetchInterval: privateEnabled ? 60_000 : false,
+    },
+  );
+  const orderDetailQuery = trpc.crypto.getOrderDetail.useQuery(
+    { accountId, uuid: selectedOrderUuid ?? '' },
+    { enabled: privateEnabled && selectedOrderUuid !== null, staleTime: 5000 },
+  );
+  const transferDetailQuery = trpc.crypto.getTransfer.useQuery(
+    {
+      accountId,
+      direction: selectedTransfer?.direction ?? 'deposit',
+      uuid: selectedTransfer?.uuid ?? '',
+    },
+    { enabled: privateEnabled && selectedTransfer !== null, staleTime: 5000 },
+  );
   const watchMarket = trpc.crypto.watchMarket.useMutation();
   const unwatchMarket = trpc.crypto.unwatchMarket.useMutation();
   const watchPrivate = trpc.crypto.watchPrivate.useMutation();
@@ -207,6 +321,15 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
   const ticker = tickerSubscription.data ?? tickerQuery.data ?? null;
   const orderbook = orderbookSubscription.data ?? orderbookQuery.data ?? null;
   const instrument = instrumentsQuery.data?.entries[0] ?? null;
+  const balanceSummaries = useMemo(
+    () =>
+      buildBalanceSummaries({
+        balances: balancesQuery.data?.balances ?? [],
+        market,
+        tradePrice: ticker?.tradePrice,
+      }),
+    [balancesQuery.data?.balances, market, ticker?.tradePrice],
+  );
   const publicRealtimeStatus =
     realtimeStatusQuery.data?.status.publicSessions.find(
       (session) => session.market === market && session.candleUnit === unit,
@@ -364,8 +487,13 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
             orderbookFallback={orderbookSubscription.status === 'error'}
             privateStatus={privateRealtimeStatus}
             publicStatus={publicRealtimeStatus}
+            smokePending={readonlySmokeQuery.isFetching}
+            smokeResult={readonlySmokeQuery.data ?? null}
             tickerFallback={tickerSubscription.status === 'error'}
             tradeTimestamp={liveTrades[0]?.timestamp ?? null}
+            onRunSmoke={() => {
+              void readonlySmokeQuery.refetch();
+            }}
           />
           <div
             className="trading-panel__grid crypto-trading-panel__grid"
@@ -377,10 +505,12 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
             }
           >
             <CryptoOrderbookPanel
+              currentPrice={ticker?.tradePrice}
               market={market}
               orderbook={orderbook}
-              onPickPrice={(nextPrice) => {
+              onPickPrice={(nextPrice, nextSide) => {
                 setPrice(nextPrice);
+                setSide(nextSide);
                 setMode('limit');
               }}
             />
@@ -410,18 +540,29 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
       </div>
 
       <div className="crypto-account-grid">
-        <CryptoBalancesPanel
-          balances={balancesQuery.data?.balances ?? []}
-          enabled={privateEnabled}
-          quote={quote}
-        />
+        <CryptoBalancesPanel balances={balanceSummaries} enabled={privateEnabled} quote={quote} />
         <CryptoOrdersPanel
           cancelPending={cancelOrder.isPending}
           enabled={privateEnabled}
+          detail={orderDetailQuery.data?.order ?? null}
+          detailLoading={orderDetailQuery.isFetching}
+          onCloseDetail={() => setSelectedOrderUuid(null)}
           onCancel={(uuid) => {
             cancelOrder.mutate({ accountId, uuid });
           }}
+          onOpenDetail={(uuid) => setSelectedOrderUuid(uuid)}
           orders={recentOrdersQuery.data?.orders ?? []}
+        />
+        <CryptoTransfersPanel
+          enabled={privateEnabled}
+          onCloseDetail={() => setSelectedTransfer(null)}
+          onOpenDetail={(transfer) =>
+            setSelectedTransfer({ direction: transfer.direction, uuid: transfer.uuid })
+          }
+          selectedTransfer={transferDetailQuery.data?.transfer ?? null}
+          transferDetailLoading={transferDetailQuery.isFetching}
+          transfers={transfersQuery.data?.transfers ?? []}
+          walletStatuses={walletStatusesQuery.data?.statuses ?? []}
         />
       </div>
     </div>
@@ -430,16 +571,22 @@ export const CryptoMainPage = ({ accountId }: CryptoMainPageProps): ReactElement
 
 const CryptoRealtimeStatus = ({
   market,
+  onRunSmoke,
   orderbookFallback,
   privateStatus,
   publicStatus,
+  smokePending,
+  smokeResult,
   tickerFallback,
   tradeTimestamp,
 }: {
   market: string;
+  onRunSmoke: () => void;
   orderbookFallback: boolean;
   privateStatus: CryptoRealtimeSessionStatus | null;
   publicStatus: CryptoRealtimeSessionStatus | null;
+  smokePending: boolean;
+  smokeResult: CryptoReadonlySmokeResult | null;
   tickerFallback: boolean;
   tradeTimestamp: number | null;
 }): ReactElement => {
@@ -464,11 +611,24 @@ const CryptoRealtimeStatus = ({
       </span>
       <span className={statusChipClass(privateState)}>개인 {statusLabel(privateState)}</span>
       <span className="muted">{market} 체결/호가 수신</span>
+      {smokeResult ? (
+        <span
+          className={
+            smokeResult.balances.ok && smokeResult.reconciliation.ok ? 'chip' : 'chip chip--down'
+          }
+        >
+          smoke 잔고 {smokeResult.balances.count} · 정합성{' '}
+          {smokeResult.reconciliation.ok ? '정상' : '확인필요'}
+        </span>
+      ) : null}
       {publicStatus?.lastError ? <span className="num-down">{publicStatus.lastError}</span> : null}
       <span style={{ flex: 1 }} />
       <span className="muted">
         최근 체결 {tradeTimestamp ? formatTradeTime(tradeTimestamp) : '대기'}
       </span>
+      <Button dense loading={smokePending} loadingText="smoke" onClick={onRunSmoke}>
+        읽기 smoke
+      </Button>
     </div>
   );
 };
@@ -488,13 +648,15 @@ function statusChipClass(state: CryptoRealtimeSessionStatus['state']): string {
   return 'chip chip--down';
 }
 
-const CryptoOrderbookPanel = ({
+export const CryptoOrderbookPanel = ({
+  currentPrice,
   market,
   onPickPrice,
   orderbook,
 }: {
+  currentPrice: string | undefined;
   market: string;
-  onPickPrice: (price: string) => void;
+  onPickPrice: (price: string, side: Side) => void;
   orderbook: {
     levels: Array<{ askPrice: string; askSize: string; bidPrice: string; bidSize: string }>;
     totalAskSize: string;
@@ -509,6 +671,10 @@ const CryptoOrderbookPanel = ({
     );
   }
   const asks = [...orderbook.levels].reverse();
+  const maxSize =
+    [...orderbook.levels.flatMap((level) => [level.askSize, level.bidSize])].sort((left, right) =>
+      decimalGt(left, right) ? -1 : 1,
+    )[0] ?? '0';
   return (
     <div className="panel orderbook-panel">
       <div className="orderbook-panel__scroll">
@@ -534,40 +700,45 @@ const CryptoOrderbookPanel = ({
           </TableGrid.Header>
           <TableGrid.Body>
             {asks.map((level, index) => (
-              <TableGrid.Row
+              <CryptoOrderbookRow
                 // biome-ignore lint/suspicious/noArrayIndexKey: Upbit 호가 레벨은 응답 순서가 레벨 식별자다.
                 key={`ask-${index}`}
-                className="orderbook-row"
-                onClick={() => onPickPrice(level.askPrice)}
-              >
-                <TableGrid.Cell flex={1} numeric className="num-down">
-                  {formatCryptoVolume(level.askSize)}
+                askSize={level.askSize}
+                bidSize="0"
+                current={currentPrice === level.askPrice}
+                market={market}
+                maxSize={maxSize}
+                onClick={() => onPickPrice(level.askPrice, 'bid')}
+                price={level.askPrice}
+                side="ask"
+              />
+            ))}
+            {currentPrice ? (
+              <TableGrid.Row className="orderbook-row orderbook-row--current">
+                <TableGrid.Cell flex={1} numeric className="muted">
+                  현재가
                 </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric className="num-down">
-                  {formatCryptoPrice(level.askPrice, market)}
+                <TableGrid.Cell flex={1} numeric>
+                  {formatCryptoPrice(currentPrice, market)}
                 </TableGrid.Cell>
                 <TableGrid.Cell flex={1} numeric className="muted">
-                  -
+                  {formatTradeTime(Date.now())}
                 </TableGrid.Cell>
               </TableGrid.Row>
-            ))}
+            ) : null}
             {orderbook.levels.map((level, index) => (
-              <TableGrid.Row
+              <CryptoOrderbookRow
                 // biome-ignore lint/suspicious/noArrayIndexKey: Upbit 호가 레벨은 응답 순서가 레벨 식별자다.
                 key={`bid-${index}`}
-                className="orderbook-row"
-                onClick={() => onPickPrice(level.bidPrice)}
-              >
-                <TableGrid.Cell flex={1} numeric className="muted">
-                  -
-                </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric className="num-up">
-                  {formatCryptoPrice(level.bidPrice, market)}
-                </TableGrid.Cell>
-                <TableGrid.Cell flex={1} numeric className="num-up">
-                  {formatCryptoVolume(level.bidSize)}
-                </TableGrid.Cell>
-              </TableGrid.Row>
+                askSize="0"
+                bidSize={level.bidSize}
+                current={currentPrice === level.bidPrice}
+                market={market}
+                maxSize={maxSize}
+                onClick={() => onPickPrice(level.bidPrice, 'ask')}
+                price={level.bidPrice}
+                side="bid"
+              />
             ))}
           </TableGrid.Body>
         </TableGrid.Root>
@@ -579,6 +750,71 @@ const CryptoOrderbookPanel = ({
         </span>
       </div>
     </div>
+  );
+};
+
+const CryptoOrderbookRow = ({
+  askSize,
+  bidSize,
+  current,
+  market,
+  maxSize,
+  onClick,
+  price,
+  side,
+}: {
+  askSize: string;
+  bidSize: string;
+  current: boolean;
+  market: string;
+  maxSize: string;
+  onClick: () => void;
+  price: string;
+  side: 'ask' | 'bid';
+}): ReactElement => {
+  const askPct = decimalRatioPercent(askSize, maxSize);
+  const bidPct = decimalRatioPercent(bidSize, maxSize);
+  return (
+    <TableGrid.Row
+      className={[
+        'orderbook-row',
+        `orderbook-row--${side === 'ask' ? 'sell' : 'buy'}`,
+        current ? 'orderbook-row--current' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      onClick={onClick}
+    >
+      <TableGrid.Cell flex={1} numeric className={side === 'ask' ? 'num-down' : 'muted'}>
+        {side === 'ask' ? (
+          <>
+            <span
+              className="orderbook-row__bar orderbook-row__bar--ask"
+              style={{ width: `${askPct}%` }}
+            />
+            <span className="orderbook-row__value">{formatCryptoVolume(askSize)}</span>
+          </>
+        ) : (
+          '-'
+        )}
+      </TableGrid.Cell>
+      <TableGrid.Cell flex={1} numeric className={side === 'ask' ? 'num-down' : 'num-up'}>
+        {formatCryptoPrice(price, market)}
+      </TableGrid.Cell>
+      <TableGrid.Cell flex={1} numeric className={side === 'bid' ? 'num-up' : 'muted'}>
+        {side === 'bid' ? (
+          <>
+            <span
+              className="orderbook-row__bar orderbook-row__bar--bid"
+              style={{ width: `${bidPct}%` }}
+            />
+            <span className="orderbook-row__value">{formatCryptoVolume(bidSize)}</span>
+          </>
+        ) : (
+          '-'
+        )}
+      </TableGrid.Cell>
+    </TableGrid.Row>
   );
 };
 
@@ -763,12 +999,12 @@ const CryptoTradeFeedPanel = ({
   </section>
 );
 
-const CryptoBalancesPanel = ({
+export const CryptoBalancesPanel = ({
   balances,
   enabled,
   quote,
 }: {
-  balances: Array<{ avgBuyPrice: string; balance: string; currency: string; locked: string }>;
+  balances: CryptoBalanceSummary[];
   enabled: boolean;
   quote: string;
 }): ReactElement => (
@@ -789,19 +1025,36 @@ const CryptoBalancesPanel = ({
           <TableGrid.Cell flex={1} numeric>
             평단
           </TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            평가
+          </TableGrid.Cell>
+          <TableGrid.Cell flex={1} numeric>
+            손익
+          </TableGrid.Cell>
         </TableGrid.Header>
         <TableGrid.Body>
           {balances.map((balance) => (
             <TableGrid.Row key={balance.currency}>
               <TableGrid.Cell width="7rem">{balance.currency}</TableGrid.Cell>
               <TableGrid.Cell flex={1} numeric>
-                {formatCryptoVolume(balance.balance)}
+                {formatCryptoVolume(balance.available)}
               </TableGrid.Cell>
               <TableGrid.Cell flex={1} numeric>
                 {formatCryptoVolume(balance.locked)}
               </TableGrid.Cell>
               <TableGrid.Cell flex={1} numeric>
                 {formatCryptoAmount(balance.avgBuyPrice, quote)}
+              </TableGrid.Cell>
+              <TableGrid.Cell flex={1} numeric>
+                {formatCryptoAmount(balance.valuation, quote)}
+              </TableGrid.Cell>
+              <TableGrid.Cell
+                flex={1}
+                numeric
+                className={Number(balance.profitLoss) < 0 ? 'num-down' : 'num-up'}
+              >
+                {formatCryptoAmount(balance.profitLoss, quote)} ·{' '}
+                {formatPercent(balance.profitLossRate)}
               </TableGrid.Cell>
             </TableGrid.Row>
           ))}
@@ -811,18 +1064,28 @@ const CryptoBalancesPanel = ({
   </section>
 );
 
-const CryptoOrdersPanel = ({
+export const CryptoOrdersPanel = ({
   cancelPending,
+  detail,
+  detailLoading,
   enabled,
+  onCloseDetail,
   onCancel,
+  onOpenDetail,
   orders,
 }: {
   cancelPending: boolean;
+  detail: CryptoOrderDetail | null;
+  detailLoading: boolean;
   enabled: boolean;
+  onCloseDetail: () => void;
   onCancel: (uuid: string) => void;
+  onOpenDetail: (uuid: string) => void;
   orders: Array<{
+    executedVolume: string;
     id: number;
     market: string;
+    paidFee: string;
     price: string | null;
     remainingVolume: string;
     side: string;
@@ -836,53 +1099,283 @@ const CryptoOrdersPanel = ({
     {!enabled ? (
       <div className="panel__body muted">활성 Upbit 실전 계좌에서만 조회됩니다.</div>
     ) : (
-      <TableGrid.Root variant="hts" stickyHeader horizontalScroll style={{ height: '100%' }}>
-        <TableGrid.Header>
-          <TableGrid.Cell width="9rem">마켓</TableGrid.Cell>
-          <TableGrid.Cell width="4.5rem">방향</TableGrid.Cell>
-          <TableGrid.Cell width="6rem">상태</TableGrid.Cell>
-          <TableGrid.Cell width="9rem" numeric>
-            가격
-          </TableGrid.Cell>
-          <TableGrid.Cell width="9rem" numeric>
-            잔량
-          </TableGrid.Cell>
-          <TableGrid.Cell width="6rem">관리</TableGrid.Cell>
-        </TableGrid.Header>
-        <TableGrid.Body>
-          {orders.map((order) => (
-            <TableGrid.Row key={order.id}>
-              <TableGrid.Cell width="9rem">{order.market}</TableGrid.Cell>
-              <TableGrid.Cell
-                width="4.5rem"
-                className={order.side === 'bid' ? 'num-up' : 'num-down'}
-              >
-                {order.side === 'bid' ? '매수' : '매도'}
-              </TableGrid.Cell>
-              <TableGrid.Cell width="6rem">{order.state}</TableGrid.Cell>
-              <TableGrid.Cell width="9rem" numeric>
-                {formatCryptoPrice(order.price ?? undefined, order.market)}
-              </TableGrid.Cell>
-              <TableGrid.Cell width="9rem" numeric>
-                {formatCryptoVolume(order.remainingVolume)}
-              </TableGrid.Cell>
-              <TableGrid.Cell width="6rem">
-                {isOpenOrder(order.state) && order.uuid ? (
-                  <Button
-                    dense
-                    disabled={cancelPending}
-                    onClick={() => onCancel(order.uuid as string)}
-                  >
-                    취소
-                  </Button>
-                ) : (
-                  <span className="muted">-</span>
-                )}
-              </TableGrid.Cell>
-            </TableGrid.Row>
-          ))}
-        </TableGrid.Body>
-      </TableGrid.Root>
+      <>
+        <TableGrid.Root variant="hts" stickyHeader horizontalScroll style={{ height: '100%' }}>
+          <TableGrid.Header>
+            <TableGrid.Cell width="9rem">마켓</TableGrid.Cell>
+            <TableGrid.Cell width="4.5rem">방향</TableGrid.Cell>
+            <TableGrid.Cell width="6rem">상태</TableGrid.Cell>
+            <TableGrid.Cell width="9rem" numeric>
+              평균가
+            </TableGrid.Cell>
+            <TableGrid.Cell width="8rem" numeric>
+              체결
+            </TableGrid.Cell>
+            <TableGrid.Cell width="8rem" numeric>
+              잔량
+            </TableGrid.Cell>
+            <TableGrid.Cell width="7rem" numeric>
+              수수료
+            </TableGrid.Cell>
+            <TableGrid.Cell width="10rem">관리</TableGrid.Cell>
+          </TableGrid.Header>
+          <TableGrid.Body>
+            {orders.map((order) => (
+              <TableGrid.Row key={order.id}>
+                <TableGrid.Cell width="9rem">{order.market}</TableGrid.Cell>
+                <TableGrid.Cell
+                  width="4.5rem"
+                  className={order.side === 'bid' ? 'num-up' : 'num-down'}
+                >
+                  {order.side === 'bid' ? '매수' : '매도'}
+                </TableGrid.Cell>
+                <TableGrid.Cell width="6rem">{stateLabel(order.state)}</TableGrid.Cell>
+                <TableGrid.Cell width="9rem" numeric>
+                  {formatCryptoPrice(order.price ?? undefined, order.market)}
+                </TableGrid.Cell>
+                <TableGrid.Cell width="8rem" numeric>
+                  {formatCryptoVolume(order.executedVolume)}
+                </TableGrid.Cell>
+                <TableGrid.Cell width="8rem" numeric>
+                  {formatCryptoVolume(order.remainingVolume)}
+                </TableGrid.Cell>
+                <TableGrid.Cell width="7rem" numeric>
+                  {formatCryptoVolume(order.paidFee)}
+                </TableGrid.Cell>
+                <TableGrid.Cell width="10rem">
+                  {order.uuid ? (
+                    <Button dense onClick={() => onOpenDetail(order.uuid as string)}>
+                      상세
+                    </Button>
+                  ) : null}
+                  {isOpenOrder(order.state) && order.uuid ? (
+                    <Button
+                      dense
+                      disabled={cancelPending}
+                      onClick={() => onCancel(order.uuid as string)}
+                    >
+                      취소
+                    </Button>
+                  ) : null}
+                </TableGrid.Cell>
+              </TableGrid.Row>
+            ))}
+          </TableGrid.Body>
+        </TableGrid.Root>
+        {detail || detailLoading ? (
+          <CryptoOrderDetailModal detail={detail} loading={detailLoading} onClose={onCloseDetail} />
+        ) : null}
+      </>
     )}
   </section>
+);
+
+const CryptoOrderDetailModal = ({
+  detail,
+  loading,
+  onClose,
+}: {
+  detail: CryptoOrderDetail | null;
+  loading: boolean;
+  onClose: () => void;
+}): ReactElement => (
+  <div className="crypto-detail-modal" role="dialog" aria-label="주문 상세">
+    <div className="crypto-detail-modal__content">
+      <div className="panel__title">
+        주문 상세
+        <Button dense onClick={onClose}>
+          닫기
+        </Button>
+      </div>
+      {loading && !detail ? (
+        <div className="panel__body muted">상세 로드 중…</div>
+      ) : detail ? (
+        <div className="panel__body crypto-detail-modal__body">
+          <div className="crypto-detail-modal__summary">
+            <span>{detail.market}</span>
+            <span className={detail.side === 'bid' ? 'num-up' : 'num-down'}>
+              {detail.side === 'bid' ? '매수' : '매도'} · {stateLabel(detail.state)}
+            </span>
+            <span>평균 {formatCryptoPrice(detail.averageExecutedPrice, detail.market)}</span>
+            <span>체결 {formatCryptoVolume(detail.executedVolume)}</span>
+            <span>잔량 {formatCryptoVolume(detail.remainingVolume)}</span>
+            <span>수수료 {formatCryptoVolume(detail.totalFee)}</span>
+          </div>
+          <TableGrid.Root
+            variant="hts"
+            stickyHeader
+            horizontalScroll
+            style={{ maxHeight: '18rem' }}
+          >
+            <TableGrid.Header>
+              <TableGrid.Cell width="9rem">시각</TableGrid.Cell>
+              <TableGrid.Cell width="10rem" numeric>
+                가격
+              </TableGrid.Cell>
+              <TableGrid.Cell width="9rem" numeric>
+                수량
+              </TableGrid.Cell>
+              <TableGrid.Cell width="10rem" numeric>
+                체결금액
+              </TableGrid.Cell>
+              <TableGrid.Cell width="8rem" numeric>
+                수수료
+              </TableGrid.Cell>
+            </TableGrid.Header>
+            <TableGrid.Body>
+              {detail.trades.length === 0 ? (
+                <TableGrid.Row>
+                  <TableGrid.Cell width="46rem" className="muted">
+                    체결 내역 없음
+                  </TableGrid.Cell>
+                </TableGrid.Row>
+              ) : (
+                detail.trades.map((trade) => (
+                  <TableGrid.Row key={trade.uuid}>
+                    <TableGrid.Cell width="9rem">{formatDateTime(trade.createdAt)}</TableGrid.Cell>
+                    <TableGrid.Cell width="10rem" numeric>
+                      {formatCryptoPrice(trade.price, detail.market)}
+                    </TableGrid.Cell>
+                    <TableGrid.Cell width="9rem" numeric>
+                      {formatCryptoVolume(trade.volume)}
+                    </TableGrid.Cell>
+                    <TableGrid.Cell width="10rem" numeric>
+                      {formatCryptoAmount(trade.funds, detail.market)}
+                    </TableGrid.Cell>
+                    <TableGrid.Cell width="8rem" numeric>
+                      {formatCryptoVolume(trade.fee)}
+                    </TableGrid.Cell>
+                  </TableGrid.Row>
+                ))
+              )}
+            </TableGrid.Body>
+          </TableGrid.Root>
+        </div>
+      ) : null}
+    </div>
+  </div>
+);
+
+export const CryptoTransfersPanel = ({
+  enabled,
+  onCloseDetail,
+  onOpenDetail,
+  selectedTransfer,
+  transferDetailLoading,
+  transfers,
+  walletStatuses,
+}: {
+  enabled: boolean;
+  onCloseDetail: () => void;
+  onOpenDetail: (transfer: CryptoTransferStatus) => void;
+  selectedTransfer: CryptoTransferStatus | null;
+  transferDetailLoading: boolean;
+  transfers: CryptoTransferStatus[];
+  walletStatuses: CryptoWalletStatus[];
+}): ReactElement => (
+  <section className="panel crypto-account-panel crypto-transfer-panel">
+    <div className="panel__title">입출금 현황</div>
+    {!enabled ? (
+      <div className="panel__body muted">활성 Upbit 실전 계좌에서만 조회됩니다.</div>
+    ) : (
+      <>
+        <TableGrid.Root variant="hts" stickyHeader horizontalScroll style={{ height: '100%' }}>
+          <TableGrid.Header>
+            <TableGrid.Cell width="5rem">구분</TableGrid.Cell>
+            <TableGrid.Cell width="7rem">자산</TableGrid.Cell>
+            <TableGrid.Cell width="7rem">상태</TableGrid.Cell>
+            <TableGrid.Cell width="9rem" numeric>
+              수량
+            </TableGrid.Cell>
+            <TableGrid.Cell width="8rem" numeric>
+              수수료
+            </TableGrid.Cell>
+            <TableGrid.Cell width="10rem">완료</TableGrid.Cell>
+            <TableGrid.Cell width="6rem">상세</TableGrid.Cell>
+          </TableGrid.Header>
+          <TableGrid.Body>
+            {transfers.map((transfer) => (
+              <TableGrid.Row key={`${transfer.direction}:${transfer.uuid}`}>
+                <TableGrid.Cell width="5rem">
+                  {transferDirectionLabel(transfer.direction)}
+                </TableGrid.Cell>
+                <TableGrid.Cell width="7rem">
+                  {transfer.currency}
+                  {transfer.netType ? `/${transfer.netType}` : ''}
+                </TableGrid.Cell>
+                <TableGrid.Cell width="7rem">{transfer.state}</TableGrid.Cell>
+                <TableGrid.Cell width="9rem" numeric>
+                  {formatCryptoVolume(transfer.amount)}
+                </TableGrid.Cell>
+                <TableGrid.Cell width="8rem" numeric>
+                  {formatCryptoVolume(transfer.fee)}
+                </TableGrid.Cell>
+                <TableGrid.Cell width="10rem">{formatDateTime(transfer.doneAt)}</TableGrid.Cell>
+                <TableGrid.Cell width="6rem">
+                  <Button dense onClick={() => onOpenDetail(transfer)}>
+                    보기
+                  </Button>
+                </TableGrid.Cell>
+              </TableGrid.Row>
+            ))}
+          </TableGrid.Body>
+        </TableGrid.Root>
+        <div className="panel__body crypto-wallet-status-strip">
+          {walletStatuses.slice(0, 6).map((status) => (
+            <span
+              key={`${status.currency}:${status.netType}`}
+              className={status.walletState === 'working' ? 'chip chip--live' : 'chip'}
+            >
+              {status.currency}/{status.netType} {status.walletState}
+            </span>
+          ))}
+        </div>
+        {selectedTransfer || transferDetailLoading ? (
+          <CryptoTransferDetailModal
+            loading={transferDetailLoading}
+            onClose={onCloseDetail}
+            transfer={selectedTransfer}
+          />
+        ) : null}
+      </>
+    )}
+  </section>
+);
+
+const CryptoTransferDetailModal = ({
+  loading,
+  onClose,
+  transfer,
+}: {
+  loading: boolean;
+  onClose: () => void;
+  transfer: CryptoTransferStatus | null;
+}): ReactElement => (
+  <div className="crypto-detail-modal" role="dialog" aria-label="입출금 상세">
+    <div className="crypto-detail-modal__content">
+      <div className="panel__title">
+        입출금 상세
+        <Button dense onClick={onClose}>
+          닫기
+        </Button>
+      </div>
+      {loading && !transfer ? (
+        <div className="panel__body muted">상세 로드 중…</div>
+      ) : transfer ? (
+        <div className="panel__body crypto-detail-modal__summary">
+          <span>{transferDirectionLabel(transfer.direction)}</span>
+          <span>
+            {transfer.currency}
+            {transfer.netType ? `/${transfer.netType}` : ''}
+          </span>
+          <span>{transfer.state}</span>
+          <span>수량 {formatCryptoVolume(transfer.amount)}</span>
+          <span>수수료 {formatCryptoVolume(transfer.fee)}</span>
+          <span>요청 {formatDateTime(transfer.createdAt)}</span>
+          <span>완료 {formatDateTime(transfer.doneAt)}</span>
+          <span>TX {transfer.txid ?? '-'}</span>
+        </div>
+      ) : null}
+    </div>
+  </div>
 );

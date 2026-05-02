@@ -48,12 +48,84 @@ export function isDecimalOnTick(value: string, tickSize: string | undefined): bo
   return valueMantissa % tickMantissa === 0n;
 }
 
+export function decimalAdd(left: string | undefined, right: string | undefined): string {
+  const l = parseDecimal(left ?? '0');
+  const r = parseDecimal(right ?? '0');
+  if (!l || !r) return '0';
+  const scale = Math.max(l.scale, r.scale);
+  const value =
+    l.mantissa * 10n ** BigInt(scale - l.scale) + r.mantissa * 10n ** BigInt(scale - r.scale);
+  return formatScaledDecimal(value, scale);
+}
+
+export function decimalSub(left: string | undefined, right: string | undefined): string {
+  const l = parseDecimal(left ?? '0');
+  const r = parseDecimal(right ?? '0');
+  if (!l || !r) return '0';
+  const scale = Math.max(l.scale, r.scale);
+  const value =
+    l.mantissa * 10n ** BigInt(scale - l.scale) - r.mantissa * 10n ** BigInt(scale - r.scale);
+  return formatScaledDecimal(value, scale);
+}
+
+export function decimalMul(left: string | undefined, right: string | undefined): string {
+  const l = parseDecimal(left ?? '0');
+  const r = parseDecimal(right ?? '0');
+  if (!l || !r) return '0';
+  const scale = l.scale + r.scale;
+  return formatScaledDecimal(l.mantissa * r.mantissa, scale);
+}
+
+export function decimalDiv(
+  left: string | undefined,
+  right: string | undefined,
+  precision = 8,
+): string {
+  const l = parseDecimal(left ?? '0');
+  const r = parseDecimal(right ?? '0');
+  if (!l || !r || r.mantissa === 0n) return '0';
+  const scale = Math.max(0, Math.trunc(precision));
+  const numerator = l.mantissa * 10n ** BigInt(scale + r.scale);
+  const denominator = r.mantissa * 10n ** BigInt(l.scale);
+  return formatScaledDecimal(numerator / denominator, scale);
+}
+
+export function decimalRatioPercent(value: string | undefined, max: string | undefined): number {
+  const v = parseDecimal(value ?? '0');
+  const m = parseDecimal(max ?? '0');
+  if (!v || !m || m.mantissa === 0n) return 0;
+  const scale = Math.max(v.scale, m.scale);
+  const valueMantissa = v.mantissa * 10n ** BigInt(scale - v.scale);
+  const maxMantissa = m.mantissa * 10n ** BigInt(scale - m.scale);
+  return Number((valueMantissa * 100n) / maxMantissa);
+}
+
+export function decimalGt(left: string | undefined, right: string | undefined): boolean {
+  const l = parseDecimal(left ?? '0');
+  const r = parseDecimal(right ?? '0');
+  if (!l || !r) return false;
+  const scale = Math.max(l.scale, r.scale);
+  return l.mantissa * 10n ** BigInt(scale - l.scale) > r.mantissa * 10n ** BigInt(scale - r.scale);
+}
+
 function parseDecimal(value: string): { mantissa: bigint; scale: number } | null {
   const trimmed = value.trim();
-  if (!/^(0|[1-9]\d*)(\.\d+)?$/.test(trimmed)) return null;
-  const [whole = '0', fraction = ''] = trimmed.split('.');
+  if (!/^-?(0|[1-9]\d*)(\.\d+)?$/.test(trimmed)) return null;
+  const negative = trimmed.startsWith('-');
+  const source = negative ? trimmed.slice(1) : trimmed;
+  const [whole = '0', fraction = ''] = source.split('.');
   return {
-    mantissa: BigInt(`${whole}${fraction}`),
+    mantissa: BigInt(`${negative ? '-' : ''}${whole}${fraction}`),
     scale: fraction.length,
   };
+}
+
+function formatScaledDecimal(value: bigint, scale: number): string {
+  const sign = value < 0n ? '-' : '';
+  const abs = value < 0n ? -value : value;
+  if (scale === 0) return `${sign}${abs}`;
+  const raw = String(abs).padStart(scale + 1, '0');
+  const whole = raw.slice(0, -scale);
+  const fraction = raw.slice(-scale).replace(/0+$/, '');
+  return fraction ? `${sign}${whole}.${fraction}` : `${sign}${whole}`;
 }

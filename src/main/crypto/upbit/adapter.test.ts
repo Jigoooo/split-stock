@@ -155,3 +155,120 @@ describe('UpbitExchangeAdapter order reconciliation reads', () => {
     expect(detail.value.trades?.[0]?.uuid).toBe('trade-uuid');
   });
 });
+
+describe('UpbitExchangeAdapter transfer status reads', () => {
+  it('maps deposit, withdrawal, and wallet status fixtures without execution calls', async () => {
+    async function* deposits() {
+      yield {
+        uuid: 'deposit-uuid',
+        currency: 'BTC',
+        amount: '0.001',
+        fee: '0',
+        state: 'ACCEPTED',
+        txid: 'deposit-txid',
+        transaction_type: 'default',
+        type: 'deposit',
+        net_type: 'BTC',
+        created_at: '2026-05-01T00:00:00+09:00',
+        done_at: '2026-05-01T00:10:00+09:00',
+      };
+    }
+    async function* withdrawals() {
+      yield {
+        uuid: 'withdraw-uuid',
+        currency: 'ETH',
+        amount: '1.25',
+        fee: '0.01',
+        state: 'DONE',
+        txid: 'withdraw-txid',
+        transaction_type: 'default',
+        type: 'withdraw',
+        net_type: 'ETH',
+        created_at: '2026-05-01T01:00:00+09:00',
+        done_at: '2026-05-01T01:20:00+09:00',
+        is_cancelable: false,
+      };
+    }
+    const createCoinAddress = vi.fn();
+    const depositKrw = vi.fn();
+    const cancelWithdrawal = vi.fn();
+    const createKrwWithdrawal = vi.fn();
+    const createWithdrawal = vi.fn();
+    const retrieveDeposit = vi.fn(async () => (await deposits().next()).value);
+    const retrieveWithdrawal = vi.fn(async () => (await withdrawals().next()).value);
+    const adapter = new UpbitExchangeAdapter({
+      client: {
+        deposits: {
+          list: vi.fn(() => deposits()),
+          retrieve: retrieveDeposit,
+          createCoinAddress,
+          depositKrw,
+        },
+        withdraws: {
+          list: vi.fn(() => withdrawals()),
+          retrieve: retrieveWithdrawal,
+          cancelWithdrawal,
+          createKrwWithdrawal,
+          createWithdrawal,
+        },
+        walletStatus: {
+          list: vi.fn(async () => [
+            {
+              currency: 'BTC',
+              net_type: 'BTC',
+              network_name: 'Bitcoin',
+              wallet_state: 'working',
+              block_elapsed_minutes: 1,
+              block_height: 900000,
+              block_state: 'normal',
+              block_updated_at: '2026-05-01T00:00:00+00:00',
+            },
+          ]),
+        },
+      } as never,
+      limiter: immediateLimiter(),
+    });
+
+    const listedDeposits = await adapter.listDeposits({ currency: 'BTC', limit: 10 });
+    const listedWithdrawals = await adapter.listWithdrawals({ currency: 'ETH', limit: 10 });
+    const deposit = await adapter.getDeposit({ uuid: 'deposit-uuid' });
+    const withdrawal = await adapter.getWithdrawal({ uuid: 'withdraw-uuid' });
+    const wallets = await adapter.listWalletStatuses();
+
+    expect(listedDeposits.isOk()).toBe(true);
+    expect(listedWithdrawals.isOk()).toBe(true);
+    expect(deposit.isOk()).toBe(true);
+    expect(withdrawal.isOk()).toBe(true);
+    expect(wallets.isOk()).toBe(true);
+    if (
+      listedDeposits.isErr() ||
+      listedWithdrawals.isErr() ||
+      deposit.isErr() ||
+      withdrawal.isErr() ||
+      wallets.isErr()
+    ) {
+      return;
+    }
+    expect(listedDeposits.value[0]).toMatchObject({
+      direction: 'deposit',
+      amount: '0.001',
+      state: 'ACCEPTED',
+    });
+    expect(listedWithdrawals.value[0]).toMatchObject({
+      direction: 'withdraw',
+      amount: '1.25',
+      fee: '0.01',
+      isCancelable: false,
+    });
+    expect(wallets.value[0]).toMatchObject({
+      currency: 'BTC',
+      walletState: 'working',
+      blockState: 'normal',
+    });
+    expect(createCoinAddress).not.toHaveBeenCalled();
+    expect(depositKrw).not.toHaveBeenCalled();
+    expect(cancelWithdrawal).not.toHaveBeenCalled();
+    expect(createKrwWithdrawal).not.toHaveBeenCalled();
+    expect(createWithdrawal).not.toHaveBeenCalled();
+  });
+});

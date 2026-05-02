@@ -42,3 +42,41 @@ export function decimalMul(left: string, right: string): string {
   const fractional = raw.slice(-scale).replace(/0+$/, '');
   return fractional ? `${whole}.${fractional}` : whole;
 }
+
+export function decimalAdd(left: string, right: string): string {
+  const l = parseDecimal(left);
+  const r = parseDecimal(right);
+  const scale = Math.max(l.scale, r.scale);
+  const value =
+    l.mantissa * 10n ** BigInt(scale - l.scale) + r.mantissa * 10n ** BigInt(scale - r.scale);
+  return formatScaled(value, scale);
+}
+
+export function decimalSub(left: string, right: string): string {
+  const l = parseDecimal(left);
+  const r = parseDecimal(right);
+  const scale = Math.max(l.scale, r.scale);
+  const value =
+    l.mantissa * 10n ** BigInt(scale - l.scale) - r.mantissa * 10n ** BigInt(scale - r.scale);
+  return formatScaled(value, scale);
+}
+
+export function decimalDiv(left: string, right: string, precision = 8): string {
+  const l = parseDecimal(left);
+  const r = parseDecimal(right);
+  if (r.mantissa === 0n) return '0';
+  const scale = Math.max(0, Math.trunc(precision));
+  const numerator = l.mantissa * 10n ** BigInt(scale + r.scale);
+  const denominator = r.mantissa * 10n ** BigInt(l.scale);
+  return formatScaled(numerator / denominator, scale);
+}
+
+function formatScaled(value: bigint, scale: number): string {
+  const sign = value < 0n ? '-' : '';
+  const abs = value < 0n ? -value : value;
+  if (scale === 0) return `${sign}${abs}`;
+  const raw = String(abs).padStart(scale + 1, '0');
+  const whole = raw.slice(0, -scale);
+  const fractional = raw.slice(-scale).replace(/0+$/, '');
+  return fractional ? `${sign}${whole}.${fractional}` : `${sign}${whole}`;
+}

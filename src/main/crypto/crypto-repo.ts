@@ -4,7 +4,9 @@ import type {
   CryptoCandleUnit,
   CryptoExchangeId,
   CryptoMarketSummary,
+  CryptoOrderDetail,
   CryptoOrderSnapshot,
+  CryptoOrderTrade,
   CryptoPrivateAssetEvent,
   CryptoPrivateOrderEvent,
   CryptoRealtimeCheckpoint,
@@ -19,6 +21,7 @@ import {
   cryptoOrders,
   cryptoRealtimeCheckpoints,
 } from '../db/schema';
+import { decimalAdd, decimalDiv, decimalMul } from './upbit/decimal';
 
 interface PersistOrderInput {
   accountId: number;
@@ -406,6 +409,74 @@ export class CryptoTradingRepo {
       .orderBy(desc(cryptoOrders.updatedAt))
       .limit(limit)
       .all();
+  }
+
+  getOrderDetail(accountId: number, uuid: string): CryptoOrderDetail | null {
+    const row = this.db
+      .select()
+      .from(cryptoOrders)
+      .where(and(eq(cryptoOrders.accountId, accountId), eq(cryptoOrders.uuid, uuid)))
+      .get();
+    if (!row?.uuid) return null;
+
+    const fills = this.db
+      .select()
+      .from(cryptoFills)
+      .where(and(eq(cryptoFills.accountId, accountId), eq(cryptoFills.orderUuid, row.uuid)))
+      .orderBy(desc(cryptoFills.executedAt))
+      .all()
+      .reverse();
+    const trades: CryptoOrderTrade[] = fills.map((fill) => ({
+      uuid: fill.tradeUuid ?? `${row.uuid}:${fill.id}`,
+      market: fill.market,
+      side: fill.side,
+      price: fill.price,
+      volume: fill.volume,
+      funds: fill.funds,
+      fee: fill.fee,
+      createdAt: fill.executedAt.getTime(),
+      raw: fill.rawJson ? JSON.parse(fill.rawJson) : undefined,
+    }));
+    const totalExecutedFunds = trades.reduce((sum, trade) => decimalAdd(sum, trade.funds), '0');
+    const totalFee =
+      trades.length > 0
+        ? trades.reduce((sum, trade) => decimalAdd(sum, trade.fee ?? '0'), '0')
+        : row.paidFee;
+    const executedVolume =
+      row.executedVolume !== '0'
+        ? row.executedVolume
+        : trades.reduce((sum, trade) => decimalAdd(sum, trade.volume), '0');
+    const fallbackExecutedFunds =
+      row.price && row.executedVolume ? decimalMul(row.price, row.executedVolume) : '0';
+    const normalizedExecutedFunds =
+      totalExecutedFunds !== '0' || trades.length > 0 ? totalExecutedFunds : fallbackExecutedFunds;
+    const averageExecutedPrice =
+      executedVolume === '0' ? '0' : decimalDiv(normalizedExecutedFunds, executedVolume, 12);
+
+    return {
+      accountId,
+      exchange: row.exchange as CryptoOrderDetail['exchange'],
+      uuid: row.uuid,
+      ...(row.identifier !== null ? { identifier: row.identifier } : {}),
+      market: row.market as CryptoOrderDetail['market'],
+      side: row.side,
+      ordType: row.ordType,
+      state: row.state,
+      ...(row.price !== null ? { price: row.price } : {}),
+      ...(row.volume !== null ? { volume: row.volume } : {}),
+      remainingVolume: row.remainingVolume,
+      executedVolume,
+      paidFee: row.paidFee,
+      locked: row.locked,
+      placedAt: row.placedAt.getTime(),
+      trades,
+      raw: row.rawJson ? JSON.parse(row.rawJson) : undefined,
+      averageExecutedPrice,
+      totalExecutedFunds: normalizedExecutedFunds,
+      totalFee,
+      fillCount: trades.length,
+      updatedAt: row.updatedAt.getTime(),
+    };
   }
 
   listFills(accountId: number, limit = 100) {

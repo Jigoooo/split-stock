@@ -124,6 +124,14 @@ describe('CryptoTradingRepo order reconciliation state', () => {
     expect(repo.listRecentOrders(1)[0]?.executedVolume).toBe('1');
     expect(repo.listFills(1)).toHaveLength(1);
     expect(repo.listFills(1)[0]?.price).toBe('101');
+    expect(repo.getOrderDetail(1, 'order-uuid')).toMatchObject({
+      uuid: 'order-uuid',
+      averageExecutedPrice: '101',
+      totalExecutedFunds: '101',
+      totalFee: '0.05',
+      fillCount: 1,
+      trades: [{ uuid: 'trade-uuid', price: '101' }],
+    });
     expect(
       repo.getRealtimeCheckpoint({ accountId: 1, exchange: 'UPBIT', stream: 'orders' }),
     ).toMatchObject({

@@ -4,10 +4,12 @@ import {
   CryptoOrderIntentSchema,
   type CryptoPrivateAssetEvent,
   type CryptoPrivateOrderEvent,
+  type CryptoReadonlySmokeResult,
   type CryptoRealtimeCandle,
   type CryptoRealtimeOrderbook,
   type CryptoRealtimeTicker,
   type CryptoRealtimeTrade,
+  CryptoTransferDirectionSchema,
   isUpbitCredentials,
   type UpbitCredentials,
 } from '@shared/contracts';
@@ -30,6 +32,27 @@ const MarketWatchInputSchema = z.object({
   market: CryptoMarketCodeSchema,
   unit: CryptoCandleUnitSchema.default('1m'),
 });
+const TransferListInputSchema = z
+  .object({
+    accountId: AccountIdField.optional(),
+    direction: CryptoTransferDirectionSchema.optional(),
+    currency: z.string().trim().toUpperCase().min(2).max(20).optional(),
+    state: z.string().trim().min(1).max(40).optional(),
+    limit: z.number().int().min(1).max(100).default(50),
+  })
+  .optional();
+const TransferDetailInputSchema = z
+  .object({
+    accountId: AccountIdField.optional(),
+    direction: CryptoTransferDirectionSchema,
+    uuid: z.string().trim().min(1).optional(),
+    txid: z.string().trim().min(1).optional(),
+    currency: z.string().trim().toUpperCase().min(2).max(20).optional(),
+  })
+  .refine((value) => value.uuid || value.txid, {
+    message: 'uuid 또는 txid가 필요합니다.',
+    path: ['uuid'],
+  });
 
 function createPushStream<T>(
   signal: AbortSignal | undefined,
@@ -141,6 +164,18 @@ function createPrivateUpbit(ctx: Context, accountId: number): UpbitExchangeAdapt
     accessKey: credentials.accessKey,
     secretKey: credentials.secretKey,
   });
+}
+
+function activeAccountIdOrThrow(ctx: Context, accountId: number | undefined): number {
+  const resolved = accountId ?? ctx.activeAccountId;
+  if (resolved === null) {
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: '활성 계좌가 없습니다.' });
+  }
+  return resolved;
+}
+
+function exchangeErrorMessage(error: { kind: string; message: string; code?: string }): string {
+  return `[${error.kind}${error.code ? `/${error.code}` : ''}] ${error.message}`;
 }
 
 export const cryptoRouter = router({
@@ -283,15 +318,153 @@ export const cryptoRouter = router({
   getBalances: runtimeProcedure
     .input(z.object({ accountId: AccountIdField.optional() }).optional())
     .query(async ({ ctx, input }) => {
-      const accountId = input?.accountId ?? ctx.activeAccountId;
-      if (accountId === null) {
-        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: '활성 계좌가 없습니다.' });
-      }
+      const accountId = activeAccountIdOrThrow(ctx, input?.accountId);
       const adapter = createPrivateUpbit(ctx, accountId);
       const result = await adapter.listBalances();
       if (result.isErr()) throwUpbitError(result.error);
       new CryptoTradingRepo(ctx.db).upsertBalances(accountId, 'UPBIT', result.value);
       return { accountId, balances: result.value };
+    }),
+
+  runReadonlySmoke: runtimeProcedure
+    .input(
+      z
+        .object({ accountId: AccountIdField.optional(), market: CryptoMarketCodeSchema.optional() })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input?.accountId);
+      const credentials = loadPrivateUpbitCredentials(ctx, accountId);
+      const adapter = new UpbitExchangeAdapter({
+        accessKey: credentials.accessKey,
+        secretKey: credentials.secretKey,
+      });
+      const checkedAt = Date.now();
+
+      const balancesResult = await adapter.listBalances();
+      if (balancesResult.isOk()) {
+        new CryptoTradingRepo(ctx.db).upsertBalances(accountId, 'UPBIT', balancesResult.value);
+      }
+
+      let reconciliationResult = null;
+      let reconciliationError: string | null = null;
+      if (ctx.cryptoRealtime) {
+        const alreadyWatching = ctx.cryptoRealtime
+          .getStatus()
+          .privateSessions.some((session) => session.accountId === accountId);
+        if (!alreadyWatching) {
+          ctx.cryptoRealtime.watchPrivate({
+            accountId,
+            accessKey: credentials.accessKey,
+            secretKey: credentials.secretKey,
+            ...(input?.market ? { markets: [input.market] } : {}),
+          });
+        }
+        const result = await ctx.cryptoRealtime.reconcilePrivate({
+          accountId,
+          accessKey: credentials.accessKey,
+          secretKey: credentials.secretKey,
+          reason: 'manual',
+          ...(input?.market !== undefined ? { market: input.market } : {}),
+        });
+        if (result.isOk()) reconciliationResult = result.value;
+        else reconciliationError = exchangeErrorMessage(result.error);
+      } else {
+        reconciliationError = '코인 실시간 서비스가 준비되지 않았습니다.';
+      }
+
+      const privateStatus =
+        ctx.cryptoRealtime
+          ?.getStatus()
+          .privateSessions.find((session) => session.accountId === accountId) ?? null;
+      const smokeResult: CryptoReadonlySmokeResult = {
+        accountId,
+        exchange: 'UPBIT' as const,
+        checkedAt,
+        balances: {
+          ok: balancesResult.isOk(),
+          count: balancesResult.isOk() ? balancesResult.value.length : 0,
+          error: balancesResult.isErr() ? exchangeErrorMessage(balancesResult.error) : null,
+        },
+        privateWs: {
+          ok:
+            privateStatus !== null &&
+            privateStatus.state !== 'failed' &&
+            privateStatus.state !== 'closed',
+          state: privateStatus?.state ?? 'unavailable',
+          lastMessageAt: privateStatus?.lastMessageAt ?? null,
+          lastError: privateStatus?.lastError ?? null,
+          error: ctx.cryptoRealtime ? null : '코인 실시간 서비스가 준비되지 않았습니다.',
+        },
+        reconciliation: {
+          ok: reconciliationResult !== null,
+          result: reconciliationResult,
+          error: reconciliationError,
+        },
+        dangerousCallsBlocked: true as const,
+      };
+      return smokeResult;
+    }),
+
+  listTransfers: runtimeProcedure.input(TransferListInputSchema).query(async ({ ctx, input }) => {
+    const accountId = activeAccountIdOrThrow(ctx, input?.accountId);
+    const adapter = createPrivateUpbit(ctx, accountId);
+    const query = {
+      ...(input?.currency !== undefined ? { currency: input.currency } : {}),
+      ...(input?.state !== undefined ? { state: input.state } : {}),
+      limit: input?.limit ?? 50,
+    };
+    const results =
+      input?.direction === 'deposit'
+        ? [await adapter.listDeposits(query)]
+        : input?.direction === 'withdraw'
+          ? [await adapter.listWithdrawals(query)]
+          : [await adapter.listDeposits(query), await adapter.listWithdrawals(query)];
+    for (const result of results) {
+      if (result.isErr()) throwUpbitError(result.error);
+    }
+    const transfers = results
+      .flatMap((result) => (result.isOk() ? result.value : []))
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, input?.limit ?? 50);
+    return { accountId, transfers };
+  }),
+
+  getTransfer: runtimeProcedure.input(TransferDetailInputSchema).query(async ({ ctx, input }) => {
+    const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+    const adapter = createPrivateUpbit(ctx, accountId);
+    const query = {
+      ...(input.uuid !== undefined ? { uuid: input.uuid } : {}),
+      ...(input.txid !== undefined ? { txid: input.txid } : {}),
+      ...(input.currency !== undefined ? { currency: input.currency } : {}),
+    };
+    const result =
+      input.direction === 'deposit'
+        ? await adapter.getDeposit(query)
+        : await adapter.getWithdrawal(query);
+    if (result.isErr()) throwUpbitError(result.error);
+    return { accountId, transfer: result.value };
+  }),
+
+  listWalletStatuses: runtimeProcedure
+    .input(
+      z
+        .object({
+          accountId: AccountIdField.optional(),
+          currency: z.string().trim().toUpperCase().min(2).max(20).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input?.accountId);
+      const adapter = createPrivateUpbit(ctx, accountId);
+      const result = await adapter.listWalletStatuses();
+      if (result.isErr()) throwUpbitError(result.error);
+      const statuses =
+        input?.currency === undefined
+          ? result.value
+          : result.value.filter((status) => status.currency === input.currency);
+      return { accountId, statuses };
     }),
 
   placeOrder: runtimeProcedure
@@ -445,5 +618,34 @@ export const cryptoRouter = router({
         accountId,
         orders: new CryptoTradingRepo(ctx.db).listRecentOrders(accountId, input?.limit ?? 100),
       };
+    }),
+
+  getOrderDetail: runtimeProcedure
+    .input(
+      z.object({
+        accountId: AccountIdField.optional(),
+        uuid: z.string().trim().min(1),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const accountId = input.accountId ?? ctx.activeAccountId;
+      if (accountId === null) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: '활성 계좌가 없습니다.' });
+      }
+      const account = ctx.activeAccounts.getById(accountId);
+      if (ctx.currentEnv !== 'PROD' || ctx.activeAccountId !== accountId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: '활성 Upbit 실전 계좌에서만 조회할 수 있습니다.',
+        });
+      }
+      if (!account || account.broker !== 'UPBIT' || account.env !== ctx.currentEnv) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: '활성 Upbit 계좌가 아닙니다.' });
+      }
+      const detail = new CryptoTradingRepo(ctx.db).getOrderDetail(accountId, input.uuid);
+      if (!detail) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '주문 상세를 찾을 수 없습니다.' });
+      }
+      return { accountId, order: detail };
     }),
 });

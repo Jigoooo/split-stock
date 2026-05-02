@@ -3,6 +3,9 @@ import {
   CredentialsSchema,
   CryptoCandleUnitSchema,
   CryptoOrderIntentSchema,
+  CryptoTransferDirectionSchema,
+  DecimalStringSchema,
+  SignedDecimalStringSchema,
   UpbitCredentialsSchema,
 } from './index';
 
@@ -80,5 +83,17 @@ describe('crypto contracts', () => {
     expect(CryptoCandleUnitSchema.safeParse('D').success).toBe(true);
     expect(CryptoCandleUnitSchema.safeParse('2m').success).toBe(false);
     expect(CryptoCandleUnitSchema.safeParse('Y').success).toBe(false);
+  });
+
+  it('keeps unsigned and signed decimal contracts distinct for crypto money fields', () => {
+    expect(DecimalStringSchema.safeParse('0.00000001').success).toBe(true);
+    expect(DecimalStringSchema.safeParse('-1').success).toBe(false);
+    expect(SignedDecimalStringSchema.safeParse('-0.25').success).toBe(true);
+  });
+
+  it('validates read-only transfer directions', () => {
+    expect(CryptoTransferDirectionSchema.safeParse('deposit').success).toBe(true);
+    expect(CryptoTransferDirectionSchema.safeParse('withdraw').success).toBe(true);
+    expect(CryptoTransferDirectionSchema.safeParse('withdraw-request').success).toBe(false);
   });
 });

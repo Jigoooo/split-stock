@@ -3054,6 +3054,29 @@ body {
 .orderbook-grid.table-grid-root[data-variant="hts"] .table-grid-row.orderbook-row--current:hover {
   background: var(--accent-tint-18);
 }
+.orderbook-grid.table-grid-root[data-variant="hts"] .table-grid-row.orderbook-row .table-grid-cell {
+  position: relative;
+  overflow: hidden;
+}
+.orderbook-row__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  opacity: 0.8;
+  pointer-events: none;
+}
+.orderbook-row__bar--ask {
+  right: 0;
+  background: rgba(45, 79, 202, 0.18);
+}
+.orderbook-row__bar--bid {
+  left: 0;
+  background: rgba(211, 64, 52, 0.18);
+}
+.orderbook-row__value {
+  position: relative;
+  z-index: 1;
+}
 .orderbook-panel .panel__body {
   padding: 0.3rem 0.5rem;
   font-size: 0.95rem;
@@ -3193,10 +3216,55 @@ body {
 
 .crypto-account-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
   gap: 0.8rem;
   min-height: 13rem;
   max-height: 18rem;
+}
+
+.crypto-wallet-status-strip {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0.35rem 0.5rem;
+}
+
+.crypto-detail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: rgba(9, 12, 20, 0.36);
+}
+
+.crypto-detail-modal__content {
+  width: min(76rem, 100%);
+  max-height: min(52rem, 90vh);
+  overflow: hidden;
+  border: 0.1rem solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--hts-panel-bg);
+  box-shadow: 0 1.6rem 4rem rgba(15, 23, 42, 0.18);
+}
+
+.crypto-detail-modal__content > .panel__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.crypto-detail-modal__body {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.crypto-detail-modal__summary {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 @media (max-width: 1100px) {

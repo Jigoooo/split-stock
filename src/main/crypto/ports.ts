@@ -14,6 +14,8 @@ import type {
   CryptoRealtimeTicker,
   CryptoRealtimeTrade,
   CryptoTicker,
+  CryptoTransferStatus,
+  CryptoWalletStatus,
 } from '@shared/contracts';
 import type { Result } from 'neverthrow';
 
@@ -49,6 +51,27 @@ export interface CryptoMarketDataAdapter {
     endTimeMs?: number;
     limit?: number;
   }): Promise<Result<CryptoOrderSnapshot[], CryptoExchangeError>>;
+  listDeposits(input?: {
+    currency?: string;
+    state?: string;
+    limit?: number;
+  }): Promise<Result<CryptoTransferStatus[], CryptoExchangeError>>;
+  getDeposit(input: {
+    uuid?: string;
+    txid?: string;
+    currency?: string;
+  }): Promise<Result<CryptoTransferStatus, CryptoExchangeError>>;
+  listWithdrawals(input?: {
+    currency?: string;
+    state?: string;
+    limit?: number;
+  }): Promise<Result<CryptoTransferStatus[], CryptoExchangeError>>;
+  getWithdrawal(input: {
+    uuid?: string;
+    txid?: string;
+    currency?: string;
+  }): Promise<Result<CryptoTransferStatus, CryptoExchangeError>>;
+  listWalletStatuses(): Promise<Result<CryptoWalletStatus[], CryptoExchangeError>>;
 }
 
 export type CryptoPublicRealtimeEvent =

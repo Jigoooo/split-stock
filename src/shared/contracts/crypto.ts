@@ -33,6 +33,12 @@ export const DecimalStringSchema = z
   .regex(/^(0|[1-9]\d*)(\.\d+)?$/, 'decimal string');
 export type DecimalString = z.infer<typeof DecimalStringSchema>;
 
+export const SignedDecimalStringSchema = z
+  .string()
+  .trim()
+  .regex(/^-?(0|[1-9]\d*)(\.\d+)?$/, 'signed decimal string');
+export type SignedDecimalString = z.infer<typeof SignedDecimalStringSchema>;
+
 export const PositiveDecimalStringSchema = DecimalStringSchema.refine(
   (value) => Number(value) > 0,
   'positive decimal string',
@@ -246,6 +252,54 @@ export interface CryptoBalance {
   unitCurrency: string;
 }
 
+export interface CryptoBalanceSummary {
+  currency: string;
+  unitCurrency: string;
+  available: DecimalString;
+  locked: DecimalString;
+  total: DecimalString;
+  avgBuyPrice: DecimalString;
+  valuation: DecimalString;
+  costBasis: DecimalString;
+  profitLoss: SignedDecimalString;
+  profitLossRate: SignedDecimalString;
+}
+
+export const CryptoTransferDirectionSchema = z.enum(['deposit', 'withdraw']);
+export type CryptoTransferDirection = z.infer<typeof CryptoTransferDirectionSchema>;
+
+export const CryptoTransferStatusStateSchema = z.string().trim().min(1);
+export type CryptoTransferStatusState = z.infer<typeof CryptoTransferStatusStateSchema>;
+
+export interface CryptoTransferStatus {
+  direction: CryptoTransferDirection;
+  uuid: string;
+  currency: string;
+  amount: DecimalString;
+  fee: DecimalString;
+  state: CryptoTransferStatusState;
+  txid: string | null;
+  transactionType: string;
+  transferType: string;
+  netType: string | null;
+  createdAt: number;
+  doneAt: number | null;
+  isCancelable?: boolean | null;
+  raw?: unknown;
+}
+
+export interface CryptoWalletStatus {
+  currency: string;
+  netType: string;
+  networkName: string;
+  walletState: 'working' | 'withdraw_only' | 'deposit_only' | 'paused' | 'unsupported' | string;
+  blockElapsedMinutes: number | null;
+  blockHeight: number | null;
+  blockState: 'normal' | 'delayed' | 'inactive' | string | null;
+  blockUpdatedAt: number | null;
+  raw?: unknown;
+}
+
 export interface CryptoRealtimeTicker extends CryptoTicker {
   exchange: CryptoExchangeId;
   receivedAt: number;
@@ -345,6 +399,17 @@ export interface CryptoOrderSnapshot {
   raw?: unknown;
 }
 
+export interface CryptoOrderDetail extends CryptoOrderSnapshot {
+  accountId: number;
+  exchange: CryptoExchangeId;
+  averageExecutedPrice: DecimalString;
+  totalExecutedFunds: DecimalString;
+  totalFee: DecimalString;
+  fillCount: number;
+  trades: CryptoOrderTrade[];
+  updatedAt: number;
+}
+
 export type CryptoRealtimeSessionState =
   | 'connecting'
   | 'open'
@@ -391,4 +456,28 @@ export interface CryptoReconcileResult {
   detailedOrders: number;
   persistedFills: number;
   checkpointAt: number;
+}
+
+export interface CryptoReadonlySmokeResult {
+  accountId: number;
+  exchange: CryptoExchangeId;
+  checkedAt: number;
+  balances: {
+    ok: boolean;
+    count: number;
+    error: string | null;
+  };
+  privateWs: {
+    ok: boolean;
+    state: CryptoRealtimeSessionState | 'unavailable';
+    lastMessageAt: number | null;
+    lastError: string | null;
+    error: string | null;
+  };
+  reconciliation: {
+    ok: boolean;
+    result: CryptoReconcileResult | null;
+    error: string | null;
+  };
+  dangerousCallsBlocked: true;
 }

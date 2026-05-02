@@ -10,6 +10,8 @@ import {
   type CryptoOrderSnapshot,
   type CryptoOrderTrade,
   type CryptoTicker,
+  type CryptoTransferStatus,
+  type CryptoWalletStatus,
 } from '@shared/contracts';
 import Upbit from '@upbit-official/upbit-sdk';
 import { err, ok, type Result } from 'neverthrow';
@@ -69,6 +71,46 @@ type UpbitCandle = {
   candle_acc_trade_volume: string;
   candle_acc_trade_price: string;
   timestamp: number;
+};
+
+type UpbitDeposit = {
+  uuid: string;
+  currency: string;
+  amount: string;
+  fee: string;
+  state: string;
+  txid?: string | null;
+  transaction_type: string;
+  type: string;
+  net_type?: string | null;
+  created_at: string;
+  done_at?: string | null;
+};
+
+type UpbitWithdraw = {
+  uuid: string;
+  currency: string;
+  amount: string;
+  fee: string;
+  state: string;
+  txid?: string | null;
+  transaction_type: string;
+  type: string;
+  net_type?: string | null;
+  created_at: string;
+  done_at?: string | null;
+  is_cancelable?: boolean | null;
+};
+
+type UpbitWalletStatus = {
+  currency: string;
+  net_type: string;
+  network_name: string;
+  wallet_state: string;
+  block_elapsed_minutes?: number | null;
+  block_height?: number | null;
+  block_state?: string | null;
+  block_updated_at?: string | null;
 };
 
 const MINUTE_UNITS = new Set<CryptoCandleUnit>([
@@ -336,6 +378,95 @@ export class UpbitExchangeAdapter implements CryptoMarketDataAdapter {
     }
   }
 
+  async listDeposits(
+    input: { currency?: string; state?: string; limit?: number } = {},
+  ): Promise<Result<CryptoTransferStatus[], ReturnType<typeof toUpbitExchangeError>>> {
+    const limit = clampListLimit(input.limit ?? 100);
+    try {
+      const rows = await this.limiter.schedule('exchange-default', async () => {
+        const collected: UpbitDeposit[] = [];
+        for await (const deposit of this.client.deposits.list({
+          ...(input.currency !== undefined ? { currency: input.currency } : {}),
+          ...(input.state !== undefined ? { state: input.state as never } : {}),
+          order_by: 'desc',
+        })) {
+          collected.push(deposit as UpbitDeposit);
+          if (collected.length >= limit) break;
+        }
+        return collected;
+      });
+      return ok(rows.map(mapDepositStatus));
+    } catch (cause) {
+      return err(toUpbitExchangeError(cause));
+    }
+  }
+
+  async getDeposit(input: {
+    uuid?: string;
+    txid?: string;
+    currency?: string;
+  }): Promise<Result<CryptoTransferStatus, ReturnType<typeof toUpbitExchangeError>>> {
+    try {
+      const row = await this.limiter.schedule('exchange-default', () =>
+        this.client.deposits.retrieve(input),
+      );
+      return ok(mapDepositStatus(row as UpbitDeposit));
+    } catch (cause) {
+      return err(toUpbitExchangeError(cause));
+    }
+  }
+
+  async listWithdrawals(
+    input: { currency?: string; state?: string; limit?: number } = {},
+  ): Promise<Result<CryptoTransferStatus[], ReturnType<typeof toUpbitExchangeError>>> {
+    const limit = clampListLimit(input.limit ?? 100);
+    try {
+      const rows = await this.limiter.schedule('exchange-default', async () => {
+        const collected: UpbitWithdraw[] = [];
+        for await (const withdraw of this.client.withdraws.list({
+          ...(input.currency !== undefined ? { currency: input.currency } : {}),
+          ...(input.state !== undefined ? { state: input.state as never } : {}),
+          order_by: 'desc',
+        })) {
+          collected.push(withdraw as UpbitWithdraw);
+          if (collected.length >= limit) break;
+        }
+        return collected;
+      });
+      return ok(rows.map(mapWithdrawStatus));
+    } catch (cause) {
+      return err(toUpbitExchangeError(cause));
+    }
+  }
+
+  async getWithdrawal(input: {
+    uuid?: string;
+    txid?: string;
+    currency?: string;
+  }): Promise<Result<CryptoTransferStatus, ReturnType<typeof toUpbitExchangeError>>> {
+    try {
+      const row = await this.limiter.schedule('exchange-default', () =>
+        this.client.withdraws.retrieve(input),
+      );
+      return ok(mapWithdrawStatus(row as UpbitWithdraw));
+    } catch (cause) {
+      return err(toUpbitExchangeError(cause));
+    }
+  }
+
+  async listWalletStatuses(): Promise<
+    Result<CryptoWalletStatus[], ReturnType<typeof toUpbitExchangeError>>
+  > {
+    try {
+      const rows = await this.limiter.schedule('exchange-default', () =>
+        this.client.walletStatus.list(),
+      );
+      return ok((rows as UpbitWalletStatus[]).map(mapWalletStatus));
+    } catch (cause) {
+      return err(toUpbitExchangeError(cause));
+    }
+  }
+
   async getOrderChance(
     market: string,
   ): Promise<Result<UpbitChance, ReturnType<typeof toUpbitExchangeError>>> {
@@ -537,6 +668,57 @@ function mapOrderSnapshot(row: UpbitOrder): CryptoOrderSnapshot {
     locked: decimalString(row.locked),
     placedAt: parseDateMs(row.created_at),
     ...(trades && trades.length > 0 ? { trades } : {}),
+    raw: row,
+  };
+}
+
+function mapDepositStatus(row: UpbitDeposit): CryptoTransferStatus {
+  return {
+    direction: 'deposit',
+    uuid: row.uuid,
+    currency: row.currency,
+    amount: decimalString(row.amount),
+    fee: decimalString(row.fee),
+    state: row.state,
+    txid: row.txid ?? null,
+    transactionType: row.transaction_type,
+    transferType: row.type,
+    netType: row.net_type ?? null,
+    createdAt: parseDateMs(row.created_at),
+    doneAt: row.done_at ? parseDateMs(row.done_at) : null,
+    raw: row,
+  };
+}
+
+function mapWithdrawStatus(row: UpbitWithdraw): CryptoTransferStatus {
+  return {
+    direction: 'withdraw',
+    uuid: row.uuid,
+    currency: row.currency,
+    amount: decimalString(row.amount),
+    fee: decimalString(row.fee),
+    state: row.state,
+    txid: row.txid ?? null,
+    transactionType: row.transaction_type,
+    transferType: row.type,
+    netType: row.net_type ?? null,
+    createdAt: parseDateMs(row.created_at),
+    doneAt: row.done_at ? parseDateMs(row.done_at) : null,
+    isCancelable: row.is_cancelable ?? null,
+    raw: row,
+  };
+}
+
+function mapWalletStatus(row: UpbitWalletStatus): CryptoWalletStatus {
+  return {
+    currency: row.currency,
+    netType: row.net_type,
+    networkName: row.network_name,
+    walletState: row.wallet_state,
+    blockElapsedMinutes: row.block_elapsed_minutes ?? null,
+    blockHeight: row.block_height ?? null,
+    blockState: row.block_state ?? null,
+    blockUpdatedAt: row.block_updated_at ? parseDateMs(row.block_updated_at) : null,
     raw: row,
   };
 }
