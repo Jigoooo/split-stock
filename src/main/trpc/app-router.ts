@@ -4,6 +4,7 @@ import { aiRouter } from './routers/ai-router';
 import { authRouter } from './routers/auth-router';
 import { backupRouter } from './routers/backup-router';
 import { bootRouter } from './routers/boot-router';
+import { cryptoMemoRouter } from './routers/crypto-memo-router';
 import { cryptoRouter } from './routers/crypto-router';
 import { displayRouter } from './routers/display-router';
 import { feesRouter } from './routers/fees-router';
@@ -43,6 +44,7 @@ export const appRouter = router({
   lotsManual: lotsManualRouter,
   strategy: strategyRouter,
   symbolMemo: symbolMemoRouter,
+  cryptoMemo: cryptoMemoRouter,
   monitoring: monitoringRouter,
   notifications: notificationsRouter,
   reports: reportsRouter,

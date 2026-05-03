@@ -484,6 +484,16 @@ export const symbolMemos = sqliteTable('symbol_memos', {
 });
 
 /**
+ * 코인 마켓별 메모 — UPBIT market(KRW-BTC 등)이 PK.
+ * symbolMemos와 같은 패턴이지만 broker-specific으로 분리해 stock pdno regex와 충돌을 피한다. (RALPLAN P6 A5)
+ */
+export const cryptoMarketMemos = sqliteTable('crypto_market_memos', {
+  market: text('market').primaryKey(), // KRW-BTC 등
+  content: text('content').notNull().default(''),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+/**
  * 통합 자동감시주문 큐 — 예약매수/사용자 감시를 단일 큐로 일원화.
  *
  * source:

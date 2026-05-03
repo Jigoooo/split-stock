@@ -339,6 +339,11 @@ const CREATE_STATEMENTS: readonly string[] = [
     content TEXT NOT NULL DEFAULT '',
     updated_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS crypto_market_memos (
+    market TEXT PRIMARY KEY,
+    content TEXT NOT NULL DEFAULT '',
+    updated_at INTEGER NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS protection_limits (
     account_id INTEGER PRIMARY KEY,
     per_symbol_daily_max_buys_enabled INTEGER NOT NULL DEFAULT 0,

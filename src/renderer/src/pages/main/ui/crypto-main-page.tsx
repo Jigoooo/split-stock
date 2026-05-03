@@ -1,4 +1,5 @@
 import { useCryptoBalanceWithLots } from '@renderer/entities/account-crypto';
+import { CryptoMemoForm } from '@renderer/features/crypto-memo';
 import {
   decimalAdd,
   decimalDiv,
@@ -55,7 +56,7 @@ type AutoMode = 'disabled' | 'dry-run' | 'live-small';
 type CryptoLeftTab = 'holdings' | 'auto';
 type CryptoHoldingsTab = 'balances' | 'lots' | 'filled' | 'open' | 'transfers';
 type CryptoRightTab = 'selected-history' | 'all-history';
-type CryptoRightDetailTab = 'strategy' | 'all' | 'open' | 'closed';
+type CryptoRightDetailTab = 'strategy' | 'all' | 'open' | 'closed' | 'memo';
 type CryptoOrderPanelId = 'left-filled' | 'left-open' | 'right-selected' | 'right-all';
 
 const CRYPTO_LEFT_TABS = [
@@ -76,6 +77,7 @@ const CRYPTO_RIGHT_DETAIL_TABS = [
   { id: 'all', label: '전체보기' },
   { id: 'open', label: '진행중' },
   { id: 'closed', label: '종료' },
+  { id: 'memo', label: '메모' },
 ] as const satisfies ReadonlyArray<HtsTabItem<CryptoRightDetailTab>>;
 
 const LIVE_TRADE_LIMIT = 60;
@@ -259,7 +261,11 @@ export const CryptoMainPage = ({
     },
   );
   const selectedAutoHistoryQuery = trpc.crypto.listAutoTradeHistory.useQuery(
-    { accountId, market, status: rightDetailTab === 'strategy' ? 'all' : rightDetailTab },
+    {
+      accountId,
+      market,
+      status: rightDetailTab === 'strategy' || rightDetailTab === 'memo' ? 'all' : rightDetailTab,
+    },
     {
       enabled: privateEnabled && market.startsWith('KRW-'),
       staleTime: 3000,
@@ -724,6 +730,7 @@ export const CryptoMainPage = ({
         right={
           <CryptoRightPane
             allHistory={allAutoHistory}
+            memoPanel={<CryptoMemoForm market={market} />}
             configPanel={
               <CryptoAutoStrategyTabBody
                 gate={autoStatusQuery.data?.gate ?? { ok: false, blockedReasons: ['상태 로드 전'] }}
@@ -863,6 +870,7 @@ const CryptoLeftPane = ({
 const CryptoRightPane = ({
   allHistory,
   configPanel,
+  memoPanel,
   onRightTabChange,
   onRightDetailTabChange,
   rightTab,
@@ -873,6 +881,7 @@ const CryptoRightPane = ({
 }: {
   allHistory: CryptoAutoTradeHistoryItem[];
   configPanel: ReactElement;
+  memoPanel: ReactElement;
   onRightTabChange: (tab: CryptoRightTab) => void;
   onRightDetailTabChange: (tab: CryptoRightDetailTab) => void;
   rightTab: CryptoRightTab;
@@ -899,6 +908,8 @@ const CryptoRightPane = ({
   const selectedContent =
     rightDetailTab === 'strategy' ? (
       configPanel
+    ) : rightDetailTab === 'memo' ? (
+      memoPanel
     ) : (
       <CryptoAutoTradeHistoryTable
         emptyText={`${selectedMarketLabel} 자동감시 매매 이력이 없습니다.`}
