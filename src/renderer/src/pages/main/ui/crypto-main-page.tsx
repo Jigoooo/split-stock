@@ -34,7 +34,6 @@ import type {
   CryptoAutoWatchStatus,
   CryptoBalanceSummary,
   CryptoCandleUnit,
-  CryptoLot,
   CryptoOrderDetail,
   CryptoStrategyAutoMode,
   CryptoStrategyProfile,
@@ -282,9 +281,6 @@ export const CryptoMainPage = ({
   const [rightTab, setRightTab] = useState<CryptoRightTab>('selected-history');
   const [rightDetailTab, setRightDetailTab] = useState<CryptoRightDetailTab>('strategy');
   const [autoMode, setAutoMode] = useState<AutoMode>('disabled');
-  const [autoEmergencyDisabled, setAutoEmergencyDisabled] = useState(true);
-  const [autoMaxOrderKrw, setAutoMaxOrderKrw] = useState('5000');
-  const [autoMaxExposureKrw, setAutoMaxExposureKrw] = useState('50000');
   const [autoStrategyProfile, setAutoStrategyProfile] = useState<CryptoStrategyProfile>(() =>
     createDefaultCryptoStrategyProfile('KRW-BTC'),
   );
@@ -521,35 +517,12 @@ export const CryptoMainPage = ({
       ]);
     },
   });
-  const saveAutoConfig = trpc.crypto.saveAutoConfig.useMutation({
-    onSuccess: () => {
-      void utils.crypto.getAutoStatus.invalidate({ accountId, market });
-    },
-  });
   const saveAutoStrategy = trpc.crypto.saveAutoStrategy.useMutation({
     onSuccess: () => {
       void Promise.all([
         utils.crypto.getAutoStatus.invalidate({ accountId, market }),
         utils.crypto.getAutoStrategy.invalidate({ accountId, market }),
       ]);
-    },
-  });
-  const runAutoLiveTick = trpc.crypto.runAutoLiveTick.useMutation({
-    onSuccess: () => {
-      void Promise.all([
-        utils.crypto.getAutoStatus.invalidate({ accountId, market }),
-        utils.crypto.listRecentOrders.invalidate({ accountId, limit: 80 }),
-      ]);
-    },
-  });
-  const startAuto = trpc.crypto.startAuto.useMutation({
-    onSuccess: () => {
-      void utils.crypto.getAutoStatus.invalidate({ accountId, market });
-    },
-  });
-  const stopAuto = trpc.crypto.stopAuto.useMutation({
-    onSuccess: () => {
-      void utils.crypto.getAutoStatus.invalidate({ accountId, market });
     },
   });
   const pauseAutoWatches = trpc.crypto.pauseAutoWatches.useMutation({
@@ -591,9 +564,6 @@ export const CryptoMainPage = ({
     const config = autoStatusQuery.data?.config;
     if (!config) return;
     setAutoMode(config.mode === 'dry-run' ? 'disabled' : config.mode);
-    setAutoEmergencyDisabled(config.emergencyDisabled);
-    setAutoMaxOrderKrw(config.maxOrderKrw);
-    setAutoMaxExposureKrw(config.maxTotalExposureKrw);
   }, [autoStatusQuery.data?.config]);
 
   useEffect(() => {
@@ -848,47 +818,11 @@ export const CryptoMainPage = ({
             allHistory={allAutoHistory}
             configPanel={
               <CryptoAutoStrategyTabBody
-                emergencyDisabled={autoEmergencyDisabled}
                 gate={autoStatusQuery.data?.gate ?? { ok: false, blockedReasons: ['상태 로드 전'] }}
-                lastDryRunAt={autoStatusQuery.data?.config.lastDryRunAt ?? null}
-                lastLiveActionAt={autoStatusQuery.data?.config.lastLiveActionAt ?? null}
-                lastReadonlySmokeAt={autoStatusQuery.data?.config.lastReadonlySmokeAt ?? null}
-                liveLots={autoStatusQuery.data?.liveLots ?? []}
                 market={market}
-                maxExposureKrw={autoMaxExposureKrw}
-                maxOrderKrw={autoMaxOrderKrw}
                 mode={autoMode}
                 onDeleteTemplate={(id) => deleteAutoStrategyTemplate.mutate({ accountId, id })}
-                onEmergencyDisabledChange={setAutoEmergencyDisabled}
-                onMaxExposureKrwChange={(value) => setAutoMaxExposureKrw(sanitizeDecimal(value))}
-                onMaxOrderKrwChange={(value) => setAutoMaxOrderKrw(sanitizeDecimal(value))}
                 onModeChange={setAutoMode}
-                onRunLive={() => {
-                  void dialog
-                    .openAsync({
-                      type: 'WARNING',
-                      title: '코인 자동감시 live-small 실행',
-                      confirmText: '소액 live 실행',
-                      cancelText: '취소',
-                      isCancelWith: true,
-                      message: `${market} 자동감시 live-small 1 tick을 실행합니다.`,
-                    })
-                    .then((confirmed) => {
-                      if (confirmed) runAutoLiveTick.mutate({ accountId, market });
-                    });
-                }}
-                onSave={() => {
-                  saveAutoConfig.mutate({
-                    accountId,
-                    market,
-                    config: {
-                      mode: autoMode,
-                      emergencyDisabled: autoEmergencyDisabled,
-                      maxOrderKrw: autoMaxOrderKrw,
-                      maxTotalExposureKrw: autoMaxExposureKrw,
-                    },
-                  });
-                }}
                 onSaveTemplate={(name, profile) =>
                   saveAutoStrategyTemplate.mutate({ accountId, name, strategy: profile })
                 }
@@ -896,23 +830,11 @@ export const CryptoMainPage = ({
                   setAutoStrategyProfile(profile);
                   saveAutoStrategy.mutate({ accountId, market, profile });
                 }}
-                onStart={() => {
-                  startAuto.mutate({ accountId, market });
-                }}
-                onStop={() => {
-                  stopAuto.mutate({ accountId, market });
-                }}
                 pending={
-                  saveAutoConfig.isPending ||
                   saveAutoStrategy.isPending ||
-                  runAutoLiveTick.isPending ||
-                  startAuto.isPending ||
-                  stopAuto.isPending ||
                   saveAutoStrategyTemplate.isPending ||
                   deleteAutoStrategyTemplate.isPending
                 }
-                quote={quote}
-                running={autoStatusQuery.data?.runtimeRunning ?? false}
                 strategy={autoStrategyProfile}
                 strategyLoading={autoStrategyQuery.isFetching}
                 templates={autoTemplates}
@@ -2228,58 +2150,26 @@ const CryptoStrategyForm = ({
 };
 
 const CryptoAutoStrategyTabBody = ({
-  emergencyDisabled,
   gate,
-  lastDryRunAt,
-  lastLiveActionAt,
-  lastReadonlySmokeAt,
-  liveLots,
   market,
-  maxExposureKrw,
-  maxOrderKrw,
   mode,
   onDeleteTemplate,
-  onEmergencyDisabledChange,
-  onMaxExposureKrwChange,
-  onMaxOrderKrwChange,
   onModeChange,
-  onRunLive,
-  onSave,
   onSaveTemplate,
   onStrategySave,
-  onStart,
-  onStop,
   pending,
-  quote,
-  running,
   strategy,
   strategyLoading,
   templates,
 }: {
-  emergencyDisabled: boolean;
   gate: CryptoAutoGateResult;
-  lastDryRunAt: number | null;
-  lastLiveActionAt: number | null;
-  lastReadonlySmokeAt: number | null;
-  liveLots: CryptoLot[];
   market: string;
-  maxExposureKrw: string;
-  maxOrderKrw: string;
   mode: AutoMode;
   onDeleteTemplate: (id: number) => void;
-  onEmergencyDisabledChange: (value: boolean) => void;
-  onMaxExposureKrwChange: (value: string) => void;
-  onMaxOrderKrwChange: (value: string) => void;
   onModeChange: (mode: AutoMode) => void;
-  onRunLive: () => void;
-  onSave: () => void;
   onSaveTemplate: (name: string, profile: CryptoStrategyProfile) => void;
   onStrategySave: (profile: CryptoStrategyProfile) => void;
-  onStart: () => void;
-  onStop: () => void;
   pending: boolean;
-  quote: string;
-  running: boolean;
   strategy: CryptoStrategyProfile;
   strategyLoading: boolean;
   templates: CryptoAutoTemplate[];
@@ -2339,30 +2229,12 @@ const CryptoAutoStrategyTabBody = ({
         </Button>
       </fieldset>
       <CryptoAutoPanel
-        emergencyDisabled={emergencyDisabled}
         enabled={market.startsWith('KRW-')}
-        events={[]}
         gate={gate}
-        lastDryRunAt={lastDryRunAt}
-        lastLiveActionAt={lastLiveActionAt}
-        lastReadonlySmokeAt={lastReadonlySmokeAt}
-        liveLots={liveLots}
-        market={market}
-        maxExposureKrw={maxExposureKrw}
-        maxOrderKrw={maxOrderKrw}
         mode={mode}
-        onEmergencyDisabledChange={onEmergencyDisabledChange}
-        onMaxExposureKrwChange={onMaxExposureKrwChange}
-        onMaxOrderKrwChange={onMaxOrderKrwChange}
         onModeChange={onModeChange}
-        onRunLive={onRunLive}
-        onSave={onSave}
         onStrategySave={onStrategySave}
-        onStart={onStart}
-        onStop={onStop}
         pending={pending}
-        quote={quote}
-        running={running}
         strategy={strategy}
         strategyLoading={strategyLoading}
       />
@@ -2371,57 +2243,21 @@ const CryptoAutoStrategyTabBody = ({
 };
 
 export const CryptoAutoPanel = ({
-  emergencyDisabled,
   enabled,
-  events,
   gate,
-  lastDryRunAt,
-  lastLiveActionAt,
-  lastReadonlySmokeAt,
-  liveLots,
-  market,
-  maxExposureKrw,
-  maxOrderKrw,
   mode,
-  onEmergencyDisabledChange,
-  onMaxExposureKrwChange,
-  onMaxOrderKrwChange,
   onModeChange,
-  onRunLive,
-  onSave,
   onStrategySave,
-  onStart,
-  onStop,
   pending,
-  quote,
-  running,
   strategy,
   strategyLoading,
 }: {
-  emergencyDisabled: boolean;
   enabled: boolean;
-  events: CryptoAutoEvent[];
   gate: CryptoAutoGateResult;
-  lastDryRunAt: number | null;
-  lastLiveActionAt: number | null;
-  lastReadonlySmokeAt: number | null;
-  liveLots: CryptoLot[];
-  market: string;
-  maxExposureKrw: string;
-  maxOrderKrw: string;
   mode: AutoMode;
-  onEmergencyDisabledChange: (value: boolean) => void;
-  onMaxExposureKrwChange: (value: string) => void;
-  onMaxOrderKrwChange: (value: string) => void;
   onModeChange: (mode: AutoMode) => void;
-  onRunLive: () => void;
-  onSave: () => void;
   onStrategySave: (profile: CryptoStrategyProfile) => void;
-  onStart: () => void;
-  onStop: () => void;
   pending: boolean;
-  quote: string;
-  running: boolean;
   strategy: CryptoStrategyProfile;
   strategyLoading: boolean;
 }): ReactElement => (
@@ -2442,42 +2278,9 @@ export const CryptoAutoPanel = ({
               { value: 'live-small', label: '소액 실거래' },
             ]}
           />
-          <Checkbox
-            checked={emergencyDisabled}
-            onChange={(event) => onEmergencyDisabledChange(event.currentTarget.checked)}
-            label="비상 중지"
-          />
-          <span className={running ? 'chip chip--live' : 'chip'}>
-            {running ? '루프 실행 중' : '루프 중지'}
-          </span>
-          <span className={gate.ok ? 'chip chip--live' : 'chip chip--down'}>
-            {gate.ok ? '실거래 조건 통과' : '실거래 조건 차단'}
-          </span>
         </div>
         {strategyLoading ? <span className="muted">차수 전략 로드 중…</span> : null}
         <CryptoStrategyForm disabled={pending} profile={strategy} onSubmit={onStrategySave} />
-        <div className="crypto-auto-panel__settings">
-          <label htmlFor="crypto-auto-max-order-krw">
-            <span className="muted">주문당 상한</span>
-            <TextInput
-              id="crypto-auto-max-order-krw"
-              aria-label="주문당 상한"
-              dense
-              value={maxOrderKrw}
-              onChange={(event) => onMaxOrderKrwChange(event.target.value)}
-            />
-          </label>
-          <label htmlFor="crypto-auto-max-exposure-krw">
-            <span className="muted">총 노출 상한</span>
-            <TextInput
-              id="crypto-auto-max-exposure-krw"
-              aria-label="총 노출 상한"
-              dense
-              value={maxExposureKrw}
-              onChange={(event) => onMaxExposureKrwChange(event.target.value)}
-            />
-          </label>
-        </div>
         {gate.blockedReasons.length > 0 ? (
           <div className="crypto-auto-panel__reasons">
             {gate.blockedReasons.map((reason) => (
@@ -2487,51 +2290,9 @@ export const CryptoAutoPanel = ({
             ))}
           </div>
         ) : null}
-        <div className="crypto-auto-panel__timestamps">
-          <span>read-only smoke {formatDateTime(lastReadonlySmokeAt)}</span>
-          <span>마지막 내부 검증 {formatDateTime(lastDryRunAt)}</span>
-          <span>마지막 실거래 실행 {formatDateTime(lastLiveActionAt)}</span>
-        </div>
-        <div className="crypto-auto-panel__actions">
-          <Button dense loading={pending} onClick={onSave}>
-            보호 설정 저장
-          </Button>
-          <Button dense disabled={pending || !gate.ok} variant="destructive" onClick={onRunLive}>
-            소액 실거래 1회
-          </Button>
-          <Button
-            dense
-            disabled={pending || running || (mode === 'live-small' && !gate.ok)}
-            onClick={onStart}
-          >
-            루프 시작
-          </Button>
-          <Button dense disabled={pending || !running} onClick={onStop}>
-            루프 중지
-          </Button>
-        </div>
-        <div className="crypto-auto-panel__lists">
-          <div>
-            <strong>실거래 차수</strong>
-            {liveLots.length === 0 ? <p className="muted">실거래 차수 없음</p> : null}
-            {liveLots.slice(0, 4).map((lot) => (
-              <p key={lot.id}>
-                #{lot.sequence} {formatCryptoVolume(lot.quantity)} · 평단{' '}
-                {formatCryptoPrice(lot.avgEntryKrw, market)} · 배정{' '}
-                {formatCryptoAmount(lot.allocatedKrw, quote)}
-              </p>
-            ))}
-          </div>
-          <div>
-            <strong>최근 판단</strong>
-            {events.length === 0 ? <p className="muted">판단 이력 없음</p> : null}
-            {events.slice(0, 4).map((event) => (
-              <p key={event.id}>
-                {formatDateTime(event.createdAt)} · {event.action} · {event.reason}
-              </p>
-            ))}
-          </div>
-        </div>
+        <p className="muted crypto-auto-panel__advanced-hint">
+          보호 설정·소액 실거래·루프 컨트롤은 설정 → 고급/안전 탭으로 이동했습니다.
+        </p>
       </div>
     )}
   </section>

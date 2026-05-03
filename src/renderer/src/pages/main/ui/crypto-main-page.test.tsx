@@ -314,7 +314,7 @@ describe('CryptoMainPage layout', () => {
     expect(screen.getAllByRole('button', { name: '시작' })[0]).toBeDisabled();
     expect(screen.getAllByRole('button', { name: '중지' })[0]).toBeDisabled();
     expect(screen.getAllByRole('button', { name: '삭제' })[0]).toBeDisabled();
-    expect(screen.getByText('실거래 조건 차단')).toBeInTheDocument();
+    // '실거래 조건 차단' chip 등 운영 컨트롤은 설정 → 고급/안전 탭으로 이전됨. (RALPLAN P0)
   });
 
   it('shows stock-like right trade history tabs for crypto automation', () => {
@@ -483,117 +483,52 @@ describe('CryptoTransfersPanel', () => {
 });
 
 describe('CryptoAutoPanel', () => {
-  it('shows dry-run/live gate state, lots, events, and disables live when blocked', () => {
+  // 운영 컨트롤(주문당 상한·smoke·소액 실거래·루프 시작/중지·실거래 차수·최근 판단)은
+  // 설정 → 고급/안전 탭으로 이전됨. 메인 패널은 mode 토글, CryptoStrategyForm,
+  // gate.blockedReasons 안내만 노출. (RALPLAN P0)
+  it('renders mode toggle, strategy form, and gate blocked reasons', () => {
     render(
       <CryptoAutoPanel
-        emergencyDisabled
         enabled
-        events={[
-          {
-            id: 1,
-            accountId: 1,
-            exchange: 'UPBIT',
-            market: 'KRW-BTC',
-            mode: 'dry-run',
-            kind: 'dry-run',
-            action: 'plan-buy',
-            reason: 'dry-run simulated',
-            intent: null,
-            result: null,
-            idempotencyKey: null,
-            createdAt: 1,
-          },
-        ]}
         gate={{ ok: false, blockedReasons: ['비상 중지 상태입니다.'] }}
-        lastDryRunAt={2}
-        lastLiveActionAt={null}
-        lastReadonlySmokeAt={1}
-        liveLots={[
-          {
-            id: 1,
-            accountId: 1,
-            exchange: 'UPBIT',
-            market: 'KRW-BTC',
-            source: 'live',
-            sequence: 1,
-            quantity: '0.00005',
-            avgEntryKrw: '100000000',
-            allocatedKrw: '5000',
-            realizedPnl: '0',
-            feesPaid: '0',
-            status: 'open',
-            openedAt: 1,
-            closedAt: null,
-            updatedAt: 1,
-          },
-        ]}
-        market="KRW-BTC"
-        maxExposureKrw="50000"
-        maxOrderKrw="5000"
-        mode="dry-run"
-        onEmergencyDisabledChange={vi.fn()}
-        onMaxExposureKrwChange={vi.fn()}
-        onMaxOrderKrwChange={vi.fn()}
+        mode="disabled"
         onModeChange={vi.fn()}
-        onRunLive={vi.fn()}
-        onSave={vi.fn()}
         onStrategySave={vi.fn()}
-        onStart={vi.fn()}
-        onStop={vi.fn()}
         pending={false}
-        quote="KRW"
-        running={false}
         strategy={createDefaultCryptoStrategyProfile('KRW-BTC')}
         strategyLoading={false}
       />,
     );
 
     expect(screen.getByText('자동감시')).toBeInTheDocument();
-    expect(screen.getByText(/read-only smoke/)).toBeInTheDocument();
-    expect(screen.getByText(/마지막 내부 검증/)).toBeInTheDocument();
-    expect(screen.getByText(/마지막 실거래 실행/)).toBeInTheDocument();
-    expect(screen.getByText('실거래 조건 차단')).toBeInTheDocument();
     expect(screen.getByText('비상 중지 상태입니다.')).toBeInTheDocument();
     expect(screen.getByText('차수별 규칙')).toBeInTheDocument();
-    expect(screen.getByText('실거래 차수')).toBeInTheDocument();
-    expect(screen.getByText(/#1/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '코인 자동감시 추가/저장' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '소액 실거래 1회' })).toBeDisabled();
-    expect(screen.queryByRole('button', { name: '모의 1회' })).not.toBeInTheDocument();
+    // 운영 컨트롤은 메인에서 제거됨 — 설정 → 고급/안전 탭에서만 노출.
+    expect(screen.queryByRole('button', { name: '소액 실거래 1회' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '루프 시작' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/read-only smoke/)).not.toBeInTheDocument();
+    expect(screen.queryByText('실거래 차수')).not.toBeInTheDocument();
+    // 안내 문구로 이동 위치 명시.
+    expect(screen.getByText(/설정 → 고급\/안전/)).toBeInTheDocument();
   });
 
-  it('disables loop start for live-small while the gate is blocked', () => {
+  it('shows the disabled body when not enabled', () => {
     render(
       <CryptoAutoPanel
-        emergencyDisabled
-        enabled
-        events={[]}
-        gate={{ ok: false, blockedReasons: ['성공한 read-only smoke 기록이 없습니다.'] }}
-        lastDryRunAt={null}
-        lastLiveActionAt={null}
-        lastReadonlySmokeAt={null}
-        liveLots={[]}
-        market="KRW-BTC"
-        maxExposureKrw="50000"
-        maxOrderKrw="5000"
-        mode="live-small"
-        onEmergencyDisabledChange={vi.fn()}
-        onMaxExposureKrwChange={vi.fn()}
-        onMaxOrderKrwChange={vi.fn()}
+        enabled={false}
+        gate={{ ok: false, blockedReasons: [] }}
+        mode="disabled"
         onModeChange={vi.fn()}
-        onRunLive={vi.fn()}
-        onSave={vi.fn()}
         onStrategySave={vi.fn()}
-        onStart={vi.fn()}
-        onStop={vi.fn()}
         pending={false}
-        quote="KRW"
-        running={false}
         strategy={createDefaultCryptoStrategyProfile('KRW-BTC')}
         strategyLoading={false}
       />,
     );
 
-    expect(screen.getByRole('button', { name: '루프 시작' })).toBeDisabled();
+    expect(
+      screen.getByText('Upbit KRW 실전 계좌와 KRW 마켓에서만 동작합니다.'),
+    ).toBeInTheDocument();
   });
 });

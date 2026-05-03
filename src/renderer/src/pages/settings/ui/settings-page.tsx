@@ -26,6 +26,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { CredentialsSettingsPanel } from './credentials-settings-panel';
+import { CryptoAdvancedSettingsSection } from './crypto-advanced-settings-section';
 import { CryptoStrategySettingsSection } from './crypto-strategy-settings-section';
 
 /**
@@ -58,6 +59,7 @@ const CRYPTO_TOP_TABS = [
   { id: 'account', label: '계좌/보안' },
   { id: 'ai', label: 'AI' },
   { id: 'backup', label: '백업' },
+  { id: 'advanced', label: '고급/안전' },
 ] as const satisfies ReadonlyArray<HtsTabItem<string>>;
 
 type StockSettingsTopTab = (typeof STOCK_TOP_TABS)[number]['id'];
@@ -301,6 +303,11 @@ export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactEl
           {topTab === 'backup' ? (
             <Section name="백업/복원">
               <BackupPanel />
+            </Section>
+          ) : null}
+          {isCrypto && topTab === 'advanced' ? (
+            <Section name="코인 자동매매 고급/안전">
+              <CryptoAdvancedSettingsSection />
             </Section>
           ) : null}
         </div>

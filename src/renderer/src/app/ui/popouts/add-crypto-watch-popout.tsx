@@ -243,24 +243,6 @@ export const AddCryptoWatchPopout = (): ReactElement => {
             onChange={(event) => setProfitPct(sanitizeDecimal(event.target.value))}
           />
         </div>
-        <div className="add-crypto-watch-popout__field">
-          <span className="muted">주문당 상한</span>
-          <TextInput
-            aria-label="주문당 상한"
-            dense
-            value={maxOrderKrw}
-            onChange={(event) => setMaxOrderKrw(sanitizeDecimal(event.target.value))}
-          />
-        </div>
-        <div className="add-crypto-watch-popout__field">
-          <span className="muted">총 노출 상한</span>
-          <TextInput
-            aria-label="총 노출 상한"
-            dense
-            value={maxExposureKrw}
-            onChange={(event) => setMaxExposureKrw(sanitizeDecimal(event.target.value))}
-          />
-        </div>
         <div className="form-sticky-action-bar">
           <Button dense onClick={() => window.close()}>
             취소
