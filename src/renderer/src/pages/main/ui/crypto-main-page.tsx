@@ -162,6 +162,7 @@ export const CryptoMainPage = ({
 
   const envQuery = trpc.auth.getEnv.useQuery();
   const privateEnabled = envQuery.data?.env === 'PROD';
+  const safetyQuery = trpc.safety.getState.useQuery({ accountId }, { staleTime: 0 });
   const marketsQuery = trpc.crypto.listMarkets.useQuery(
     { term, quoteCurrency: 'KRW', limit: 80 },
     { staleTime: 60_000 },
@@ -448,6 +449,24 @@ export const CryptoMainPage = ({
 
   const submit = async (chosenSide: Side = side): Promise<void> => {
     if (priceTickError) return;
+    const snap = safetyQuery.data;
+    if (snap !== undefined) {
+      if (!snap.master) {
+        dialog.error({
+          title: '자동매매 잠금',
+          message: '글로벌 자동매매가 OFF 상태입니다. 헤더에서 자동매매를 켜주세요.',
+        });
+        return;
+      }
+      if (snap.errorLock.active) {
+        dialog.error({
+          title: '에러 잠금',
+          message:
+            snap.errorLock.reason ?? '에러 잠금 상태입니다. 잠금을 해제한 후 다시 시도하세요.',
+        });
+        return;
+      }
+    }
     const chosenOrdType = ordTypeFor(chosenSide);
     const payload = {
       accountId,
@@ -485,10 +504,14 @@ export const CryptoMainPage = ({
     await placeOrder.mutateAsync(payload);
   };
 
+  const safetyAllows =
+    safetyQuery.data === undefined ||
+    (safetyQuery.data.master && !safetyQuery.data.errorLock.active);
   const canSubmitFor = (chosenSide: Side): boolean => {
     const chosenOrdType = ordTypeFor(chosenSide);
     return (
       privateEnabled &&
+      safetyAllows &&
       market.length > 0 &&
       !placeOrder.isPending &&
       !priceTickError &&
