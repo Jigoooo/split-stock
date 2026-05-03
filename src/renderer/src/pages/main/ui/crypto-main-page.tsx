@@ -6,7 +6,6 @@ import {
   decimalRatioPercent,
   decimalSub,
   formatCryptoAmount,
-  formatCryptoDecimal,
   formatCryptoPrice,
   formatCryptoVolume,
   getCryptoQuote,
@@ -49,13 +48,14 @@ import {
 import { Search } from 'lucide-react';
 import type { CSSProperties, MouseEvent, ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  formatDateTime,
-  formatPercent,
-  formatSignedPrice,
-  formatTradeTime,
-} from '../model/crypto-formatters';
+import { formatDateTime, formatPercent, formatSignedPrice } from '../model/crypto-formatters';
 import { storeAddCryptoWatchPrefill } from '../model/crypto-watch-popout-prefill';
+import { CryptoAutoEventTable } from './crypto-auto-event-table';
+import { CryptoBalancesPanel } from './crypto-balances-panel';
+import { CryptoTradeFeedPanel } from './crypto-trade-feed-panel';
+
+export { CryptoBalancesPanel } from './crypto-balances-panel';
+
 import { CryptoChartPanel } from './crypto-chart-panel';
 import { MainThreeSplitLayout } from './main-three-split-layout';
 import { WatchContextMenu, type WatchContextMenuState } from './watch-context-menu';
@@ -1495,55 +1495,6 @@ const CryptoOrderTicket = ({
   </section>
 );
 
-const CryptoTradeFeedPanel = ({
-  market,
-  trades,
-}: {
-  market: string;
-  trades: Array<{ askBid: string; id: string; price: string; timestamp: number; volume: string }>;
-}): ReactElement => (
-  <section className="panel crypto-trade-feed">
-    <div className="panel__title">실시간 체결</div>
-    <TableGrid.Root variant="hts" stickyHeader horizontalScroll style={{ flex: 1, minHeight: 0 }}>
-      <TableGrid.Header>
-        <TableGrid.Cell width="8.8rem">시각</TableGrid.Cell>
-        <TableGrid.Cell width="10rem" numeric>
-          체결가
-        </TableGrid.Cell>
-        <TableGrid.Cell width="9rem" numeric>
-          수량
-        </TableGrid.Cell>
-      </TableGrid.Header>
-      <TableGrid.Body>
-        {trades.map((trade) => (
-          <TableGrid.Row key={trade.id}>
-            <TableGrid.Cell width="8.8rem" className="date-time-cell">
-              {formatTradeTime(trade.timestamp)}
-            </TableGrid.Cell>
-            <TableGrid.Cell
-              width="10rem"
-              numeric
-              className={trade.askBid === 'ASK' ? 'num-down' : 'num-up'}
-            >
-              {formatCryptoPrice(trade.price, market)}
-            </TableGrid.Cell>
-            <TableGrid.Cell width="9rem" numeric>
-              {formatCryptoVolume(trade.volume)}
-            </TableGrid.Cell>
-          </TableGrid.Row>
-        ))}
-        {trades.length === 0 ? (
-          <TableGrid.Row placeholder>
-            <TableGrid.Cell width="100%" className="muted">
-              실시간 체결 내역이 없습니다.
-            </TableGrid.Cell>
-          </TableGrid.Row>
-        ) : null}
-      </TableGrid.Body>
-    </TableGrid.Root>
-  </section>
-);
-
 const watchStatusLabel = (status: CryptoAutoWatchStatus): string =>
   ({
     WATCHING: '감시중',
@@ -1897,44 +1848,6 @@ const CryptoAutoTradeHistoryTable = ({
         </TableGrid.Row>
       ))}
       {history.length === 0 ? (
-        <TableGrid.Row placeholder>
-          <TableGrid.Cell width="100%" className="muted">
-            {emptyText}
-          </TableGrid.Cell>
-        </TableGrid.Row>
-      ) : null}
-    </TableGrid.Body>
-  </TableGrid.Root>
-);
-
-const CryptoAutoEventTable = ({
-  emptyText,
-  events,
-}: {
-  emptyText: string;
-  events: CryptoAutoEvent[];
-}): ReactElement => (
-  <TableGrid.Root variant="hts" stickyHeader horizontalScroll aria-label="코인 자동감시 실행내역">
-    <TableGrid.Header>
-      <TableGrid.Cell width="10rem">마켓</TableGrid.Cell>
-      <TableGrid.Cell width="10rem">구분</TableGrid.Cell>
-      <TableGrid.Cell width="10rem">액션</TableGrid.Cell>
-      <TableGrid.Cell width="24rem">사유</TableGrid.Cell>
-      <TableGrid.Cell width="12rem">시각</TableGrid.Cell>
-    </TableGrid.Header>
-    <TableGrid.Body>
-      {events.map((event) => (
-        <TableGrid.Row key={event.id}>
-          <TableGrid.Cell width="10rem" className="num">
-            {event.market}
-          </TableGrid.Cell>
-          <TableGrid.Cell width="10rem">{event.kind}</TableGrid.Cell>
-          <TableGrid.Cell width="10rem">{event.action}</TableGrid.Cell>
-          <TableGrid.Cell width="24rem">{event.reason}</TableGrid.Cell>
-          <TableGrid.Cell width="12rem">{formatDateTime(event.createdAt)}</TableGrid.Cell>
-        </TableGrid.Row>
-      ))}
-      {events.length === 0 ? (
         <TableGrid.Row placeholder>
           <TableGrid.Cell width="100%" className="muted">
             {emptyText}
@@ -2303,112 +2216,6 @@ export const CryptoAutoPanel = ({
     )}
   </section>
 );
-
-export const CryptoBalancesPanel = ({
-  balances,
-  enabled,
-  quote,
-}: {
-  balances: CryptoBalanceSummary[];
-  enabled: boolean;
-  quote: string;
-}): ReactElement => (
-  <section className="panel crypto-account-panel">
-    <div className="panel__title">실시간 잔고</div>
-    {!enabled ? (
-      <div className="panel__body muted">활성 Upbit 실전 계좌에서만 조회됩니다.</div>
-    ) : (
-      <TableGrid.Root variant="hts" stickyHeader horizontalScroll style={{ height: '100%' }}>
-        <TableGrid.Header>
-          <TableGrid.Cell width="7rem">자산</TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
-            주문가능
-          </TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
-            잠김
-          </TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
-            평단
-          </TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
-            평가
-          </TableGrid.Cell>
-          <TableGrid.Cell flex={1} numeric>
-            손익
-          </TableGrid.Cell>
-        </TableGrid.Header>
-        <TableGrid.Body>
-          {balances.map((balance) => (
-            <TableGrid.Row key={balance.currency}>
-              <TableGrid.Cell width="7rem">{balance.currency}</TableGrid.Cell>
-              <TableGrid.Cell flex={1} numeric>
-                {formatBalanceQuantity(balance.available, balance.currency, quote)}
-              </TableGrid.Cell>
-              <TableGrid.Cell flex={1} numeric>
-                {formatBalanceQuantity(balance.locked, balance.currency, quote)}
-              </TableGrid.Cell>
-              <TableGrid.Cell flex={1} numeric>
-                {formatCryptoAmount(balance.avgBuyPrice, quote)}
-              </TableGrid.Cell>
-              <TableGrid.Cell flex={1} numeric>
-                {formatCryptoAmount(balance.valuation, quote)}
-              </TableGrid.Cell>
-              <TableGrid.Cell
-                flex={1}
-                numeric
-                className={
-                  hasMeaningfulBalanceProfitLoss(balance, quote)
-                    ? Number(balance.profitLoss) < 0
-                      ? 'num-down'
-                      : 'num-up'
-                    : 'muted'
-                }
-              >
-                {formatBalanceProfitLoss(balance, quote)}
-              </TableGrid.Cell>
-            </TableGrid.Row>
-          ))}
-          {balances.length === 0 ? (
-            <TableGrid.Row placeholder>
-              <TableGrid.Cell width="100%" className="muted">
-                조회된 실시간 잔고가 없습니다.
-              </TableGrid.Cell>
-            </TableGrid.Row>
-          ) : null}
-        </TableGrid.Body>
-      </TableGrid.Root>
-    )}
-  </section>
-);
-
-function hasMeaningfulBalanceProfitLoss(balance: CryptoBalanceSummary, quote: string): boolean {
-  if (balance.currency === quote) return false;
-  const costBasis = Number(balance.costBasis);
-  const valuation = Number(balance.valuation);
-  return Number.isFinite(costBasis) && costBasis > 0 && Number.isFinite(valuation);
-}
-
-function formatBalanceProfitLoss(balance: CryptoBalanceSummary, quote: string): string {
-  if (!hasMeaningfulBalanceProfitLoss(balance, quote)) return '-';
-  return `${formatCryptoAmount(balance.profitLoss, quote)} / ${formatPercent(
-    balance.profitLossRate,
-  )}`;
-}
-
-function formatBalanceQuantity(
-  value: string | number | undefined,
-  currency: string,
-  quote: string,
-): string {
-  if (currency === quote) return formatCryptoAmount(value, quote);
-  const numeric = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(numeric)) return '-';
-  const abs = Math.abs(numeric);
-  if (abs === 0) return '0';
-  if (abs < 0.000001) return '0.000001 미만';
-  if (abs >= 1) return formatCryptoDecimal(value, { maxFractionDigits: 4 });
-  return formatCryptoDecimal(value, { maxFractionDigits: 6 });
-}
 
 export const CryptoOrdersPanel = ({
   cancelPending,
