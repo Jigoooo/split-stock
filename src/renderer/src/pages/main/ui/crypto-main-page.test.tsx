@@ -35,6 +35,14 @@ vi.mock('@renderer/shared/api/trpc', () => ({
     auth: {
       getEnv: { useQuery: () => ({ data: { env: 'PROD' }, isPending: false }) },
     },
+    safety: {
+      getState: {
+        useQuery: () => ({
+          data: { master: true, bySymbol: {}, errorLock: { active: false, reason: null } },
+          isPending: false,
+        }),
+      },
+    },
     crypto: {
       cancelOrder: { useMutation: mockMutation },
       getAutoStatus: {
