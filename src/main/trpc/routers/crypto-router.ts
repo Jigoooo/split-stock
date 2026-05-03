@@ -28,6 +28,7 @@ import { CryptoAutoTradingRepo } from '../../crypto/crypto-auto-repo';
 import { CryptoAutoTradingService } from '../../crypto/crypto-auto-service';
 import { CryptoTradingRepo } from '../../crypto/crypto-repo';
 import { UpbitExchangeAdapter } from '../../crypto/upbit/adapter';
+import { normalizeUpbitKrwLimitPrice } from '../../crypto/upbit/decimal';
 import type { Context } from '../context';
 import { publicProcedure, router, runtimeProcedure } from '../trpc-core';
 
@@ -942,8 +943,20 @@ export const cryptoRouter = router({
   placeOrder: runtimeProcedure
     .input(CryptoOrderIntentSchema.and(z.object({ accountId: AccountIdField })))
     .mutation(async ({ ctx, input }) => {
+      // RALPLAN P6 A7: UPBIT KRW 마켓 지정가는 호가단위 위반 시 API rejection.
+      // side에 따라 floor(매수=낮게)/ceil(매도=높게)로 보정해 주문가 미체결 위험을 줄인다.
+      const corrected =
+        input.ordType === 'limit' && input.price && input.market.startsWith('KRW-')
+          ? {
+              ...input,
+              price: normalizeUpbitKrwLimitPrice(
+                input.price,
+                input.side === 'bid' ? 'floor' : 'ceil',
+              ),
+            }
+          : input;
       const adapter = createPrivateUpbit(ctx, input.accountId);
-      const result = await adapter.createOrder(input);
+      const result = await adapter.createOrder(corrected);
       if (result.isErr()) throwUpbitError(result.error);
       new CryptoTradingRepo(ctx.db).upsertOrder({
         accountId: input.accountId,
@@ -959,6 +972,8 @@ export const cryptoRouter = router({
           market: input.market,
           side: input.side,
           ordType: input.ordType,
+          requestedPrice: input.price,
+          actualPrice: corrected.price,
           uuid: result.value.uuid,
         },
       });
