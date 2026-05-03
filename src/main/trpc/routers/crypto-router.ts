@@ -209,10 +209,21 @@ function createPrivateUpbit(ctx: Context, accountId: number): UpbitExchangeAdapt
 }
 
 function createCryptoAutoService(ctx: Context): CryptoAutoTradingService {
+  const rateGuard = ctx.rateGuard;
+  const cryptoProtectionGuard = ctx.cryptoProtectionGuard;
   return new CryptoAutoTradingService({
     repo: new CryptoAutoTradingRepo(ctx.db),
     logger: ctx.logger,
     safetyRegistry: ctx.safetyRegistry,
+    ...(rateGuard ? { rateGuard } : {}),
+    ...(cryptoProtectionGuard
+      ? {
+          protectionGuard: {
+            canBuyToday: (accountId, market, amountKrw) =>
+              cryptoProtectionGuard.canBuyToday(accountId, market, amountKrw),
+          },
+        }
+      : {}),
   });
 }
 
@@ -978,6 +989,18 @@ export const cryptoRouter = router({
         exchange: 'UPBIT',
         order: result.value,
       });
+      // RALPLAN P6 A4 — UPBIT 지정가 주문은 호가 미체결 시 timeout 후 자동취소.
+      // 'price'(시장가 매수)/'market'(시장가 매도)는 즉시 체결되므로 등록 대상 아님.
+      if (corrected.ordType === 'limit' && ctx.cryptoPendingOrderWatcher && result.value.uuid) {
+        ctx.cryptoPendingOrderWatcher.register({
+          pdno: corrected.market,
+          side: corrected.side === 'bid' ? 'BUY' : 'SELL',
+          nth: Date.now(),
+          odno: result.value.uuid,
+          accountId: input.accountId,
+          ...(corrected.volume ? { qty: Number(corrected.volume) } : {}),
+        });
+      }
       ctx.logger.log({
         level: 'WARN',
         category: 'ORDER',
@@ -1020,6 +1043,19 @@ export const cryptoRouter = router({
         exchange: 'UPBIT',
         order: result.value,
       });
+      // RALPLAN P6 A4 — 사용자 취소 시 미체결 자동취소 watcher에서 해당 항목 제거.
+      // (uuid 기준으로 매칭되는 모든 entry 해제 — listActive 순회는 비용이 적음.)
+      if (ctx.cryptoPendingOrderWatcher) {
+        for (const entry of ctx.cryptoPendingOrderWatcher.listActive()) {
+          if (entry.odno === result.value.uuid) {
+            ctx.cryptoPendingOrderWatcher.cancel({
+              pdno: entry.pdno,
+              side: entry.side,
+              nth: entry.nth,
+            });
+          }
+        }
+      }
       return result.value;
     }),
 

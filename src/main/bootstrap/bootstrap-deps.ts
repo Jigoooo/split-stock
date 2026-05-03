@@ -37,7 +37,7 @@ import { AuthService } from '../kis/auth';
 import { KIS_BASE_URL } from '../kis/endpoints';
 import { KisHttpClient } from '../kis/http-client';
 import { TokenStore } from '../kis/token-store';
-import type { WsFactory, WsLike } from '../kis/ws-client';
+import { realTimer, type WsFactory, type WsLike } from '../kis/ws-client';
 import {
   cleanupOldEventLogs,
   createApiFailureLogger,
@@ -51,11 +51,13 @@ import { createFileLogger } from '../logging/file-logger';
 import { notifyTrade, notifyWatchOutcome } from '../notification/trade-notifier';
 import { configureStartupPerf, markStartup } from '../perf/startup-perf';
 import { createAccountSyncRuntime } from '../runtime/account-sync-runtime';
+import { createCryptoPendingCancelWatcher } from '../runtime/crypto-pending-cancel-runtime';
 import { createTradingRuntime } from '../runtime/trading-runtime';
 import { createWatchEventDispatchers } from '../runtime/watch-events';
+import { CryptoProtectionGuard } from '../safety/crypto-protection-guard';
 import { ProtectionGuard } from '../safety/protection-guard';
 import { ProtectionLimitsRepo } from '../safety/protection-limits-repo';
-import { createRateGuardRepo } from '../safety/rate-guard';
+import { createRateGuard, createRateGuardRepo } from '../safety/rate-guard';
 import { SafetyStateRegistry } from '../safety/safety-state';
 import { createTimeWindowRepo } from '../safety/time-window';
 import { CredentialsRepo } from '../security/credentials-repo';
@@ -240,6 +242,14 @@ export function bootstrapDeps(userDataDir: string) {
     logger: apiFailureLogger,
   });
   const protectionGuard = new ProtectionGuard(db, protectionLimitsRepo);
+  // RALPLAN P6 A2 — broker-agnostic RateGuard 인스턴스. 코인/주식 양측에서 동일 인스턴스 공유.
+  const rateGuard = createRateGuard({
+    repo: rateGuardRepo,
+    safetyRegistry,
+    logger: eventLogger,
+  });
+  // RALPLAN P6 A3 — 코인 전용 ProtectionGuard. cryptoOrders/cryptoAutoLots 기반.
+  const cryptoProtectionGuard = new CryptoProtectionGuard(db, protectionLimitsRepo);
   markStartup('bootstrap.repos.end');
   // 활성 계좌 보장 — 계좌 0개면 null. 자격증명 저장 시 자동 시드.
   const ensured = activeAccounts.ensureActive();
@@ -314,6 +324,15 @@ export function bootstrapDeps(userDataDir: string) {
   const cryptoRealtime = new CryptoRealtimeService(db, eventLogger);
   markStartup('crypto-realtime.create.end');
 
+  // RALPLAN P6 A4 — UPBIT 미체결 자동취소 watcher. PendingOrderWatcher 재사용 + UPBIT cancelOrder.
+  const cryptoPendingOrderWatcher = createCryptoPendingCancelWatcher({
+    timer: realTimer,
+    db,
+    settingsRepo,
+    credentialsRepo,
+    logger: eventLogger,
+  });
+
   markStartup('context-factory.create.start');
   const factory = createContextFactory({
     bootStatus,
@@ -337,10 +356,13 @@ export function bootstrapDeps(userDataDir: string) {
     activeAccounts,
     timeWindowRepo,
     rateGuardRepo,
+    rateGuard,
     protectionLimitsRepo,
+    cryptoProtectionGuard,
     watchEngine,
     strategyEngine,
     pendingOrderWatcher,
+    cryptoPendingOrderWatcher,
     bus,
     cryptoRealtime,
     aiCredentialsRepo,

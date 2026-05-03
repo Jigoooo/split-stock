@@ -52,6 +52,26 @@ export interface CryptoAutoServiceOptions {
       getSnapshot(): { master: boolean; errorLock: { active: boolean; reason?: string | null } };
     };
   };
+  /**
+   * 연속매수 방지 — broker-agnostic RateGuard. (RALPLAN P6 A2)
+   * 매수 성공 직후 recordBuy + checkAndPossiblyDisableAuto 호출.
+   * 윈도우 내 임계 초과 시 SafetyStateRegistry.master=false 자동 전환.
+   */
+  rateGuard?: {
+    recordBuy(accountId: number, symbol: string, ts: number): void;
+    checkAndPossiblyDisableAuto(accountId: number): { switchedToManual: boolean };
+  };
+  /**
+   * 일/계좌 한도 가드 — broker-agnostic CryptoProtectionGuard. (RALPLAN P6 A3)
+   * plan-buy 직전 canBuyToday 호출 — Result.err 면 gate 차단.
+   */
+  protectionGuard?: {
+    canBuyToday(
+      accountId: number,
+      market: string,
+      amountKrw: number,
+    ): { ok: boolean; reason?: string };
+  };
 }
 
 export interface CryptoAutoTickInput {
@@ -192,12 +212,16 @@ export class CryptoAutoTradingService {
   private readonly logger: EventLogger;
   private readonly now: () => number;
   private readonly safetyRegistry: CryptoAutoServiceOptions['safetyRegistry'];
+  private readonly rateGuard: CryptoAutoServiceOptions['rateGuard'];
+  private readonly protectionGuard: CryptoAutoServiceOptions['protectionGuard'];
 
   constructor(options: CryptoAutoServiceOptions) {
     this.repo = options.repo;
     this.logger = options.logger;
     this.now = options.now ?? Date.now;
     this.safetyRegistry = options.safetyRegistry;
+    this.rateGuard = options.rateGuard;
+    this.protectionGuard = options.protectionGuard;
   }
 
   getGate(input: {
@@ -266,6 +290,13 @@ export class CryptoAutoTradingService {
       );
       if (decimalGtStrict(nextExposure, config.maxTotalExposureKrw)) {
         blockedReasons.push('총 노출 KRW 상한을 초과했습니다.');
+      }
+      if (this.protectionGuard) {
+        const amount = Number(input.intent.krwAmount);
+        if (Number.isFinite(amount) && amount > 0) {
+          const verdict = this.protectionGuard.canBuyToday(input.accountId, market.value, amount);
+          if (!verdict.ok) blockedReasons.push(verdict.reason ?? '보호 한도 초과');
+        }
       }
     }
 
@@ -553,6 +584,18 @@ export class CryptoAutoTradingService {
     const order = await input.adapter.createOrder(orderIntent);
     if (order.isErr()) return err(order.error);
     this.repo.markLiveAction(input.accountId, market.value, this.now());
+    if (this.rateGuard && planned.value.kind === 'plan-buy') {
+      this.rateGuard.recordBuy(input.accountId, market.value, this.now());
+      const guard = this.rateGuard.checkAndPossiblyDisableAuto(input.accountId);
+      if (guard.switchedToManual) {
+        this.logger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'crypto.auto.rate-guard.disabled',
+          payload: { accountId: input.accountId, market: market.value },
+        });
+      }
+    }
     const event = this.repo.insertEvent({
       accountId: input.accountId,
       market: market.value,

@@ -22,8 +22,9 @@ import type { KisHttpClient } from '../kis/http-client';
 import type { EventLogger } from '../logging/event-logger';
 import type { FeedBus } from '../realtime/feed-bus';
 import type { RealtimeService } from '../realtime/realtime-service';
+import type { CryptoProtectionGuard } from '../safety/crypto-protection-guard';
 import type { ProtectionLimitsRepo } from '../safety/protection-limits-repo';
-import type { RateGuardRepo } from '../safety/rate-guard';
+import type { RateGuard, RateGuardRepo } from '../safety/rate-guard';
 import type { SafetyState, SafetyStateRegistry } from '../safety/safety-state';
 import type { TimeWindowRepo } from '../safety/time-window';
 import type { CredentialsRepo } from '../security/credentials-repo';
@@ -77,13 +78,21 @@ export interface Context {
   activeAccountId: number | null;
   timeWindowRepo: TimeWindowRepo;
   rateGuardRepo: RateGuardRepo;
+  /** broker-agnostic RateGuard 인스턴스 — 코인/주식 매수 빈도 제어. (RALPLAN P6 A2)
+   *  테스트 fixture 에서는 미주입 가능. */
+  rateGuard: RateGuard | undefined;
   protectionLimitsRepo: ProtectionLimitsRepo;
+  /** 코인 전용 ProtectionGuard — 일/계좌 한도. (RALPLAN P6 A3)
+   *  테스트 fixture 에서는 미주입 가능. */
+  cryptoProtectionGuard: CryptoProtectionGuard | undefined;
   watchEngine: WatchEngine | null;
   strategyEngine: StrategyExecutionEngine | null;
   currentStateSync: CurrentStateSync | undefined;
   prebuyRepo: PrebuyRepo;
   /** 미체결 자동취소 감시 인스턴스 — 부팅 시 주입, 미활성화 시 null. */
   pendingOrderWatcher: PendingOrderWatcher | null;
+  /** 코인(UPBIT) 미체결 자동취소 감시 인스턴스. (RALPLAN P6 A4) */
+  cryptoPendingOrderWatcher: PendingOrderWatcher | undefined;
   realtime: RealtimeService | null;
   /** 코인 거래소 public/private WS fanout 서비스. */
   cryptoRealtime: CryptoRealtimeService | null;
