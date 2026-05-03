@@ -3342,6 +3342,9 @@ body {
   display: grid;
   gap: 0.55rem;
   overflow: auto;
+  /* sticky 액션 바가 패널 바닥에 정확히 붙도록 panel__body 의 0.8rem 하단 padding 제거.
+     좌우/상단 padding 은 유지 — 액션 바 좌우 negative margin (bleed) 와 짝을 이룬다. */
+  padding-bottom: 0;
 }
 
 .crypto-auto-panel__controls,

@@ -39,6 +39,8 @@ interface CryptoFeedTabsTrade {
 
 export interface CryptoFeedTabsProps {
   market: string;
+  /** "비트코인 (KRW-BTC)" 형태의 표시명. 마켓명 없으면 market 코드 그대로. */
+  marketLabel: string;
   enabled: boolean;
   /** 현재 마켓의 미체결 주문 (이미 wait/watch 로 필터된 배열). */
   openOrders: CryptoFeedTabsOrder[];
@@ -60,6 +62,7 @@ export const CryptoFeedTabs = (props: CryptoFeedTabsProps): ReactElement => {
     detailLoading,
     enabled,
     market,
+    marketLabel,
     onCancel,
     onCloseDetail,
     onOpenDetail,
@@ -97,7 +100,11 @@ export const CryptoFeedTabs = (props: CryptoFeedTabsProps): ReactElement => {
           className="crypto-feed-tabs__body"
         >
           {tab === 'feed' ? (
-            <CryptoTradeFeedPanel market={market} trades={trades} />
+            <CryptoTradeFeedPanel
+              market={market}
+              trades={trades}
+              title={`실시간 체결 — ${marketLabel}`}
+            />
           ) : (
             <CryptoOrdersPanel
               cancelPending={cancelPending}
@@ -108,7 +115,7 @@ export const CryptoFeedTabs = (props: CryptoFeedTabsProps): ReactElement => {
               onCancel={onCancel}
               onOpenDetail={onOpenDetail}
               orders={marketOpenOrders}
-              title=""
+              title={`미체결 주문 (${marketOpenOrders.length}건) · ${marketLabel}`}
             />
           )}
         </motion.div>

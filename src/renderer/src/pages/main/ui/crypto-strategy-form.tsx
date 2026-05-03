@@ -1,3 +1,8 @@
+import type {
+  StageRuleField,
+  StageRuleRowRaw,
+} from '@renderer/features/edit-strategy/model/strategy-form-types';
+import { StageRulesEditor } from '@renderer/features/edit-strategy/ui/stage-rules-editor';
 import { Button, Select, TextInput } from '@renderer/shared/ui';
 import type { CryptoStrategyAutoMode, CryptoStrategyProfile } from '@shared/contracts';
 import {
@@ -5,7 +10,7 @@ import {
   deriveCryptoStrategyAutoMode,
   MAX_CRYPTO_STRATEGY_STAGES,
 } from '@shared/contracts';
-import { type ReactElement, useEffect, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useState } from 'react';
 
 /**
  * 코인 strategy 폼 — settings 페이지와 main 우측 자동매매 설정 탭 둘 다에서 동일하게 사용.
@@ -76,56 +81,87 @@ export const CryptoStrategyForm = (props: CryptoStrategyFormProps): ReactElement
   const submitLabel = props.submitLabel ?? '자동감시 설정 저장';
   const submitAriaLabel = props.submitAriaLabel ?? submitLabel;
   const [draft, setDraft] = useState(profile);
+  const [templateNth, setTemplateNth] = useState<string>('1');
 
   useEffect(() => {
     setDraft(profile);
   }, [profile]);
 
-  const updateBuyAmount = (nth: number, raw: string): void => {
-    const value = sanitizeDecimal(raw);
-    setDraft((current) => ({
-      ...current,
-      buyRules: ensureBuyRules(current).map((rule) =>
-        rule.nth === nth ? { ...rule, amountKrw: value } : rule,
-      ),
-    }));
-  };
+  // 항상 1~50 차수 렌더. 국내주식 stage-rules-editor 와 동일한 StageRuleRowRaw 형태.
+  const stageRows: StageRuleRowRaw[] = useMemo(
+    () =>
+      Array.from({ length: MAX_CRYPTO_STRATEGY_STAGES }, (_, index) => {
+        const nth = index + 1;
+        const buyRule = draft.buyRules.find((rule) => rule.nth === nth);
+        const sellRule = draft.sellRules.find((rule) => rule.nth === nth);
+        return {
+          nth,
+          amountKrw: buyRule?.amountKrw ?? '5000',
+          // 1차는 "수동진입" 으로 표시되므로 triggerDropPct 는 빈 값.
+          triggerDropPct: nth === 1 ? '' : (buyRule?.triggerDropPct ?? '0.03'),
+          targetProfitPct: sellRule?.targetProfitPct ?? '0.02',
+        };
+      }),
+    [draft.buyRules, draft.sellRules],
+  );
 
-  const updateBuyDrop = (nth: number, raw: string): void => {
-    if (nth === 1) return;
-    const value = sanitizeDecimal(raw);
-    setDraft((current) => ({
-      ...current,
-      buyRules: ensureBuyRules(current).map((rule) =>
-        rule.nth === nth ? { ...rule, triggerDropPct: value } : rule,
-      ),
-    }));
-  };
-
-  const updateSellTarget = (nth: number, raw: string): void => {
-    const value = sanitizeDecimal(raw);
-    setDraft((current) => ({
-      ...current,
-      sellRules: ensureSellRules(current).map((rule) =>
-        rule.nth === nth ? { ...rule, targetProfitPct: value } : rule,
-      ),
-    }));
-  };
-
-  // 항상 1~50 차수 렌더. inactive 차수는 disabled + 시각 dim.
-  const rows = Array.from({ length: MAX_CRYPTO_STRATEGY_STAGES }, (_, index) => {
-    const nth = index + 1;
-    const buyRule = draft.buyRules.find((rule) => rule.nth === nth) ?? {
-      nth,
-      amountKrw: '5000',
-      triggerDropPct: nth === 1 ? null : '0.03',
+  const handleStageRuleChange =
+    (nth: number, key: StageRuleField) =>
+    (raw: string): void => {
+      const value = sanitizeDecimal(raw);
+      setDraft((current) => {
+        if (key === 'amountKrw') {
+          return {
+            ...current,
+            buyRules: ensureBuyRules(current).map((rule) =>
+              rule.nth === nth ? { ...rule, amountKrw: value } : rule,
+            ),
+          };
+        }
+        if (key === 'triggerDropPct') {
+          if (nth === 1) return current;
+          return {
+            ...current,
+            buyRules: ensureBuyRules(current).map((rule) =>
+              rule.nth === nth ? { ...rule, triggerDropPct: value } : rule,
+            ),
+          };
+        }
+        return {
+          ...current,
+          sellRules: ensureSellRules(current).map((rule) =>
+            rule.nth === nth ? { ...rule, targetProfitPct: value } : rule,
+          ),
+        };
+      });
     };
-    const sellRule = draft.sellRules.find((rule) => rule.nth === nth) ?? {
-      nth,
-      targetProfitPct: '0.02',
-    };
-    return { buyRule, sellRule, nth };
-  });
+
+  const handleApplyTemplate = (scope: 'active' | 'all'): void => {
+    const sourceNth = Math.max(1, parseInt(templateNth, 10) || 1);
+    setDraft((current) => {
+      const sourceBuy = ensureBuyRules(current).find((rule) => rule.nth === sourceNth);
+      const sourceSell = ensureSellRules(current).find((rule) => rule.nth === sourceNth);
+      const targetCount =
+        scope === 'active' ? Math.max(1, current.maxStages) : MAX_CRYPTO_STRATEGY_STAGES;
+      const sourceAmount = sourceBuy?.amountKrw ?? '5000';
+      const sourceDrop = sourceBuy?.triggerDropPct ?? '0.03';
+      const sourceProfit = sourceSell?.targetProfitPct ?? '0.02';
+      const buyRules = Array.from({ length: targetCount }, (_, idx) => {
+        const nth = idx + 1;
+        return {
+          nth,
+          amountKrw: sourceAmount,
+          // 1차는 항상 수동진입 (triggerDropPct=null), 2차+ 는 source drop 적용.
+          triggerDropPct: nth === 1 ? null : sourceDrop,
+        };
+      });
+      const sellRules = Array.from({ length: targetCount }, (_, idx) => ({
+        nth: idx + 1,
+        targetProfitPct: sourceProfit,
+      }));
+      return { ...current, buyRules, sellRules };
+    });
+  };
 
   const formClassName =
     chrome === 'panel'
@@ -180,105 +216,27 @@ export const CryptoStrategyForm = (props: CryptoStrategyFormProps): ReactElement
               ))}
             </Select>
           </label>
-          <label htmlFor="crypto-strategy-buy-order-type">
-            <span className="muted">자동매수 주문방식</span>
-            <Select
-              id="crypto-strategy-buy-order-type"
-              aria-label="자동매수 주문방식"
-              dense
-              disabled={disabled || !draft.autoBuyEnabled}
-              value={draft.autoBuyOrderType}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  autoBuyOrderType: event.target.value as CryptoStrategyProfile['autoBuyOrderType'],
-                }))
-              }
-            >
-              <option value="MARKET">시장가</option>
-              <option value="LIMIT">지정가</option>
-            </Select>
-          </label>
-          <label htmlFor="crypto-strategy-sell-order-type">
-            <span className="muted">자동매도 주문방식</span>
-            <Select
-              id="crypto-strategy-sell-order-type"
-              aria-label="자동매도 주문방식"
-              dense
-              disabled={disabled || !draft.autoSellEnabled}
-              value={draft.autoSellOrderType}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  autoSellOrderType: event.target
-                    .value as CryptoStrategyProfile['autoSellOrderType'],
-                }))
-              }
-            >
-              <option value="MARKET">시장가</option>
-              <option value="LIMIT">지정가</option>
-            </Select>
-          </label>
         </section>
-        <section aria-label="차수별 자동감시 규칙" className="crypto-strategy-form__rules">
-          <div className="muted crypto-strategy-form__rules-title">차수별 규칙</div>
-          <div className="crypto-strategy-form__rules-head" role="presentation">
-            <span />
-            <span className="num-up">매수 규칙</span>
-            <span className="num-down">매도 규칙</span>
-          </div>
-          <div className="crypto-strategy-form__rules-list">
-            {rows.map(({ buyRule, sellRule, nth }) => {
-              const isActive = nth <= draft.maxStages;
-              const rowDisabled = disabled || !isActive;
-              return (
-                <div
-                  key={nth}
-                  className={`crypto-strategy-form__rule-row${
-                    isActive ? '' : ' crypto-strategy-form__rule-row--inactive'
-                  }`}
-                  aria-disabled={!isActive}
-                >
-                  <strong>{nth}차</strong>
-                  <div className="crypto-strategy-form__rule-buy">
-                    {nth === 1 ? (
-                      <span className="muted">수동진입</span>
-                    ) : (
-                      <>
-                        <TextInput
-                          aria-label={`${nth}차 자동매수 하락률`}
-                          dense
-                          disabled={rowDisabled || !draft.autoBuyEnabled}
-                          value={buyRule.triggerDropPct ?? ''}
-                          onChange={(event) => updateBuyDrop(nth, event.target.value)}
-                        />
-                        <span>하락시 매수</span>
-                      </>
-                    )}
-                    <TextInput
-                      aria-label={`${nth}차 매수금액`}
-                      dense
-                      disabled={rowDisabled || !draft.autoBuyEnabled}
-                      value={buyRule.amountKrw}
-                      onChange={(event) => updateBuyAmount(nth, event.target.value)}
-                    />
-                    <span>원</span>
-                  </div>
-                  <div className="crypto-strategy-form__rule-sell">
-                    <TextInput
-                      aria-label={`${nth}차 자동매도 익절률`}
-                      dense
-                      disabled={rowDisabled || !draft.autoSellEnabled}
-                      value={sellRule.targetProfitPct}
-                      onChange={(event) => updateSellTarget(nth, event.target.value)}
-                    />
-                    <span>수익시 매도</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+        <StageRulesEditor
+          activeMaxStages={draft.maxStages}
+          autoBuyEnabled={draft.autoBuyEnabled}
+          autoBuyOrderType={draft.autoBuyOrderType}
+          autoSellEnabled={draft.autoSellEnabled}
+          autoSellOrderType={draft.autoSellOrderType}
+          disabled={disabled}
+          errors={{}}
+          onApplyTemplate={handleApplyTemplate}
+          onAutoBuyOrderTypeChange={(value) =>
+            setDraft((current) => ({ ...current, autoBuyOrderType: value }))
+          }
+          onAutoSellOrderTypeChange={(value) =>
+            setDraft((current) => ({ ...current, autoSellOrderType: value }))
+          }
+          onChange={handleStageRuleChange}
+          onTemplateNthChange={setTemplateNth}
+          rows={stageRows}
+          templateNth={templateNth}
+        />
       </div>
       <div className="form-sticky-action-bar crypto-strategy-form__actions">
         <span className="muted">저장 대상 · 코인 차수 전략</span>

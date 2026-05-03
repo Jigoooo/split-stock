@@ -6,12 +6,14 @@ import { formatTradeTime } from '../model/crypto-formatters';
 export const CryptoTradeFeedPanel = ({
   market,
   trades,
+  title = '실시간 체결',
 }: {
   market: string;
   trades: Array<{ askBid: string; id: string; price: string; timestamp: number; volume: string }>;
+  title?: string;
 }): ReactElement => (
   <section className="panel crypto-trade-feed">
-    <div className="panel__title">실시간 체결</div>
+    <div className="panel__title">{title}</div>
     <TableGrid.Root variant="hts" stickyHeader horizontalScroll style={{ flex: 1, minHeight: 0 }}>
       <TableGrid.Header>
         <TableGrid.Cell width="8.8rem">시각</TableGrid.Cell>

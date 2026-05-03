@@ -140,8 +140,8 @@ export const CryptoAutoPanel = ({
           profile={strategy}
           onSubmit={onStrategySave}
           chrome="content"
-          submitLabel="종목 설정 저장"
-          submitAriaLabel="코인 종목 설정 저장"
+          submitLabel="설정 저장"
+          submitAriaLabel="코인 설정 저장"
         />
       </div>
     )}

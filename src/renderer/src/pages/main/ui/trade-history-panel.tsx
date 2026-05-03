@@ -319,8 +319,8 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
           dirtyBaseline={active.data?.profile ?? null}
           disabled={isPending}
           chrome="content"
-          submitLabel="종목 설정 저장"
-          submitContextLabel="종목 설정"
+          submitLabel="설정 저장"
+          submitContextLabel="설정"
           onSubmit={(profile) => {
             void save(profile);
             setInitialOverride(null);

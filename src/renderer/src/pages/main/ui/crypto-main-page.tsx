@@ -664,6 +664,7 @@ export const CryptoMainPage = ({
       tradeFeed={
         <CryptoFeedTabs
           market={market}
+          marketLabel={selectedMarketLabel}
           enabled={privateEnabled}
           openOrders={openOrders}
           trades={liveTrades}
