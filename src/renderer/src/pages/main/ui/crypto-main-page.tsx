@@ -27,12 +27,12 @@ import { storeAddCryptoWatchPrefill } from '../model/crypto-watch-popout-prefill
 import { CryptoAutoStrategyTabBody } from './crypto-auto-panel';
 import { CryptoBalancesPanel } from './crypto-balances-panel';
 import { CryptoCyclesPanel } from './crypto-cycles-panel';
+import { CryptoFeedTabs } from './crypto-feed-tabs';
 import { CryptoLotsPanel } from './crypto-lots-panel';
 import { CryptoMarketBar } from './crypto-market-bar';
 import { CryptoOrderTicket } from './crypto-order-ticket';
 import { CryptoOrderbookPanel } from './crypto-orderbook-panel';
 import { CryptoOrdersPanel } from './crypto-orders-panel';
-import { CryptoTradeFeedPanel } from './crypto-trade-feed-panel';
 import { CryptoTransfersPanel } from './crypto-transfers-panel';
 import { CryptoAutoTradeHistoryTable, CryptoWatchBoard } from './crypto-watch-board';
 
@@ -57,7 +57,12 @@ type CryptoLeftTab = 'holdings' | 'auto';
 type CryptoHoldingsTab = 'balances' | 'lots' | 'filled' | 'open' | 'transfers';
 type CryptoRightTab = 'selected-history' | 'all-history';
 type CryptoRightDetailTab = 'strategy' | 'all' | 'open' | 'closed' | 'memo';
-type CryptoOrderPanelId = 'left-filled' | 'left-open' | 'right-selected' | 'right-all';
+type CryptoOrderPanelId =
+  | 'left-filled'
+  | 'left-open'
+  | 'right-selected'
+  | 'right-all'
+  | 'feed-tabs';
 
 const CRYPTO_LEFT_TABS = [
   { id: 'holdings', label: '포지션' },
@@ -657,7 +662,24 @@ export const CryptoMainPage = ({
           volume={volume}
         />
       }
-      tradeFeed={<CryptoTradeFeedPanel market={market} trades={liveTrades} />}
+      tradeFeed={
+        <CryptoFeedTabs
+          market={market}
+          enabled={privateEnabled}
+          openOrders={openOrders}
+          trades={liveTrades}
+          cancelPending={cancelOrder.isPending}
+          onCancel={(uuid) => cancelOrder.mutate({ accountId, uuid })}
+          onOpenDetail={(uuid) => openOrderDetail('feed-tabs', uuid)}
+          onCloseDetail={closeOrderDetail}
+          detail={
+            selectedOrder?.panelId === 'feed-tabs' ? (orderDetailQuery.data?.order ?? null) : null
+          }
+          detailLoading={
+            selectedOrder?.panelId === 'feed-tabs' ? orderDetailQuery.isFetching : false
+          }
+        />
+      }
     />
   );
 
