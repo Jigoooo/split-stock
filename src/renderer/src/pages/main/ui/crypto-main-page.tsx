@@ -1,3 +1,4 @@
+import { useCryptoBalanceWithLots } from '@renderer/entities/account-crypto';
 import {
   decimalAdd,
   decimalDiv,
@@ -24,6 +25,7 @@ import { isOpenOrder } from '../model/crypto-formatters';
 import { storeAddCryptoWatchPrefill } from '../model/crypto-watch-popout-prefill';
 import { CryptoAutoStrategyTabBody } from './crypto-auto-panel';
 import { CryptoBalancesPanel } from './crypto-balances-panel';
+import { CryptoLotsPanel } from './crypto-lots-panel';
 import { CryptoMarketBar } from './crypto-market-bar';
 import { CryptoOrderTicket } from './crypto-order-ticket';
 import { CryptoOrderbookPanel } from './crypto-orderbook-panel';
@@ -51,7 +53,7 @@ type Mode = 'limit' | 'market';
 type OrderType = 'limit' | 'price' | 'market';
 type AutoMode = 'disabled' | 'dry-run' | 'live-small';
 type CryptoLeftTab = 'holdings' | 'auto';
-type CryptoHoldingsTab = 'balances' | 'filled' | 'open' | 'transfers';
+type CryptoHoldingsTab = 'balances' | 'lots' | 'filled' | 'open' | 'transfers';
 type CryptoRightTab = 'selected-history' | 'all-history';
 type CryptoRightDetailTab = 'strategy' | 'all' | 'open' | 'closed';
 type CryptoOrderPanelId = 'left-filled' | 'left-open' | 'right-selected' | 'right-all';
@@ -63,6 +65,7 @@ const CRYPTO_LEFT_TABS = [
 
 const CRYPTO_HOLDINGS_TABS = [
   { id: 'balances', label: '실시간 잔고' },
+  { id: 'lots', label: '차수' },
   { id: 'filled', label: '체결' },
   { id: 'open', label: '미체결' },
   { id: 'transfers', label: '입출금' },
@@ -353,6 +356,7 @@ export const CryptoMainPage = ({
     [balancesQuery.data?.balances, market, ticker?.tradePrice],
   );
   const quote = getCryptoQuote(market);
+  const cryptoLotsData = useCryptoBalanceWithLots(accountId, market);
   const selectedMarketLabel = formatCryptoMarketLabel(selectedMarket?.koreanName ?? null, market);
   const ordTypeFor = (chosenSide: Side): OrderType =>
     mode === 'market' ? (chosenSide === 'bid' ? 'price' : 'market') : 'limit';
@@ -667,6 +671,15 @@ export const CryptoMainPage = ({
             filledOrdersPanel={renderOrdersPanel('left-filled', '체결', filledOrders)}
             holdingsTab={holdingsTab}
             leftTab={leftTab}
+            lotsPanel={
+              <CryptoLotsPanel
+                enabled={privateEnabled}
+                market={market}
+                lots={cryptoLotsData.lots}
+                currentPrice={cryptoLotsData.position?.currentPrice ?? 0}
+                quote={quote}
+              />
+            }
             onHoldingsTabChange={setHoldingsTab}
             onLeftTabChange={setLeftTab}
             openOrdersPanel={renderOrdersPanel('left-open', '미체결', openOrders)}
@@ -777,6 +790,7 @@ const CryptoLeftPane = ({
   filledOrdersPanel,
   holdingsTab,
   leftTab,
+  lotsPanel,
   onHoldingsTabChange,
   onLeftTabChange,
   openOrdersPanel,
@@ -787,6 +801,7 @@ const CryptoLeftPane = ({
   filledOrdersPanel: ReactElement;
   holdingsTab: CryptoHoldingsTab;
   leftTab: CryptoLeftTab;
+  lotsPanel: ReactElement;
   onHoldingsTabChange: (tab: CryptoHoldingsTab) => void;
   onLeftTabChange: (tab: CryptoLeftTab) => void;
   openOrdersPanel: ReactElement;
@@ -794,6 +809,7 @@ const CryptoLeftPane = ({
 }): ReactElement => {
   let content = balancesPanel;
   if (leftTab === 'auto') content = autoPanel;
+  if (leftTab === 'holdings' && holdingsTab === 'lots') content = lotsPanel;
   if (leftTab === 'holdings' && holdingsTab === 'filled') content = filledOrdersPanel;
   if (leftTab === 'holdings' && holdingsTab === 'open') content = openOrdersPanel;
   if (leftTab === 'holdings' && holdingsTab === 'transfers') content = transfersPanel;
