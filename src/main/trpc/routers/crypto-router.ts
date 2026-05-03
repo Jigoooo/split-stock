@@ -211,6 +211,7 @@ function createCryptoAutoService(ctx: Context): CryptoAutoTradingService {
   return new CryptoAutoTradingService({
     repo: new CryptoAutoTradingRepo(ctx.db),
     logger: ctx.logger,
+    safetyRegistry: ctx.safetyRegistry,
   });
 }
 

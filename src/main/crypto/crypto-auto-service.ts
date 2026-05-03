@@ -45,6 +45,13 @@ export interface CryptoAutoServiceOptions {
   repo: CryptoAutoTradingRepo;
   logger: EventLogger;
   now?: () => number;
+  /** 글로벌 자동매매 잠금 — broker-agnostic SafetyStateRegistry. (RALPLAN P6 A1) */
+  safetyRegistry?: {
+    get(accountId: number): {
+      canTrade(symbol: string): boolean;
+      getSnapshot(): { master: boolean; errorLock: { active: boolean; reason?: string | null } };
+    };
+  };
 }
 
 export interface CryptoAutoTickInput {
@@ -184,11 +191,13 @@ export class CryptoAutoTradingService {
   private readonly repo: CryptoAutoTradingRepo;
   private readonly logger: EventLogger;
   private readonly now: () => number;
+  private readonly safetyRegistry: CryptoAutoServiceOptions['safetyRegistry'];
 
   constructor(options: CryptoAutoServiceOptions) {
     this.repo = options.repo;
     this.logger = options.logger;
     this.now = options.now ?? Date.now;
+    this.safetyRegistry = options.safetyRegistry;
   }
 
   getGate(input: {
@@ -204,6 +213,14 @@ export class CryptoAutoTradingService {
     const checked = ensureConfig(config);
     if (checked.isErr()) return err(checked.error);
     const blockedReasons: string[] = [];
+
+    if (this.safetyRegistry) {
+      const snap = this.safetyRegistry.get(input.accountId).getSnapshot();
+      if (!snap.master) blockedReasons.push('글로벌 자동매매가 OFF 상태입니다.');
+      if (snap.errorLock.active) {
+        blockedReasons.push(snap.errorLock.reason ?? '에러 잠금 상태입니다.');
+      }
+    }
 
     if (config.mode !== 'live-small') blockedReasons.push('live-small 모드가 아닙니다.');
     if (config.emergencyDisabled) blockedReasons.push('비상 중지 상태입니다.');
