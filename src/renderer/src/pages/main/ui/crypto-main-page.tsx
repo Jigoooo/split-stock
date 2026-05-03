@@ -53,7 +53,6 @@ interface CryptoMainPageProps {
 type Side = 'bid' | 'ask';
 type Mode = 'limit' | 'market';
 type OrderType = 'limit' | 'price' | 'market';
-type AutoMode = 'disabled' | 'dry-run' | 'live-small';
 type CryptoLeftTab = 'holdings' | 'auto';
 type CryptoHoldingsTab = 'balances' | 'lots' | 'filled' | 'open' | 'transfers';
 type CryptoRightTab = 'selected-history' | 'all-history';
@@ -149,7 +148,6 @@ export const CryptoMainPage = ({
   const [holdingsTab, setHoldingsTab] = useState<CryptoHoldingsTab>('balances');
   const [rightTab, setRightTab] = useState<CryptoRightTab>('selected-history');
   const [rightDetailTab, setRightDetailTab] = useState<CryptoRightDetailTab>('strategy');
-  const [autoMode, setAutoMode] = useState<AutoMode>('disabled');
   const [autoStrategyProfile, setAutoStrategyProfile] = useState<CryptoStrategyProfile>(() =>
     createDefaultCryptoStrategyProfile('KRW-BTC'),
   );
@@ -435,12 +433,6 @@ export const CryptoMainPage = ({
       void utils.crypto.listAutoStrategyTemplates.invalidate({ accountId });
     },
   });
-
-  useEffect(() => {
-    const config = autoStatusQuery.data?.config;
-    if (!config) return;
-    setAutoMode(config.mode === 'dry-run' ? 'disabled' : config.mode);
-  }, [autoStatusQuery.data?.config]);
 
   useEffect(() => {
     const applyProfile = (next: CryptoStrategyProfile): void => {
@@ -743,11 +735,8 @@ export const CryptoMainPage = ({
             memoPanel={<CryptoMemoForm market={market} />}
             configPanel={
               <CryptoAutoStrategyTabBody
-                gate={autoStatusQuery.data?.gate ?? { ok: false, blockedReasons: ['상태 로드 전'] }}
                 market={market}
-                mode={autoMode}
                 onDeleteTemplate={(id) => deleteAutoStrategyTemplate.mutate({ accountId, id })}
-                onModeChange={setAutoMode}
                 onSaveTemplate={(name, profile) =>
                   saveAutoStrategyTemplate.mutate({ accountId, name, strategy: profile })
                 }

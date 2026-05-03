@@ -1,20 +1,29 @@
-import { Button, SegmentedToggle, Select, TextInput } from '@renderer/shared/ui';
-import type {
-  CryptoAutoGateResult,
-  CryptoAutoTemplate,
-  CryptoStrategyProfile,
-} from '@shared/contracts';
+import { Button, Select, TextInput } from '@renderer/shared/ui';
+import type { CryptoAutoTemplate, CryptoStrategyProfile } from '@shared/contracts';
 import { type ReactElement, useState } from 'react';
 import { CryptoStrategyForm } from './crypto-strategy-form';
 
-type AutoMode = 'disabled' | 'dry-run' | 'live-small';
+/**
+ * 코인 자동매매 설정 탭 (main 우측 패널).
+ *
+ * 운영 컨트롤(mode toggle, 글로벌 ON/OFF/소액 실거래/비상중지 chips, 보호 설정·루프
+ * 컨트롤 hint) 은 모두 설정 → 고급/안전 탭으로 이동했다 (P0 격리). 이 탭은
+ * 종목별 strategy 입력만 담당. onOpenAdvancedSettings 가 주어지면 panel title
+ * 옆에 "고급/안전 →" 빠른 진입 링크를 노출한다 (onboarding).
+ */
+
+const openAdvancedSettingsPopout = (): void => {
+  try {
+    window.localStorage.setItem('popout:settings:initialTab', 'advanced');
+  } catch {
+    // localStorage 차단 시 — settings 페이지가 default 탭으로 열림.
+  }
+  void window.appShell?.openPopout('settings');
+};
 
 export const CryptoAutoStrategyTabBody = ({
-  gate,
   market,
-  mode,
   onDeleteTemplate,
-  onModeChange,
   onSaveTemplate,
   onStrategySave,
   pending,
@@ -22,11 +31,8 @@ export const CryptoAutoStrategyTabBody = ({
   strategyLoading,
   templates,
 }: {
-  gate: CryptoAutoGateResult;
   market: string;
-  mode: AutoMode;
   onDeleteTemplate: (id: number) => void;
-  onModeChange: (mode: AutoMode) => void;
   onSaveTemplate: (name: string, profile: CryptoStrategyProfile) => void;
   onStrategySave: (profile: CryptoStrategyProfile) => void;
   pending: boolean;
@@ -90,9 +96,6 @@ export const CryptoAutoStrategyTabBody = ({
       </fieldset>
       <CryptoAutoPanel
         enabled={market.startsWith('KRW-')}
-        gate={gate}
-        mode={mode}
-        onModeChange={onModeChange}
         onStrategySave={onStrategySave}
         pending={pending}
         strategy={strategy}
@@ -104,41 +107,33 @@ export const CryptoAutoStrategyTabBody = ({
 
 export const CryptoAutoPanel = ({
   enabled,
-  gate,
-  mode,
-  onModeChange,
   onStrategySave,
   pending,
   strategy,
   strategyLoading,
 }: {
   enabled: boolean;
-  gate: CryptoAutoGateResult;
-  mode: AutoMode;
-  onModeChange: (mode: AutoMode) => void;
   onStrategySave: (profile: CryptoStrategyProfile) => void;
   pending: boolean;
   strategy: CryptoStrategyProfile;
   strategyLoading: boolean;
 }): ReactElement => (
   <section className="panel crypto-account-panel crypto-auto-panel">
-    <div className="panel__title">자동감시</div>
+    <div className="panel__title crypto-auto-panel__title">
+      <span>자동감시</span>
+      <Button
+        dense
+        variant="ghost"
+        aria-label="고급/안전 설정 열기"
+        onClick={openAdvancedSettingsPopout}
+      >
+        고급/안전 →
+      </Button>
+    </div>
     {!enabled ? (
       <div className="panel__body muted">Upbit KRW 실전 계좌와 KRW 마켓에서만 동작합니다.</div>
     ) : (
       <div className="panel__body crypto-auto-panel__body">
-        <div className="crypto-auto-panel__controls">
-          <SegmentedToggle
-            ariaLabel="코인 자동감시 모드"
-            value={mode === 'dry-run' ? 'disabled' : mode}
-            onChange={onModeChange}
-            dense
-            items={[
-              { value: 'disabled', label: '중지' },
-              { value: 'live-small', label: '소액 실거래' },
-            ]}
-          />
-        </div>
         {strategyLoading ? <span className="muted">차수 전략 로드 중…</span> : null}
         <CryptoStrategyForm
           disabled={pending}
@@ -148,18 +143,6 @@ export const CryptoAutoPanel = ({
           submitLabel="종목 설정 저장"
           submitAriaLabel="코인 종목 설정 저장"
         />
-        {gate.blockedReasons.length > 0 ? (
-          <div className="crypto-auto-panel__reasons">
-            {gate.blockedReasons.map((reason) => (
-              <span key={reason} className="chip chip--down">
-                {reason}
-              </span>
-            ))}
-          </div>
-        ) : null}
-        <p className="muted crypto-auto-panel__advanced-hint">
-          보호 설정·소액 실거래·루프 컨트롤은 설정 → 고급/안전 탭으로 이동했습니다.
-        </p>
       </div>
     )}
   </section>

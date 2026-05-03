@@ -3354,6 +3354,14 @@ body {
   align-items: center;
 }
 
+/* main 우측 자동매매 설정 탭 panel title — 우측에 "고급/안전 →" 빠른 진입 링크. */
+.crypto-auto-panel__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .crypto-auto-panel__timestamps {
   color: var(--text-muted);
   font-size: 1.1rem;

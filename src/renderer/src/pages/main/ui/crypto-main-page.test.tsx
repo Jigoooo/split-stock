@@ -494,16 +494,13 @@ describe('CryptoTransfersPanel', () => {
 });
 
 describe('CryptoAutoPanel', () => {
-  // 운영 컨트롤(주문당 상한·smoke·소액 실거래·루프 시작/중지·실거래 차수·최근 판단)은
-  // 설정 → 고급/안전 탭으로 이전됨. 메인 패널은 mode 토글, CryptoStrategyForm,
-  // gate.blockedReasons 안내만 노출. (RALPLAN P0)
-  it('renders mode toggle, strategy form, and gate blocked reasons', () => {
+  // 운영 컨트롤(mode toggle, blockedReasons chips, "설정 → 고급/안전" hint)은
+  // 모두 설정 → 고급/안전 탭으로 이동했다 (RALPLAN U3). main 우측 자동매매 설정
+  // 탭은 종목별 strategy 입력만 담당. panel title 우측에 "고급/안전 →" 링크만.
+  it('renders strategy form only — operational controls moved to advanced settings', () => {
     render(
       <CryptoAutoPanel
         enabled
-        gate={{ ok: false, blockedReasons: ['비상 중지 상태입니다.'] }}
-        mode="disabled"
-        onModeChange={vi.fn()}
         onStrategySave={vi.fn()}
         pending={false}
         strategy={createDefaultCryptoStrategyProfile('KRW-BTC')}
@@ -512,25 +509,25 @@ describe('CryptoAutoPanel', () => {
     );
 
     expect(screen.getByText('자동감시')).toBeInTheDocument();
-    expect(screen.getByText('비상 중지 상태입니다.')).toBeInTheDocument();
     expect(screen.getByText('차수별 규칙')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '코인 종목 설정 저장' })).toBeInTheDocument();
-    // 운영 컨트롤은 메인에서 제거됨 — 설정 → 고급/안전 탭에서만 노출.
+    // 고급/안전 빠른 진입 링크는 main 에 존재.
+    expect(screen.getByRole('button', { name: '고급/안전 설정 열기' })).toBeInTheDocument();
+    // 운영 컨트롤은 main 에서 완전 제거 — 고급/안전 탭에서만.
     expect(screen.queryByRole('button', { name: '소액 실거래 1회' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '루프 시작' })).not.toBeInTheDocument();
     expect(screen.queryByText(/read-only smoke/)).not.toBeInTheDocument();
     expect(screen.queryByText('실거래 차수')).not.toBeInTheDocument();
-    // 안내 문구로 이동 위치 명시.
-    expect(screen.getByText(/설정 → 고급\/안전/)).toBeInTheDocument();
+    // mode toggle 도 제거.
+    expect(screen.queryByRole('group', { name: '코인 자동감시 모드' })).not.toBeInTheDocument();
+    // blockedReasons chip + hint 텍스트도 제거.
+    expect(screen.queryByText(/설정 → 고급\/안전 탭으로 이동했습니다/)).not.toBeInTheDocument();
   });
 
   it('shows the disabled body when not enabled', () => {
     render(
       <CryptoAutoPanel
         enabled={false}
-        gate={{ ok: false, blockedReasons: [] }}
-        mode="disabled"
-        onModeChange={vi.fn()}
         onStrategySave={vi.fn()}
         pending={false}
         strategy={createDefaultCryptoStrategyProfile('KRW-BTC')}
