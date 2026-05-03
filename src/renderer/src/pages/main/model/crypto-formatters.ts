@@ -31,6 +31,18 @@ export function formatTradeTime(timestamp: number | undefined): string {
   }).format(new Date(timestamp));
 }
 
+export function isOpenOrder(state: string): boolean {
+  return state === 'wait' || state === 'watch';
+}
+
+export function stateLabel(state: string): string {
+  if (state === 'wait') return '대기';
+  if (state === 'watch') return '예약';
+  if (state === 'done') return '완료';
+  if (state === 'cancel') return '취소';
+  return state;
+}
+
 export function formatDateTime(timestamp: number | null | undefined): string {
   if (!timestamp) return '-';
   return new Intl.DateTimeFormat('ko-KR', {
