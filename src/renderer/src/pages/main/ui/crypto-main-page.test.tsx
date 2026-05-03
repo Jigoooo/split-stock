@@ -45,6 +45,9 @@ vi.mock('@renderer/shared/api/trpc', () => ({
     },
     crypto: {
       cancelOrder: { useMutation: mockMutation },
+      listClosedLots: {
+        useQuery: () => ({ data: { lots: [] }, isPending: false, error: null }),
+      },
       getAutoStatus: {
         useQuery: () => ({
           data: {

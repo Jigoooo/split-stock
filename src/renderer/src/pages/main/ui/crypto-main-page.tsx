@@ -1,4 +1,4 @@
-import { useCryptoBalanceWithLots } from '@renderer/entities/account-crypto';
+import { useCryptoBalanceWithLots, useCryptoTradeCycles } from '@renderer/entities/account-crypto';
 import { CryptoMemoForm } from '@renderer/features/crypto-memo';
 import {
   decimalAdd,
@@ -26,6 +26,7 @@ import { isOpenOrder } from '../model/crypto-formatters';
 import { storeAddCryptoWatchPrefill } from '../model/crypto-watch-popout-prefill';
 import { CryptoAutoStrategyTabBody } from './crypto-auto-panel';
 import { CryptoBalancesPanel } from './crypto-balances-panel';
+import { CryptoCyclesPanel } from './crypto-cycles-panel';
 import { CryptoLotsPanel } from './crypto-lots-panel';
 import { CryptoMarketBar } from './crypto-market-bar';
 import { CryptoOrderTicket } from './crypto-order-ticket';
@@ -364,6 +365,7 @@ export const CryptoMainPage = ({
   );
   const quote = getCryptoQuote(market);
   const cryptoLotsData = useCryptoBalanceWithLots(accountId, market);
+  const cryptoTradeCycles = useCryptoTradeCycles(accountId, market);
   const selectedMarketLabel = formatCryptoMarketLabel(selectedMarket?.koreanName ?? null, market);
   const ordTypeFor = (chosenSide: Side): OrderType =>
     mode === 'market' ? (chosenSide === 'bid' ? 'price' : 'market') : 'limit';
@@ -730,6 +732,14 @@ export const CryptoMainPage = ({
         right={
           <CryptoRightPane
             allHistory={allAutoHistory}
+            cyclesPanel={
+              <CryptoCyclesPanel
+                enabled={privateEnabled}
+                market={market}
+                cycles={cryptoTradeCycles.cycles}
+                quote={quote}
+              />
+            }
             memoPanel={<CryptoMemoForm market={market} />}
             configPanel={
               <CryptoAutoStrategyTabBody
@@ -870,6 +880,7 @@ const CryptoLeftPane = ({
 const CryptoRightPane = ({
   allHistory,
   configPanel,
+  cyclesPanel,
   memoPanel,
   onRightTabChange,
   onRightDetailTabChange,
@@ -881,6 +892,7 @@ const CryptoRightPane = ({
 }: {
   allHistory: CryptoAutoTradeHistoryItem[];
   configPanel: ReactElement;
+  cyclesPanel: ReactElement;
   memoPanel: ReactElement;
   onRightTabChange: (tab: CryptoRightTab) => void;
   onRightDetailTabChange: (tab: CryptoRightDetailTab) => void;
@@ -910,6 +922,8 @@ const CryptoRightPane = ({
       configPanel
     ) : rightDetailTab === 'memo' ? (
       memoPanel
+    ) : rightDetailTab === 'closed' ? (
+      cyclesPanel
     ) : (
       <CryptoAutoTradeHistoryTable
         emptyText={`${selectedMarketLabel} 자동감시 매매 이력이 없습니다.`}

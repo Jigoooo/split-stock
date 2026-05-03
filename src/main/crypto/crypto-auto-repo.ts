@@ -658,6 +658,32 @@ export class CryptoAutoTradingRepo {
       .map(mapLot);
   }
 
+  /**
+   * 종료된 차수(매수→매도 완결) 목록. 매매 사이클 분석용. (RALPLAN P6 A6)
+   * 닫힌 시각 내림차순 정렬, 옵션 limit (default 100).
+   */
+  listClosedLots(
+    accountId: number,
+    market: CryptoKrwMarketCode,
+    options: { source?: CryptoAutoLotSource; limit?: number } = {},
+  ): CryptoLot[] {
+    const filters = [
+      eq(cryptoAutoLots.accountId, accountId),
+      eq(cryptoAutoLots.exchange, 'UPBIT'),
+      eq(cryptoAutoLots.market, market),
+      eq(cryptoAutoLots.status, 'closed'),
+    ];
+    if (options.source !== undefined) filters.push(eq(cryptoAutoLots.source, options.source));
+    return this.db
+      .select()
+      .from(cryptoAutoLots)
+      .where(and(...filters))
+      .orderBy(desc(cryptoAutoLots.closedAt))
+      .limit(options.limit ?? 100)
+      .all()
+      .map(mapLot);
+  }
+
   createLot(input: {
     accountId: number;
     market: CryptoKrwMarketCode;

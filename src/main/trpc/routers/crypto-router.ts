@@ -730,6 +730,21 @@ export const cryptoRouter = router({
       return { accountId, history };
     }),
 
+  listClosedLots: runtimeProcedure
+    .input(
+      AutoMarketInputSchema.extend({
+        limit: z.number().int().min(1).max(500).default(100),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const lots = new CryptoAutoTradingRepo(ctx.db).listClosedLots(accountId, input.market, {
+        limit: input.limit,
+      });
+      return { accountId, market: input.market, lots };
+    }),
+
   listAutoStrategyTemplates: runtimeProcedure
     .input(z.object({ accountId: AccountIdField.optional() }).optional())
     .query(({ ctx, input }) => {
