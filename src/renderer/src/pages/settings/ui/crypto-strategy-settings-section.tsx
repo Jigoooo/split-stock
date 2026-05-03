@@ -212,7 +212,21 @@ function CryptoBasicStrategyForm({
   onDraftChange: (profile: CryptoStrategyProfile) => void;
   onSave: () => void;
 }): ReactElement {
-  const rows = draft.buyRules.slice(0, draft.maxStages);
+  // 국내주식 stage-rules-editor 패턴: 항상 1~50차를 렌더하고
+  // maxStages 초과 차수는 disabled 처리해 사용자가 관리차수 확장 효과를 즉시 인지하게 한다.
+  const rows = Array.from({ length: 50 }, (_, index) => {
+    const nth = index + 1;
+    const buyRule = draft.buyRules.find((r) => r.nth === nth) ?? {
+      nth,
+      amountKrw: '5000',
+      triggerDropPct: nth === 1 ? null : '0.03',
+    };
+    const sellRule = draft.sellRules.find((r) => r.nth === nth) ?? {
+      nth,
+      targetProfitPct: '0.02',
+    };
+    return { nth, buyRule, sellRule };
+  });
   return (
     <div className="panel__body crypto-settings-form">
       <label htmlFor="crypto-settings-max-stages">
@@ -233,39 +247,41 @@ function CryptoBasicStrategyForm({
           <span>하락률</span>
           <span>익절률</span>
         </div>
-        {rows.map((rule, index) => {
-          const sellRule = draft.sellRules[index] ?? { nth: rule.nth, targetProfitPct: '0.02' };
+        {rows.map(({ nth, buyRule, sellRule }) => {
+          const isActive = nth <= draft.maxStages;
+          const rowDisabled = disabled || !isActive;
           return (
-            <div key={rule.nth} className="crypto-settings-stage-grid__row">
-              <strong>{rule.nth}차</strong>
+            <div
+              key={nth}
+              className={`crypto-settings-stage-grid__row${
+                isActive ? '' : ' crypto-settings-stage-grid__row--inactive'
+              }`}
+            >
+              <strong>{nth}차</strong>
               <TextInput
-                aria-label={`${rule.nth}차 매수금액`}
+                aria-label={`${nth}차 매수금액`}
                 dense
-                disabled={disabled}
-                value={rule.amountKrw}
+                disabled={rowDisabled}
+                value={buyRule.amountKrw}
                 onChange={(event) =>
-                  onDraftChange(updateBuyRule(draft, rule.nth, 'amountKrw', event.target.value))
+                  onDraftChange(updateBuyRule(draft, nth, 'amountKrw', event.target.value))
                 }
               />
               <TextInput
-                aria-label={`${rule.nth}차 하락률`}
+                aria-label={`${nth}차 하락률`}
                 dense
-                disabled={disabled || rule.nth === 1}
-                value={rule.triggerDropPct ?? ''}
+                disabled={rowDisabled || nth === 1}
+                value={buyRule.triggerDropPct ?? ''}
                 onChange={(event) =>
-                  onDraftChange(
-                    updateBuyRule(draft, rule.nth, 'triggerDropPct', event.target.value),
-                  )
+                  onDraftChange(updateBuyRule(draft, nth, 'triggerDropPct', event.target.value))
                 }
               />
               <TextInput
-                aria-label={`${sellRule.nth}차 익절률`}
+                aria-label={`${nth}차 익절률`}
                 dense
-                disabled={disabled}
+                disabled={rowDisabled}
                 value={sellRule.targetProfitPct}
-                onChange={(event) =>
-                  onDraftChange(updateSellRule(draft, sellRule.nth, event.target.value))
-                }
+                onChange={(event) => onDraftChange(updateSellRule(draft, nth, event.target.value))}
               />
             </div>
           );
