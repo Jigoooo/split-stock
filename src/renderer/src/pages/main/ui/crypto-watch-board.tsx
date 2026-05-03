@@ -298,7 +298,7 @@ export const CryptoWatchBoard = ({
               </Button>
               <Button
                 dense
-                variant="destructive"
+                variant="danger"
                 disabled={mutationDisabled || !selectedAction.canDelete}
                 onClick={() => clearAndRun(onDelete, selected)}
               >
@@ -310,6 +310,13 @@ export const CryptoWatchBoard = ({
             <div className="watch-table-toolbar" role="toolbar" aria-label="코인 자동감시 탭 요약">
               <span className="watch-table-toolbar__count">
                 {CRYPTO_WATCH_BOARD_TABS.find((item) => item.id === tab)?.label}
+              </span>
+              <span className="muted watch-table-toolbar__hint">
+                {tab === 'events'
+                  ? `${events.length}건`
+                  : tab === 'failed'
+                    ? `${failedHistory.length}건`
+                    : `${history.length}건`}
               </span>
             </div>
           )}
@@ -365,24 +372,24 @@ function buildCryptoWatchActionState(
       helpText: 'Upbit 실전 계좌에서만 변경할 수 있습니다.',
     };
   }
-  if (watches.length === 0) {
-    return {
-      canDelete: false,
-      canPause: false,
-      canResume: false,
-      helpText: '자동감시를 선택하세요.',
-    };
-  }
-  const canPause = watches.some((watch) => watch.status === 'WATCHING');
-  const canResume = watches.some((watch) => watch.status !== 'WATCHING');
+  // 국내주식 watch-list 패턴: 모두 같은 상태일 때만 일괄 시작/중지 허용.
+  const hasRows = watches.length > 0;
+  const allWatching = hasRows && watches.every((watch) => watch.status === 'WATCHING');
+  const allPaused = hasRows && watches.every((watch) => watch.status !== 'WATCHING');
+  const canPause = enabled && allWatching;
+  const canResume = enabled && allPaused;
+  const canDelete = enabled && hasRows;
+
+  let helpText = '작업할 자동감시를 선택하세요.';
+  if (hasRows && allWatching) helpText = '선택한 항목은 중지할 수 있습니다.';
+  else if (hasRows && allPaused) helpText = '선택한 항목은 시작할 수 있습니다.';
+  else if (hasRows) helpText = '상태가 섞인 항목은 시작/중지를 한 번에 실행할 수 없습니다.';
+
   return {
-    canDelete: true,
+    canDelete,
     canPause,
     canResume,
-    helpText:
-      canPause || canResume
-        ? '행 클릭으로 선택하고 우클릭으로 작업합니다.'
-        : '변경할 수 없는 상태입니다.',
+    helpText,
   };
 }
 
