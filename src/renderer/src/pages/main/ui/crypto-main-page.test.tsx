@@ -514,7 +514,7 @@ describe('CryptoAutoPanel', () => {
     expect(screen.getByText('자동감시')).toBeInTheDocument();
     expect(screen.getByText('비상 중지 상태입니다.')).toBeInTheDocument();
     expect(screen.getByText('차수별 규칙')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '코인 자동감시 추가/저장' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '코인 종목 설정 저장' })).toBeInTheDocument();
     // 운영 컨트롤은 메인에서 제거됨 — 설정 → 고급/안전 탭에서만 노출.
     expect(screen.queryByRole('button', { name: '소액 실거래 1회' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '루프 시작' })).not.toBeInTheDocument();

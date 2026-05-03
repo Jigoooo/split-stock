@@ -140,7 +140,14 @@ export const CryptoAutoPanel = ({
           />
         </div>
         {strategyLoading ? <span className="muted">차수 전략 로드 중…</span> : null}
-        <CryptoStrategyForm disabled={pending} profile={strategy} onSubmit={onStrategySave} />
+        <CryptoStrategyForm
+          disabled={pending}
+          profile={strategy}
+          onSubmit={onStrategySave}
+          chrome="content"
+          submitLabel="종목 설정 저장"
+          submitAriaLabel="코인 종목 설정 저장"
+        />
         {gate.blockedReasons.length > 0 ? (
           <div className="crypto-auto-panel__reasons">
             {gate.blockedReasons.map((reason) => (

@@ -1,4 +1,5 @@
 import { useActiveAccountId } from '@renderer/entities/account';
+import { CryptoStrategyForm } from '@renderer/pages/main/ui/crypto-strategy-form';
 import { trpc } from '@renderer/shared/api/trpc';
 import { Button, Checkbox, Select, TextInput } from '@renderer/shared/ui';
 import type {
@@ -7,7 +8,7 @@ import type {
   CryptoKrwMarketCode,
   CryptoStrategyProfile,
 } from '@shared/contracts';
-import { createCryptoStrategyRules, createDefaultCryptoStrategyProfile } from '@shared/contracts';
+import { createDefaultCryptoStrategyProfile } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -119,11 +120,16 @@ export function CryptoStrategySettingsSection({
       {accountId === null ? (
         <div className="panel__body muted">활성 Upbit 계좌가 필요합니다.</div>
       ) : activeTab === 'basic' ? (
-        <CryptoBasicStrategyForm
+        <CryptoStrategyForm
           disabled={pending || strategyQuery.isFetching}
-          draft={draft}
-          onDraftChange={setDraft}
-          onSave={() => saveDraft()}
+          profile={draft}
+          chrome="content"
+          submitLabel="기본값 저장"
+          submitAriaLabel="코인 기본 매매 설정 저장"
+          onSubmit={(profile) => {
+            setDraft(profile);
+            saveDraft(profile);
+          }}
         />
       ) : activeTab === 'templates' ? (
         <CryptoTemplateForm
@@ -173,101 +179,6 @@ export function CryptoStrategySettingsSection({
       ) : (
         <CryptoFeeForm />
       )}
-    </div>
-  );
-}
-
-function CryptoBasicStrategyForm({
-  disabled,
-  draft,
-  onDraftChange,
-  onSave,
-}: {
-  disabled: boolean;
-  draft: CryptoStrategyProfile;
-  onDraftChange: (profile: CryptoStrategyProfile) => void;
-  onSave: () => void;
-}): ReactElement {
-  // 국내주식 stage-rules-editor 패턴: 항상 1~50차를 렌더하고
-  // maxStages 초과 차수는 disabled 처리해 사용자가 관리차수 확장 효과를 즉시 인지하게 한다.
-  const rows = Array.from({ length: 50 }, (_, index) => {
-    const nth = index + 1;
-    const buyRule = draft.buyRules.find((r) => r.nth === nth) ?? {
-      nth,
-      amountKrw: '5000',
-      triggerDropPct: nth === 1 ? null : '0.03',
-    };
-    const sellRule = draft.sellRules.find((r) => r.nth === nth) ?? {
-      nth,
-      targetProfitPct: '0.02',
-    };
-    return { nth, buyRule, sellRule };
-  });
-  return (
-    <div className="panel__body crypto-settings-form">
-      <label htmlFor="crypto-settings-max-stages">
-        <span className="muted">최대 관리차수</span>
-        <TextInput
-          id="crypto-settings-max-stages"
-          aria-label="최대 관리차수"
-          dense
-          disabled={disabled}
-          value={String(draft.maxStages)}
-          onChange={(event) => onDraftChange(resizeProfile(draft, Number(event.target.value)))}
-        />
-      </label>
-      <div className="crypto-settings-stage-grid">
-        <div className="crypto-settings-stage-grid__header">
-          <span>차수</span>
-          <span>매수금액</span>
-          <span>하락률</span>
-          <span>익절률</span>
-        </div>
-        {rows.map(({ nth, buyRule, sellRule }) => {
-          const isActive = nth <= draft.maxStages;
-          const rowDisabled = disabled || !isActive;
-          return (
-            <div
-              key={nth}
-              className={`crypto-settings-stage-grid__row${
-                isActive ? '' : ' crypto-settings-stage-grid__row--inactive'
-              }`}
-            >
-              <strong>{nth}차</strong>
-              <TextInput
-                aria-label={`${nth}차 매수금액`}
-                dense
-                disabled={rowDisabled}
-                value={buyRule.amountKrw}
-                onChange={(event) =>
-                  onDraftChange(updateBuyRule(draft, nth, 'amountKrw', event.target.value))
-                }
-              />
-              <TextInput
-                aria-label={`${nth}차 하락률`}
-                dense
-                disabled={rowDisabled || nth === 1}
-                value={buyRule.triggerDropPct ?? ''}
-                onChange={(event) =>
-                  onDraftChange(updateBuyRule(draft, nth, 'triggerDropPct', event.target.value))
-                }
-              />
-              <TextInput
-                aria-label={`${nth}차 익절률`}
-                dense
-                disabled={rowDisabled}
-                value={sellRule.targetProfitPct}
-                onChange={(event) => onDraftChange(updateSellRule(draft, nth, event.target.value))}
-              />
-            </div>
-          );
-        })}
-      </div>
-      <div className="form-sticky-action-bar">
-        <Button dense variant="primary" disabled={disabled} onClick={onSave}>
-          기본매매 설정 저장
-        </Button>
-      </div>
     </div>
   );
 }
@@ -535,69 +446,6 @@ function CryptoFeeForm(): ReactElement {
       </div>
     </div>
   );
-}
-
-function resizeProfile(profile: CryptoStrategyProfile, value: number): CryptoStrategyProfile {
-  const maxStages = Math.max(1, Math.min(50, Number.isFinite(value) ? Math.trunc(value) : 1));
-  const defaults = createCryptoStrategyRules(maxStages);
-  return {
-    ...profile,
-    maxStages,
-    buyRules: Array.from({ length: maxStages }, (_, index) => {
-      const current = profile.buyRules[index];
-      const fallback = defaults.buyRules[index];
-      return {
-        ...(fallback ?? { nth: index + 1, amountKrw: '5000', triggerDropPct: null }),
-        ...current,
-        nth: index + 1,
-        triggerDropPct:
-          index === 0 ? null : (current?.triggerDropPct ?? fallback?.triggerDropPct ?? '0.03'),
-      };
-    }),
-    sellRules: Array.from({ length: maxStages }, (_, index) => {
-      const current = profile.sellRules[index];
-      const fallback = defaults.sellRules[index];
-      return {
-        ...(fallback ?? { nth: index + 1, targetProfitPct: '0.02' }),
-        ...current,
-        nth: index + 1,
-      };
-    }),
-  };
-}
-
-function updateBuyRule(
-  profile: CryptoStrategyProfile,
-  nth: number,
-  field: 'amountKrw' | 'triggerDropPct',
-  rawValue: string,
-): CryptoStrategyProfile {
-  const value = sanitizeDecimal(rawValue);
-  return {
-    ...profile,
-    buyRules: profile.buyRules.map((rule) =>
-      rule.nth === nth
-        ? {
-            ...rule,
-            [field]: field === 'triggerDropPct' && nth === 1 ? null : value,
-          }
-        : rule,
-    ),
-  };
-}
-
-function updateSellRule(
-  profile: CryptoStrategyProfile,
-  nth: number,
-  rawValue: string,
-): CryptoStrategyProfile {
-  const value = sanitizeDecimal(rawValue);
-  return {
-    ...profile,
-    sellRules: profile.sellRules.map((rule) =>
-      rule.nth === nth ? { ...rule, targetProfitPct: value } : rule,
-    ),
-  };
 }
 
 function sanitizeDecimal(value: string): string {

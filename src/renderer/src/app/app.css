@@ -3452,6 +3452,15 @@ body {
   overflow: hidden;
 }
 
+/* maxStages 초과 차수 — 국내주식 stage-rule-card 의 inactive 시각효과와 정렬. */
+.crypto-strategy-form__rule-row--inactive {
+  opacity: 0.45;
+  background: var(--bg-2);
+}
+.crypto-strategy-form__rule-row--inactive > strong {
+  color: var(--color-text-muted, #999);
+}
+
 .crypto-strategy-form__rule-row > strong {
   display: grid;
   place-items: center;
