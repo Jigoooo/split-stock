@@ -12,6 +12,7 @@ import {
   HtsTabs,
   OverlayScrollbar,
   Select,
+  TextInput,
 } from '@renderer/shared/ui';
 import type { StrategyProfile } from '@shared/contracts';
 import type { CSSProperties } from 'react';
@@ -115,10 +116,12 @@ interface StrategyTabBodyProps {
  * (StrategyForm 주석 참고)
  */
 const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps): ReactElement => {
-  const { active, clear, isPending, presets, save } = useEditStrategy(pdno);
+  const { active, clear, isPending, presets, removePreset, save, saveAsPreset } =
+    useEditStrategy(pdno);
   const strategySession = useOptionalStrategyRecommendationSession();
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [initialOverride, setInitialOverride] = useState<StrategyProfile | null>(null);
+  const [newTemplateName, setNewTemplateName] = useState('');
   const presetItems = presets.data?.presets ?? [];
   const selectedPreset = presetItems.find((preset) => preset.name === selectedTemplate) ?? null;
 
@@ -246,7 +249,54 @@ const StrategyTabBody = ({ onOpenStrategySettings, pdno }: StrategyTabBodyProps)
             disabled={isPending || !selectedPreset}
             dense
           >
-            템플릿 불러오기
+            불러오기
+          </Button>
+          <TextInput
+            value={newTemplateName}
+            onChange={(event) => setNewTemplateName(event.target.value)}
+            placeholder="템플릿 이름"
+            aria-label="새 템플릿 이름"
+            disabled={isPending}
+            dense
+            style={{ flex: '0 1 12rem', minWidth: '8rem' }}
+          />
+          <Button
+            onClick={() => {
+              const name = newTemplateName.trim();
+              const profile = active.data?.profile;
+              if (!name || !profile) return;
+              void saveAsPreset(name, profile).then(() => {
+                setSelectedTemplate(name);
+                setNewTemplateName('');
+              });
+            }}
+            disabled={isPending || newTemplateName.trim().length === 0 || !active.data?.profile}
+            dense
+            variant="primary"
+          >
+            저장
+          </Button>
+          <Button
+            onClick={() => {
+              if (!selectedTemplate) return;
+              void (async () => {
+                const confirmed = await alertDialog.confirm({
+                  type: DialogType.WARNING,
+                  title: '템플릿 삭제',
+                  message: `"${selectedTemplate}" 템플릿을 삭제합니다. 이 작업은 되돌릴 수 없습니다.`,
+                  confirmText: '삭제',
+                  cancelText: '취소',
+                });
+                if (!confirmed) return;
+                await removePreset(selectedTemplate);
+                setSelectedTemplate('');
+              })();
+            }}
+            disabled={isPending || !selectedTemplate}
+            dense
+            variant="destructive"
+          >
+            삭제
           </Button>
           <Button
             onClick={openTemplateManagement}

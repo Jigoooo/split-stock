@@ -156,7 +156,7 @@ describe('TradeHistoryPanel', () => {
 
     expect(screen.getByRole('button', { name: '종목 설정 저장' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '템플릿 관리' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '템플릿 불러오기' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '불러오기' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: '템플릿 관리' }));
 
