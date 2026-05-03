@@ -232,7 +232,7 @@ describe('SettingsPage', () => {
 
     expectTabSelected('매매설정관리');
     expectTabSelected('기본매매 설정');
-    expect(screen.getByText('코인 매매설정관리')).toBeInTheDocument();
+    expect(screen.getByText(/코인 매매설정관리/)).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '템플릿 관리' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '보호 설정' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '조건 설정' })).toBeInTheDocument();

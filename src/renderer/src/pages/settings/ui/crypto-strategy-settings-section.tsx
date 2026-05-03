@@ -17,6 +17,8 @@ interface CryptoStrategySettingsSectionProps {
   activeTab: CryptoSettingsTab;
 }
 
+// 매매설정관리는 코인별로 분기하지 않고 단일 default(KRW-BTC를 키로 사용)로 통합한다.
+// 자동감시 등록 시 이 default가 마켓별로 복사된다. (RALPLAN P4 — 항목 7)
 const DEFAULT_MARKET = 'KRW-BTC' as CryptoKrwMarketCode;
 
 export function CryptoStrategySettingsSection({
@@ -24,7 +26,7 @@ export function CryptoStrategySettingsSection({
 }: CryptoStrategySettingsSectionProps): ReactElement {
   const utils = trpc.useUtils();
   const { accountId } = useActiveAccountId();
-  const [market, setMarket] = useState<CryptoKrwMarketCode>(DEFAULT_MARKET);
+  const market = DEFAULT_MARKET;
   const [draft, setDraft] = useState<CryptoStrategyProfile>(() =>
     createDefaultCryptoStrategyProfile(DEFAULT_MARKET),
   );
@@ -34,17 +36,14 @@ export function CryptoStrategySettingsSection({
   const [templateId, setTemplateId] = useState('');
   const [templateName, setTemplateName] = useState('기본 코인 차수 전략');
 
-  const marketsQuery = trpc.crypto.listMarkets.useQuery(undefined, {
-    staleTime: 10 * 60 * 1000,
-  });
   const autoInput = useMemo(
     () => ({
       ...(accountId !== null ? { accountId } : {}),
       market,
     }),
-    [accountId, market],
+    [accountId],
   );
-  const enabled = accountId !== null && market.startsWith('KRW-');
+  const enabled = accountId !== null;
   const strategyQuery = trpc.crypto.getAutoStrategy.useQuery(autoInput, { enabled });
   const statusQuery = trpc.crypto.getAutoStatus.useQuery(autoInput, { enabled });
   const templatesQuery = trpc.crypto.listAutoStrategyTemplates.useQuery(
@@ -77,15 +76,8 @@ export function CryptoStrategySettingsSection({
   });
 
   useEffect(() => {
-    const next = marketsQuery.data?.entries.find((entry) => entry.market.startsWith('KRW-'));
-    if (next && !marketsQuery.data?.entries.some((entry) => entry.market === market)) {
-      setMarket(next.market as CryptoKrwMarketCode);
-    }
-  }, [market, marketsQuery.data?.entries]);
-
-  useEffect(() => {
     setDraft(strategyQuery.data?.profile ?? createDefaultCryptoStrategyProfile(market));
-  }, [market, strategyQuery.data?.profile]);
+  }, [strategyQuery.data?.profile]);
 
   useEffect(() => {
     const config = statusQuery.data?.config;
@@ -122,23 +114,7 @@ export function CryptoStrategySettingsSection({
   return (
     <div className="panel">
       <div className="panel__title">
-        <span>코인 매매설정관리</span>
-        <Select
-          dense
-          aria-label="코인 매매설정 마켓"
-          value={market}
-          disabled={marketsQuery.isPending || pending}
-          onChange={(event) => setMarket(event.target.value as CryptoKrwMarketCode)}
-          style={{ minWidth: '12rem' }}
-        >
-          {(marketsQuery.data?.entries ?? [{ market: DEFAULT_MARKET, koreanName: '비트코인' }])
-            .filter((entry) => entry.market.startsWith('KRW-'))
-            .map((entry) => (
-              <option key={entry.market} value={entry.market}>
-                {entry.koreanName} ({entry.market})
-              </option>
-            ))}
-        </Select>
+        <span>코인 매매설정관리 (모든 코인 공통)</span>
       </div>
       {accountId === null ? (
         <div className="panel__body muted">활성 Upbit 계좌가 필요합니다.</div>
