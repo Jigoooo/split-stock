@@ -45,6 +45,21 @@ export const AddCryptoWatchPopout = (): ReactElement => {
     { accountId, id: payload?.watchId ?? 0 },
     { enabled: accountId > 0 && payload?.watchId !== undefined },
   );
+  // RALPLAN P6 #8 — UPBIT KRW 마켓 검색용 자동완성 데이터 (코인명/마켓 코드 모두 매칭).
+  const marketsQuery = trpc.crypto.listMarkets.useQuery(
+    { quoteCurrency: 'KRW', limit: 200 },
+    { staleTime: 5 * 60_000 },
+  );
+  const marketOptions = useMemo(() => {
+    const data = marketsQuery.data;
+    const entries = data && 'entries' in data ? data.entries : [];
+    return entries
+      .map((m) => ({
+        value: m.market,
+        label: `${m.market} · ${m.koreanName ?? m.englishName ?? ''}`,
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+  }, [marketsQuery.data]);
   const createWatch = trpc.crypto.createAutoWatch.useMutation();
   const updateWatch = trpc.crypto.updateAutoWatch.useMutation();
 
@@ -145,9 +160,18 @@ export const AddCryptoWatchPopout = (): ReactElement => {
           <TextInput
             aria-label="코인 자동감시 마켓"
             dense
+            list="add-crypto-watch-markets"
+            placeholder="KRW-BTC 또는 비트코인"
             value={market}
             onChange={(event) => setMarket(event.target.value.toUpperCase() as CryptoKrwMarketCode)}
           />
+          <datalist id="add-crypto-watch-markets">
+            {marketOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </datalist>
         </div>
         <div className="add-crypto-watch-popout__field">
           <span className="muted">별칭</span>

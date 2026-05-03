@@ -221,7 +221,7 @@ describe('SettingsPage', () => {
     expect(window.localStorage.getItem('popout:settings:strategyTab')).toBeNull();
   });
 
-  it('UPBIT 계좌에서는 국내주식 주문 탭을 숨기고 코인 매매설정관리를 기본으로 연다', () => {
+  it('UPBIT 계좌에서는 코인 매매설정관리를 기본으로 열고 주문/체결 탭도 동등 노출한다', () => {
     mockUseActiveAccountId.mockReturnValue({
       accountId: 2,
       account: { broker: 'UPBIT' },
@@ -237,7 +237,9 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('tab', { name: '보호 설정' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '조건 설정' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '수수료' })).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: '주문/체결' })).not.toBeInTheDocument();
+    // RALPLAN P6 #9 — 코인 계좌에도 '주문/체결' 탭 노출 (PendingCancelForm + CryptoActivePendingList).
+    // 단, default 탭은 매매설정관리이므로 PendingCancelForm 자체는 아직 렌더되지 않음.
+    expect(screen.getByRole('tab', { name: '주문/체결' })).toBeInTheDocument();
     expect(screen.queryByTestId('strategy-settings-surface')).not.toBeInTheDocument();
     expect(screen.queryByTestId('pending-cancel-form')).not.toBeInTheDocument();
   });

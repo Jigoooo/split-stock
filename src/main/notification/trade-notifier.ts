@@ -2,11 +2,15 @@ import type { WatchOutcomeEvent } from '@shared/contracts';
 import { Notification } from 'electron';
 
 export interface TradeNotifyParams {
-  pdno: string; // 종목 코드
+  pdno: string; // 종목 코드 또는 코인 마켓 (KRW-BTC)
   side: 'buy' | 'sell'; // 매수/매도
   qty: number; // 수량
-  price: number; // 가격
+  price: number; // 가격 (지정가) — 0이면 표시 생략
   name?: string; // 종목명 (있으면 포함)
+  /** 수량 단위 — 기본 '주', 코인은 마켓별 base currency('BTC' 등). */
+  qtyUnit?: string;
+  /** 가격 단위 — 기본 '원'. */
+  priceUnit?: string;
 }
 
 /**
@@ -19,9 +23,11 @@ export interface TradeNotifyParams {
 export function notifyTrade(param: TradeNotifyParams): void {
   const sideKo = param.side === 'buy' ? '매수' : '매도';
   const title = `${sideKo} 체결`;
-  const body = param.name
-    ? `${param.name} ${param.qty}주 @ ${param.price.toLocaleString('ko-KR')}원`
-    : `${param.pdno} ${param.qty}주 @ ${param.price.toLocaleString('ko-KR')}원`;
+  const qtyUnit = param.qtyUnit ?? '주';
+  const priceUnit = param.priceUnit ?? '원';
+  const subject = param.name ?? param.pdno;
+  const priceText = param.price > 0 ? ` @ ${param.price.toLocaleString('ko-KR')}${priceUnit}` : '';
+  const body = `${subject} ${param.qty}${qtyUnit}${priceText}`;
 
   try {
     new Notification({

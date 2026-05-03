@@ -1,8 +1,6 @@
 import { useActiveAccountId } from '@renderer/entities/account';
-import { CryptoActivePendingList } from '@renderer/features/crypto-pending-cancel/active-pending-list';
 import { ProtectionLimits } from '@renderer/features/edit-strategy/ui/protection-limits';
 import { RateGuard } from '@renderer/features/edit-strategy/ui/rate-guard';
-import { PendingCancelForm } from '@renderer/features/pending-cancel-settings/ui/pending-cancel-form';
 import {
   formatCryptoAmount,
   formatCryptoPrice,
@@ -315,8 +313,6 @@ export const CryptoAdvancedSettingsSection = (): ReactElement => {
         >
           <RateGuard />
           <ProtectionLimits />
-          <PendingCancelForm />
-          <CryptoActivePendingList />
         </div>
       </div>
     </div>

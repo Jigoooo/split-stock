@@ -29,6 +29,7 @@ import { CryptoAutoTradingService } from '../../crypto/crypto-auto-service';
 import { CryptoTradingRepo } from '../../crypto/crypto-repo';
 import { UpbitExchangeAdapter } from '../../crypto/upbit/adapter';
 import { normalizeUpbitKrwLimitPrice } from '../../crypto/upbit/decimal';
+import { notifyTrade } from '../../notification/trade-notifier';
 import type { Context } from '../context';
 import { publicProcedure, router, runtimeProcedure } from '../trpc-core';
 
@@ -808,6 +809,26 @@ export const cryptoRouter = router({
     });
     if (result.isErr()) throwUpbitError(result.error);
     persistAutoOrderIfPresent(ctx, tick.accountId, result.value.event.result);
+    // RALPLAN P6 #6 — 자동매매 체결 알림 (gate 통과 + 실 placement 만).
+    const intent = result.value.intent;
+    if (
+      result.value.gate.ok &&
+      result.value.event.kind === 'live-place' &&
+      (intent.kind === 'plan-buy' || intent.kind === 'plan-sell')
+    ) {
+      const market = intent.market;
+      const baseCurrency = market.split('-')[1] ?? market;
+      const qty = intent.kind === 'plan-sell' ? Number(intent.quantity) : 0;
+      const price = intent.kind === 'plan-sell' ? Number(intent.limitPrice) : 0;
+      const krwAmount = intent.kind === 'plan-buy' ? Number(intent.krwAmount) : 0;
+      notifyTrade({
+        pdno: market,
+        side: intent.kind === 'plan-buy' ? 'buy' : 'sell',
+        qty: qty > 0 ? qty : krwAmount,
+        price,
+        qtyUnit: intent.kind === 'plan-buy' ? ' KRW' : ` ${baseCurrency}`,
+      });
+    }
     return result.value;
   }),
 
@@ -1029,6 +1050,19 @@ export const cryptoRouter = router({
           uuid: result.value.uuid,
         },
       });
+      // RALPLAN P6 #6 — 매뉴얼 코인 주문 체결 알림. (시장가 매수는 price 가 KRW 금액이라 0 으로 처리)
+      const baseCurrency = corrected.market.split('-')[1] ?? corrected.market;
+      const qty = Number(corrected.volume ?? '0');
+      const priceNum = corrected.ordType === 'limit' ? Number(corrected.price ?? '0') : 0;
+      if (qty > 0 || priceNum > 0) {
+        notifyTrade({
+          pdno: corrected.market,
+          side: corrected.side === 'bid' ? 'buy' : 'sell',
+          qty,
+          price: priceNum,
+          qtyUnit: ` ${baseCurrency}`,
+        });
+      }
       return result.value;
     }),
 

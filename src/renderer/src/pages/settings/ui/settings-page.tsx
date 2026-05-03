@@ -5,6 +5,7 @@ import {
   MarketContextSection,
 } from '@renderer/features/ai-settings';
 import { BackupPanel } from '@renderer/features/backup-restore';
+import { CryptoActivePendingList } from '@renderer/features/crypto-pending-cancel/active-pending-list';
 import {
   ChartSettingsForm,
   GridDensityForm,
@@ -56,6 +57,7 @@ const STOCK_TOP_TABS = [
 const CRYPTO_TOP_TABS = [
   { id: 'strategy', label: '매매설정관리' },
   { id: 'display', label: '표시' },
+  { id: 'orders', label: '주문/체결' },
   { id: 'account', label: '계좌/보안' },
   { id: 'ai', label: 'AI' },
   { id: 'backup', label: '백업' },
@@ -271,6 +273,26 @@ export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactEl
               </Section>
               <Section name="활성 미체결 목록">
                 <ActivePendingList />
+              </Section>
+              <Section name="호가 자동 보정">
+                <div className="panel">
+                  <div className="panel__title">호가 자동 보정</div>
+                  <div className="panel__body">
+                    <PriceCorrectionForm />
+                  </div>
+                </div>
+              </Section>
+            </div>
+          ) : null}
+          {/* RALPLAN P6 #9 — 코인 '주문/체결' 탭. 미체결 설정은 broker-agnostic 공유,
+              활성 목록은 cryptoPendingOrderWatcher 인스턴스 기준. 호가 보정은 코인도 stock UI 재사용. */}
+          {isCrypto && topTab === 'orders' ? (
+            <div style={{ display: 'grid', gap: '1.2rem' }}>
+              <Section name="미체결 자동취소">
+                <PendingCancelForm />
+              </Section>
+              <Section name="활성 미체결 목록 (UPBIT)">
+                <CryptoActivePendingList />
               </Section>
               <Section name="호가 자동 보정">
                 <div className="panel">
