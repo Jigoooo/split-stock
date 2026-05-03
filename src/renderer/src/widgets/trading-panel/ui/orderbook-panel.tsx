@@ -26,7 +26,9 @@ const RoutingIndicator = ({ mode }: { mode: WsRoutingMode }): ReactElement | nul
 };
 
 const ORDERBOOK_QTY_BASE_CHARS = 12;
-const ORDERBOOK_PRICE_BASE_CHARS = 11;
+// 코인 KRW 마켓 (예: 116,638,000 = 11char) 도 짤림 없이 표시되도록 base 13 으로 상향.
+// '0' 글리프 폭 기준 ch 단위는 컴마/숫자 혼합 텍스트 실폭과 ±1ch 오차가 발생할 수 있어 여유 확보.
+const ORDERBOOK_PRICE_BASE_CHARS = 13;
 const ORDERBOOK_CELL_EXTRA_WIDTH_REM = 1;
 
 const getLongestFormattedLength = (values: number[], minChars: number): number =>

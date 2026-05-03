@@ -52,7 +52,11 @@ export const CryptoOrderbookPanel = ({
             <TableGrid.Cell flex={2} numeric style={{ justifyContent: 'flex-end' }}>
               매도잔량
             </TableGrid.Cell>
-            <TableGrid.Cell flex={1} numeric>
+            <TableGrid.Cell
+              flex={1}
+              numeric
+              style={{ justifyContent: 'center', minWidth: 'calc(13ch + 1rem)' }}
+            >
               호가
             </TableGrid.Cell>
             <TableGrid.Cell flex={2} numeric>
@@ -152,7 +156,12 @@ const CryptoOrderbookRow = ({
           '-'
         )}
       </TableGrid.Cell>
-      <TableGrid.Cell flex={1} numeric className={side === 'ask' ? 'num-down' : 'num-up'}>
+      <TableGrid.Cell
+        flex={1}
+        numeric
+        className={side === 'ask' ? 'num-down' : 'num-up'}
+        style={{ justifyContent: 'center', minWidth: 'calc(13ch + 1rem)' }}
+      >
         {formatCryptoPrice(price, market)}
       </TableGrid.Cell>
       <TableGrid.Cell

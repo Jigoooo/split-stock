@@ -161,7 +161,7 @@ describe('OrderbookPanel', () => {
 
     expect(priceCell).not.toBeNull();
     expect(qtyCell).not.toBeNull();
-    expect((priceCell as HTMLElement).style.minWidth).toBe('calc(11ch + 1rem)');
+    expect((priceCell as HTMLElement).style.minWidth).toBe('calc(13ch + 1rem)');
     expect((qtyCell as HTMLElement).style.minWidth).toBe('calc(12ch + 1rem)');
   });
 });
