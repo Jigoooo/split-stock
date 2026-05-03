@@ -108,7 +108,7 @@ export const CryptoFeedTabs = (props: CryptoFeedTabsProps): ReactElement => {
               onCancel={onCancel}
               onOpenDetail={onOpenDetail}
               orders={marketOpenOrders}
-              title={`${market} 미체결`}
+              title=""
             />
           )}
         </motion.div>

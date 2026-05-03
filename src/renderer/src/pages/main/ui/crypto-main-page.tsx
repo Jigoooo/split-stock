@@ -532,7 +532,6 @@ export const CryptoMainPage = ({
   const openOrders = recentOrders.filter((order) => isOpenOrder(order.state));
   const filledOrders = recentOrders.filter((order) => !isOpenOrder(order.state));
   const autoWatches = autoWatchesQuery.data?.watches ?? [];
-  const selectedWatch = autoWatches.find((watch) => watch.market === market) ?? null;
   const selectedAutoHistory = selectedAutoHistoryQuery.data?.history ?? [];
   const allAutoHistory = allAutoHistoryQuery.data?.history ?? [];
   const autoTemplates = autoTemplatesQuery.data?.templates ?? [];
@@ -782,7 +781,6 @@ export const CryptoMainPage = ({
             rightDetailTab={rightDetailTab}
             selectedMarketLabel={selectedMarketLabel}
             selectedHistory={selectedAutoHistory}
-            selectedWatch={selectedWatch}
           />
         }
         bottom={
@@ -899,7 +897,6 @@ const CryptoRightPane = ({
   rightDetailTab,
   selectedMarketLabel,
   selectedHistory,
-  selectedWatch,
 }: {
   allHistory: CryptoAutoTradeHistoryItem[];
   configPanel: ReactElement;
@@ -911,7 +908,6 @@ const CryptoRightPane = ({
   rightDetailTab: CryptoRightDetailTab;
   selectedMarketLabel: string;
   selectedHistory: CryptoAutoTradeHistoryItem[];
-  selectedWatch: CryptoAutoWatch | null;
 }): ReactElement => {
   const tabs: ReadonlyArray<HtsTabItem<CryptoRightTab>> = [
     {
@@ -975,9 +971,6 @@ const CryptoRightPane = ({
                 onChange={onRightDetailTabChange}
                 ariaLabel="선택 마켓 매매내역 하위 탭"
               />
-              <span className={selectedWatch?.runtimeRunning ? 'chip chip--live' : 'chip'}>
-                {selectedWatch?.runtimeRunning ? '루프 실행 중' : '루프 중지'}
-              </span>
             </div>
             {selectedContent}
           </>
