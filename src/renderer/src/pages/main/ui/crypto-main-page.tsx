@@ -739,6 +739,14 @@ export const CryptoMainPage = ({
       ticket={
         <CryptoOrderTicket
           advancedOpen={advancedOpen}
+          availableBase={
+            balancesQuery.data?.balances.find((b) => b.currency === (market.split('-')[1] ?? ''))
+              ?.balance ?? '0'
+          }
+          availableQuote={
+            balancesQuery.data?.balances.find((b) => b.currency === quote)?.balance ?? '0'
+          }
+          baseCurrency={market.split('-')[1] ?? ''}
           canBuy={canSubmitFor('bid')}
           canSell={canSubmitFor('ask')}
           error={priceTickError ?? placeOrder.error?.message ?? null}
@@ -752,6 +760,7 @@ export const CryptoMainPage = ({
           onVolumeChange={setVolume}
           pending={placeOrder.isPending}
           price={price}
+          quoteCurrency={quote}
           side={side}
           smpType={smpType}
           timeInForce={timeInForce}
@@ -1349,6 +1358,9 @@ const CryptoOrderbookRow = ({
 
 const CryptoOrderTicket = ({
   advancedOpen,
+  availableBase,
+  availableQuote,
+  baseCurrency,
   canBuy,
   canSell,
   error,
@@ -1362,12 +1374,18 @@ const CryptoOrderTicket = ({
   onVolumeChange,
   pending,
   price,
+  quoteCurrency,
   side,
   smpType,
   timeInForce,
   volume,
 }: {
   advancedOpen: boolean;
+  /** 매도가능 base 통화 잔고 (BTC 등) */
+  availableBase: string;
+  /** 매수가능 quote 통화 잔고 (KRW 등) */
+  availableQuote: string;
+  baseCurrency: string;
   canBuy: boolean;
   canSell: boolean;
   error: string | null;
@@ -1381,6 +1399,7 @@ const CryptoOrderTicket = ({
   onVolumeChange: (value: string) => void;
   pending: boolean;
   price: string;
+  quoteCurrency: string;
   side: Side;
   smpType: string;
   timeInForce: string;
@@ -1390,12 +1409,6 @@ const CryptoOrderTicket = ({
     <div className="panel__title">즉시 주문</div>
     <div className="order-ticket-form__scroll">
       <div className="panel__body order-ticket-form__content">
-        <div className="order-ticket-form__meta">
-          <span className="chip order-ticket-form__source-chip">
-            {side === 'bid' ? '매수 의도' : '매도 의도'}
-          </span>
-          <span className="muted">호가 클릭 시 가격과 의도가 반영됩니다.</span>
-        </div>
         <div className="order-ticket-form__field">
           <span className="order-ticket-form__label">구분</span>
           <SegmentedToggle
@@ -1403,6 +1416,7 @@ const CryptoOrderTicket = ({
             value={mode}
             onChange={onModeChange}
             dense
+            fullWidth
             items={[
               { value: 'limit', label: '지정가' },
               { value: 'market', label: '시장가' },
@@ -1434,6 +1448,20 @@ const CryptoOrderTicket = ({
             dense
             disabled={mode === 'market' && side === 'bid'}
           />
+          <span className="muted order-ticket-form__hint">
+            <span>
+              매수가능{' '}
+              <span className="num">
+                {formatCryptoAmount(availableQuote, quoteCurrency)} {quoteCurrency}
+              </span>
+            </span>
+            <span>
+              매도가능{' '}
+              <span className="num">
+                {formatCryptoVolume(availableBase)} {baseCurrency}
+              </span>
+            </span>
+          </span>
         </label>
         <Checkbox
           checked={advancedOpen}
