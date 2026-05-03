@@ -54,8 +54,20 @@ export function useChartInstance({
     });
     chartRef.current = chart;
 
+    let disposed = false;
+    let resizeRaf: number | null = null;
     const handleResize = (): void => {
-      chart.applyOptions({ width: element.clientWidth, height: element.clientHeight || 340 });
+      if (disposed || chartRef.current !== chart) return;
+      if (resizeRaf !== null) return;
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = null;
+        if (disposed || chartRef.current !== chart) return;
+        try {
+          chart.applyOptions({ width: element.clientWidth, height: element.clientHeight || 340 });
+        } catch {
+          // lightweight-charts can throw if a late ResizeObserver callback races with remove().
+        }
+      });
     };
 
     window.addEventListener('resize', handleResize);
@@ -79,8 +91,10 @@ export function useChartInstance({
     chart.timeScale().subscribeVisibleLogicalRangeChange(measureAxis);
 
     return () => {
+      disposed = true;
       window.removeEventListener('resize', handleResize);
       observer.disconnect();
+      if (resizeRaf !== null) cancelAnimationFrame(resizeRaf);
       if (axisRaf !== null) cancelAnimationFrame(axisRaf);
       try {
         chart.timeScale().unsubscribeVisibleLogicalRangeChange(measureAxis);
@@ -88,8 +102,12 @@ export function useChartInstance({
         // ignore
       }
       disconnectDrawingHost();
-      chart.remove();
       chartRef.current = null;
+      try {
+        chart.remove();
+      } catch {
+        // ignore disposal races during fast account/page switches.
+      }
       priceLinesRef.current = [];
       seriesRef.current = null;
       volumeSeriesRef.current = null;
@@ -109,6 +127,10 @@ export function useChartInstance({
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    chart.applyOptions({ crosshair: resolveCrosshairOptions(displaySettings) });
+    try {
+      chart.applyOptions({ crosshair: resolveCrosshairOptions(displaySettings) });
+    } catch {
+      // ignore late display-setting updates that arrive after chart teardown.
+    }
   }, [chartRef, displaySettings]);
 }

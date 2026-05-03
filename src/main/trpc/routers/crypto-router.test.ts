@@ -1,4 +1,4 @@
-import type { Credentials } from '@shared/contracts';
+import { type Credentials, createDefaultCryptoStrategyProfile } from '@shared/contracts';
 import type { TRPCError } from '@trpc/server';
 import { ok } from 'neverthrow';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -153,6 +153,9 @@ describe('cryptoRouter session boundary', () => {
       ok({
         market: 'KRW-BTC',
         tradePrice: '100000000',
+        openingPrice: '99000000',
+        highPrice: '101000000',
+        lowPrice: '98000000',
         signedChangePrice: '0',
         signedChangeRate: '0',
         accTradePrice24h: '0',
@@ -593,6 +596,105 @@ describe('cryptoRouter session boundary', () => {
     expect(adapterMocks.listBalances).toHaveBeenCalled();
     expect(adapterMocks.createOrder).not.toHaveBeenCalled();
     expect(adapterMocks.cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it('saves and reads crypto auto stage strategy profiles', async () => {
+    const deps = setup();
+    const upbitAccountId = seedActiveUpbit(deps);
+    const caller = createCaller(deps.ctx);
+    const profile = {
+      ...createDefaultCryptoStrategyProfile('KRW-BTC'),
+      maxStages: 2,
+      buyRules: [
+        { nth: 1, triggerDropPct: null, amountKrw: '7000.5' },
+        { nth: 2, triggerDropPct: '0.04', amountKrw: '9000.25' },
+      ],
+      sellRules: [
+        { nth: 1, targetProfitPct: '0.025' },
+        { nth: 2, targetProfitPct: '0.05' },
+      ],
+      autoBuyEnabled: true,
+      autoSellEnabled: true,
+    };
+
+    const saved = await caller.saveAutoStrategy({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      profile,
+    });
+    const loaded = await caller.getAutoStrategy({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+    });
+
+    expect(saved.profile).toMatchObject({ maxStages: 2, buyRules: profile.buyRules });
+    expect(loaded.profile).toMatchObject({ maxStages: 2, sellRules: profile.sellRules });
+  });
+
+  it('manages crypto auto watches, history, and strategy templates', async () => {
+    const deps = setup();
+    const upbitAccountId = seedActiveUpbit(deps);
+    const caller = createCaller(deps.ctx);
+    const profile = createDefaultCryptoStrategyProfile('KRW-BTC');
+
+    const created = await caller.createAutoWatch({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      label: 'BTC 감시',
+      status: 'PAUSED',
+      entryCondition: { type: 'price-below', price: '100000000' },
+      strategy: { ...profile, autoBuyEnabled: true, autoSellEnabled: true },
+      guard: { maxOrderKrw: '7000', maxTotalExposureKrw: '21000' },
+    });
+    const listed = await caller.listAutoWatches({ accountId: upbitAccountId });
+    const createdWatch = created.watch;
+    if (!createdWatch) throw new Error('watch creation failed');
+
+    expect(createdWatch).toMatchObject({
+      market: 'KRW-BTC',
+      label: 'BTC 감시',
+      status: 'PAUSED',
+      entryCondition: { type: 'price-below', price: '100000000' },
+    });
+    expect(listed.watches).toHaveLength(1);
+
+    const resumed = await caller.resumeAutoWatches({
+      accountId: upbitAccountId,
+      ids: [createdWatch.id],
+    });
+    expect(resumed.affected).toBe(1);
+    const resumedWatch = (
+      await caller.getAutoWatch({ accountId: upbitAccountId, id: createdWatch.id })
+    ).watch;
+    if (!resumedWatch) throw new Error('resumed watch missing');
+    expect(resumedWatch.status).toBe('WATCHING');
+
+    const template = await caller.saveAutoStrategyTemplate({
+      accountId: upbitAccountId,
+      name: '보수형',
+      strategy: profile,
+    });
+    expect(template.template.name).toBe('보수형');
+    expect(
+      (await caller.listAutoStrategyTemplates({ accountId: upbitAccountId })).templates,
+    ).toHaveLength(1);
+
+    const history = await caller.listAutoTradeHistory({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      status: 'all',
+    });
+    expect(history.history.some((item) => item.reason === 'crypto auto watch saved')).toBe(true);
+
+    const deleted = await caller.deleteAutoWatches({
+      accountId: upbitAccountId,
+      ids: [createdWatch.id],
+    });
+    expect(deleted.affected).toBe(1);
+    expect(
+      (await caller.listAutoWatches({ accountId: upbitAccountId, includeCancelled: false }))
+        .watches,
+    ).toHaveLength(0);
   });
 
   it('rejects crypto auto status for non-KRW automation markets', async () => {

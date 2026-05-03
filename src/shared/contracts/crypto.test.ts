@@ -4,10 +4,16 @@ import {
   CryptoAutoGuardConfigSchema,
   CryptoAutoIntentSchema,
   CryptoAutoLotSourceSchema,
+  CryptoAutoTemplateUpsertInputSchema,
+  CryptoAutoTradeHistoryFilterSchema,
+  CryptoAutoWatchStatusSchema,
+  CryptoAutoWatchUpsertInputSchema,
   CryptoCandleUnitSchema,
   CryptoKrwMarketCodeSchema,
   CryptoOrderIntentSchema,
+  CryptoStrategyProfileSchema,
   CryptoTransferDirectionSchema,
+  createDefaultCryptoStrategyProfile,
   DecimalStringSchema,
   SignedDecimalStringSchema,
   UpbitCredentialsSchema,
@@ -131,5 +137,55 @@ describe('crypto contracts', () => {
     expect(CryptoAutoLotSourceSchema.safeParse('dry-run').success).toBe(true);
     expect(CryptoAutoLotSourceSchema.safeParse('live').success).toBe(true);
     expect(CryptoAutoLotSourceSchema.safeParse('paper').success).toBe(false);
+  });
+
+  it('validates crypto stage strategy profiles as KRW-only decimal contracts', () => {
+    const profile = createDefaultCryptoStrategyProfile('KRW-BTC');
+
+    expect(CryptoStrategyProfileSchema.safeParse(profile).success).toBe(true);
+    expect(
+      CryptoStrategyProfileSchema.safeParse({
+        ...profile,
+        market: 'BTC-ETH',
+      }).success,
+    ).toBe(false);
+    expect(
+      CryptoStrategyProfileSchema.safeParse({
+        ...profile,
+        buyRules: [
+          { nth: 1, triggerDropPct: '0.03', amountKrw: '5000.5' },
+          { nth: 2, triggerDropPct: '0.03', amountKrw: '5000.5' },
+          { nth: 3, triggerDropPct: '0.03', amountKrw: '5000.5' },
+        ],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('validates crypto auto watch and template contracts', () => {
+    const profile = createDefaultCryptoStrategyProfile('KRW-BTC');
+
+    expect(CryptoAutoWatchStatusSchema.safeParse('WATCHING').success).toBe(true);
+    expect(CryptoAutoWatchStatusSchema.safeParse('RUNNING').success).toBe(false);
+    expect(
+      CryptoAutoWatchUpsertInputSchema.safeParse({
+        market: 'KRW-BTC',
+        status: 'WATCHING',
+        entryCondition: { type: 'price-below', price: '100000000' },
+        strategy: profile,
+      }).success,
+    ).toBe(true);
+    expect(
+      CryptoAutoWatchUpsertInputSchema.safeParse({
+        market: 'BTC-ETH',
+        strategy: { ...profile, market: 'BTC-ETH' },
+      }).success,
+    ).toBe(false);
+    expect(
+      CryptoAutoTemplateUpsertInputSchema.safeParse({
+        name: '기본 템플릿',
+        strategy: profile,
+      }).success,
+    ).toBe(true);
+    expect(CryptoAutoTradeHistoryFilterSchema.parse(undefined)).toBeUndefined();
   });
 });

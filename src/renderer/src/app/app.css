@@ -3210,6 +3210,69 @@ body {
   height: 100%;
 }
 
+.crypto-market-bar {
+  display: grid;
+  grid-template-columns: minmax(22rem, 38rem) auto minmax(0, 1fr) minmax(32rem, auto) auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.45rem 0.7rem;
+  min-height: 3.2rem;
+  overflow: visible;
+}
+
+.crypto-market-bar__autocomplete {
+  position: relative;
+  min-width: 0;
+}
+
+.crypto-market-bar__search {
+  width: 100%;
+  min-width: 0;
+}
+
+.crypto-market-bar__dropdown {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 28rem;
+  overflow: auto;
+}
+
+.crypto-market-bar__dropdown .hts-btn {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 0.8rem;
+  border-radius: 0;
+  text-align: left;
+}
+
+.crypto-market-bar__name,
+.crypto-market-bar__price,
+.crypto-market-bar__change {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crypto-market-bar__quotes,
+.position-chart__quote-strip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.crypto-market-bar__quotes > *,
+.position-chart__quote-strip > * {
+  min-width: 0;
+}
+
 .crypto-split-pane {
   display: flex;
   flex-direction: column;
@@ -3233,6 +3296,12 @@ body {
 }
 
 .crypto-trade-workspace-grid {
+  min-height: 0;
+}
+
+.crypto-trade-workspace-grid > .crypto-chart-workspace {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
@@ -3283,7 +3352,7 @@ body {
 
 .crypto-auto-panel__settings {
   display: grid;
-  grid-template-columns: repeat(5, minmax(8rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   gap: 0.5rem;
 }
 
@@ -3305,6 +3374,111 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.crypto-strategy-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.crypto-strategy-form__top {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.6rem;
+  align-items: end;
+}
+
+.crypto-strategy-form__top label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.crypto-strategy-form__rules {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.crypto-strategy-form__rules-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.crypto-strategy-form__rules-head,
+.crypto-strategy-form__rule-row {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1.35fr) minmax(12rem, 0.85fr);
+  align-items: stretch;
+}
+
+.crypto-strategy-form__rules-head {
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg-2);
+  font-size: 1rem;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+.crypto-strategy-form__rules-head > span {
+  padding: 0.45rem 0.65rem;
+  border-right: 1px solid var(--border);
+}
+
+.crypto-strategy-form__rules-head > span:last-child {
+  border-right: 0;
+}
+
+.crypto-strategy-form__rules-list {
+  display: grid;
+  gap: 0.45rem;
+  max-height: 32rem;
+  overflow: auto;
+}
+
+.crypto-strategy-form__rule-row {
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.crypto-strategy-form__rule-row > strong {
+  display: grid;
+  place-items: center;
+  padding: 0.55rem 0.65rem;
+  border-right: 1px solid var(--border);
+  background: var(--bg-2);
+}
+
+.crypto-strategy-form__rule-buy,
+.crypto-strategy-form__rule-sell {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.55rem 0.75rem;
+  white-space: nowrap;
+}
+
+.crypto-strategy-form__rule-buy {
+  border-right: 1px solid var(--border);
+}
+
+.crypto-strategy-form__rule-buy .hts-input {
+  width: 8.8rem;
+}
+
+.crypto-strategy-form__rule-sell .hts-input {
+  width: 6.4rem;
+}
+
+.crypto-strategy-form__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
 .crypto-wallet-status-strip {
@@ -3352,9 +3526,74 @@ body {
   align-items: center;
 }
 
+.crypto-detail-modal__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 0.9rem;
+  margin: 0;
+}
+
+.crypto-detail-modal__fields > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.crypto-detail-modal__fields dt {
+  color: var(--fg-2);
+  font-size: 0.95rem;
+}
+
+.crypto-detail-modal__fields dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.crypto-settings-form {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.crypto-settings-form label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.crypto-settings-stage-grid {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.crypto-settings-stage-grid__header,
+.crypto-settings-stage-grid__row {
+  display: grid;
+  grid-template-columns: 4rem repeat(3, minmax(7rem, 1fr));
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.crypto-settings-stage-grid__header {
+  color: var(--fg-2);
+  font-size: 0.95rem;
+}
+
 @media (max-width: 1100px) {
   .crypto-main-page {
     overflow: auto;
+  }
+
+  .crypto-market-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .crypto-market-bar__name,
+  .crypto-market-bar__price,
+  .crypto-market-bar__change,
+  .crypto-market-bar__quotes,
+  .position-chart__quote-strip {
+    display: none;
   }
 
   .crypto-trade-workspace-grid.main-bottom-section__content {
@@ -4041,4 +4280,56 @@ body {
 
 .watch-orders-table.table-grid-root[data-variant="hts"] .table-grid-body .watch-order-row--paused {
   --table-grid-row-custom-bg: rgba(234, 179, 8, 0.085);
+}
+
+.crypto-watch-board {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.crypto-watch-board__table {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.crypto-watch-board__row-actions,
+.crypto-auto-template-bar,
+.add-crypto-watch-popout__checks {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.crypto-trade-history-pane,
+.crypto-auto-strategy-tab {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.crypto-right-pane__orders {
+  min-height: 9rem;
+  max-height: 16rem;
+  overflow: hidden;
+}
+
+.add-crypto-watch-popout__body {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.add-crypto-watch-popout .form-sticky-action-bar {
+  grid-column: 1 / -1;
+}
+
+.add-crypto-watch-popout__field {
+  display: grid;
+  gap: 0.25rem;
 }

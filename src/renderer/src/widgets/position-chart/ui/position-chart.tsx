@@ -38,7 +38,7 @@ export const PositionChart = ({
   pdno,
   name,
   lines,
-  enableDrawingTools = true,
+  enableDrawingTools = false,
 }: PositionChartProps): ReactElement => {
   const chart = usePositionChart(pdno);
   const { settings: displaySettings } = useGetDisplaySettings();
@@ -70,13 +70,15 @@ export const PositionChart = ({
             pdno
           )}
         </span>
-        <PriceChips pdno={pdno} />
         {chart.isLoading ? (
           <span className="muted" style={{ fontSize: '1rem' }}>
             로드 중…
           </span>
         ) : null}
         <span style={{ flex: 1 }} />
+        <div className="position-chart__quote-strip">
+          <PriceChips pdno={pdno} />
+        </div>
         <SegmentedToggle
           value={chart.period}
           onChange={chart.setPeriod}

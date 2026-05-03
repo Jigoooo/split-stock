@@ -3,7 +3,8 @@ import { formatCryptoPrice, formatCryptoVolume, isDecimalOnTick } from './crypto
 
 describe('crypto-format', () => {
   it('keeps crypto decimal precision visible', () => {
-    expect(formatCryptoPrice('0.00000012', 'KRW-TEST')).toBe('0.00000012');
+    expect(formatCryptoPrice('1491.99999999', 'KRW-BTC')).toBe('1,492');
+    expect(formatCryptoPrice('0.00000012', 'BTC-TEST')).toBe('0.00000012');
     expect(formatCryptoVolume('0.123456789')).toBe('0.12345679');
   });
 

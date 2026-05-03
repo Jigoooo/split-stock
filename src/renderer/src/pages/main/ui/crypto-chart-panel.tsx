@@ -2,7 +2,7 @@ import { useGetDisplaySettings } from '@renderer/entities/display-settings';
 import { formatCryptoPrice, formatCryptoVolume } from '@renderer/pages/main/model/crypto-format';
 import { useCryptoCandles } from '@renderer/pages/main/model/use-crypto-candles';
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, Select } from '@renderer/shared/ui';
+import { Button, SegmentedToggle } from '@renderer/shared/ui';
 import { CandlestickChart } from '@renderer/widgets/position-chart';
 import { CRYPTO_CANDLE_UNITS, type CryptoCandleUnit } from '@shared/contracts';
 import { Settings } from 'lucide-react';
@@ -16,7 +16,7 @@ const UNIT_LABEL: Record<CryptoCandleUnit, string> = {
   '15m': '15분',
   '30m': '30분',
   '60m': '60분',
-  '240m': '240분',
+  '240m': '4시간',
   D: '일',
   W: '주',
   M: '월',
@@ -87,19 +87,13 @@ export const CryptoChartPanel = ({
           </span>
         ) : null}
         <span style={{ flex: 1 }} />
-        <Select
-          aria-label="코인 봉 단위"
+        <SegmentedToggle
+          ariaLabel="코인 봉 단위"
           value={unit}
-          onChange={(event) => onUnitChange(event.target.value as CryptoCandleUnit)}
+          onChange={onUnitChange}
           dense
-          style={{ width: '8.8rem' }}
-        >
-          {CRYPTO_CANDLE_UNITS.map((value) => (
-            <option key={value} value={value}>
-              {UNIT_LABEL[value]}
-            </option>
-          ))}
-        </Select>
+          items={CRYPTO_CANDLE_UNITS.map((value) => ({ value, label: UNIT_LABEL[value] }))}
+        />
         <Button
           iconLeading={<Settings size={14} />}
           iconOnly
@@ -164,7 +158,7 @@ export const CryptoChartPanel = ({
           <CandlestickChart
             candles={chart.candles}
             chartKey={`crypto:UPBIT:${market}:${unit}`}
-            enableDrawingTools
+            enableDrawingTools={false}
             liveCandle={liveCandle}
             lines={[]}
             markers={[]}

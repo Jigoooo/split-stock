@@ -3,6 +3,29 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockUseActiveAccountId = vi.hoisted(() => vi.fn());
+const mockMutation = vi.hoisted(() => () => ({
+  mutate: vi.fn(),
+  mutateAsync: vi.fn().mockResolvedValue(undefined),
+  isPending: false,
+  error: null,
+}));
+const cryptoProfile = vi.hoisted(() => ({
+  version: 1,
+  market: 'KRW-BTC',
+  maxStages: 2,
+  buyRules: [
+    { nth: 1, triggerDropPct: null, amountKrw: '5000' },
+    { nth: 2, triggerDropPct: '0.03', amountKrw: '5000' },
+  ],
+  sellRules: [
+    { nth: 1, targetProfitPct: '0.02' },
+    { nth: 2, targetProfitPct: '0.02' },
+  ],
+  autoBuyEnabled: false,
+  autoBuyOrderType: 'MARKET',
+  autoSellEnabled: false,
+  autoSellOrderType: 'MARKET',
+}));
 
 vi.mock('@renderer/entities/account', () => ({
   useActiveAccountId: () => mockUseActiveAccountId(),
@@ -10,8 +33,52 @@ vi.mock('@renderer/entities/account', () => ({
 
 vi.mock('@renderer/shared/api/trpc', () => ({
   trpc: {
+    useUtils: () => ({
+      crypto: {
+        getAutoStatus: { invalidate: vi.fn() },
+        getAutoStrategy: { invalidate: vi.fn() },
+        listAutoStrategyTemplates: { invalidate: vi.fn() },
+      },
+    }),
     auth: {
       getEnv: { useQuery: () => ({ data: { env: 'PROD' }, isPending: false }) },
+    },
+    crypto: {
+      listMarkets: {
+        useQuery: () => ({
+          data: { entries: [{ market: 'KRW-BTC', koreanName: '비트코인' }] },
+          isPending: false,
+        }),
+      },
+      getAutoStrategy: {
+        useQuery: () => ({
+          data: { profile: cryptoProfile },
+          isFetching: false,
+        }),
+      },
+      getAutoStatus: {
+        useQuery: () => ({
+          data: {
+            config: {
+              emergencyDisabled: true,
+              maxOrderKrw: '5000',
+              maxTotalExposureKrw: '50000',
+            },
+          },
+          isFetching: false,
+        }),
+      },
+      listAutoStrategyTemplates: { useQuery: () => ({ data: { templates: [] } }) },
+      saveAutoStrategy: { useMutation: mockMutation },
+      saveAutoConfig: { useMutation: mockMutation },
+      saveAutoStrategyTemplate: { useMutation: mockMutation },
+      deleteAutoStrategyTemplate: { useMutation: mockMutation },
+    },
+    fees: {
+      getSettings: {
+        useQuery: () => ({ data: { buy: 0.05, sell: 0.05, tax: 0 }, isPending: false }),
+      },
+      updateSettings: { useMutation: mockMutation },
     },
   },
 }));
@@ -154,7 +221,7 @@ describe('SettingsPage', () => {
     expect(window.localStorage.getItem('popout:settings:strategyTab')).toBeNull();
   });
 
-  it('UPBIT 계좌에서는 국내주식 설정 탭을 숨기고 코인 설정 탭을 기본으로 연다', () => {
+  it('UPBIT 계좌에서는 국내주식 주문 탭을 숨기고 코인 매매설정관리를 기본으로 연다', () => {
     mockUseActiveAccountId.mockReturnValue({
       accountId: 2,
       account: { broker: 'UPBIT' },
@@ -163,9 +230,13 @@ describe('SettingsPage', () => {
 
     render(<SettingsPage />);
 
-    expectTabSelected('코인');
-    expect(screen.getByText('코인 거래 설정')).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: '매매설정관리' })).not.toBeInTheDocument();
+    expectTabSelected('매매설정관리');
+    expectTabSelected('기본매매 설정');
+    expect(screen.getByText('코인 매매설정관리')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '템플릿 관리' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '보호 설정' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '조건 설정' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '수수료' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: '주문/체결' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('strategy-settings-surface')).not.toBeInTheDocument();
     expect(screen.queryByTestId('pending-cancel-form')).not.toBeInTheDocument();

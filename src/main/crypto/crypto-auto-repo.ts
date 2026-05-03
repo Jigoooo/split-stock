@@ -5,13 +5,37 @@ import type {
   CryptoAutoIntent,
   CryptoAutoLotSource,
   CryptoAutoMode,
+  CryptoAutoTemplate,
+  CryptoAutoTemplateUpsertInput,
+  CryptoAutoTradeHistoryFilter,
+  CryptoAutoTradeHistoryItem,
+  CryptoAutoWatch,
+  CryptoAutoWatchEntryCondition,
+  CryptoAutoWatchListFilter,
+  CryptoAutoWatchStatus,
+  CryptoAutoWatchUpsertInput,
   CryptoKrwMarketCode,
   CryptoLot,
+  CryptoStrategyProfile,
   CryptoAutoEvent as SharedCryptoAutoEvent,
 } from '@shared/contracts';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import {
+  CryptoAutoTemplateUpsertInputSchema,
+  CryptoAutoWatchEntryConditionSchema,
+  CryptoAutoWatchUpsertInputSchema,
+  CryptoStrategyProfileSchema,
+  createCryptoStrategyRules,
+} from '@shared/contracts';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { cryptoAutoConfigs, cryptoAutoEvents, cryptoAutoLots } from '../db/schema';
+import {
+  cryptoAutoConfigs,
+  cryptoAutoEvents,
+  cryptoAutoLots,
+  cryptoAutoTemplates,
+  cryptoAutoWatches,
+  cryptoOrders,
+} from '../db/schema';
 
 export const DEFAULT_CRYPTO_AUTO_CONFIG: CryptoAutoGuardConfig = {
   exchange: 'UPBIT',
@@ -50,6 +74,15 @@ function parseJson(value: string | null): unknown {
     return JSON.parse(value);
   } catch {
     return value;
+  }
+}
+
+function parseEntryCondition(value: string | null): CryptoAutoWatchEntryCondition {
+  if (!value) return { type: 'immediate', price: null };
+  try {
+    return CryptoAutoWatchEntryConditionSchema.parse(JSON.parse(value));
+  } catch {
+    return { type: 'immediate', price: null };
   }
 }
 
@@ -131,6 +164,77 @@ function mapEvent(row: typeof cryptoAutoEvents.$inferSelect): CryptoAutoEvent {
   };
 }
 
+function mapTemplate(row: typeof cryptoAutoTemplates.$inferSelect): CryptoAutoTemplate {
+  const parsed = CryptoStrategyProfileSchema.parse(JSON.parse(row.strategyJson));
+  return {
+    id: row.id,
+    accountId: row.accountId,
+    name: row.name,
+    strategy: parsed,
+    createdAt: row.createdAt.getTime(),
+    updatedAt: row.updatedAt.getTime(),
+  };
+}
+
+function strategyFromConfig(config: CryptoAutoConfig): CryptoStrategyProfile {
+  return {
+    version: 1,
+    market: config.market,
+    maxStages: config.maxOpenLots,
+    ...createCryptoStrategyRules(config.maxOpenLots, {
+      amountKrw: config.baseOrderKrw,
+      dropPct: config.addTriggerPct,
+      profitPct: config.takeProfitPct,
+    }),
+    autoBuyEnabled: config.mode !== 'disabled',
+    autoBuyOrderType: 'MARKET',
+    autoSellEnabled: config.mode !== 'disabled',
+    autoSellOrderType: 'MARKET',
+  };
+}
+
+function parseStrategyJson(
+  market: CryptoKrwMarketCode,
+  value: string | null,
+): CryptoStrategyProfile | null {
+  if (!value) return null;
+  try {
+    const parsed = CryptoStrategyProfileSchema.safeParse(JSON.parse(value));
+    if (!parsed.success) return null;
+    return parsed.data.market === market ? parsed.data : { ...parsed.data, market };
+  } catch {
+    return null;
+  }
+}
+
+function maxBuyAmount(profile: CryptoStrategyProfile): string {
+  return profile.buyRules.reduce((max, rule) => {
+    const left = Number(max);
+    const right = Number(rule.amountKrw);
+    return Number.isFinite(right) && right > left ? rule.amountKrw : max;
+  }, profile.buyRules[0]?.amountKrw ?? '5000');
+}
+
+function previousStrategyJson(
+  db: Db,
+  accountId: number,
+  market: CryptoKrwMarketCode,
+): string | null {
+  return (
+    db
+      .select({ strategyJson: cryptoAutoConfigs.strategyJson })
+      .from(cryptoAutoConfigs)
+      .where(
+        and(
+          eq(cryptoAutoConfigs.accountId, accountId),
+          eq(cryptoAutoConfigs.exchange, 'UPBIT'),
+          eq(cryptoAutoConfigs.market, market),
+        ),
+      )
+      .get()?.strategyJson ?? null
+  );
+}
+
 export class CryptoAutoTradingRepo {
   constructor(private readonly db: Db) {}
 
@@ -176,6 +280,7 @@ export class CryptoAutoTradingRepo {
         staleCancelCap: next.staleCancelCap,
         requireReadOnlySmoke: next.requireReadOnlySmoke,
         requireDryRunHistoryBeforeLive: next.requireDryRunHistoryBeforeLive,
+        strategyJson: previousStrategyJson(this.db, accountId, market),
         lastDryRunAt: next.lastDryRunAt === null ? null : new Date(next.lastDryRunAt),
         lastReadonlySmokeAt:
           next.lastReadonlySmokeAt === null ? null : new Date(next.lastReadonlySmokeAt),
@@ -203,6 +308,285 @@ export class CryptoAutoTradingRepo {
       })
       .run();
     return this.getConfig(accountId, market);
+  }
+
+  getStrategy(accountId: number, market: CryptoKrwMarketCode): CryptoStrategyProfile {
+    const row = this.db
+      .select({ strategyJson: cryptoAutoConfigs.strategyJson })
+      .from(cryptoAutoConfigs)
+      .where(
+        and(
+          eq(cryptoAutoConfigs.accountId, accountId),
+          eq(cryptoAutoConfigs.exchange, 'UPBIT'),
+          eq(cryptoAutoConfigs.market, market),
+        ),
+      )
+      .get();
+    return (
+      parseStrategyJson(market, row?.strategyJson ?? null) ??
+      strategyFromConfig(this.getConfig(accountId, market))
+    );
+  }
+
+  upsertStrategy(
+    accountId: number,
+    market: CryptoKrwMarketCode,
+    profile: CryptoStrategyProfile,
+  ): CryptoStrategyProfile {
+    const parsed = CryptoStrategyProfileSchema.parse({ ...profile, market });
+    const firstBuy = parsed.buyRules[0];
+    const secondBuy = parsed.buyRules[1];
+    const firstSell = parsed.sellRules[0];
+    const mode =
+      parsed.autoBuyEnabled || parsed.autoSellEnabled
+        ? this.getConfig(accountId, market).mode
+        : 'disabled';
+    this.upsertConfig(accountId, market, {
+      mode,
+      baseOrderKrw: firstBuy?.amountKrw ?? '5000',
+      maxOrderKrw: maxBuyAmount(parsed),
+      addTriggerPct: secondBuy?.triggerDropPct ?? '0.03',
+      takeProfitPct: firstSell?.targetProfitPct ?? '0.02',
+      maxOpenLots: parsed.maxStages,
+    });
+    this.db
+      .update(cryptoAutoConfigs)
+      .set({ strategyJson: JSON.stringify(parsed), updatedAt: new Date() })
+      .where(
+        and(
+          eq(cryptoAutoConfigs.accountId, accountId),
+          eq(cryptoAutoConfigs.exchange, 'UPBIT'),
+          eq(cryptoAutoConfigs.market, market),
+        ),
+      )
+      .run();
+    return this.getStrategy(accountId, market);
+  }
+
+  listWatches(accountId: number, filter: CryptoAutoWatchListFilter = undefined): CryptoAutoWatch[] {
+    this.ensureLegacyConfigWatches(accountId);
+    const filters = [
+      eq(cryptoAutoWatches.accountId, accountId),
+      eq(cryptoAutoWatches.exchange, 'UPBIT'),
+    ];
+    if (filter?.market) filters.push(eq(cryptoAutoWatches.market, filter.market));
+    if (filter?.status) filters.push(eq(cryptoAutoWatches.status, filter.status));
+    if (!filter?.includeCancelled) {
+      filters.push(sql`${cryptoAutoWatches.status} <> 'CANCELLED'`);
+    }
+    return this.db
+      .select()
+      .from(cryptoAutoWatches)
+      .where(and(...filters))
+      .orderBy(desc(cryptoAutoWatches.updatedAt))
+      .all()
+      .map((row) => this.mapWatch(row));
+  }
+
+  getWatch(accountId: number, id: number): CryptoAutoWatch | null {
+    const row = this.db
+      .select()
+      .from(cryptoAutoWatches)
+      .where(and(eq(cryptoAutoWatches.accountId, accountId), eq(cryptoAutoWatches.id, id)))
+      .get();
+    return row ? this.mapWatch(row) : null;
+  }
+
+  upsertWatch(accountId: number, input: CryptoAutoWatchUpsertInput): CryptoAutoWatch {
+    const parsed = CryptoAutoWatchUpsertInputSchema.parse({ ...input, accountId });
+    const strategy = CryptoStrategyProfileSchema.parse({
+      ...parsed.strategy,
+      market: parsed.market,
+    });
+    const guard = Object.fromEntries(
+      Object.entries(parsed.guard).filter(([, value]) => value !== undefined),
+    ) as Partial<CryptoAutoGuardConfig>;
+    const config = this.upsertConfig(accountId, parsed.market, {
+      ...guard,
+      mode: parsed.status === 'WATCHING' ? 'live-small' : 'disabled',
+    });
+    this.upsertStrategy(accountId, parsed.market, strategy);
+
+    const now = new Date();
+    const values = {
+      accountId,
+      exchange: 'UPBIT',
+      market: parsed.market,
+      label: parsed.label ?? null,
+      status: parsed.status,
+      entryConditionJson: JSON.stringify(parsed.entryCondition),
+      strategyJson: JSON.stringify(strategy),
+      guardJson: JSON.stringify({ ...config, ...guard }),
+      updatedAt: now,
+    };
+
+    if (parsed.id !== undefined) {
+      this.db
+        .update(cryptoAutoWatches)
+        .set(values)
+        .where(and(eq(cryptoAutoWatches.accountId, accountId), eq(cryptoAutoWatches.id, parsed.id)))
+        .run();
+      return (
+        this.getWatch(accountId, parsed.id) ??
+        this.upsertWatch(accountId, { ...parsed, id: undefined })
+      );
+    }
+
+    const result = this.db
+      .insert(cryptoAutoWatches)
+      .values({ ...values, createdAt: now })
+      .onConflictDoUpdate({
+        target: [cryptoAutoWatches.accountId, cryptoAutoWatches.exchange, cryptoAutoWatches.market],
+        set: values,
+      })
+      .run();
+    const id = Number(result.lastInsertRowid);
+    const row =
+      this.db.select().from(cryptoAutoWatches).where(eq(cryptoAutoWatches.id, id)).get() ??
+      this.db
+        .select()
+        .from(cryptoAutoWatches)
+        .where(
+          and(
+            eq(cryptoAutoWatches.accountId, accountId),
+            eq(cryptoAutoWatches.exchange, 'UPBIT'),
+            eq(cryptoAutoWatches.market, parsed.market),
+          ),
+        )
+        .get();
+    if (!row) throw new Error('crypto auto watch upsert failed');
+    return this.mapWatch(row);
+  }
+
+  pauseWatches(accountId: number, ids: number[]): number {
+    return this.updateWatchStatuses(accountId, ids, 'PAUSED');
+  }
+
+  resumeWatches(accountId: number, ids: number[]): number {
+    return this.updateWatchStatuses(accountId, ids, 'WATCHING');
+  }
+
+  deleteWatches(accountId: number, ids: number[]): number {
+    return this.updateWatchStatuses(accountId, ids, 'CANCELLED');
+  }
+
+  listTradeHistory(
+    accountId: number,
+    filter: CryptoAutoTradeHistoryFilter = undefined,
+  ): CryptoAutoTradeHistoryItem[] {
+    const filters = [
+      eq(cryptoAutoEvents.accountId, accountId),
+      eq(cryptoAutoEvents.exchange, 'UPBIT'),
+    ];
+    if (filter?.market) filters.push(eq(cryptoAutoEvents.market, filter.market));
+    if (filter?.status === 'failed') {
+      filters.push(sql`${cryptoAutoEvents.kind} in ('blocked', 'decimal-error')`);
+    } else if (filter?.status === 'open') {
+      filters.push(sql`${cryptoAutoEvents.action} in ('plan-buy', 'plan-sell', 'cancel-stale')`);
+    } else if (filter?.status === 'closed') {
+      filters.push(sql`${cryptoAutoEvents.kind} in ('live-place', 'live-cancel')`);
+    }
+    const limit = Math.max(1, Math.min(200, Math.trunc(filter?.limit ?? 80)));
+    return this.db
+      .select()
+      .from(cryptoAutoEvents)
+      .where(and(...filters))
+      .orderBy(desc(cryptoAutoEvents.createdAt))
+      .limit(limit)
+      .all()
+      .map((row) => ({
+        id: row.id,
+        accountId: row.accountId,
+        exchange: 'UPBIT',
+        market: row.market as CryptoKrwMarketCode,
+        status:
+          row.kind === 'blocked' || row.kind === 'decimal-error'
+            ? 'failed'
+            : row.kind === 'live-cancel'
+              ? 'closed'
+              : 'event',
+        action: row.action,
+        reason: row.reason,
+        mode: row.mode as CryptoAutoMode,
+        createdAt: row.createdAt.getTime(),
+      }));
+  }
+
+  listTemplates(accountId: number): CryptoAutoTemplate[] {
+    return this.db
+      .select()
+      .from(cryptoAutoTemplates)
+      .where(eq(cryptoAutoTemplates.accountId, accountId))
+      .orderBy(desc(cryptoAutoTemplates.updatedAt))
+      .all()
+      .map(mapTemplate);
+  }
+
+  saveTemplate(accountId: number, input: CryptoAutoTemplateUpsertInput): CryptoAutoTemplate {
+    const parsed = CryptoAutoTemplateUpsertInputSchema.parse({ ...input, accountId });
+    const now = new Date();
+    if (parsed.id !== undefined) {
+      this.db
+        .update(cryptoAutoTemplates)
+        .set({
+          name: parsed.name,
+          strategyJson: JSON.stringify(parsed.strategy),
+          updatedAt: now,
+        })
+        .where(
+          and(eq(cryptoAutoTemplates.accountId, accountId), eq(cryptoAutoTemplates.id, parsed.id)),
+        )
+        .run();
+      const row = this.db
+        .select()
+        .from(cryptoAutoTemplates)
+        .where(
+          and(eq(cryptoAutoTemplates.accountId, accountId), eq(cryptoAutoTemplates.id, parsed.id)),
+        )
+        .get();
+      if (!row) throw new Error('crypto auto template update failed');
+      return mapTemplate(row);
+    }
+    const result = this.db
+      .insert(cryptoAutoTemplates)
+      .values({
+        accountId,
+        name: parsed.name,
+        strategyJson: JSON.stringify(parsed.strategy),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [cryptoAutoTemplates.accountId, cryptoAutoTemplates.name],
+        set: {
+          strategyJson: JSON.stringify(parsed.strategy),
+          updatedAt: now,
+        },
+      })
+      .run();
+    const id = Number(result.lastInsertRowid);
+    const row =
+      this.db.select().from(cryptoAutoTemplates).where(eq(cryptoAutoTemplates.id, id)).get() ??
+      this.db
+        .select()
+        .from(cryptoAutoTemplates)
+        .where(
+          and(
+            eq(cryptoAutoTemplates.accountId, accountId),
+            eq(cryptoAutoTemplates.name, parsed.name),
+          ),
+        )
+        .get();
+    if (!row) throw new Error('crypto auto template upsert failed');
+    return mapTemplate(row);
+  }
+
+  deleteTemplate(accountId: number, id: number): boolean {
+    const result = this.db
+      .delete(cryptoAutoTemplates)
+      .where(and(eq(cryptoAutoTemplates.accountId, accountId), eq(cryptoAutoTemplates.id, id)))
+      .run();
+    return result.changes > 0;
   }
 
   markReadonlySmokeSucceeded(
@@ -404,6 +788,110 @@ export class CryptoAutoTradingRepo {
         sinceMs: 0,
       }) > 0
     );
+  }
+
+  private ensureLegacyConfigWatches(accountId: number): void {
+    const configs = this.db
+      .select()
+      .from(cryptoAutoConfigs)
+      .where(
+        and(eq(cryptoAutoConfigs.accountId, accountId), eq(cryptoAutoConfigs.exchange, 'UPBIT')),
+      )
+      .all()
+      .map((row) => mapConfigRow(accountId, row.market as CryptoKrwMarketCode, row));
+    for (const config of configs) {
+      const strategy = this.getStrategy(accountId, config.market);
+      const now = new Date(config.updatedAt || Date.now());
+      this.db
+        .insert(cryptoAutoWatches)
+        .values({
+          accountId,
+          exchange: 'UPBIT',
+          market: config.market,
+          label: null,
+          status: config.mode === 'disabled' ? 'PAUSED' : 'WATCHING',
+          entryConditionJson: JSON.stringify({ type: 'immediate', price: null }),
+          strategyJson: JSON.stringify(strategy),
+          guardJson: JSON.stringify(config),
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({
+          target: [
+            cryptoAutoWatches.accountId,
+            cryptoAutoWatches.exchange,
+            cryptoAutoWatches.market,
+          ],
+        })
+        .run();
+    }
+  }
+
+  private mapWatch(row: typeof cryptoAutoWatches.$inferSelect): CryptoAutoWatch {
+    const market = row.market as CryptoKrwMarketCode;
+    const config = this.getConfig(row.accountId, market);
+    const strategy =
+      parseStrategyJson(market, row.strategyJson) ?? this.getStrategy(row.accountId, market);
+    const lastEvent = this.listRecentEvents(row.accountId, market, 1)[0] ?? null;
+    const liveLots = this.listOpenLots(row.accountId, market, 'live');
+    const openOrderCount =
+      this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(cryptoOrders)
+        .where(
+          and(
+            eq(cryptoOrders.accountId, row.accountId),
+            eq(cryptoOrders.exchange, 'UPBIT'),
+            eq(cryptoOrders.market, market),
+            sql`${cryptoOrders.state} in ('wait', 'watch')`,
+          ),
+        )
+        .get()?.count ?? 0;
+    return {
+      id: row.id,
+      accountId: row.accountId,
+      exchange: 'UPBIT',
+      market,
+      label: row.label,
+      status: row.status as CryptoAutoWatchStatus,
+      entryCondition: parseEntryCondition(row.entryConditionJson),
+      strategy,
+      config,
+      currentStage: liveLots.length,
+      openOrderCount: Number(openOrderCount),
+      lastDecision: lastEvent?.reason ?? null,
+      lastDecisionAt: lastEvent?.createdAt ?? null,
+      lastActionAt: config.lastLiveActionAt ?? lastEvent?.createdAt ?? null,
+      blockedReasons: [],
+      runtimeRunning: false,
+      createdAt: row.createdAt.getTime(),
+      updatedAt: row.updatedAt.getTime(),
+    };
+  }
+
+  private updateWatchStatuses(
+    accountId: number,
+    ids: number[],
+    status: CryptoAutoWatchStatus,
+  ): number {
+    if (ids.length === 0) return 0;
+    const rows = this.db
+      .select()
+      .from(cryptoAutoWatches)
+      .where(and(eq(cryptoAutoWatches.accountId, accountId), inArray(cryptoAutoWatches.id, ids)))
+      .all();
+    const now = new Date();
+    this.db
+      .update(cryptoAutoWatches)
+      .set({ status, updatedAt: now })
+      .where(and(eq(cryptoAutoWatches.accountId, accountId), inArray(cryptoAutoWatches.id, ids)))
+      .run();
+    for (const row of rows) {
+      this.upsertConfig(accountId, row.market as CryptoKrwMarketCode, {
+        mode: status === 'WATCHING' ? 'live-small' : 'disabled',
+      });
+    }
+    return rows.length;
   }
 
   private nextLotSequence(

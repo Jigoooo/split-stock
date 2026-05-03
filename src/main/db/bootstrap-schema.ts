@@ -219,12 +219,36 @@ const CREATE_STATEMENTS: readonly string[] = [
     stale_cancel_cap INTEGER NOT NULL DEFAULT 3,
     require_readonly_smoke INTEGER NOT NULL DEFAULT 1,
     require_dry_run_history_before_live INTEGER NOT NULL DEFAULT 1,
+    strategy_json TEXT,
     last_dry_run_at INTEGER,
     last_readonly_smoke_at INTEGER,
     last_live_action_at INTEGER,
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (account_id, exchange, market)
   )`,
+  `CREATE TABLE IF NOT EXISTS crypto_auto_watches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    exchange TEXT NOT NULL DEFAULT 'UPBIT',
+    market TEXT NOT NULL,
+    label TEXT,
+    status TEXT NOT NULL DEFAULT 'PAUSED',
+    entry_condition_json TEXT NOT NULL DEFAULT '{"type":"immediate","price":null}',
+    strategy_json TEXT NOT NULL,
+    guard_json TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS crypto_auto_watches_account_market_uniq ON crypto_auto_watches(account_id, exchange, market)`,
+  `CREATE TABLE IF NOT EXISTS crypto_auto_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    strategy_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS crypto_auto_templates_account_name_uniq ON crypto_auto_templates(account_id, name)`,
   `CREATE TABLE IF NOT EXISTS crypto_auto_lots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id INTEGER NOT NULL,

@@ -173,13 +173,18 @@ function writeCachedSnapshot(accountId: number | null, data: BalanceWithLotsSnap
  * 활성 계좌가 없으면 쿼리 disabled.
  */
 export function useBalanceWithLots(): UseBalanceWithLotsResult {
-  const { accountId } = useActiveAccountId();
-  const cachedSnapshot = useMemo(() => readCachedSnapshot(accountId), [accountId]);
-  const [queryReady, setQueryReady] = useState(accountId !== null && cachedSnapshot === null);
+  const { account, accountId } = useActiveAccountId();
+  const stockBalanceEnabled = accountId !== null && account?.broker !== 'UPBIT';
+  const stockAccountId = stockBalanceEnabled ? accountId : null;
+  const cachedSnapshot = useMemo(
+    () => (stockAccountId !== null ? readCachedSnapshot(stockAccountId) : null),
+    [stockAccountId],
+  );
+  const [queryReady, setQueryReady] = useState(stockBalanceEnabled && cachedSnapshot === null);
   const [consecutiveFailureCount, setConsecutiveFailureCount] = useState(0);
 
   useEffect(() => {
-    if (accountId === null) {
+    if (!stockBalanceEnabled) {
       setQueryReady(false);
       return;
     }
@@ -190,12 +195,12 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
     setQueryReady(false);
     const id = window.setTimeout(() => setQueryReady(true), 250);
     return () => window.clearTimeout(id);
-  }, [accountId, cachedSnapshot]);
+  }, [cachedSnapshot, stockBalanceEnabled]);
 
   const query = trpc.account.getBalanceWithLots.useQuery(
-    accountId !== null ? { accountId } : undefined,
+    stockAccountId !== null ? { accountId: stockAccountId } : skipToken,
     {
-      enabled: accountId !== null && queryReady,
+      enabled: stockBalanceEnabled && queryReady,
       refetchInterval: 4000,
       staleTime: 0,
     },
@@ -220,11 +225,11 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
     ).sort((a, b) => a.localeCompare(b));
   }, [data]);
   const strategyMetaQuery = trpc.strategy.getEffectiveMetas.useQuery(
-    accountId !== null && strategyPdnos.length > 0
-      ? { accountId, pdnos: strategyPdnos }
+    stockAccountId !== null && strategyPdnos.length > 0
+      ? { accountId: stockAccountId, pdnos: strategyPdnos }
       : skipToken,
     {
-      enabled: accountId !== null && strategyPdnos.length > 0,
+      enabled: stockAccountId !== null && strategyPdnos.length > 0,
       staleTime: 0,
     },
   );
@@ -232,8 +237,8 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
   useEffect(() => {
     if (!query.data) return;
     setConsecutiveFailureCount(0);
-    writeCachedSnapshot(accountId, query.data as BalanceWithLotsSnapshot);
-  }, [accountId, query.data]);
+    writeCachedSnapshot(stockAccountId, query.data as BalanceWithLotsSnapshot);
+  }, [query.data, stockAccountId]);
 
   useEffect(() => {
     if (query.errorUpdatedAt === 0 || !query.error) return;

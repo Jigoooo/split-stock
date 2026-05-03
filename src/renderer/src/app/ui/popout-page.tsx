@@ -24,6 +24,10 @@ const loadAddWatchOrderPopout = () =>
   import('./popouts/add-watch-order-popout').then((m) => ({
     default: m.AddWatchOrderPopout,
   }));
+const loadAddCryptoWatchPopout = () =>
+  import('./popouts/add-crypto-watch-popout').then((m) => ({
+    default: m.AddCryptoWatchPopout,
+  }));
 
 const TradePopout = lazy(loadTradePopout);
 const LogsPopout = lazy(loadLogsPopout);
@@ -33,6 +37,7 @@ const StockPickerPopout = lazy(loadStockPickerPopout);
 const ProfitCalculatorPopout = lazy(loadProfitCalculatorPopout);
 const AddAccountPopout = lazy(loadAddAccountPopout);
 const AddWatchOrderPopout = lazy(loadAddWatchOrderPopout);
+const AddCryptoWatchPopout = lazy(loadAddCryptoWatchPopout);
 
 const popoutPrewarmLoaders = {
   trade: loadTradePopout,
@@ -43,6 +48,7 @@ const popoutPrewarmLoaders = {
   'profit-calculator': loadProfitCalculatorPopout,
   'add-account': loadAddAccountPopout,
   'add-watch-order': loadAddWatchOrderPopout,
+  'add-crypto-watch': loadAddCryptoWatchPopout,
 } satisfies Record<PopoutRoute, () => Promise<unknown>>;
 
 export function prewarmPopoutRoute(route: PopoutRoute): void {
@@ -82,12 +88,13 @@ const PopoutRouteLoading = ({
 );
 
 export const PopoutPage = ({ activationKey, route, popout }: PopoutPageProps): ReactElement => {
-  const isEdgeToEdgeRoute = route === 'add-watch-order' || route === 'add-account';
+  const isEdgeToEdgeRoute =
+    route === 'add-watch-order' || route === 'add-crypto-watch' || route === 'add-account';
   // settings 페이지는 자체 sticky 탭 + 내부 스크롤을 사용하므로 외부 wrapper 의 overflow 를 hidden 으로
   // 두어 이중 스크롤바를 방지한다.
   const isInternallyScrolled = route === 'settings';
   useEffect(() => {
-    if (route === 'add-watch-order') return;
+    if (route === 'add-watch-order' || route === 'add-crypto-watch') return;
     document.title = getPopoutWindowTitle(route);
   }, [route]);
 
@@ -113,6 +120,9 @@ export const PopoutPage = ({ activationKey, route, popout }: PopoutPageProps): R
       break;
     case 'add-watch-order':
       content = <AddWatchOrderPopout key={`add-watch-order:${activationKey}`} />;
+      break;
+    case 'add-crypto-watch':
+      content = <AddCryptoWatchPopout key={`add-crypto-watch:${activationKey}`} />;
       break;
     case 'settings':
       content = <SettingsPopout activationKey={activationKey} />;

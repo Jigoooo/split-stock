@@ -340,12 +340,48 @@ export const cryptoAutoConfigs = sqliteTable(
     })
       .notNull()
       .default(true),
+    strategyJson: text('strategy_json'),
     lastDryRunAt: integer('last_dry_run_at', { mode: 'timestamp_ms' }),
     lastReadonlySmokeAt: integer('last_readonly_smoke_at', { mode: 'timestamp_ms' }),
     lastLiveActionAt: integer('last_live_action_at', { mode: 'timestamp_ms' }),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.accountId, t.exchange, t.market] })],
+);
+
+export const cryptoAutoWatches = sqliteTable(
+  'crypto_auto_watches',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    accountId: integer('account_id').notNull(),
+    exchange: text('exchange').notNull().default('UPBIT'),
+    market: text('market').notNull(),
+    label: text('label'),
+    status: text('status').notNull().default('PAUSED'),
+    entryConditionJson: text('entry_condition_json')
+      .notNull()
+      .default('{"type":"immediate","price":null}'),
+    strategyJson: text('strategy_json').notNull(),
+    guardJson: text('guard_json'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [
+    uniqueIndex('crypto_auto_watches_account_market_uniq').on(t.accountId, t.exchange, t.market),
+  ],
+);
+
+export const cryptoAutoTemplates = sqliteTable(
+  'crypto_auto_templates',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    accountId: integer('account_id').notNull(),
+    name: text('name').notNull(),
+    strategyJson: text('strategy_json').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [uniqueIndex('crypto_auto_templates_account_name_uniq').on(t.accountId, t.name)],
 );
 
 export const cryptoAutoLots = sqliteTable('crypto_auto_lots', {

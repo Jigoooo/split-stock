@@ -1,4 +1,4 @@
-import type { CryptoBalance } from '@shared/contracts';
+import { type CryptoBalance, createDefaultCryptoStrategyProfile } from '@shared/contracts';
 import { err, ok } from 'neverthrow';
 import { describe, expect, it, vi } from 'vitest';
 import { bootstrapSchema } from '../db/bootstrap-schema';
@@ -80,6 +80,84 @@ describe('CryptoAutoTradingService', () => {
     expect(repo.listOpenLots(1, 'KRW-BTC')).toHaveLength(1);
     expect(adapter.createOrder).not.toHaveBeenCalled();
     expect(adapter.cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it('uses stage-specific crypto strategy amount, trigger, and take-profit rules', () => {
+    const { repo, service } = setup();
+    repo.upsertConfig(1, 'KRW-BTC', { mode: 'dry-run', emergencyDisabled: true });
+    repo.upsertStrategy(1, 'KRW-BTC', {
+      ...createDefaultCryptoStrategyProfile('KRW-BTC'),
+      maxStages: 2,
+      buyRules: [
+        { nth: 1, triggerDropPct: null, amountKrw: '7000' },
+        { nth: 2, triggerDropPct: '0.05', amountKrw: '9000' },
+      ],
+      sellRules: [
+        { nth: 1, targetProfitPct: '0.01' },
+        { nth: 2, targetProfitPct: '0.03' },
+      ],
+      autoBuyEnabled: true,
+      autoSellEnabled: true,
+    });
+
+    const first = service.runDryTick({
+      accountId: 1,
+      market: 'KRW-BTC',
+      balances,
+      tradePrice: '100000000',
+    });
+    const second = service.runDryTick({
+      accountId: 1,
+      market: 'KRW-BTC',
+      balances,
+      tradePrice: '95000000',
+    });
+    const sell = service.plan({
+      accountId: 1,
+      market: 'KRW-BTC',
+      balances,
+      tradePrice: '101000000',
+    });
+
+    expect(first._unsafeUnwrap().intent).toMatchObject({ kind: 'plan-buy', krwAmount: '7000' });
+    expect(second._unsafeUnwrap().intent).toMatchObject({ kind: 'plan-buy', krwAmount: '9000' });
+    expect(sell._unsafeUnwrap()).toMatchObject({ kind: 'plan-sell' });
+  });
+
+  it('waits for an active watch entry condition before the first crypto buy', () => {
+    const { repo, service } = setup();
+    const profile = {
+      ...createDefaultCryptoStrategyProfile('KRW-BTC'),
+      autoBuyEnabled: true,
+      autoSellEnabled: true,
+    };
+    repo.upsertWatch(1, {
+      market: 'KRW-BTC',
+      status: 'WATCHING',
+      entryCondition: { type: 'price-below', price: '90000000' },
+      strategy: profile,
+      guard: { emergencyDisabled: true },
+    });
+    repo.upsertConfig(1, 'KRW-BTC', { mode: 'dry-run', emergencyDisabled: true });
+
+    const waiting = service.plan({
+      accountId: 1,
+      market: 'KRW-BTC',
+      balances,
+      tradePrice: '100000000',
+    });
+    const triggered = service.plan({
+      accountId: 1,
+      market: 'KRW-BTC',
+      balances,
+      tradePrice: '89000000',
+    });
+
+    expect(waiting._unsafeUnwrap()).toMatchObject({
+      kind: 'noop',
+      reason: '최초 매수 감시 조건이 충족되지 않았습니다.',
+    });
+    expect(triggered._unsafeUnwrap()).toMatchObject({ kind: 'plan-buy' });
   });
 
   it('fails closed on invalid decimal input before creating intents', () => {

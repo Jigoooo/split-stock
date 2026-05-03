@@ -26,6 +26,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { CredentialsSettingsPanel } from './credentials-settings-panel';
+import { CryptoStrategySettingsSection } from './crypto-strategy-settings-section';
 
 /**
  * 매매설정관리 서브탭 — features/edit-strategy 의 STRATEGY_SETTINGS_TABS 에
@@ -52,7 +53,7 @@ const STOCK_TOP_TABS = [
 ] as const satisfies ReadonlyArray<HtsTabItem<string>>;
 
 const CRYPTO_TOP_TABS = [
-  { id: 'crypto', label: '코인' },
+  { id: 'strategy', label: '매매설정관리' },
   { id: 'display', label: '표시' },
   { id: 'account', label: '계좌/보안' },
   { id: 'ai', label: 'AI' },
@@ -63,7 +64,7 @@ type StockSettingsTopTab = (typeof STOCK_TOP_TABS)[number]['id'];
 type CryptoSettingsTopTab = (typeof CRYPTO_TOP_TABS)[number]['id'];
 type SettingsTopTab = StockSettingsTopTab | CryptoSettingsTopTab;
 const DEFAULT_STOCK_TOP_TAB: SettingsTopTab = 'strategy';
-const DEFAULT_CRYPTO_TOP_TAB: SettingsTopTab = 'crypto';
+const DEFAULT_CRYPTO_TOP_TAB: SettingsTopTab = 'strategy';
 const DEFAULT_STRATEGY_TAB: ExtendedStrategyTab = 'basic';
 const SETTINGS_INITIAL_TAB_STORAGE_KEY = 'popout:settings:initialTab';
 const SETTINGS_STRATEGY_TAB_STORAGE_KEY = 'popout:settings:strategyTab';
@@ -212,12 +213,12 @@ export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactEl
           onChange={setTopTab}
           ariaLabel="설정 상위 탭"
         />
-        {!isCrypto && topTab === 'strategy' ? (
+        {topTab === 'strategy' ? (
           <HtsTabs<ExtendedStrategyTab>
             tabs={STRATEGY_TABS_WITH_FEE}
             active={strategyTab}
             onChange={setStrategyTab}
-            ariaLabel="기본 자동매매설정 탭"
+            ariaLabel={isCrypto ? '코인 매매설정관리 탭' : '기본 자동매매설정 탭'}
           />
         ) : null}
       </div>
@@ -251,9 +252,9 @@ export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactEl
               <StrategySection activeTab={strategyTab} onTabChange={(t) => setStrategyTab(t)} />
             </Section>
           ) : null}
-          {isCrypto && topTab === 'crypto' ? (
-            <Section name="코인 거래 설정">
-              <CryptoSettingsSection />
+          {isCrypto && topTab === 'strategy' ? (
+            <Section name="코인 매매설정관리">
+              <CryptoStrategySettingsSection activeTab={strategyTab} />
             </Section>
           ) : null}
           {topTab === 'display' ? (
@@ -357,30 +358,6 @@ function FeeSection(): ReactElement {
   // FeeEnv: 'real' | 'mock'. AppEnv: 'PROD' | 'MOCK'. mapping.
   const feeEnv = env === 'PROD' ? 'real' : 'mock';
   return <FeeSettingsForm env={feeEnv} />;
-}
-
-function CryptoSettingsSection(): ReactElement {
-  const envQuery = trpc.auth.getEnv.useQuery();
-  const env = envQuery.data?.env ?? null;
-
-  return (
-    <div className="panel">
-      <div className="panel__title">코인 거래 설정</div>
-      <div className="panel__body" style={{ display: 'grid', gap: '0.8rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <span className="chip chip--live">UPBIT</span>
-          <span className="chip">{env ?? '환경 미확인'}</span>
-        </div>
-        <p className="muted" style={{ margin: 0 }}>
-          코인 자동매매, read-only smoke, realtime 상태, live gate는 코인 메인 화면의 자동매매와
-          실시간 상태 패널에서 관리합니다.
-        </p>
-        <p className="muted" style={{ margin: 0 }}>
-          이 설정 화면에서는 국내주식 자동매매/주문 보정 설정을 노출하지 않습니다.
-        </p>
-      </div>
-    </div>
-  );
 }
 
 function DisplaySettingsSection(): ReactElement {

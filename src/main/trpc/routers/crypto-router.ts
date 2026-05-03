@@ -1,6 +1,11 @@
 import {
   type CryptoAutoGuardConfig,
   CryptoAutoGuardConfigSchema,
+  CryptoAutoTemplateUpsertInputSchema,
+  CryptoAutoTradeHistoryFilterSchema,
+  CryptoAutoWatchActionInputSchema,
+  CryptoAutoWatchListFilterSchema,
+  CryptoAutoWatchUpsertInputSchema,
   CryptoCandleUnitSchema,
   CryptoKrwMarketCodeSchema,
   CryptoMarketCodeSchema,
@@ -12,6 +17,7 @@ import {
   type CryptoRealtimeOrderbook,
   type CryptoRealtimeTicker,
   type CryptoRealtimeTrade,
+  CryptoStrategyProfileSchema,
   CryptoTransferDirectionSchema,
   isUpbitCredentials,
   type UpbitCredentials,
@@ -64,6 +70,9 @@ const AutoMarketInputSchema = z.object({
 });
 const AutoConfigInputSchema = AutoMarketInputSchema.extend({
   config: CryptoAutoGuardConfigSchema.partial(),
+});
+const AutoStrategyInputSchema = AutoMarketInputSchema.extend({
+  profile: CryptoStrategyProfileSchema,
 });
 const AutoRunInputSchema = AutoMarketInputSchema.extend({
   tradePrice: z.string().trim().optional(),
@@ -228,6 +237,25 @@ function stopCryptoAutoJob(accountId: number, market: string): boolean {
   clearInterval(job.timer);
   cryptoAutoJobs.delete(key);
   return true;
+}
+
+function withWatchRuntimeState(
+  ctx: Context,
+  watches: ReturnType<CryptoAutoTradingRepo['listWatches']>,
+) {
+  const service = createCryptoAutoService(ctx);
+  return watches.map((watch) => {
+    const gate = service.getGate({
+      accountId: watch.accountId,
+      market: watch.market,
+      requireIdempotency: false,
+    });
+    return {
+      ...watch,
+      blockedReasons: gate.isOk() ? gate.value.blockedReasons : [gate.error.message],
+      runtimeRunning: cryptoAutoJobs.has(cryptoAutoJobKey(watch.accountId, watch.market)),
+    };
+  });
 }
 
 async function readAutoTickInputs(ctx: Context, input: z.infer<typeof AutoRunInputSchema>) {
@@ -582,6 +610,152 @@ export const cryptoRouter = router({
     });
     return { accountId, market: input.market, config, event };
   }),
+
+  getAutoStrategy: runtimeProcedure.input(AutoMarketInputSchema).query(({ ctx, input }) => {
+    const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+    loadPrivateUpbitCredentials(ctx, accountId);
+    const repo = new CryptoAutoTradingRepo(ctx.db);
+    return {
+      accountId,
+      market: input.market,
+      profile: repo.getStrategy(accountId, input.market),
+    };
+  }),
+
+  saveAutoStrategy: runtimeProcedure.input(AutoStrategyInputSchema).mutation(({ ctx, input }) => {
+    const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+    loadPrivateUpbitCredentials(ctx, accountId);
+    const repo = new CryptoAutoTradingRepo(ctx.db);
+    const profile = repo.upsertStrategy(accountId, input.market, input.profile);
+    const config = repo.getConfig(accountId, input.market);
+    const event = repo.insertEvent({
+      accountId,
+      market: input.market,
+      mode: config.mode,
+      kind: 'config',
+      action: 'config',
+      reason: 'crypto auto strategy saved',
+      result: profile,
+    });
+    return { accountId, market: input.market, profile, event };
+  }),
+
+  listAutoWatches: runtimeProcedure
+    .input(CryptoAutoWatchListFilterSchema)
+    .query(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input?.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const repo = new CryptoAutoTradingRepo(ctx.db);
+      const watches = repo.listWatches(accountId, input);
+      return { accountId, watches: withWatchRuntimeState(ctx, watches) };
+    }),
+
+  getAutoWatch: runtimeProcedure
+    .input(z.object({ accountId: AccountIdField.optional(), id: z.number().int().positive() }))
+    .query(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const repo = new CryptoAutoTradingRepo(ctx.db);
+      const watch = repo.getWatch(accountId, input.id);
+      if (!watch) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '코인 자동감시를 찾을 수 없습니다.' });
+      }
+      return { accountId, watch: withWatchRuntimeState(ctx, [watch])[0] };
+    }),
+
+  createAutoWatch: runtimeProcedure
+    .input(CryptoAutoWatchUpsertInputSchema)
+    .mutation(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const repo = new CryptoAutoTradingRepo(ctx.db);
+      const watch = repo.upsertWatch(accountId, input);
+      repo.insertEvent({
+        accountId,
+        market: watch.market,
+        mode: watch.config.mode,
+        kind: 'config',
+        action: 'config',
+        reason: 'crypto auto watch saved',
+        result: { watchId: watch.id, status: watch.status },
+      });
+      return { accountId, watch: withWatchRuntimeState(ctx, [watch])[0] };
+    }),
+
+  updateAutoWatch: runtimeProcedure
+    .input(CryptoAutoWatchUpsertInputSchema)
+    .mutation(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const repo = new CryptoAutoTradingRepo(ctx.db);
+      const watch = repo.upsertWatch(accountId, input);
+      return { accountId, watch: withWatchRuntimeState(ctx, [watch])[0] };
+    }),
+
+  pauseAutoWatches: runtimeProcedure
+    .input(CryptoAutoWatchActionInputSchema)
+    .mutation(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const affected = new CryptoAutoTradingRepo(ctx.db).pauseWatches(accountId, input.ids);
+      return { accountId, ids: input.ids, affected };
+    }),
+
+  resumeAutoWatches: runtimeProcedure
+    .input(CryptoAutoWatchActionInputSchema)
+    .mutation(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const affected = new CryptoAutoTradingRepo(ctx.db).resumeWatches(accountId, input.ids);
+      return { accountId, ids: input.ids, affected };
+    }),
+
+  deleteAutoWatches: runtimeProcedure
+    .input(CryptoAutoWatchActionInputSchema)
+    .mutation(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const affected = new CryptoAutoTradingRepo(ctx.db).deleteWatches(accountId, input.ids);
+      return { accountId, ids: input.ids, affected };
+    }),
+
+  listAutoTradeHistory: runtimeProcedure
+    .input(CryptoAutoTradeHistoryFilterSchema)
+    .query(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input?.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const history = new CryptoAutoTradingRepo(ctx.db).listTradeHistory(accountId, input);
+      return { accountId, history };
+    }),
+
+  listAutoStrategyTemplates: runtimeProcedure
+    .input(z.object({ accountId: AccountIdField.optional() }).optional())
+    .query(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input?.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      return {
+        accountId,
+        templates: new CryptoAutoTradingRepo(ctx.db).listTemplates(accountId),
+      };
+    }),
+
+  saveAutoStrategyTemplate: runtimeProcedure
+    .input(CryptoAutoTemplateUpsertInputSchema)
+    .mutation(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const template = new CryptoAutoTradingRepo(ctx.db).saveTemplate(accountId, input);
+      return { accountId, template };
+    }),
+
+  deleteAutoStrategyTemplate: runtimeProcedure
+    .input(z.object({ accountId: AccountIdField.optional(), id: z.number().int().positive() }))
+    .mutation(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const deleted = new CryptoAutoTradingRepo(ctx.db).deleteTemplate(accountId, input.id);
+      return { accountId, id: input.id, deleted };
+    }),
 
   runAutoDryTick: runtimeProcedure.input(AutoRunInputSchema).mutation(async ({ ctx, input }) => {
     const tick = await readAutoTickInputs(ctx, input);

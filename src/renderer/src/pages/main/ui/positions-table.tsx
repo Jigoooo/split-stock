@@ -98,18 +98,24 @@ export const PositionsTable = ({
       </TableGrid.Header>
       <TableGrid.Body scrollRef={scrollRef}>
         {showInlineError && error ? (
-          <div className="chip chip--down" role="alert" style={{ margin: '0.6rem' }}>
-            {error.message}
-          </div>
+          <TableGrid.Row placeholder>
+            <TableGrid.Cell width="100%" className="chip chip--down" title={error.message}>
+              <span role="alert">{error.message}</span>
+            </TableGrid.Cell>
+          </TableGrid.Row>
         ) : null}
         {isPending ? (
-          <div className="muted" style={{ padding: '1rem' }}>
-            로드 중…
-          </div>
+          <TableGrid.Row placeholder>
+            <TableGrid.Cell width="100%" className="muted">
+              로드 중…
+            </TableGrid.Cell>
+          </TableGrid.Row>
         ) : rows.length === 0 ? (
-          <div className="muted" style={{ padding: '1rem' }}>
-            보유 종목이 없습니다.
-          </div>
+          <TableGrid.Row placeholder>
+            <TableGrid.Cell width="100%" className="muted">
+              보유 종목이 없습니다.
+            </TableGrid.Cell>
+          </TableGrid.Row>
         ) : (
           <div style={{ height: virtual.totalSize, position: 'relative', width: '100%' }}>
             {virtual.items.map((vItem) => {

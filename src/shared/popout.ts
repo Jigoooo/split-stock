@@ -77,6 +77,14 @@ export const POPOUT_ROUTE_CONFIG = {
     minWidth: 900,
     autoContentHeight: true,
   },
+  'add-crypto-watch': {
+    label: '코인 자동감시 추가',
+    title: 'Split Stock · 코인 자동감시 추가',
+    defaultWidth: 1040,
+    defaultHeight: 820,
+    minWidth: 860,
+    autoContentHeight: true,
+  },
 } as const satisfies Record<string, PopoutRouteConfig>;
 
 export type PopoutRoute = keyof typeof POPOUT_ROUTE_CONFIG;

@@ -6,12 +6,15 @@ import {
   CryptoAutoIntentSchema,
   type CryptoAutoLotSource,
   type CryptoAutoRunResult,
+  type CryptoAutoWatchEntryCondition,
   type CryptoBalance,
   type CryptoExchangeError,
   CryptoKrwMarketCodeSchema,
   type CryptoOrderIntent,
   type CryptoOrderSnapshot,
   type CryptoReadonlySmokeResult,
+  type CryptoStrategyProfile,
+  CryptoStrategyProfileSchema,
 } from '@shared/contracts';
 import type { Result } from 'neverthrow';
 import { err, ok } from 'neverthrow';
@@ -110,6 +113,35 @@ function ensureConfig(config: CryptoAutoConfig): Result<CryptoAutoConfig, Crypto
   return ok(config);
 }
 
+function ensureStrategy(
+  strategy: CryptoStrategyProfile,
+): Result<CryptoStrategyProfile, CryptoExchangeError> {
+  const parsed = CryptoStrategyProfileSchema.safeParse(strategy);
+  if (!parsed.success) {
+    return err(
+      cryptoExchangeError('코인 자동매매 차수 전략이 올바르지 않습니다.', parsed.error.flatten()),
+    );
+  }
+  try {
+    for (const rule of parsed.data.buyRules) {
+      assertDecimalString(rule.amountKrw, { field: `buyRules.${rule.nth}.amountKrw` });
+      if (rule.triggerDropPct !== null) {
+        assertDecimalString(rule.triggerDropPct, {
+          field: `buyRules.${rule.nth}.triggerDropPct`,
+        });
+      }
+    }
+    for (const rule of parsed.data.sellRules) {
+      assertDecimalString(rule.targetProfitPct, {
+        field: `sellRules.${rule.nth}.targetProfitPct`,
+      });
+    }
+  } catch (cause) {
+    return err(cryptoExchangeError(cause instanceof Error ? cause.message : String(cause), cause));
+  }
+  return ok(parsed.data);
+}
+
 function availableKrw(balances: CryptoBalance[]): string {
   return balances.find((balance) => balance.currency === 'KRW')?.balance ?? '0';
 }
@@ -125,6 +157,27 @@ function buildIdentifier(input: {
   now: number;
 }): string {
   return `crypto-auto:${input.accountId}:${input.market}:${input.intent.kind}:${input.now}`;
+}
+
+function buyRuleForNextStage(
+  strategy: CryptoStrategyProfile,
+  openLotCount: number,
+): CryptoStrategyProfile['buyRules'][number] | null {
+  return strategy.buyRules.find((rule) => rule.nth === openLotCount + 1) ?? null;
+}
+
+function sellRuleForLot(
+  strategy: CryptoStrategyProfile,
+  sequence: number,
+): CryptoStrategyProfile['sellRules'][number] | null {
+  return strategy.sellRules.find((rule) => rule.nth === sequence) ?? null;
+}
+
+function entryConditionMet(condition: CryptoAutoWatchEntryCondition, tradePrice: string): boolean {
+  if (condition.type === 'immediate') return true;
+  if (!condition.price) return false;
+  if (condition.type === 'price-above') return decimalGteStrict(tradePrice, condition.price);
+  return decimalLteStrict(tradePrice, condition.price);
 }
 
 export class CryptoAutoTradingService {
@@ -215,6 +268,9 @@ export class CryptoAutoTradingService {
     const config = this.repo.getConfig(input.accountId, market.value);
     const checked = ensureConfig(config);
     if (checked.isErr()) return err(checked.error);
+    const checkedStrategy = ensureStrategy(this.repo.getStrategy(input.accountId, market.value));
+    if (checkedStrategy.isErr()) return err(checkedStrategy.error);
+    const strategy = checkedStrategy.value;
     try {
       assertDecimalString(input.tradePrice, { field: 'tradePrice' });
       for (const balance of input.balances) {
@@ -245,11 +301,25 @@ export class CryptoAutoTradingService {
     const priceCeil = normalizeUpbitKrwLimitPrice(input.tradePrice, 'ceil');
     const lotSource = input.lotSource ?? (config.mode === 'live-small' ? 'live' : 'dry-run');
     const lots = this.repo.listOpenLots(input.accountId, market.value, lotSource);
+    const activeWatch =
+      this.repo.listWatches(input.accountId, {
+        includeCancelled: false,
+        market: market.value,
+        status: 'WATCHING',
+      })[0] ?? null;
     const sellLot = lots.find((lot) => {
-      const target = decimalMulStrict(lot.avgEntryKrw, decimalAddStrict('1', config.takeProfitPct));
+      const sellRule = sellRuleForLot(strategy, lot.sequence);
+      if (!sellRule) return false;
+      const target = decimalMulStrict(
+        lot.avgEntryKrw,
+        decimalAddStrict('1', sellRule.targetProfitPct),
+      );
       return decimalGteStrict(input.tradePrice, target);
     });
     if (sellLot) {
+      if (!strategy.autoSellEnabled) {
+        return ok({ kind: 'noop', market: market.value, reason: '자동매도가 OFF 상태입니다.' });
+      }
       return ok({
         kind: 'plan-sell',
         market: market.value,
@@ -259,8 +329,15 @@ export class CryptoAutoTradingService {
       });
     }
 
-    const quoteAmount = decimalLteStrict(config.baseOrderKrw, config.maxOrderKrw)
-      ? config.baseOrderKrw
+    if (!strategy.autoBuyEnabled) {
+      return ok({ kind: 'noop', market: market.value, reason: '자동매수가 OFF 상태입니다.' });
+    }
+    const nextBuyRule = buyRuleForNextStage(strategy, lots.length);
+    if (!nextBuyRule) {
+      return ok({ kind: 'noop', market: market.value, reason: '다음 차수 매수 규칙이 없습니다.' });
+    }
+    const quoteAmount = decimalLteStrict(nextBuyRule.amountKrw, config.maxOrderKrw)
+      ? nextBuyRule.amountKrw
       : config.maxOrderKrw;
     const quoteAvailable = availableKrw(input.balances);
     if (!decimalGteStrict(quoteAvailable, quoteAmount)) {
@@ -270,10 +347,24 @@ export class CryptoAutoTradingService {
       return ok({
         kind: 'noop',
         market: market.value,
-        reason: '기본 주문금액이 최소 주문금액 미만입니다.',
+        reason: '차수 주문금액이 최소 주문금액 미만입니다.',
       });
     }
     if (lots.length === 0) {
+      if (!activeWatch) {
+        return ok({
+          kind: 'noop',
+          market: market.value,
+          reason: '활성 자동감시 항목이 없습니다.',
+        });
+      }
+      if (!entryConditionMet(activeWatch.entryCondition, input.tradePrice)) {
+        return ok({
+          kind: 'noop',
+          market: market.value,
+          reason: '최초 매수 감시 조건이 충족되지 않았습니다.',
+        });
+      }
       return ok({
         kind: 'plan-buy',
         market: market.value,
@@ -281,14 +372,15 @@ export class CryptoAutoTradingService {
         limitPrice: priceFloor,
       });
     }
-    if (lots.length >= config.maxOpenLots) {
+    if (lots.length >= strategy.maxStages) {
       return ok({ kind: 'noop', market: market.value, reason: '최대 open lot 수에 도달했습니다.' });
     }
-    const lowestEntry = lots
-      .map((lot) => lot.avgEntryKrw)
-      .sort((left, right) => (decimalGtStrict(left, right) ? 1 : -1))[0];
-    if (lowestEntry) {
-      const addTrigger = decimalMulStrict(lowestEntry, decimalSubStrict('1', config.addTriggerPct));
+    const previousLot = [...lots].sort((left, right) => right.sequence - left.sequence)[0];
+    if (previousLot && nextBuyRule.triggerDropPct !== null) {
+      const addTrigger = decimalMulStrict(
+        previousLot.avgEntryKrw,
+        decimalSubStrict('1', nextBuyRule.triggerDropPct),
+      );
       if (decimalLteStrict(input.tradePrice, addTrigger)) {
         return ok({
           kind: 'plan-buy',

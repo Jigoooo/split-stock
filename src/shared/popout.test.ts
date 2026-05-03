@@ -11,6 +11,7 @@ describe('popout config', () => {
   it('허용된 route만 통과시킨다', () => {
     expect(isPopoutRoute('logs')).toBe(true);
     expect(isPopoutRoute('add-watch-order')).toBe(true);
+    expect(isPopoutRoute('add-crypto-watch')).toBe(true);
     expect(isPopoutRoute('unknown')).toBe(false);
   });
 
@@ -27,6 +28,10 @@ describe('popout config', () => {
       minWidth: 900,
     });
     expect(getPopoutRouteConfig('add-watch-order').minHeight).toBeUndefined();
+    expect(getPopoutRouteConfig('add-crypto-watch')).toMatchObject({
+      autoContentHeight: true,
+      minWidth: 860,
+    });
   });
 
   it('이벤트 로그 팝업은 로그 테이블을 위해 넓은 기본 폭을 사용한다', () => {

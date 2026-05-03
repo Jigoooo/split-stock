@@ -15,6 +15,8 @@ const {
   useActiveAccountIdMock,
   useTradeCyclesMock,
   crosshairHandlerHolder,
+  chartInstancesMock,
+  resizeObserverCallbackHolder,
   trpcUtilsMock,
 } = vi.hoisted(() => {
   const fetchChartMock = vi.fn();
@@ -48,6 +50,13 @@ const {
     }),
   );
   const crosshairHandlerHolder: { current: ((p: unknown) => void) | null } = { current: null };
+  const resizeObserverCallbackHolder: {
+    current: ResizeObserverCallback | null;
+  } = { current: null };
+  const chartInstancesMock: Array<{
+    applyOptions: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+  }> = [];
   const subscribeCrosshairMoveMock = vi.fn((handler: (p: unknown) => void) => {
     crosshairHandlerHolder.current = handler;
   });
@@ -58,23 +67,27 @@ const {
     (
       _container: unknown,
       _options: { localization: { priceFormatter: (price: number) => string } },
-    ) => ({
-      applyOptions: vi.fn(),
-      remove: vi.fn(),
-      addSeries: addSeriesMock,
-      removeSeries: vi.fn(),
-      subscribeClick: vi.fn(),
-      unsubscribeClick: vi.fn(),
-      subscribeCrosshairMove: subscribeCrosshairMoveMock,
-      unsubscribeCrosshairMove: unsubscribeCrosshairMoveMock,
-      timeScale: () => ({
-        subscribeVisibleLogicalRangeChange: vi.fn(),
-        unsubscribeVisibleLogicalRangeChange: vi.fn(),
-        getVisibleLogicalRange: () => null,
-        setVisibleLogicalRange: vi.fn(),
-        timeToCoordinate: () => 0,
-      }),
-    }),
+    ) => {
+      const chart = {
+        applyOptions: vi.fn(),
+        remove: vi.fn(),
+        addSeries: addSeriesMock,
+        removeSeries: vi.fn(),
+        subscribeClick: vi.fn(),
+        unsubscribeClick: vi.fn(),
+        subscribeCrosshairMove: subscribeCrosshairMoveMock,
+        unsubscribeCrosshairMove: unsubscribeCrosshairMoveMock,
+        timeScale: () => ({
+          subscribeVisibleLogicalRangeChange: vi.fn(),
+          unsubscribeVisibleLogicalRangeChange: vi.fn(),
+          getVisibleLogicalRange: () => null,
+          setVisibleLogicalRange: vi.fn(),
+          timeToCoordinate: () => 0,
+        }),
+      };
+      chartInstancesMock.push(chart);
+      return chart;
+    },
   );
   const setMarkersMock = vi.fn();
   const detachMarkersMock = vi.fn();
@@ -121,6 +134,8 @@ const {
     useActiveAccountIdMock,
     useTradeCyclesMock,
     crosshairHandlerHolder,
+    chartInstancesMock,
+    resizeObserverCallbackHolder,
     trpcUtilsMock,
   };
 });
@@ -189,6 +204,9 @@ import { PositionChart } from './ui/position-chart';
 
 beforeAll(() => {
   class ResizeObserverMock {
+    constructor(callback: ResizeObserverCallback) {
+      resizeObserverCallbackHolder.current = callback;
+    }
     observe(): void {}
     disconnect(): void {}
   }
@@ -208,6 +226,8 @@ beforeEach(() => {
   useActiveAccountIdMock.mockReset();
   useActiveAccountIdMock.mockReturnValue({ accountId: 1, isPending: false });
   crosshairHandlerHolder.current = null;
+  resizeObserverCallbackHolder.current = null;
+  chartInstancesMock.length = 0;
   window.localStorage.clear();
 });
 
@@ -215,7 +235,7 @@ describe('PositionChart', () => {
   it('초기 요청 실패 후 로딩 문구를 내리고 재시도 버튼을 노출한다', async () => {
     fetchChartMock.mockRejectedValueOnce(new Error('봉 조회 실패: NETWORK - HTTP 500'));
 
-    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} enableDrawingTools />);
 
     expect(await screen.findByText('봉 조회 실패: NETWORK - HTTP 500')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '봉 다시 시도' })).toBeInTheDocument();
@@ -227,7 +247,7 @@ describe('PositionChart', () => {
       .mockRejectedValueOnce(new Error('봉 조회 실패: NETWORK - HTTP 500'))
       .mockResolvedValueOnce({ candles: [], toMs: Date.UTC(2026, 3, 19) });
 
-    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} enableDrawingTools />);
 
     const retryButton = await screen.findByRole('button', { name: '봉 다시 시도' });
     fireEvent.click(retryButton);
@@ -299,6 +319,39 @@ describe('PositionChart', () => {
       expect(fetchChartMock).toHaveBeenCalledWith({ code: '005930', period: 'W' }),
     );
     expect(createChartMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('unmount 이후 늦게 들어온 ResizeObserver 콜백은 disposed 차트를 건드리지 않는다', async () => {
+    fetchChartMock.mockResolvedValueOnce({
+      candles: [
+        {
+          date: '2026-04-18',
+          open: 10000,
+          high: 12345,
+          low: 9800,
+          close: 12000,
+          volume: 123456,
+        },
+      ],
+      toMs: Date.UTC(2026, 3, 19),
+    });
+
+    const { unmount } = render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+
+    await waitFor(() => expect(createChartMock).toHaveBeenCalledTimes(1));
+    const chart = chartInstancesMock[0];
+    expect(chart).toBeDefined();
+    if (!chart) throw new Error('chart instance missing');
+
+    chart.applyOptions.mockClear();
+    unmount();
+
+    act(() => {
+      resizeObserverCallbackHolder.current?.([], {} as ResizeObserver);
+    });
+
+    expect(chart.remove).toHaveBeenCalledTimes(1);
+    expect(chart.applyOptions).not.toHaveBeenCalled();
   });
 
   it('봉 조회가 성공했지만 데이터가 없으면 빈 상태를 차트와 구분해 보여준다', async () => {
@@ -527,7 +580,7 @@ describe('PositionChart', () => {
       ]),
     );
 
-    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} enableDrawingTools />);
 
     await waitFor(() => expect(createChartMock.mock.calls.length).toBeGreaterThan(0));
     await waitFor(() => expect(addSeriesMock.mock.calls.length).toBeGreaterThan(0));

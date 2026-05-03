@@ -24,6 +24,10 @@ export interface UseSwitchAccountResult {
 export function useSwitchAccount(): UseSwitchAccountResult {
   const qc = useQueryClient();
   const setActive = trpc.account.setActive.useMutation({
+    onMutate: async () => {
+      // 계좌 전환 중 이전 계좌 query 가 새 ctx(env/accountId) 조합으로 재시도되는 레이스 방지.
+      await qc.cancelQueries();
+    },
     onSuccess: (_data, variables) => {
       // 활성 계좌 변경은 컨텍스트 자체가 바뀌므로 모든 query invalidate.
       // await 하면 무거운 query (orderbook/positions/balance 등) 의 refetch 가 끝날 때까지

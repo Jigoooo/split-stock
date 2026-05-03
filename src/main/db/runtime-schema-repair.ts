@@ -218,10 +218,61 @@ export function repairCryptoRuntimeSchema(db: Db): void {
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (account_id, exchange, stream)
     )`,
+    `CREATE TABLE IF NOT EXISTS crypto_auto_configs (
+      account_id INTEGER NOT NULL,
+      exchange TEXT NOT NULL DEFAULT 'UPBIT',
+      market TEXT NOT NULL,
+      mode TEXT NOT NULL DEFAULT 'disabled',
+      emergency_disabled INTEGER NOT NULL DEFAULT 1,
+      base_order_krw TEXT NOT NULL DEFAULT '5000',
+      max_order_krw TEXT NOT NULL DEFAULT '5000',
+      max_total_exposure_krw TEXT NOT NULL DEFAULT '50000',
+      min_order_total_krw TEXT NOT NULL DEFAULT '5000',
+      add_trigger_pct TEXT NOT NULL DEFAULT '0.03',
+      take_profit_pct TEXT NOT NULL DEFAULT '0.02',
+      max_open_lots INTEGER NOT NULL DEFAULT 3,
+      cooldown_ms INTEGER NOT NULL DEFAULT 60000,
+      stale_cancel_cap INTEGER NOT NULL DEFAULT 3,
+      require_readonly_smoke INTEGER NOT NULL DEFAULT 1,
+      require_dry_run_history_before_live INTEGER NOT NULL DEFAULT 1,
+      strategy_json TEXT,
+      last_dry_run_at INTEGER,
+      last_readonly_smoke_at INTEGER,
+      last_live_action_at INTEGER,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (account_id, exchange, market)
+    )`,
+    `CREATE TABLE IF NOT EXISTS crypto_auto_watches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL,
+      exchange TEXT NOT NULL DEFAULT 'UPBIT',
+      market TEXT NOT NULL,
+      label TEXT,
+      status TEXT NOT NULL DEFAULT 'PAUSED',
+      entry_condition_json TEXT NOT NULL DEFAULT '{"type":"immediate","price":null}',
+      strategy_json TEXT NOT NULL,
+      guard_json TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS crypto_auto_watches_account_market_uniq ON crypto_auto_watches(account_id, exchange, market)`,
+    `CREATE TABLE IF NOT EXISTS crypto_auto_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      account_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      strategy_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS crypto_auto_templates_account_name_uniq ON crypto_auto_templates(account_id, name)`,
   ];
   try {
     for (const statement of statements) {
       db.run(sql.raw(statement));
+    }
+    const autoColumns = new Set(listColumns(db, 'crypto_auto_configs'));
+    if (autoColumns.size > 0 && !autoColumns.has('strategy_json')) {
+      db.run(sql.raw('ALTER TABLE crypto_auto_configs ADD COLUMN strategy_json TEXT'));
     }
   } catch {
     return;

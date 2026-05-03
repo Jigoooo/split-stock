@@ -102,6 +102,220 @@ export const CryptoAutoGuardConfigSchema = z.object({
 });
 export type CryptoAutoGuardConfig = z.infer<typeof CryptoAutoGuardConfigSchema>;
 
+export const MAX_CRYPTO_STRATEGY_STAGES = 50;
+const CryptoStrategyStageNthSchema = z.number().int().min(1).max(MAX_CRYPTO_STRATEGY_STAGES);
+const CryptoStrategyOrderTypeSchema = z.enum(['LIMIT', 'MARKET']);
+
+export const CryptoStrategyAutoModeSchema = z.enum(['ALL_ON', 'ALL_OFF', 'BUY_ONLY', 'SELL_ONLY']);
+export type CryptoStrategyAutoMode = z.infer<typeof CryptoStrategyAutoModeSchema>;
+
+export const CryptoStrategyBuyRuleSchema = z.object({
+  nth: CryptoStrategyStageNthSchema,
+  triggerDropPct: PositiveDecimalStringSchema.nullable(),
+  amountKrw: PositiveDecimalStringSchema,
+});
+export type CryptoStrategyBuyRule = z.infer<typeof CryptoStrategyBuyRuleSchema>;
+
+export const CryptoStrategySellRuleSchema = z.object({
+  nth: CryptoStrategyStageNthSchema,
+  targetProfitPct: PositiveDecimalStringSchema,
+});
+export type CryptoStrategySellRule = z.infer<typeof CryptoStrategySellRuleSchema>;
+
+const CryptoStrategyProfileBaseSchema = z.object({
+  version: z.literal(1).default(1),
+  market: CryptoKrwMarketCodeSchema,
+  maxStages: z.number().int().min(1).max(MAX_CRYPTO_STRATEGY_STAGES),
+  buyRules: z.array(CryptoStrategyBuyRuleSchema).min(1).max(MAX_CRYPTO_STRATEGY_STAGES),
+  sellRules: z.array(CryptoStrategySellRuleSchema).min(1).max(MAX_CRYPTO_STRATEGY_STAGES),
+  autoBuyEnabled: z.boolean().default(false),
+  autoBuyOrderType: CryptoStrategyOrderTypeSchema.default('MARKET'),
+  autoSellEnabled: z.boolean().default(false),
+  autoSellOrderType: CryptoStrategyOrderTypeSchema.default('MARKET'),
+});
+
+export const CryptoStrategyProfileSchema = CryptoStrategyProfileBaseSchema.superRefine(
+  (profile, ctx) => {
+    if (profile.buyRules.length < profile.maxStages) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['buyRules'],
+        message: 'buyRules는 maxStages 이상 채워야 합니다.',
+      });
+    }
+    if (profile.sellRules.length < profile.maxStages) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['sellRules'],
+        message: 'sellRules는 maxStages 이상 채워야 합니다.',
+      });
+    }
+
+    for (let index = 0; index < profile.buyRules.length; index += 1) {
+      const nth = index + 1;
+      const rule = profile.buyRules[index];
+      if (!rule || rule.nth !== nth) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['buyRules'],
+          message: 'buyRules nth는 1차부터 순서대로 채워야 합니다.',
+        });
+        break;
+      }
+      if (nth === 1 && rule.triggerDropPct !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['buyRules', index, 'triggerDropPct'],
+          message: '1차 triggerDropPct는 null이어야 합니다.',
+        });
+      }
+      if (nth > 1 && rule.triggerDropPct === null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['buyRules', index, 'triggerDropPct'],
+          message: '2차 이후 triggerDropPct가 필요합니다.',
+        });
+      }
+    }
+
+    for (let index = 0; index < profile.sellRules.length; index += 1) {
+      const nth = index + 1;
+      const rule = profile.sellRules[index];
+      if (!rule || rule.nth !== nth) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['sellRules'],
+          message: 'sellRules nth는 1차부터 순서대로 채워야 합니다.',
+        });
+        break;
+      }
+    }
+  },
+);
+export type CryptoStrategyProfile = z.infer<typeof CryptoStrategyProfileSchema>;
+
+export function createCryptoStrategyRules(
+  maxStages: number = 3,
+  opts: {
+    amountKrw?: DecimalString;
+    dropPct?: DecimalString;
+    profitPct?: DecimalString;
+  } = {},
+): Pick<CryptoStrategyProfile, 'buyRules' | 'sellRules'> {
+  const safeMaxStages = Math.max(1, Math.min(MAX_CRYPTO_STRATEGY_STAGES, Math.trunc(maxStages)));
+  const amountKrw = opts.amountKrw ?? '5000';
+  const dropPct = opts.dropPct ?? '0.03';
+  const profitPct = opts.profitPct ?? '0.02';
+  return {
+    buyRules: Array.from({ length: safeMaxStages }, (_, index) => ({
+      nth: index + 1,
+      triggerDropPct: index === 0 ? null : dropPct,
+      amountKrw,
+    })),
+    sellRules: Array.from({ length: safeMaxStages }, (_, index) => ({
+      nth: index + 1,
+      targetProfitPct: profitPct,
+    })),
+  };
+}
+
+export function createDefaultCryptoStrategyProfile(
+  market: CryptoKrwMarketCode,
+): CryptoStrategyProfile {
+  return {
+    version: 1,
+    market,
+    maxStages: 3,
+    ...createCryptoStrategyRules(3),
+    autoBuyEnabled: false,
+    autoBuyOrderType: 'MARKET',
+    autoSellEnabled: false,
+    autoSellOrderType: 'MARKET',
+  };
+}
+
+export function deriveCryptoStrategyAutoMode(
+  profile: Pick<CryptoStrategyProfile, 'autoBuyEnabled' | 'autoSellEnabled'>,
+): CryptoStrategyAutoMode {
+  if (profile.autoBuyEnabled && profile.autoSellEnabled) return 'ALL_ON';
+  if (!profile.autoBuyEnabled && !profile.autoSellEnabled) return 'ALL_OFF';
+  return profile.autoBuyEnabled ? 'BUY_ONLY' : 'SELL_ONLY';
+}
+
+export const CryptoAutoWatchStatusSchema = z.enum([
+  'WATCHING',
+  'PAUSED',
+  'EXECUTED',
+  'FAILED',
+  'CANCELLED',
+]);
+export type CryptoAutoWatchStatus = z.infer<typeof CryptoAutoWatchStatusSchema>;
+
+export const CryptoAutoWatchEntryConditionSchema = z.object({
+  type: z.enum(['immediate', 'price-above', 'price-below']).default('immediate'),
+  price: PositiveDecimalStringSchema.nullable().default(null),
+});
+export type CryptoAutoWatchEntryCondition = z.infer<typeof CryptoAutoWatchEntryConditionSchema>;
+
+export const CryptoAutoWatchListFilterSchema = z
+  .object({
+    accountId: z.number().int().positive().optional(),
+    market: CryptoKrwMarketCodeSchema.optional(),
+    status: CryptoAutoWatchStatusSchema.optional(),
+    includeCancelled: z.boolean().default(false),
+  })
+  .optional();
+export type CryptoAutoWatchListFilter = z.infer<typeof CryptoAutoWatchListFilterSchema>;
+
+export const CryptoAutoWatchUpsertInputSchema = z.object({
+  accountId: z.number().int().positive().optional(),
+  id: z.number().int().positive().optional(),
+  market: CryptoKrwMarketCodeSchema,
+  label: z.string().trim().max(60).optional(),
+  status: CryptoAutoWatchStatusSchema.default('PAUSED'),
+  entryCondition: CryptoAutoWatchEntryConditionSchema.default({
+    type: 'immediate',
+    price: null,
+  }),
+  strategy: CryptoStrategyProfileSchema,
+  guard: CryptoAutoGuardConfigSchema.partial().default({}),
+});
+export type CryptoAutoWatchUpsertInput = z.infer<typeof CryptoAutoWatchUpsertInputSchema>;
+
+export const CryptoAutoWatchActionInputSchema = z.object({
+  accountId: z.number().int().positive().optional(),
+  ids: z.array(z.number().int().positive()).min(1).max(100),
+});
+export type CryptoAutoWatchActionInput = z.infer<typeof CryptoAutoWatchActionInputSchema>;
+
+export const CryptoAutoTradeHistoryFilterSchema = z
+  .object({
+    accountId: z.number().int().positive().optional(),
+    market: CryptoKrwMarketCodeSchema.optional(),
+    status: z.enum(['all', 'open', 'closed', 'failed']).default('all'),
+    limit: z.number().int().min(1).max(200).default(80),
+  })
+  .optional();
+export type CryptoAutoTradeHistoryFilter = z.infer<typeof CryptoAutoTradeHistoryFilterSchema>;
+
+export const CryptoAutoTemplateSchema = z.object({
+  id: z.number().int().positive(),
+  accountId: z.number().int().positive(),
+  name: z.string().trim().min(1).max(60),
+  strategy: CryptoStrategyProfileSchema,
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+});
+export type CryptoAutoTemplate = z.infer<typeof CryptoAutoTemplateSchema>;
+
+export const CryptoAutoTemplateUpsertInputSchema = z.object({
+  accountId: z.number().int().positive().optional(),
+  id: z.number().int().positive().optional(),
+  name: z.string().trim().min(1).max(60),
+  strategy: CryptoStrategyProfileSchema,
+});
+export type CryptoAutoTemplateUpsertInput = z.infer<typeof CryptoAutoTemplateUpsertInputSchema>;
+
 export interface CryptoLot {
   id: number;
   accountId: number;
@@ -169,6 +383,45 @@ export interface CryptoAutoStatus {
   recentEvents: CryptoAutoEvent[];
   gate: CryptoAutoGateResult;
   runtimeRunning: boolean;
+}
+
+export interface CryptoAutoWatch {
+  id: number;
+  accountId: number;
+  exchange: CryptoExchangeId;
+  market: CryptoKrwMarketCode;
+  label: string | null;
+  status: CryptoAutoWatchStatus;
+  entryCondition: CryptoAutoWatchEntryCondition;
+  strategy: CryptoStrategyProfile;
+  config: CryptoAutoConfig;
+  currentStage: number;
+  openOrderCount: number;
+  lastDecision: string | null;
+  lastDecisionAt: number | null;
+  lastActionAt: number | null;
+  blockedReasons: string[];
+  runtimeRunning: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CryptoAutoWatchActionResult {
+  accountId: number;
+  ids: number[];
+  affected: number;
+}
+
+export interface CryptoAutoTradeHistoryItem {
+  id: number;
+  accountId: number;
+  exchange: CryptoExchangeId;
+  market: CryptoKrwMarketCode;
+  status: 'open' | 'closed' | 'failed' | 'event';
+  action: string;
+  reason: string;
+  mode: CryptoAutoMode;
+  createdAt: number;
 }
 
 export const UpbitOrderSideSchema = z.enum(['bid', 'ask']);
@@ -327,6 +580,9 @@ export interface CryptoMarketSummary {
 export interface CryptoTicker {
   market: CryptoMarketCode;
   tradePrice: DecimalString;
+  openingPrice: DecimalString;
+  highPrice: DecimalString;
+  lowPrice: DecimalString;
   signedChangePrice: DecimalString;
   signedChangeRate: DecimalString;
   accTradePrice24h: DecimalString;

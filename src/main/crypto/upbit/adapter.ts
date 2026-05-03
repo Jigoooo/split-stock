@@ -226,6 +226,9 @@ export class UpbitExchangeAdapter implements CryptoMarketDataAdapter {
       return ok({
         market: ticker.market,
         tradePrice: decimalString(ticker.trade_price),
+        openingPrice: decimalString(ticker.opening_price),
+        highPrice: decimalString(ticker.high_price),
+        lowPrice: decimalString(ticker.low_price),
         signedChangePrice: decimalString(ticker.signed_change_price),
         signedChangeRate: decimalString(ticker.signed_change_rate),
         accTradePrice24h: decimalString(ticker.acc_trade_price_24h),

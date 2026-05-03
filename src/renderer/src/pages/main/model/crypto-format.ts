@@ -21,7 +21,7 @@ export function formatCryptoPrice(
   marketOrQuote: string,
 ): string {
   const quote = marketOrQuote.includes('-') ? getCryptoQuote(marketOrQuote) : marketOrQuote;
-  if (quote === 'KRW') return formatCryptoDecimal(value, { maxFractionDigits: 8 });
+  if (quote === 'KRW') return formatCryptoDecimal(value, { maxFractionDigits: 0 });
   if (quote === 'USDT') return formatCryptoDecimal(value, { maxFractionDigits: 6 });
   return formatCryptoDecimal(value, { maxFractionDigits: 8 });
 }
