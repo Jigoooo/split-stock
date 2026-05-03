@@ -29,6 +29,7 @@ function toLegacyQuote(q: Quote) {
     dayChange: q.dayChange,
     dayChangeRate: q.dayChangeRate,
     accumVolume: q.accumVolume,
+    accumValue: q.accumValue,
     open: q.open,
     high: q.high,
     low: q.low,

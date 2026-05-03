@@ -13,6 +13,7 @@ export function toQuote(q: QuoteResult): Quote {
     dayChange: q.dayChange,
     dayChangeRate: q.dayChangeRate,
     accumVolume: q.accumVolume,
+    accumValue: q.accumValue,
     open: q.open,
     high: q.high,
     low: q.low,

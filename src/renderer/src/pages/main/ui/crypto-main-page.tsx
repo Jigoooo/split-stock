@@ -967,11 +967,21 @@ const CryptoMarketBar = ({
           {formatSignedPrice(ticker?.signedChangePrice, market)} ·{' '}
           {formatPercent(ticker?.signedChangeRate)}
         </span>
-        <span className="muted">시가 {formatCryptoPrice(ticker?.openingPrice, market)}</span>
-        <span className="muted">고가 {formatCryptoPrice(ticker?.highPrice, market)}</span>
-        <span className="muted">저가 {formatCryptoPrice(ticker?.lowPrice, market)}</span>
-        <span className="muted">
-          거래대금 {formatCryptoAmount(ticker?.accTradePrice24h, quote)}
+        <span>
+          <span className="muted">시</span>{' '}
+          <span className="num">{formatCryptoPrice(ticker?.openingPrice, market)}</span>
+        </span>
+        <span>
+          <span className="muted">고</span>{' '}
+          <span className="num num-up">{formatCryptoPrice(ticker?.highPrice, market)}</span>
+        </span>
+        <span>
+          <span className="muted">저</span>{' '}
+          <span className="num num-down">{formatCryptoPrice(ticker?.lowPrice, market)}</span>
+        </span>
+        <span>
+          <span className="muted">거래대금</span>{' '}
+          <span className="num">{formatCryptoAmount(ticker?.accTradePrice24h, quote)}</span>
         </span>
       </div>
       <span className={tickerFallback ? 'chip chip--down' : 'chip chip--live'}>

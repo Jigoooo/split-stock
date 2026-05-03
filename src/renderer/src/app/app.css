@@ -1770,6 +1770,15 @@ body {
   font-size: 1rem;
 }
 
+.hts-segmented--full-width {
+  display: flex;
+  width: 100%;
+}
+
+.hts-segmented__item--full-width {
+  flex: 1;
+}
+
 .position-chart__panel {
   background: #ffffff;
   border-color: #cbd5e1;

@@ -11,6 +11,8 @@ export interface SegmentedToggleProps<T extends string> {
   onChange: (next: T) => void;
   ariaLabel: string;
   dense?: boolean;
+  /** 컨테이너 너비를 채우고 각 item을 동등 분할 (지정가/시장가 토글용) */
+  fullWidth?: boolean;
 }
 
 export const SegmentedToggle = <T extends string>({
@@ -19,12 +21,19 @@ export const SegmentedToggle = <T extends string>({
   onChange,
   ariaLabel,
   dense = false,
+  fullWidth = false,
 }: SegmentedToggleProps<T>): ReactElement => {
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className={['hts-segmented', dense ? 'hts-segmented--dense' : ''].filter(Boolean).join(' ')}
+      className={[
+        'hts-segmented',
+        dense ? 'hts-segmented--dense' : '',
+        fullWidth ? 'hts-segmented--full-width' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
     >
       {items.map((item) => {
         const active = item.value === value;
@@ -39,6 +48,7 @@ export const SegmentedToggle = <T extends string>({
               'hts-segmented__item',
               active ? 'hts-segmented__item--active' : '',
               dense ? 'hts-segmented__item--dense' : '',
+              fullWidth ? 'hts-segmented__item--full-width' : '',
             ]
               .filter(Boolean)
               .join(' ')}

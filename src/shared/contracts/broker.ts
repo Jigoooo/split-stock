@@ -126,6 +126,8 @@ export const QuoteSchema = z.object({
   dayChange: MoneySchema,
   dayChangeRate: z.number(),
   accumVolume: z.number().int().nonnegative(),
+  // 누적거래대금 (원) — KIS acml_tr_pbmn / Kiwoom trde_prica.
+  accumValue: z.number().nonnegative(),
   open: MoneySchema.nonnegative(),
   high: MoneySchema.nonnegative(),
   low: MoneySchema.nonnegative(),

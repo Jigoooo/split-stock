@@ -152,6 +152,7 @@ describe('quote mapper', () => {
       dayChange: 1_000,
       dayChangeRate: 1.43,
       accumVolume: 1_234_567,
+      accumValue: 87_345_678_900,
       open: 70_500,
       high: 71_500,
       low: 70_200,

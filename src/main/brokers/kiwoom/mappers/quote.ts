@@ -44,6 +44,7 @@ export function toKiwoomQuote(symbol: string, wire: KiwoomQuoteWire): Quote {
     dayChange: parseNum(wire.pre),
     dayChangeRate: parseNum(wire.flu_rt),
     accumVolume: parseNum(wire.trde_qty),
+    accumValue: parseNum(wire.trde_prica),
     open: parseNum(wire.open_pric),
     high: parseNum(wire.high_pric),
     low: parseNum(wire.low_pric),

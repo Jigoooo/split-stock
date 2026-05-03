@@ -1,5 +1,5 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
-import { NumberInput, Select } from '@renderer/shared/ui';
+import { NumberInput, SegmentedToggle } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import type { Division } from '../model/order-ticket-types';
 
@@ -37,16 +37,17 @@ export const OrderTicketFields = ({
     </div>
     <div className="order-ticket-form__field">
       <span className="order-ticket-form__label">구분</span>
-      <Select
-        id="order-division"
+      <SegmentedToggle<Division>
+        ariaLabel="주문 구분"
         value={division}
-        onChange={(event) => setDivision(event.target.value as Division)}
-        aria-label="주문 구분"
+        onChange={setDivision}
+        items={[
+          { value: 'LIMIT', label: '지정가' },
+          { value: 'MARKET', label: '시장가' },
+        ]}
         dense
-      >
-        <option value="LIMIT">지정가</option>
-        <option value="MARKET">시장가</option>
-      </Select>
+        fullWidth
+      />
     </div>
     <label className="order-ticket-form__field" htmlFor="order-qty">
       <span className="order-ticket-form__label">수량</span>

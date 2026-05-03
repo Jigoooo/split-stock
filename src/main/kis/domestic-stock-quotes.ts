@@ -16,6 +16,8 @@ export interface QuoteResult {
   dayChange: number;
   dayChangeRate: number;
   accumVolume: number;
+  /** 누적거래대금 (원) — acml_tr_pbmn 매핑. KIS 응답에서 optional이라 0 fallback. */
+  accumValue: number;
   open: number;
   high: number;
   low: number;
@@ -68,6 +70,7 @@ export async function inquirePrice(
     dayChange: parseNum(out.prdy_vrss),
     dayChangeRate: parseNum(out.prdy_ctrt),
     accumVolume: parseNum(out.acml_vol),
+    accumValue: parseNum(out.acml_tr_pbmn ?? '0'),
     open: parseNum(out.stck_oprc),
     high: parseNum(out.stck_hgpr),
     low: parseNum(out.stck_lwpr),

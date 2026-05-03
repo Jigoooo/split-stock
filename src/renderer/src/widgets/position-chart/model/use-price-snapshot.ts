@@ -5,10 +5,13 @@ export interface PriceSnapshot {
   price: number;
   dayChange: number;
   dayChangeRate: number;
+  open: number;
   high: number;
   low: number;
   upperLimit: number;
   lowerLimit: number;
+  /** 누적거래대금 (원) */
+  accumValue: number;
 }
 
 function priceCacheKey(pdno: string): string {

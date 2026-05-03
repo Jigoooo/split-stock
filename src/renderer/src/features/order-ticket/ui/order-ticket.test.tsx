@@ -294,20 +294,13 @@ describe('OrderTicket', () => {
         />,
       ),
     );
-    const divSelect = screen.getByRole('combobox', { name: '주문 구분' });
-    fireEvent.click(divSelect);
-    const options = screen.getAllByRole('option', { hidden: true });
-    const marketOption = options[1];
-    expect(marketOption).toBeDefined();
-    if (!marketOption) {
-      throw new Error('시장가 option이 렌더되지 않았습니다.');
-    }
-    fireEvent.click(marketOption);
+    // 구분 토글은 SegmentedToggle radiogroup. 시장가 radio 클릭 → 가격 입력 disabled.
+    fireEvent.click(screen.getByRole('radio', { name: '시장가' }));
     expect(screen.getByLabelText('주문 가격')).toBeDisabled();
     expect(screen.getByLabelText('주문 가격')).toHaveValue('시장가');
   });
 
-  it('구분 라벨을 눌러도 셀렉트가 열리지 않는다', () => {
+  it('구분 라벨을 눌러도 토글 상태가 바뀌지 않는다', () => {
     render(
       wrap(
         <OrderTicket
@@ -318,12 +311,10 @@ describe('OrderTicket', () => {
       ),
     );
 
+    // 구분 토글은 SegmentedToggle radiogroup. 라벨 클릭은 no-op이어야 한다.
+    const limit = screen.getByRole('radio', { name: '지정가' });
+    expect(limit).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(screen.getByText('구분', { selector: '.order-ticket-form__label' }));
-
-    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: '주문 구분' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
+    expect(limit).toHaveAttribute('aria-checked', 'true');
   });
 });
