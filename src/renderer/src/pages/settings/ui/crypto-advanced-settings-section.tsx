@@ -1,4 +1,8 @@
 import { useActiveAccountId } from '@renderer/entities/account';
+import { CryptoActivePendingList } from '@renderer/features/crypto-pending-cancel/active-pending-list';
+import { ProtectionLimits } from '@renderer/features/edit-strategy/ui/protection-limits';
+import { RateGuard } from '@renderer/features/edit-strategy/ui/rate-guard';
+import { PendingCancelForm } from '@renderer/features/pending-cancel-settings/ui/pending-cancel-form';
 import {
   formatCryptoAmount,
   formatCryptoPrice,
@@ -297,6 +301,22 @@ export const CryptoAdvancedSettingsSection = (): ReactElement => {
               </p>
             ))}
           </div>
+        </div>
+
+        {/* RALPLAN P6 A2/A3 — broker-agnostic protection_limits 테이블 기반 안전장치.
+            코인 자동매매가 동일 한도/Rate Guard 를 적용받도록 코인 고급 탭에 노출. */}
+        <div
+          style={{
+            display: 'grid',
+            gap: '0.8rem',
+            paddingTop: '0.8rem',
+            borderTop: '0.1rem solid var(--border)',
+          }}
+        >
+          <RateGuard />
+          <ProtectionLimits />
+          <PendingCancelForm />
+          <CryptoActivePendingList />
         </div>
       </div>
     </div>

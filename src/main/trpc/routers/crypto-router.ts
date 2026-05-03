@@ -989,6 +989,20 @@ export const cryptoRouter = router({
         exchange: 'UPBIT',
         order: result.value,
       });
+      // RALPLAN P6 #3 — 매뉴얼 매수에도 RateGuard 적용. 윈도우 내 임계 초과 시 SafetyState.master=false.
+      // 자동매매 runLiveTick 과 동일한 broker-agnostic RateGuard 인스턴스 공유.
+      if (corrected.side === 'bid' && ctx.rateGuard) {
+        ctx.rateGuard.recordBuy(input.accountId, corrected.market, Date.now());
+        const guard = ctx.rateGuard.checkAndPossiblyDisableAuto(input.accountId);
+        if (guard.switchedToManual) {
+          ctx.logger.log({
+            level: 'WARN',
+            category: 'ORDER',
+            message: 'crypto.manual.rate-guard.disabled',
+            payload: { accountId: input.accountId, market: corrected.market },
+          });
+        }
+      }
       // RALPLAN P6 A4 — UPBIT 지정가 주문은 호가 미체결 시 timeout 후 자동취소.
       // 'price'(시장가 매수)/'market'(시장가 매도)는 즉시 체결되므로 등록 대상 아님.
       if (corrected.ordType === 'limit' && ctx.cryptoPendingOrderWatcher && result.value.uuid) {

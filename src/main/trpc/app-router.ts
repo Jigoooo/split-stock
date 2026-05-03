@@ -5,6 +5,7 @@ import { authRouter } from './routers/auth-router';
 import { backupRouter } from './routers/backup-router';
 import { bootRouter } from './routers/boot-router';
 import { cryptoMemoRouter } from './routers/crypto-memo-router';
+import { cryptoPendingCancelRouter } from './routers/crypto-pending-cancel-router';
 import { cryptoRouter } from './routers/crypto-router';
 import { displayRouter } from './routers/display-router';
 import { feesRouter } from './routers/fees-router';
@@ -54,6 +55,7 @@ export const appRouter = router({
   tradingWindows: tradingWindowsRouter,
   rateGuard: rateGuardRouter,
   pendingCancel: pendingCancelRouter,
+  cryptoPendingCancel: cryptoPendingCancelRouter,
   protection: protectionRouter,
   priceCorrection: priceCorrectionRouter,
 });

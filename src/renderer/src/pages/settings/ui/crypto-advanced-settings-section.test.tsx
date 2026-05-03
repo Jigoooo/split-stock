@@ -63,6 +63,13 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       crypto: {
         getAutoStatus: { invalidate: vi.fn() },
       },
+      rateGuard: { getSettings: { invalidate: vi.fn() } },
+      protection: { get: { invalidate: vi.fn() } },
+      pendingCancel: {
+        getSettings: { invalidate: vi.fn() },
+        listActive: { invalidate: vi.fn() },
+      },
+      cryptoPendingCancel: { listActive: { invalidate: vi.fn() } },
     }),
     account: {
       getActive: {
@@ -83,6 +90,56 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       runAutoLiveTick: { useMutation: mockMutation },
       startAuto: { useMutation: mockMutation },
       stopAuto: { useMutation: mockMutation },
+    },
+    // RALPLAN P6 #1/#2 후속 — 고급 탭에 broker-agnostic RateGuard·ProtectionLimits·PendingCancel 컴포넌트 노출
+    rateGuard: {
+      getSettings: {
+        useQuery: () => ({
+          data: { enabled: false, windowSeconds: 40, maxCount: 5 },
+          isPending: false,
+          error: null,
+        }),
+      },
+      updateSettings: { useMutation: mockMutation },
+    },
+    protection: {
+      get: {
+        useQuery: () => ({
+          data: {
+            perSymbolDailyMaxBuysEnabled: false,
+            perSymbolDailyMaxBuys: null,
+            dailyTotalMaxAmountEnabled: false,
+            dailyTotalMaxAmount: null,
+            dailyTotalMaxCountEnabled: false,
+            dailyTotalMaxCount: null,
+            accountTotalMaxAmountEnabled: false,
+            accountTotalMaxAmount: null,
+          },
+          isPending: false,
+          error: null,
+        }),
+      },
+      set: { useMutation: mockMutation },
+    },
+    pendingCancel: {
+      getSettings: {
+        useQuery: () => ({
+          data: { enabled: true, timeoutMinutes: 10, maxCancels: 5 },
+          isPending: false,
+          error: null,
+        }),
+      },
+      updateSettings: { useMutation: mockMutation },
+      listActive: {
+        useQuery: () => ({ data: { items: [] }, isPending: false, error: null, refetch: vi.fn() }),
+      },
+      unregister: { useMutation: mockMutation },
+    },
+    cryptoPendingCancel: {
+      listActive: {
+        useQuery: () => ({ data: { items: [] }, isPending: false, error: null, refetch: vi.fn() }),
+      },
+      unregister: { useMutation: mockMutation },
     },
   },
 }));
