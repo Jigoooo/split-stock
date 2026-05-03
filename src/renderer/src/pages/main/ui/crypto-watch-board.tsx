@@ -222,56 +222,99 @@ export const CryptoWatchBoard = ({
   }
 
   return (
-    <section className="panel crypto-watch-board" aria-label="코인 자동감시 보드">
-      <div className="watch-board__tabs">
+    <section
+      className="panel crypto-watch-board"
+      aria-label="코인 자동감시 보드"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          minHeight: '2.8rem',
+          padding: '0.3rem 0',
+          flexShrink: 0,
+        }}
+      >
         <HtsTabs<CryptoWatchBoardTab>
           tabs={CRYPTO_WATCH_BOARD_TABS}
           active={tab}
           onChange={setTab}
           ariaLabel="코인 자동감시 탭"
         />
-        <Button dense variant="primary" onClick={onAdd} disabled={!enabled}>
-          + 추가
-        </Button>
+        <div
+          style={{
+            marginLeft: 'auto',
+            marginRight: '0.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.4rem',
+          }}
+        >
+          {tab === 'status' && (
+            <Button
+              dense
+              variant="primary"
+              onClick={onAdd}
+              disabled={!enabled}
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              + 추가
+            </Button>
+          )}
+        </div>
       </div>
-      {tab === 'status' ? (
-        <div className="watch-list__bulk-bar" role="toolbar" aria-label="선택한 코인 자동감시 작업">
-          <span className="muted">{selected.length}건 선택</span>
-          <Button
-            dense
-            disabled={mutationDisabled || !selectedAction.canResume}
-            onClick={() => clearAndRun(onResume, selected)}
-          >
-            시작
-          </Button>
-          <Button
-            dense
-            disabled={mutationDisabled || !selectedAction.canPause}
-            onClick={() => clearAndRun(onPause, selected)}
-          >
-            중지
-          </Button>
-          <Button
-            dense
-            variant="destructive"
-            disabled={mutationDisabled || !selectedAction.canDelete}
-            onClick={() => clearAndRun(onDelete, selected)}
-          >
-            삭제
-          </Button>
-          <span className="muted watch-table-toolbar__hint">{selectedAction.helpText}</span>
-        </div>
-      ) : (
-        <div className="watch-list__bulk-bar" role="toolbar" aria-label="코인 자동감시 탭 요약">
-          <span className="muted">
-            {CRYPTO_WATCH_BOARD_TABS.find((item) => item.id === tab)?.label}
-          </span>
-        </div>
-      )}
       {!enabled ? (
         <div className="panel__body muted">Upbit 실전 계좌에서 자동감시 현황을 볼 수 있습니다.</div>
       ) : (
-        content
+        <div className="watch-table-shell">
+          {tab === 'status' ? (
+            <div
+              className="watch-table-toolbar"
+              role="toolbar"
+              aria-label="선택한 코인 자동감시 작업"
+            >
+              <span className="watch-table-toolbar__count">{selected.length}건 선택</span>
+              <Button
+                dense
+                disabled={mutationDisabled || !selectedAction.canResume}
+                onClick={() => clearAndRun(onResume, selected)}
+              >
+                시작
+              </Button>
+              <Button
+                dense
+                disabled={mutationDisabled || !selectedAction.canPause}
+                onClick={() => clearAndRun(onPause, selected)}
+              >
+                중지
+              </Button>
+              <Button
+                dense
+                variant="destructive"
+                disabled={mutationDisabled || !selectedAction.canDelete}
+                onClick={() => clearAndRun(onDelete, selected)}
+              >
+                삭제
+              </Button>
+              <span className="muted watch-table-toolbar__hint">{selectedAction.helpText}</span>
+            </div>
+          ) : (
+            <div className="watch-table-toolbar" role="toolbar" aria-label="코인 자동감시 탭 요약">
+              <span className="watch-table-toolbar__count">
+                {CRYPTO_WATCH_BOARD_TABS.find((item) => item.id === tab)?.label}
+              </span>
+            </div>
+          )}
+          {content}
+        </div>
       )}
       {menu ? (
         <WatchContextMenu
