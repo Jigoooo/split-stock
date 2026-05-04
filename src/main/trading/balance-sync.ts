@@ -37,6 +37,13 @@ export interface BalanceSyncOptions {
  * Stage 4f: KIS 직접 의존(httpByEnv/auth/credentialsRepo/inquireBalance) →
  * BrokerPort.inquireBalance 추상. Kiwoom 활성 시에도 동일 polling 로직 재사용.
  */
+/**
+ * 체결 통보 (CNI) 수신 시 KIS REST 잔고 API lag (보통 1~3초) 흡수용 backoff 시퀀스.
+ * Q-E: 즉시 1회 + 3초 후 + 5초 후 = 총 3회 재시도. balance polling 30초 주기보다
+ * 빠르게 화면 잔고를 갱신하면서, KIS API stale 응답으로 인한 false miss 도 흡수.
+ */
+const TRADE_EVENT_BACKOFF_MS: readonly number[] = [0, 3_000, 5_000] as const;
+
 export class BalanceSync {
   private readonly timer: Timer;
   private readonly intervalMs: number;
@@ -44,6 +51,8 @@ export class BalanceSync {
   private disposed = false;
   /** 현재 폴링 중인지 여부 — 중복 실행 방지. */
   private running = false;
+  /** 체결 통보 backoff 재시도 핸들 — dispose 시 모두 clear. */
+  private readonly backoffHandles = new Set<{ clear: () => void }>();
 
   constructor(private readonly opts: BalanceSyncOptions) {
     this.timer = opts.timer ?? realTimer;
@@ -68,6 +77,8 @@ export class BalanceSync {
   dispose(): void {
     this.disposed = true;
     this.stop();
+    for (const handle of this.backoffHandles) handle.clear();
+    this.backoffHandles.clear();
   }
 
   /**
@@ -76,6 +87,28 @@ export class BalanceSync {
   async refresh(): Promise<void> {
     if (this.disposed) return;
     await this.poll();
+  }
+
+  /**
+   * Q-E: 체결 통보 수신 시 backoff 재시도로 잔고 갱신.
+   * KIS REST 잔고 API 가 fill 후 1~3초 lag 가 있어 단일 polling 으로는 stale 응답을 받기 쉬움.
+   * 즉시(0ms) + 3초 + 5초 총 3회 재시도로 lag 흡수. 각 재시도는 비동기로 stack 되며
+   * dispose 시 pending timer 모두 clear.
+   */
+  refreshWithBackoff(): void {
+    if (this.disposed) return;
+    for (const delayMs of TRADE_EVENT_BACKOFF_MS) {
+      if (delayMs === 0) {
+        void this.poll();
+        continue;
+      }
+      const handle = this.timer.setTimeout(() => {
+        this.backoffHandles.delete(handle);
+        if (this.disposed) return;
+        void this.poll();
+      }, delayMs);
+      this.backoffHandles.add(handle);
+    }
   }
 
   private schedulePoll(): void {

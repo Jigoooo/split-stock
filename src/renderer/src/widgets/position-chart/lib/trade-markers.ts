@@ -47,7 +47,8 @@ export function toTradeMarkers(
   const markers: SeriesMarker<Time>[] = [];
 
   for (const cycle of cycles) {
-    if (typeof cycle.boughtAt === 'number') {
+    // Q-D: BUYING (미체결 매수 진행 중) 차수는 marker 완전 숨김 — 체결 후에만 표시.
+    if (cycle.status !== 'BUYING' && typeof cycle.boughtAt === 'number') {
       const candleDate = findCandleDateAtOrBefore(candles, msToYmdKst(cycle.boughtAt));
       if (candleDate) {
         markers.push({

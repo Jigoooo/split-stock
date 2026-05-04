@@ -146,15 +146,21 @@ describe('toTradeMarkers', () => {
     ]);
   });
 
-  it('BUYING / SELLING 진행 중 차수의 BUY 마커는 boughtAt 이 있으면 표시된다', () => {
+  it('BUYING 진행 중 차수의 BUY 마커는 표시되지 않는다 (Q-D: 체결 후에만 노출)', () => {
     const candles = candlesYmd('2026-04-10');
     const markers = toTradeMarkers(
-      [
-        cycle({ nth: 1, status: 'BUYING', boughtAt: ymdToMsKst('2026-04-10') }),
-        cycle({ nth: 2, status: 'SELLING', boughtAt: ymdToMsKst('2026-04-10') }),
-      ],
+      [cycle({ nth: 1, status: 'BUYING', boughtAt: ymdToMsKst('2026-04-10') })],
       candles,
     );
-    expect(markers.map((m) => m.text)).toEqual(['B1', 'B2']);
+    expect(markers).toEqual([]);
+  });
+
+  it('SELLING 진행 중 차수의 BUY 마커는 boughtAt 이 있으면 표시된다 (이미 매수 체결 완료)', () => {
+    const candles = candlesYmd('2026-04-10');
+    const markers = toTradeMarkers(
+      [cycle({ nth: 2, status: 'SELLING', boughtAt: ymdToMsKst('2026-04-10') })],
+      candles,
+    );
+    expect(markers.map((m) => m.text)).toEqual(['B2']);
   });
 });

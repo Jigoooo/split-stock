@@ -55,7 +55,11 @@ export function buildLotSyncState(input: {
   const lotQtyByPdno = new Map<string, number>();
   const hasSellingLot = new Set<string>();
   for (const [pdno, lots] of Object.entries(input.lotsByPdno)) {
-    const qty = lots.reduce((sum, lot) => sum + lot.qty, 0);
+    // BUYING lot 은 KIS 잔고에 아직 반영되지 않은 미체결 매수 → mismatch 비교에서 완전 제외.
+    // (Q-C: BUYING 차수가 lot 합산에 들어가면 KIS qty(0) vs lotQty(N) 가 STALE_LOTS 로 오인됨)
+    const qty = lots
+      .filter((lot) => lot.status !== 'BUYING')
+      .reduce((sum, lot) => sum + lot.qty, 0);
     if (qty > 0) lotQtyByPdno.set(pdno, qty);
     if (lots.some((lot) => lot.status === 'SELLING')) hasSellingLot.add(pdno);
   }

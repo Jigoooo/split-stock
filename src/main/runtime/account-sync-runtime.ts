@@ -66,6 +66,9 @@ export function createAccountSyncRuntime(input: {
       });
       input.broadcastTradeExecution(event);
       currentStateSyncRef.sync?.trigger('trade-event');
+      // Q-E: KIS REST 잔고 API lag (1~3초) 흡수용 backoff 재시도. 30초 polling 보다 빠르게
+      // 화면 잔고를 갱신해 사용자 stale 인지 (체결 후 0건 표시) 차단.
+      balanceSync.refreshWithBackoff();
     },
   });
   manualOrderReconciler.start();

@@ -22,15 +22,36 @@ function createFakeLogger(): EventLogger & {
   };
 }
 
-function createFakeTimer(): Timer & { tickInterval(): void } {
+function createFakeTimer(): Timer & {
+  tickInterval(): void;
+  pendingTimeouts(): number;
+  flushTimeouts(): void;
+} {
   let intervalCb: (() => void) | null = null;
+  const timeoutCbs = new Set<() => void>();
   return {
     tickInterval() {
       if (intervalCb) intervalCb();
     },
+    pendingTimeouts() {
+      return timeoutCbs.size;
+    },
+    flushTimeouts() {
+      const snapshot = Array.from(timeoutCbs);
+      timeoutCbs.clear();
+      for (const cb of snapshot) cb();
+    },
     setTimeout(cb, _ms) {
-      const h = setTimeout(cb, 0);
-      return { clear: () => clearTimeout(h) };
+      const wrapped = (): void => {
+        timeoutCbs.delete(wrapped);
+        cb();
+      };
+      timeoutCbs.add(wrapped);
+      return {
+        clear: () => {
+          timeoutCbs.delete(wrapped);
+        },
+      };
     },
     setInterval(cb, _ms) {
       intervalCb = cb;
@@ -73,6 +94,10 @@ function setupDb(): { lotsRepo: LotsRepo } {
   const db = createTestDb();
   bootstrapSchema(db);
   return { lotsRepo: new LotsRepo(db) };
+}
+
+async function flushAsync(): Promise<void> {
+  for (let i = 0; i < 5; i += 1) await Promise.resolve();
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -289,5 +314,56 @@ describe('BalanceSync', () => {
     await sync.refresh();
 
     expect(broker.callCount.inquireBalance).toBe(0);
+  });
+
+  it('refreshWithBackoff() → 즉시 1회 + backoff 2회 시퀀스 호출 (Q-E)', async () => {
+    const timer = createFakeTimer();
+    const logger = createFakeLogger();
+    const { lotsRepo } = setupDb();
+    const broker = makeFakeBroker([]);
+
+    const sync = new BalanceSync({
+      getBroker: () => broker,
+      getAccountId: () => 1,
+      lotsRepo,
+      logger,
+      timer,
+    });
+
+    // 즉시(0ms) + 3초 + 5초 = 총 3개 시퀀스. 즉시 호출 1회 + pending timer 2개 등록.
+    sync.refreshWithBackoff();
+    await flushAsync();
+    expect(broker.callCount.inquireBalance).toBe(1);
+    expect(timer.pendingTimeouts()).toBe(2);
+
+    // 첫 backoff timer 발화 → 두 번째 poll 진행. 첫 poll 은 이미 완료된 상태.
+    timer.flushTimeouts();
+    await flushAsync();
+    // 두 timer 가 동시에 발화하면 두 번째는 첫 poll 의 running 가드로 인해 skip 될 수 있으나,
+    // 첫 poll 이 await 만 가득한 sync 작업이라 microtask drain 후 완료. 최종 호출 횟수 ≥ 2.
+    expect(broker.callCount.inquireBalance).toBeGreaterThanOrEqual(2);
+    expect(timer.pendingTimeouts()).toBe(0);
+  });
+
+  it('refreshWithBackoff() 후 dispose() → pending backoff timer 모두 clear', async () => {
+    const timer = createFakeTimer();
+    const logger = createFakeLogger();
+    const { lotsRepo } = setupDb();
+    const broker = makeFakeBroker([]);
+
+    const sync = new BalanceSync({
+      getBroker: () => broker,
+      getAccountId: () => 1,
+      lotsRepo,
+      logger,
+      timer,
+    });
+
+    sync.refreshWithBackoff();
+    await Promise.resolve();
+    expect(timer.pendingTimeouts()).toBe(2);
+
+    sync.dispose();
+    expect(timer.pendingTimeouts()).toBe(0);
   });
 });

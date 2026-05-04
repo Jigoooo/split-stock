@@ -112,7 +112,11 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
                 />
               </TableGrid.Cell>
               <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.symbol} numeric>
-                {nameFilter && o.pdno === pdnoFilter ? nameFilter : o.pdno}
+                {(() => {
+                  // 우선순위: 서버 join name → caller 가 넘긴 nameFilter (필터 활성 시) → pdno
+                  const name = o.name ?? (nameFilter && o.pdno === pdnoFilter ? nameFilter : null);
+                  return name ? `${name} (${o.pdno})` : o.pdno;
+                })()}
               </TableGrid.Cell>
               <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.side}>
                 <span className={o.side === 'BUY' ? 'num-up' : 'num-down'}>
@@ -122,18 +126,21 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
               <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.quantity} numeric>
                 <div
                   style={{
-                    display: 'grid',
-                    gap: '0.15rem',
-                    justifyItems: 'end',
-                    lineHeight: 1.15,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-end',
+                    gap: '0.1rem',
+                    lineHeight: 1.2,
                   }}
                 >
-                  <span className="num">
+                  <span className="num" style={{ whiteSpace: 'nowrap' }}>
                     {thousandSeparator(o.remainingQty)} / {thousandSeparator(o.qty)}
                   </span>
-                  <span className="muted" style={{ fontSize: '1rem' }}>
-                    체결 {thousandSeparator(o.filledQty)}주
-                  </span>
+                  {o.filledQty > 0 ? (
+                    <span className="muted" style={{ fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
+                      체결 {thousandSeparator(o.filledQty)}주
+                    </span>
+                  ) : null}
                 </div>
               </TableGrid.Cell>
               <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.price} numeric>

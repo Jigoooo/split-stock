@@ -25,9 +25,34 @@ describe('buildLotSyncMismatches', () => {
     expect(
       buildLotSyncMismatches({
         positions: [],
-        lotsByPdno: { '005930': [{ qty: 3, status: 'BUYING' }] },
+        lotsByPdno: { '005930': [{ qty: 3, status: 'OPEN' }] },
       }),
     ).toEqual([{ pdno: '005930', kisQty: 0, lotQty: 3, reason: 'STALE_LOTS' }]);
+  });
+
+  it('BUYING 차수만 있는 종목은 mismatch 에서 완전 제외된다 (KIS lag 흡수)', () => {
+    // 미체결 매수 즉시 BUYING 차수가 insert 되지만 KIS 잔고는 fill 까지 0 이라
+    // STALE_LOTS 로 오인되면 사용자에게 잘못된 경고. BUYING 은 lot 합산에서 제외.
+    expect(
+      buildLotSyncMismatches({
+        positions: [],
+        lotsByPdno: { '005930': [{ qty: 3, status: 'BUYING' }] },
+      }),
+    ).toEqual([]);
+  });
+
+  it('OPEN + BUYING 혼합이면 OPEN 만 합산해 mismatch 비교한다', () => {
+    expect(
+      buildLotSyncMismatches({
+        positions: [{ code: '005930', qty: 5 }],
+        lotsByPdno: {
+          '005930': [
+            { qty: 5, status: 'OPEN' },
+            { qty: 3, status: 'BUYING' },
+          ],
+        },
+      }),
+    ).toEqual([]);
   });
 
   it('SELLING 차수의 일시 수량 차이는 RECONCILING으로 분리한다', () => {
