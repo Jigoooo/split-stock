@@ -53,12 +53,15 @@ export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement =
           stateLabel: o.status === 'PARTIAL' ? '부분체결' : '미체결',
           stateVariant: o.status === 'PARTIAL' ? 'up' : 'neutral',
           // B2: orgNo 누락 시 정정/취소 API 호출 불가 → wrapper 에서 warning chip 합성.
-          warning: !o.orgNo
-            ? {
-                label: 'orgNo ✕',
-                title: '원주문번호 누락 — 정정/취소 불가. KIS 잔고에서 직접 확인 필요',
-              }
-            : undefined,
+          // exactOptionalPropertyTypes 호환 위해 undefined 일 땐 키 자체를 빼고 spread.
+          ...(o.orgNo
+            ? {}
+            : {
+                warning: {
+                  label: 'orgNo ✕',
+                  title: '원주문번호 누락 — 정정/취소 불가. KIS 잔고에서 직접 확인 필요',
+                },
+              }),
           placedAt: o.placedAt,
         };
       }),

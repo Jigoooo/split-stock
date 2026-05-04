@@ -176,13 +176,14 @@ export const OrdersPanel = ({
             if (col === 'select') {
               return <TableGrid.Cell key={col} width={width} minWidth={width} />;
             }
+            const isDateCol = col === 'time' || col === 'placedAt';
             return (
               <TableGrid.Cell
                 key={col}
                 width={width}
                 minWidth={width}
-                className={col === 'time' || col === 'placedAt' ? 'date-time-cell' : undefined}
-                numeric={numeric || undefined}
+                {...(isDateCol ? { className: 'date-time-cell' } : {})}
+                {...(numeric ? { numeric: true } : {})}
               >
                 {label}
               </TableGrid.Cell>
@@ -221,10 +222,10 @@ export const OrdersPanel = ({
 interface RenderCellArgs {
   cancelPending: boolean;
   col: OrdersPanelColumn;
-  onCancel?: (id: string) => void;
-  onOpenDetail?: (id: string) => void;
+  onCancel: ((id: string) => void) | undefined;
+  onOpenDetail: ((id: string) => void) | undefined;
   order: NormalizedOrder;
-  selection?: OrdersPanelProps['selection'];
+  selection: OrdersPanelProps['selection'];
 }
 
 const renderCell = ({
