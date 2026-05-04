@@ -1,21 +1,46 @@
 import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, TableGrid } from '@renderer/shared/ui';
+import { type NormalizedOrder, OrdersPanel } from '@renderer/widgets/orders-panel';
 import type { CryptoOrderDetail } from '@shared/contracts';
-import type { ReactElement } from 'react';
+import { type ReactElement, useMemo } from 'react';
 import { formatCryptoAmount, formatCryptoPrice, formatCryptoVolume } from '../model/crypto-format';
 import { formatDateTime, isOpenOrder, stateLabel } from '../model/crypto-formatters';
 
-const CRYPTO_ORDER_COLS = {
-  market: '11rem',
-  side: '6.4rem',
-  state: '9.6rem',
-  price: '11rem',
-  executed: '9.6rem',
-  remaining: '9.6rem',
-  fee: '8rem',
-  manage: '12.4rem',
-} as const;
+const CRYPTO_ORDER_COLUMNS = [
+  'symbol',
+  'side',
+  'state',
+  'price',
+  'executed',
+  'remaining',
+  'fee',
+  'manage',
+] as const;
 
+interface CryptoOrderRow {
+  executedVolume: string;
+  id: number;
+  market: string;
+  paidFee: string;
+  price: string | null;
+  remainingVolume: string;
+  side: string;
+  state: string;
+  uuid: string | null;
+  volume: string | null;
+}
+
+/**
+ * 코인 주문 패널 — broker-agnostic OrdersPanel 위 wrapper.
+ *
+ * UPBIT-specific 처리는 모두 wrapper 에서 흡수:
+ *   - DecimalString → Number 변환 (executedVolume, remainingVolume, paidFee, price 등)
+ *   - bid/ask → BUY/SELL 정규화
+ *   - state 라벨 (wait/watch/done/cancel → 한국어)
+ *   - uuid 가 null 인 행은 cancel/detail 버튼 숨김 (cancellable=false)
+ *
+ * OrdersPanel base 는 NormalizedOrder shape 만 받음 — DecimalString 이 base 에 새지 않음.
+ */
 export const CryptoOrdersPanel = ({
   cancelPending,
   detail,
@@ -34,127 +59,86 @@ export const CryptoOrdersPanel = ({
   onCloseDetail: () => void;
   onCancel: (uuid: string) => void;
   onOpenDetail: (uuid: string) => void;
-  orders: Array<{
-    executedVolume: string;
-    id: number;
-    market: string;
-    paidFee: string;
-    price: string | null;
-    remainingVolume: string;
-    side: string;
-    state: string;
-    uuid: string | null;
-    volume: string | null;
-  }>;
+  orders: Array<CryptoOrderRow>;
   title?: string;
-}): ReactElement => (
-  <section
-    className="panel crypto-account-panel"
-    style={{
-      display: 'flex',
-      flexDirection: 'column',
-      height: '100%',
-      minHeight: 0,
-      overflow: 'hidden',
-    }}
-    aria-label={title}
-  >
-    <div className="panel__title" style={{ flexShrink: 0 }}>
-      {title} ({thousandSeparator(orders.length)}건)
-    </div>
-    {!enabled ? (
-      <div className="panel__body muted">활성 Upbit 실전 계좌에서만 조회됩니다.</div>
-    ) : (
-      <>
-        <TableGrid.Root
-          variant="hts"
-          stickyHeader
-          horizontalScroll
-          aria-label={`${title} 테이블`}
-          style={{ flex: 1, minHeight: 0 }}
-        >
-          <TableGrid.Header>
-            <TableGrid.Cell width={CRYPTO_ORDER_COLS.market}>마켓</TableGrid.Cell>
-            <TableGrid.Cell width={CRYPTO_ORDER_COLS.side}>구분</TableGrid.Cell>
-            <TableGrid.Cell width={CRYPTO_ORDER_COLS.state}>상태</TableGrid.Cell>
-            <TableGrid.Cell width={CRYPTO_ORDER_COLS.price} numeric>
-              가격
-            </TableGrid.Cell>
-            <TableGrid.Cell width={CRYPTO_ORDER_COLS.executed} numeric>
-              체결
-            </TableGrid.Cell>
-            <TableGrid.Cell width={CRYPTO_ORDER_COLS.remaining} numeric>
-              잔량
-            </TableGrid.Cell>
-            <TableGrid.Cell width={CRYPTO_ORDER_COLS.fee} numeric>
-              수수료
-            </TableGrid.Cell>
-            <TableGrid.Cell width={CRYPTO_ORDER_COLS.manage}>관리</TableGrid.Cell>
-          </TableGrid.Header>
-          <TableGrid.Body>
-            {orders.length === 0 ? (
-              <TableGrid.Row placeholder>
-                <TableGrid.Cell width="100%" className="muted">
-                  {title} 내역이 없습니다.
-                </TableGrid.Cell>
-              </TableGrid.Row>
-            ) : null}
-            {orders.map((order) => {
-              const isOpen = isOpenOrder(order.state);
-              const sideClass = order.side === 'bid' ? 'num-up' : 'num-down';
-              return (
-                <TableGrid.Row key={order.id}>
-                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.market}>{order.market}</TableGrid.Cell>
-                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.side} className={sideClass}>
-                    {order.side === 'bid' ? '매수' : '매도'}
-                  </TableGrid.Cell>
-                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.state}>
-                    <span className={`chip ${isOpen ? '' : 'chip--up'}`}>
-                      {stateLabel(order.state)}
-                    </span>
-                  </TableGrid.Cell>
-                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.price} numeric>
-                    {formatCryptoPrice(order.price ?? undefined, order.market)}
-                  </TableGrid.Cell>
-                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.executed} numeric>
-                    {formatCryptoVolume(order.executedVolume)}
-                  </TableGrid.Cell>
-                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.remaining} numeric>
-                    {formatCryptoVolume(order.remainingVolume)}
-                  </TableGrid.Cell>
-                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.fee} numeric>
-                    {formatCryptoVolume(order.paidFee)}
-                  </TableGrid.Cell>
-                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.manage}>
-                    <span style={{ display: 'inline-flex', gap: '0.4rem' }}>
-                      {order.uuid ? (
-                        <Button dense onClick={() => onOpenDetail(order.uuid as string)}>
-                          상세
-                        </Button>
-                      ) : null}
-                      {isOpen && order.uuid ? (
-                        <Button
-                          dense
-                          disabled={cancelPending}
-                          onClick={() => onCancel(order.uuid as string)}
-                        >
-                          취소
-                        </Button>
-                      ) : null}
-                    </span>
-                  </TableGrid.Cell>
-                </TableGrid.Row>
-              );
-            })}
-          </TableGrid.Body>
-        </TableGrid.Root>
-        {detail || detailLoading ? (
+}): ReactElement => {
+  const resolvedTitle = `${title} (${thousandSeparator(orders.length)}건)`;
+
+  const normalized = useMemo<NormalizedOrder[]>(
+    () =>
+      orders.map((order) => {
+        const isOpen = isOpenOrder(order.state);
+        const volumeNum = order.volume !== null ? Number(order.volume) : 0;
+        const remainingNum = Number(order.remainingVolume);
+        const executedNum = Number(order.executedVolume);
+        const priceNum = order.price !== null ? Number(order.price) : 0;
+        const cancellable = isOpen && order.uuid !== null;
+        const id = order.uuid ?? `crypto-order-${order.id}`;
+        return {
+          id,
+          symbol: order.market,
+          symbolLabel: order.market,
+          side: order.side === 'bid' ? 'BUY' : 'SELL',
+          qty: Number.isFinite(volumeNum) ? volumeNum : 0,
+          remainingQty: Number.isFinite(remainingNum) ? remainingNum : 0,
+          filledQty: Number.isFinite(executedNum) ? executedNum : 0,
+          price: Number.isFinite(priceNum) ? priceNum : 0,
+          priceLabel: formatCryptoPrice(order.price ?? undefined, order.market),
+          executedLabel: formatCryptoVolume(order.executedVolume),
+          remainingLabel: formatCryptoVolume(order.remainingVolume),
+          feeLabel: formatCryptoVolume(order.paidFee),
+          stateLabel: stateLabel(order.state),
+          stateVariant: isOpen ? 'neutral' : 'up',
+          placedAt: 0,
+          cancellable,
+          raw: order,
+        };
+      }),
+    [orders],
+  );
+
+  if (!enabled) {
+    return (
+      <OrdersPanel
+        mode="active"
+        title={resolvedTitle}
+        columns={CRYPTO_ORDER_COLUMNS}
+        orders={[]}
+        disabledPlaceholder="활성 Upbit 실전 계좌에서만 조회됩니다."
+      />
+    );
+  }
+
+  const handleCancel = (id: string): void => {
+    // uuid 가 null 이면 cancellable=false 로 차단됐으므로 여기는 항상 uuid.
+    if (id.startsWith('crypto-order-')) return;
+    onCancel(id);
+  };
+
+  const handleDetail = (id: string): void => {
+    if (id.startsWith('crypto-order-')) return;
+    onOpenDetail(id);
+  };
+
+  return (
+    <OrdersPanel
+      mode="active"
+      title={resolvedTitle}
+      tableAriaLabel={`${title} 테이블`}
+      columns={CRYPTO_ORDER_COLUMNS}
+      orders={normalized}
+      onCancel={handleCancel}
+      onOpenDetail={handleDetail}
+      cancelPending={cancelPending}
+      emptyText={`${title} 내역이 없습니다.`}
+      footerSlot={
+        detail || detailLoading ? (
           <CryptoOrderDetailModal detail={detail} loading={detailLoading} onClose={onCloseDetail} />
-        ) : null}
-      </>
-    )}
-  </section>
-);
+        ) : null
+      }
+    />
+  );
+};
 
 const CryptoOrderDetailModal = ({
   detail,

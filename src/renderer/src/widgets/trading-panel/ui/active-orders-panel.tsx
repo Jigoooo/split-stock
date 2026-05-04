@@ -1,21 +1,8 @@
-import {
-  formatDateTimeLongKo,
-  formatTimeOnly,
-  thousandSeparator,
-} from '@renderer/shared/lib/formatter';
-import { Button, Checkbox, TableGrid } from '@renderer/shared/ui';
-import type { ReactElement } from 'react';
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
+import { Button } from '@renderer/shared/ui';
+import { type NormalizedOrder, OrdersPanel } from '@renderer/widgets/orders-panel';
+import { type ReactElement, useMemo } from 'react';
 import { useActiveOrders } from '../model/use-active-orders';
-
-const ACTIVE_ORDER_COLUMN_WIDTHS = {
-  select: '5.2rem',
-  symbol: '11rem',
-  side: '12.4rem',
-  quantity: '14.8rem',
-  price: '10rem',
-  status: '9.6rem',
-  time: '11.2rem',
-} as const;
 
 export interface ActiveOrdersPanelProps {
   /** 표시할 종목 필터 (선택). null이면 전체. */
@@ -24,157 +11,89 @@ export interface ActiveOrdersPanelProps {
   nameFilter?: string | null;
 }
 
+const ACTIVE_COLUMNS = [
+  'select',
+  'symbol',
+  'side',
+  'remaining',
+  'price',
+  'state',
+  'placedAt',
+] as const;
+
+/**
+ * KIS 미체결 주문 패널 — broker-agnostic OrdersPanel 위 wrapper.
+ *
+ * KIS 전용 affordance (orgNo 누락 경고, batch cancel) 는 이 wrapper 에서만 합성:
+ *   - orgNo 누락 → 행별 `warning` chip 으로 노출 (정정/취소 API 호출 불가 신호)
+ *   - cancelMany batch → toolbar `selectionAction` 슬롯에 합성
+ *
+ * OrdersPanel base 는 broker prop 분기 없이 NormalizedOrder shape 만 소비.
+ */
 export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement => {
   const { pdnoFilter, nameFilter } = props;
   const { cancelError, cancelPending, cancelSelected, orders, selected, toggle } =
     useActiveOrders(pdnoFilter);
 
+  const normalized = useMemo<NormalizedOrder[]>(
+    () =>
+      orders.map((o) => {
+        // 우선순위: 서버 join name → caller 가 넘긴 nameFilter (필터 활성 시) → pdno
+        const name = o.name ?? (nameFilter && o.pdno === pdnoFilter ? nameFilter : null);
+        return {
+          id: o.odno,
+          symbol: o.pdno,
+          symbolLabel: name ? `${name} (${o.pdno})` : o.pdno,
+          side: o.side === 'BUY' ? 'BUY' : 'SELL',
+          qty: o.qty,
+          remainingQty: o.remainingQty,
+          filledQty: o.filledQty,
+          price: o.price,
+          priceLabel: o.division === 'MARKET' ? '시장가' : thousandSeparator(o.price),
+          stateLabel: o.status === 'PARTIAL' ? '부분체결' : '미체결',
+          stateVariant: o.status === 'PARTIAL' ? 'up' : 'neutral',
+          // B2: orgNo 누락 시 정정/취소 API 호출 불가 → wrapper 에서 warning chip 합성.
+          warning: !o.orgNo
+            ? {
+                label: 'orgNo ✕',
+                title: '원주문번호 누락 — 정정/취소 불가. KIS 잔고에서 직접 확인 필요',
+              }
+            : undefined,
+          placedAt: o.placedAt,
+        };
+      }),
+    [orders, nameFilter, pdnoFilter],
+  );
+
+  const title =
+    `미체결 주문 (${thousandSeparator(orders.length)}건)` +
+    (pdnoFilter ? ` · ${nameFilter ? `${nameFilter} (${pdnoFilter})` : pdnoFilter}` : '');
+
+  const selectionAction = (
+    <>
+      <Button
+        disabled={selected.size === 0 || cancelPending}
+        onClick={() => void cancelSelected()}
+        dense
+      >
+        선택 취소 ({thousandSeparator(selected.size)})
+      </Button>
+      {cancelError ? <span className="chip chip--down">{cancelError}</span> : null}
+    </>
+  );
+
+  const selectedIds = useMemo(() => new Set(selected), [selected]);
+
   return (
-    <div
-      className="panel"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: 0,
-        overflow: 'hidden',
-      }}
-    >
-      <div className="panel__title" style={{ flexShrink: 0 }}>
-        미체결 주문 ({thousandSeparator(orders.length)}건)
-        {pdnoFilter ? ` · ${nameFilter ? `${nameFilter} (${pdnoFilter})` : pdnoFilter}` : ''}
-      </div>
-      <div
-        className="panel__body"
-        style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexShrink: 0 }}
-      >
-        <Button
-          disabled={selected.size === 0 || cancelPending}
-          onClick={() => void cancelSelected()}
-          dense
-        >
-          선택 취소 ({thousandSeparator(selected.size)})
-        </Button>
-        {cancelError ? <span className="chip chip--down">{cancelError}</span> : null}
-      </div>
-      <TableGrid.Root
-        variant="hts"
-        stickyHeader
-        horizontalScroll
-        aria-label="미체결 주문"
-        style={{ flex: 1, minHeight: 0 }}
-      >
-        <TableGrid.Header>
-          <TableGrid.Cell
-            width={ACTIVE_ORDER_COLUMN_WIDTHS.select}
-            minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.select}
-          />
-          <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.symbol}>
-            종목
-          </TableGrid.Cell>
-          <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.side}>
-            구분
-          </TableGrid.Cell>
-          <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.quantity} numeric>
-            남은/원주문
-          </TableGrid.Cell>
-          <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.price} numeric>
-            가격
-          </TableGrid.Cell>
-          <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.status}>
-            상태
-          </TableGrid.Cell>
-          <TableGrid.Cell
-            flex={1}
-            minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.time}
-            className="date-time-cell"
-          >
-            접수시각
-          </TableGrid.Cell>
-        </TableGrid.Header>
-        <TableGrid.Body>
-          {orders.length === 0 ? (
-            <TableGrid.Row placeholder>
-              <TableGrid.Cell className="muted">미체결 없음</TableGrid.Cell>
-            </TableGrid.Row>
-          ) : null}
-          {orders.map((o) => (
-            <TableGrid.Row key={o.odno}>
-              <TableGrid.Cell
-                width={ACTIVE_ORDER_COLUMN_WIDTHS.select}
-                minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.select}
-              >
-                <Checkbox
-                  checked={selected.has(o.odno)}
-                  onChange={() => toggle(o.odno)}
-                  aria-label={`선택 ${o.odno}`}
-                  dense
-                />
-              </TableGrid.Cell>
-              <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.symbol} numeric>
-                {(() => {
-                  // 우선순위: 서버 join name → caller 가 넘긴 nameFilter (필터 활성 시) → pdno
-                  const name = o.name ?? (nameFilter && o.pdno === pdnoFilter ? nameFilter : null);
-                  return name ? `${name} (${o.pdno})` : o.pdno;
-                })()}
-              </TableGrid.Cell>
-              <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.side}>
-                <span className={o.side === 'BUY' ? 'num-up' : 'num-down'}>
-                  {o.side} · {o.division}
-                </span>
-              </TableGrid.Cell>
-              <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.quantity} numeric>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-end',
-                    gap: '0.1rem',
-                    lineHeight: 1.2,
-                  }}
-                >
-                  <span className="num" style={{ whiteSpace: 'nowrap' }}>
-                    {thousandSeparator(o.remainingQty)} / {thousandSeparator(o.qty)}
-                  </span>
-                  {o.filledQty > 0 ? (
-                    <span className="muted" style={{ fontSize: '0.95rem', whiteSpace: 'nowrap' }}>
-                      체결 {thousandSeparator(o.filledQty)}주
-                    </span>
-                  ) : null}
-                </div>
-              </TableGrid.Cell>
-              <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.price} numeric>
-                {o.division === 'MARKET' ? '시장가' : thousandSeparator(o.price)}
-              </TableGrid.Cell>
-              <TableGrid.Cell flex={1} minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.status}>
-                <span style={{ display: 'inline-flex', gap: '0.3rem', alignItems: 'center' }}>
-                  <span className={`chip ${o.status === 'PARTIAL' ? 'chip--up' : ''}`}>
-                    {o.status === 'PARTIAL' ? '부분체결' : '미체결'}
-                  </span>
-                  {/* B2: KIS 응답에서 orgNo 가 누락되면 정정/취소 API 호출이 불가 → 사용자에게 별도 chip 으로
-                      경고. 이 행은 자동/수동 취소가 모두 막혀 PENDING 으로 영구 정체될 수 있음. */}
-                  {!o.orgNo ? (
-                    <span
-                      className="chip chip--down"
-                      title="원주문번호 누락 — 정정/취소 불가. KIS 잔고에서 직접 확인 필요"
-                    >
-                      orgNo ✕
-                    </span>
-                  ) : null}
-                </span>
-              </TableGrid.Cell>
-              <TableGrid.Cell
-                flex={1}
-                minWidth={ACTIVE_ORDER_COLUMN_WIDTHS.time}
-                className="muted date-time-cell"
-                title={formatDateTimeLongKo(o.placedAt)}
-              >
-                {formatTimeOnly(o.placedAt)}
-              </TableGrid.Cell>
-            </TableGrid.Row>
-          ))}
-        </TableGrid.Body>
-      </TableGrid.Root>
-    </div>
+    <OrdersPanel
+      mode="active"
+      title={title}
+      tableAriaLabel="미체결 주문"
+      columns={ACTIVE_COLUMNS}
+      orders={normalized}
+      selection={{ selectedIds, onToggle: toggle }}
+      selectionAction={selectionAction}
+      emptyText="미체결 없음"
+    />
   );
 };
