@@ -1,8 +1,20 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, TableGrid } from '@renderer/shared/ui';
 import type { CryptoOrderDetail } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { formatCryptoAmount, formatCryptoPrice, formatCryptoVolume } from '../model/crypto-format';
 import { formatDateTime, isOpenOrder, stateLabel } from '../model/crypto-formatters';
+
+const CRYPTO_ORDER_COLS = {
+  market: '11rem',
+  side: '6.4rem',
+  state: '9.6rem',
+  price: '11rem',
+  executed: '9.6rem',
+  remaining: '9.6rem',
+  fee: '8rem',
+  manage: '12.4rem',
+} as const;
 
 export const CryptoOrdersPanel = ({
   cancelPending,
@@ -36,72 +48,50 @@ export const CryptoOrdersPanel = ({
   }>;
   title?: string;
 }): ReactElement => (
-  <section className="panel crypto-account-panel">
-    <div className="panel__title">{title}</div>
+  <section
+    className="panel crypto-account-panel"
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      minHeight: 0,
+      overflow: 'hidden',
+    }}
+    aria-label={title}
+  >
+    <div className="panel__title" style={{ flexShrink: 0 }}>
+      {title} ({thousandSeparator(orders.length)}건)
+    </div>
     {!enabled ? (
       <div className="panel__body muted">활성 Upbit 실전 계좌에서만 조회됩니다.</div>
     ) : (
       <>
-        <TableGrid.Root variant="hts" stickyHeader horizontalScroll style={{ height: '100%' }}>
+        <TableGrid.Root
+          variant="hts"
+          stickyHeader
+          horizontalScroll
+          aria-label={`${title} 테이블`}
+          style={{ flex: 1, minHeight: 0 }}
+        >
           <TableGrid.Header>
-            <TableGrid.Cell width="9rem">마켓</TableGrid.Cell>
-            <TableGrid.Cell width="4.5rem">방향</TableGrid.Cell>
-            <TableGrid.Cell width="6rem">상태</TableGrid.Cell>
-            <TableGrid.Cell width="9rem" numeric>
-              평균가
+            <TableGrid.Cell width={CRYPTO_ORDER_COLS.market}>마켓</TableGrid.Cell>
+            <TableGrid.Cell width={CRYPTO_ORDER_COLS.side}>구분</TableGrid.Cell>
+            <TableGrid.Cell width={CRYPTO_ORDER_COLS.state}>상태</TableGrid.Cell>
+            <TableGrid.Cell width={CRYPTO_ORDER_COLS.price} numeric>
+              가격
             </TableGrid.Cell>
-            <TableGrid.Cell width="8rem" numeric>
+            <TableGrid.Cell width={CRYPTO_ORDER_COLS.executed} numeric>
               체결
             </TableGrid.Cell>
-            <TableGrid.Cell width="8rem" numeric>
+            <TableGrid.Cell width={CRYPTO_ORDER_COLS.remaining} numeric>
               잔량
             </TableGrid.Cell>
-            <TableGrid.Cell width="7rem" numeric>
+            <TableGrid.Cell width={CRYPTO_ORDER_COLS.fee} numeric>
               수수료
             </TableGrid.Cell>
-            <TableGrid.Cell width="10rem">관리</TableGrid.Cell>
+            <TableGrid.Cell width={CRYPTO_ORDER_COLS.manage}>관리</TableGrid.Cell>
           </TableGrid.Header>
           <TableGrid.Body>
-            {orders.map((order) => (
-              <TableGrid.Row key={order.id}>
-                <TableGrid.Cell width="9rem">{order.market}</TableGrid.Cell>
-                <TableGrid.Cell
-                  width="4.5rem"
-                  className={order.side === 'bid' ? 'num-up' : 'num-down'}
-                >
-                  {order.side === 'bid' ? '매수' : '매도'}
-                </TableGrid.Cell>
-                <TableGrid.Cell width="6rem">{stateLabel(order.state)}</TableGrid.Cell>
-                <TableGrid.Cell width="9rem" numeric>
-                  {formatCryptoPrice(order.price ?? undefined, order.market)}
-                </TableGrid.Cell>
-                <TableGrid.Cell width="8rem" numeric>
-                  {formatCryptoVolume(order.executedVolume)}
-                </TableGrid.Cell>
-                <TableGrid.Cell width="8rem" numeric>
-                  {formatCryptoVolume(order.remainingVolume)}
-                </TableGrid.Cell>
-                <TableGrid.Cell width="7rem" numeric>
-                  {formatCryptoVolume(order.paidFee)}
-                </TableGrid.Cell>
-                <TableGrid.Cell width="10rem">
-                  {order.uuid ? (
-                    <Button dense onClick={() => onOpenDetail(order.uuid as string)}>
-                      상세
-                    </Button>
-                  ) : null}
-                  {isOpenOrder(order.state) && order.uuid ? (
-                    <Button
-                      dense
-                      disabled={cancelPending}
-                      onClick={() => onCancel(order.uuid as string)}
-                    >
-                      취소
-                    </Button>
-                  ) : null}
-                </TableGrid.Cell>
-              </TableGrid.Row>
-            ))}
             {orders.length === 0 ? (
               <TableGrid.Row placeholder>
                 <TableGrid.Cell width="100%" className="muted">
@@ -109,6 +99,53 @@ export const CryptoOrdersPanel = ({
                 </TableGrid.Cell>
               </TableGrid.Row>
             ) : null}
+            {orders.map((order) => {
+              const isOpen = isOpenOrder(order.state);
+              const sideClass = order.side === 'bid' ? 'num-up' : 'num-down';
+              return (
+                <TableGrid.Row key={order.id}>
+                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.market}>{order.market}</TableGrid.Cell>
+                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.side} className={sideClass}>
+                    {order.side === 'bid' ? '매수' : '매도'}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.state}>
+                    <span className={`chip ${isOpen ? '' : 'chip--up'}`}>
+                      {stateLabel(order.state)}
+                    </span>
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.price} numeric>
+                    {formatCryptoPrice(order.price ?? undefined, order.market)}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.executed} numeric>
+                    {formatCryptoVolume(order.executedVolume)}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.remaining} numeric>
+                    {formatCryptoVolume(order.remainingVolume)}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.fee} numeric>
+                    {formatCryptoVolume(order.paidFee)}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={CRYPTO_ORDER_COLS.manage}>
+                    <span style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                      {order.uuid ? (
+                        <Button dense onClick={() => onOpenDetail(order.uuid as string)}>
+                          상세
+                        </Button>
+                      ) : null}
+                      {isOpen && order.uuid ? (
+                        <Button
+                          dense
+                          disabled={cancelPending}
+                          onClick={() => onCancel(order.uuid as string)}
+                        >
+                          취소
+                        </Button>
+                      ) : null}
+                    </span>
+                  </TableGrid.Cell>
+                </TableGrid.Row>
+              );
+            })}
           </TableGrid.Body>
         </TableGrid.Root>
         {detail || detailLoading ? (

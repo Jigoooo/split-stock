@@ -1,4 +1,5 @@
 import type { CryptoLotEntry } from '@renderer/entities/account-crypto';
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
 import type { ReactElement } from 'react';
 import { formatCryptoAmount, formatCryptoPrice, formatCryptoVolume } from '../model/crypto-format';
@@ -23,16 +24,36 @@ export const CryptoLotsPanel = ({
   currentPrice: number;
   quote: string;
 }): ReactElement => (
-  <section className="panel crypto-account-panel">
-    <div className="panel__title">차수별 잔고 ({market})</div>
+  <section
+    className="panel crypto-account-panel"
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      minHeight: 0,
+      overflow: 'hidden',
+    }}
+    aria-label={`차수별 잔고 (${market})`}
+  >
+    <div className="panel__title" style={{ flexShrink: 0 }}>
+      차수별 잔고 ({market}) · {thousandSeparator(lots.length)}차수
+    </div>
     {!enabled ? (
       <div className="panel__body muted">활성 Upbit 실전 계좌에서만 조회됩니다.</div>
     ) : (
-      <TableGrid.Root variant="hts" stickyHeader horizontalScroll style={{ height: '100%' }}>
+      <TableGrid.Root
+        variant="hts"
+        stickyHeader
+        horizontalScroll
+        aria-label="차수별 잔고 테이블"
+        style={{ flex: 1, minHeight: 0 }}
+      >
         <TableGrid.Header>
-          <TableGrid.Cell width="4rem">차수</TableGrid.Cell>
+          <TableGrid.Cell width="5.6rem" numeric>
+            차수
+          </TableGrid.Cell>
           <TableGrid.Cell flex={1} numeric>
-            평단
+            매입가
           </TableGrid.Cell>
           <TableGrid.Cell flex={1} numeric>
             수량
@@ -44,18 +65,25 @@ export const CryptoLotsPanel = ({
             평가금액
           </TableGrid.Cell>
           <TableGrid.Cell flex={1} numeric>
-            손익
+            평가손익
           </TableGrid.Cell>
         </TableGrid.Header>
         <TableGrid.Body>
+          {lots.length === 0 ? (
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell width="100%" className="muted">
+                보유 차수가 없습니다.
+              </TableGrid.Cell>
+            </TableGrid.Row>
+          ) : null}
           {lots.map((lot) => {
             const evalAmount = lot.qty * currentPrice;
             const pnl = evalAmount - lot.amountKrw;
             const pnlRate = lot.amountKrw > 0 ? pnl / lot.amountKrw : 0;
             return (
               <TableGrid.Row key={lot.nth}>
-                <TableGrid.Cell width="4rem">
-                  <strong>#{lot.nth}</strong>
+                <TableGrid.Cell width="5.6rem" numeric>
+                  <strong>{lot.nth}차</strong>
                 </TableGrid.Cell>
                 <TableGrid.Cell flex={1} numeric>
                   {formatCryptoPrice(lot.buyPrice, market)}
@@ -79,13 +107,6 @@ export const CryptoLotsPanel = ({
               </TableGrid.Row>
             );
           })}
-          {lots.length === 0 ? (
-            <TableGrid.Row placeholder>
-              <TableGrid.Cell width="100%" className="muted">
-                보유 차수가 없습니다.
-              </TableGrid.Cell>
-            </TableGrid.Row>
-          ) : null}
         </TableGrid.Body>
       </TableGrid.Root>
     )}

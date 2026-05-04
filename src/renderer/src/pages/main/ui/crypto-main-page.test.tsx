@@ -484,7 +484,7 @@ describe('CryptoTransfersPanel', () => {
       />,
     );
 
-    expect(screen.getByText('입출금 현황')).toBeInTheDocument();
+    expect(screen.getByText(/입출금 현황/)).toBeInTheDocument();
     expect(screen.getByText('ETH/ETH working')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '상세' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '입금 요청' })).not.toBeInTheDocument();

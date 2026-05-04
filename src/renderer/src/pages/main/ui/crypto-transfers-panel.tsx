@@ -1,3 +1,4 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { Button, TableGrid } from '@renderer/shared/ui';
 import type { CryptoTransferStatus, CryptoWalletStatus } from '@shared/contracts';
 import type { ReactElement } from 'react';
@@ -7,6 +8,16 @@ import { formatDateTime } from '../model/crypto-formatters';
 function transferDirectionLabel(direction: CryptoTransferStatus['direction']): string {
   return direction === 'deposit' ? '입금' : '출금';
 }
+
+const TRANSFER_COLS = {
+  direction: '5.6rem',
+  currency: '8rem',
+  state: '8rem',
+  amount: '9.6rem',
+  fee: '8rem',
+  doneAt: '11.2rem',
+  detail: '6.4rem',
+} as const;
 
 export const CryptoTransfersPanel = ({
   enabled,
@@ -25,51 +36,47 @@ export const CryptoTransfersPanel = ({
   transfers: CryptoTransferStatus[];
   walletStatuses: CryptoWalletStatus[];
 }): ReactElement => (
-  <section className="panel crypto-account-panel crypto-transfer-panel">
-    <div className="panel__title">입출금 현황</div>
+  <section
+    className="panel crypto-account-panel crypto-transfer-panel"
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      minHeight: 0,
+      overflow: 'hidden',
+    }}
+    aria-label="입출금 현황"
+  >
+    <div className="panel__title" style={{ flexShrink: 0 }}>
+      입출금 현황 ({thousandSeparator(transfers.length)}건)
+    </div>
     {!enabled ? (
       <div className="panel__body muted">활성 Upbit 실전 계좌에서만 조회됩니다.</div>
     ) : (
       <>
-        <TableGrid.Root variant="hts" stickyHeader horizontalScroll style={{ height: '100%' }}>
+        <TableGrid.Root
+          variant="hts"
+          stickyHeader
+          horizontalScroll
+          aria-label="입출금 내역 테이블"
+          style={{ flex: 1, minHeight: 0 }}
+        >
           <TableGrid.Header>
-            <TableGrid.Cell width="5rem">구분</TableGrid.Cell>
-            <TableGrid.Cell width="7rem">자산</TableGrid.Cell>
-            <TableGrid.Cell width="7rem">상태</TableGrid.Cell>
-            <TableGrid.Cell width="9rem" numeric>
+            <TableGrid.Cell width={TRANSFER_COLS.direction}>구분</TableGrid.Cell>
+            <TableGrid.Cell width={TRANSFER_COLS.currency}>자산</TableGrid.Cell>
+            <TableGrid.Cell width={TRANSFER_COLS.state}>상태</TableGrid.Cell>
+            <TableGrid.Cell width={TRANSFER_COLS.amount} numeric>
               수량
             </TableGrid.Cell>
-            <TableGrid.Cell width="8rem" numeric>
+            <TableGrid.Cell width={TRANSFER_COLS.fee} numeric>
               수수료
             </TableGrid.Cell>
-            <TableGrid.Cell width="10rem">완료</TableGrid.Cell>
-            <TableGrid.Cell width="6rem">상세</TableGrid.Cell>
+            <TableGrid.Cell width={TRANSFER_COLS.doneAt} className="date-time-cell">
+              완료시각
+            </TableGrid.Cell>
+            <TableGrid.Cell width={TRANSFER_COLS.detail}>관리</TableGrid.Cell>
           </TableGrid.Header>
           <TableGrid.Body>
-            {transfers.map((transfer) => (
-              <TableGrid.Row key={`${transfer.direction}:${transfer.uuid}`}>
-                <TableGrid.Cell width="5rem">
-                  {transferDirectionLabel(transfer.direction)}
-                </TableGrid.Cell>
-                <TableGrid.Cell width="7rem">
-                  {transfer.currency}
-                  {transfer.netType ? `/${transfer.netType}` : ''}
-                </TableGrid.Cell>
-                <TableGrid.Cell width="7rem">{transfer.state}</TableGrid.Cell>
-                <TableGrid.Cell width="9rem" numeric>
-                  {formatCryptoVolume(transfer.amount)}
-                </TableGrid.Cell>
-                <TableGrid.Cell width="8rem" numeric>
-                  {formatCryptoVolume(transfer.fee)}
-                </TableGrid.Cell>
-                <TableGrid.Cell width="10rem">{formatDateTime(transfer.doneAt)}</TableGrid.Cell>
-                <TableGrid.Cell width="6rem">
-                  <Button dense onClick={() => onOpenDetail(transfer)}>
-                    상세
-                  </Button>
-                </TableGrid.Cell>
-              </TableGrid.Row>
-            ))}
             {transfers.length === 0 ? (
               <TableGrid.Row placeholder>
                 <TableGrid.Cell width="100%" className="muted">
@@ -77,9 +84,40 @@ export const CryptoTransfersPanel = ({
                 </TableGrid.Cell>
               </TableGrid.Row>
             ) : null}
+            {transfers.map((transfer) => {
+              const directionClass = transfer.direction === 'deposit' ? 'num-up' : 'num-down';
+              return (
+                <TableGrid.Row key={`${transfer.direction}:${transfer.uuid}`}>
+                  <TableGrid.Cell width={TRANSFER_COLS.direction} className={directionClass}>
+                    {transferDirectionLabel(transfer.direction)}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={TRANSFER_COLS.currency}>
+                    {transfer.currency}
+                    {transfer.netType ? `/${transfer.netType}` : ''}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={TRANSFER_COLS.state}>
+                    <span className="chip">{transfer.state}</span>
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={TRANSFER_COLS.amount} numeric>
+                    {formatCryptoVolume(transfer.amount)}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={TRANSFER_COLS.fee} numeric>
+                    {formatCryptoVolume(transfer.fee)}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={TRANSFER_COLS.doneAt} className="muted date-time-cell">
+                    {formatDateTime(transfer.doneAt)}
+                  </TableGrid.Cell>
+                  <TableGrid.Cell width={TRANSFER_COLS.detail}>
+                    <Button dense onClick={() => onOpenDetail(transfer)}>
+                      상세
+                    </Button>
+                  </TableGrid.Cell>
+                </TableGrid.Row>
+              );
+            })}
           </TableGrid.Body>
         </TableGrid.Root>
-        <div className="panel__body crypto-wallet-status-strip">
+        <div className="panel__body crypto-wallet-status-strip" style={{ flexShrink: 0 }}>
           {walletStatuses.slice(0, 6).map((status) => (
             <span
               key={`${status.currency}:${status.netType}`}

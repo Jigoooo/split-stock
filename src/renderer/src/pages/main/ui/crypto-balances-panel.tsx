@@ -1,3 +1,4 @@
+import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
 import type { CryptoBalanceSummary } from '@shared/contracts';
 import type { ReactElement } from 'react';
@@ -13,12 +14,30 @@ export const CryptoBalancesPanel = ({
   enabled: boolean;
   quote: string;
 }): ReactElement => (
-  <section className="panel crypto-account-panel">
-    <div className="panel__title">실시간 잔고</div>
+  <section
+    className="panel crypto-account-panel"
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%',
+      minHeight: 0,
+      overflow: 'hidden',
+    }}
+    aria-label="실시간 잔고"
+  >
+    <div className="panel__title" style={{ flexShrink: 0 }}>
+      실시간 잔고 ({thousandSeparator(balances.length)}건)
+    </div>
     {!enabled ? (
       <div className="panel__body muted">활성 Upbit 실전 계좌에서만 조회됩니다.</div>
     ) : (
-      <TableGrid.Root variant="hts" stickyHeader horizontalScroll style={{ height: '100%' }}>
+      <TableGrid.Root
+        variant="hts"
+        stickyHeader
+        horizontalScroll
+        aria-label="실시간 잔고 테이블"
+        style={{ flex: 1, minHeight: 0 }}
+      >
         <TableGrid.Header>
           <TableGrid.Cell width="7rem">자산</TableGrid.Cell>
           <TableGrid.Cell flex={1} numeric>
@@ -28,16 +47,23 @@ export const CryptoBalancesPanel = ({
             잠김
           </TableGrid.Cell>
           <TableGrid.Cell flex={1} numeric>
-            평단
+            매입가
           </TableGrid.Cell>
           <TableGrid.Cell flex={1} numeric>
-            평가
+            평가금액
           </TableGrid.Cell>
           <TableGrid.Cell flex={1} numeric>
-            손익
+            평가손익
           </TableGrid.Cell>
         </TableGrid.Header>
         <TableGrid.Body>
+          {balances.length === 0 ? (
+            <TableGrid.Row placeholder>
+              <TableGrid.Cell width="100%" className="muted">
+                보유 자산이 없습니다.
+              </TableGrid.Cell>
+            </TableGrid.Row>
+          ) : null}
           {balances.map((balance) => (
             <TableGrid.Row key={balance.currency}>
               <TableGrid.Cell width="7rem">{balance.currency}</TableGrid.Cell>
@@ -68,13 +94,6 @@ export const CryptoBalancesPanel = ({
               </TableGrid.Cell>
             </TableGrid.Row>
           ))}
-          {balances.length === 0 ? (
-            <TableGrid.Row placeholder>
-              <TableGrid.Cell width="100%" className="muted">
-                조회된 실시간 잔고가 없습니다.
-              </TableGrid.Cell>
-            </TableGrid.Row>
-          ) : null}
         </TableGrid.Body>
       </TableGrid.Root>
     )}
