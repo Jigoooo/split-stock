@@ -1,5 +1,4 @@
-import { useCryptoBalanceWithLots, useCryptoTradeCycles } from '@renderer/entities/account-crypto';
-import { CryptoMemoForm } from '@renderer/features/crypto-memo';
+import { useCryptoBalanceWithLots } from '@renderer/entities/account-crypto';
 import {
   decimalAdd,
   decimalDiv,
@@ -12,28 +11,25 @@ import {
 import { trpc } from '@renderer/shared/api/trpc';
 import { dialog, type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
 import type {
-  CryptoAutoTradeHistoryItem,
   CryptoBalanceSummary,
   CryptoCandleUnit,
   CryptoStrategyProfile,
   CryptoTransferStatus,
 } from '@shared/contracts';
-import { createDefaultCryptoStrategyProfile } from '@shared/contracts';
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { isOpenOrder } from '../model/crypto-formatters';
 import { storeAddCryptoWatchPrefill } from '../model/crypto-watch-popout-prefill';
-import { CryptoAutoStrategyTabBody } from './crypto-auto-panel';
 import { CryptoBalancesPanel } from './crypto-balances-panel';
-import { CryptoCyclesPanel } from './crypto-cycles-panel';
 import { CryptoFeedTabs } from './crypto-feed-tabs';
 import { CryptoLotsPanel } from './crypto-lots-panel';
 import { CryptoMarketBar } from './crypto-market-bar';
 import { CryptoOrderTicket } from './crypto-order-ticket';
 import { CryptoOrderbookPanel } from './crypto-orderbook-panel';
 import { CryptoOrdersPanel } from './crypto-orders-panel';
+import { CryptoTradeHistoryPanel } from './crypto-trade-history-panel';
 import { CryptoTransfersPanel } from './crypto-transfers-panel';
-import { CryptoAutoTradeHistoryTable, CryptoWatchBoard } from './crypto-watch-board';
+import { CryptoWatchBoard } from './crypto-watch-board';
 
 export { CryptoAutoPanel } from './crypto-auto-panel';
 export { CryptoBalancesPanel } from './crypto-balances-panel';
@@ -54,8 +50,6 @@ type Mode = 'limit' | 'market';
 type OrderType = 'limit' | 'price' | 'market';
 type CryptoLeftTab = 'holdings' | 'auto';
 type CryptoHoldingsTab = 'balances' | 'lots' | 'filled' | 'open' | 'transfers';
-type CryptoRightTab = 'selected-history' | 'all-history';
-type CryptoRightDetailTab = 'strategy' | 'all' | 'open' | 'closed' | 'memo';
 type CryptoOrderPanelId =
   | 'left-filled'
   | 'left-open'
@@ -75,14 +69,6 @@ const CRYPTO_HOLDINGS_TABS = [
   { id: 'open', label: '미체결' },
   { id: 'transfers', label: '입출금' },
 ] as const satisfies ReadonlyArray<HtsTabItem<CryptoHoldingsTab>>;
-
-const CRYPTO_RIGHT_DETAIL_TABS = [
-  { id: 'strategy', label: '자동매매 설정' },
-  { id: 'all', label: '전체보기' },
-  { id: 'open', label: '진행중' },
-  { id: 'closed', label: '종료' },
-  { id: 'memo', label: '메모' },
-] as const satisfies ReadonlyArray<HtsTabItem<CryptoRightDetailTab>>;
 
 const LIVE_TRADE_LIMIT = 60;
 
@@ -150,11 +136,6 @@ export const CryptoMainPage = ({
   } | null>(null);
   const [leftTab, setLeftTab] = useState<CryptoLeftTab>('holdings');
   const [holdingsTab, setHoldingsTab] = useState<CryptoHoldingsTab>('balances');
-  const [rightTab, setRightTab] = useState<CryptoRightTab>('selected-history');
-  const [rightDetailTab, setRightDetailTab] = useState<CryptoRightDetailTab>('strategy');
-  const [autoStrategyProfile, setAutoStrategyProfile] = useState<CryptoStrategyProfile>(() =>
-    createDefaultCryptoStrategyProfile('KRW-BTC'),
-  );
   const [liveTrades, setLiveTrades] = useState<
     Array<{
       id: string;
@@ -248,31 +229,12 @@ export const CryptoMainPage = ({
       refetchInterval: privateEnabled && market.startsWith('KRW-') ? 5000 : false,
     },
   );
-  const autoStrategyQuery = trpc.crypto.getAutoStrategy.useQuery(
-    { accountId, market },
-    {
-      enabled: privateEnabled && market.startsWith('KRW-'),
-      staleTime: 3000,
-    },
-  );
   const autoWatchesQuery = trpc.crypto.listAutoWatches.useQuery(
     { accountId },
     {
       enabled: privateEnabled,
       staleTime: 3000,
       refetchInterval: privateEnabled ? 5000 : false,
-    },
-  );
-  const selectedAutoHistoryQuery = trpc.crypto.listAutoTradeHistory.useQuery(
-    {
-      accountId,
-      market,
-      status: rightDetailTab === 'strategy' || rightDetailTab === 'memo' ? 'all' : rightDetailTab,
-    },
-    {
-      enabled: privateEnabled && market.startsWith('KRW-'),
-      staleTime: 3000,
-      refetchInterval: privateEnabled ? 8000 : false,
     },
   );
   const allAutoHistoryQuery = trpc.crypto.listAutoTradeHistory.useQuery(
@@ -282,10 +244,6 @@ export const CryptoMainPage = ({
       staleTime: 3000,
       refetchInterval: privateEnabled ? 8000 : false,
     },
-  );
-  const autoTemplatesQuery = trpc.crypto.listAutoStrategyTemplates.useQuery(
-    { accountId },
-    { enabled: privateEnabled, staleTime: 10_000 },
   );
   const watchMarket = trpc.crypto.watchMarket.useMutation();
   const unwatchMarket = trpc.crypto.unwatchMarket.useMutation();
@@ -367,7 +325,6 @@ export const CryptoMainPage = ({
   );
   const quote = getCryptoQuote(market);
   const cryptoLotsData = useCryptoBalanceWithLots(accountId, market);
-  const cryptoTradeCycles = useCryptoTradeCycles(accountId, market);
   const selectedMarketLabel = formatCryptoMarketLabel(selectedMarket?.koreanName ?? null, market);
   const ordTypeFor = (chosenSide: Side): OrderType =>
     mode === 'market' ? (chosenSide === 'bid' ? 'price' : 'market') : 'limit';
@@ -395,14 +352,6 @@ export const CryptoMainPage = ({
       ]);
     },
   });
-  const saveAutoStrategy = trpc.crypto.saveAutoStrategy.useMutation({
-    onSuccess: () => {
-      void Promise.all([
-        utils.crypto.getAutoStatus.invalidate({ accountId, market }),
-        utils.crypto.getAutoStrategy.invalidate({ accountId, market }),
-      ]);
-    },
-  });
   const pauseAutoWatches = trpc.crypto.pauseAutoWatches.useMutation({
     onSuccess: () => {
       void Promise.all([
@@ -427,30 +376,6 @@ export const CryptoMainPage = ({
       ]);
     },
   });
-  const saveAutoStrategyTemplate = trpc.crypto.saveAutoStrategyTemplate.useMutation({
-    onSuccess: () => {
-      void utils.crypto.listAutoStrategyTemplates.invalidate({ accountId });
-    },
-  });
-  const deleteAutoStrategyTemplate = trpc.crypto.deleteAutoStrategyTemplate.useMutation({
-    onSuccess: () => {
-      void utils.crypto.listAutoStrategyTemplates.invalidate({ accountId });
-    },
-  });
-
-  useEffect(() => {
-    const applyProfile = (next: CryptoStrategyProfile): void => {
-      setAutoStrategyProfile((current) =>
-        JSON.stringify(current) === JSON.stringify(next) ? current : next,
-      );
-    };
-    if (autoStrategyQuery.data?.profile) {
-      applyProfile(autoStrategyQuery.data.profile);
-      return;
-    }
-    applyProfile(createDefaultCryptoStrategyProfile(market as CryptoStrategyProfile['market']));
-  }, [autoStrategyQuery.data?.profile, market]);
-
   const submit = async (chosenSide: Side = side): Promise<void> => {
     if (priceTickError) return;
     const snap = safetyQuery.data;
@@ -531,9 +456,7 @@ export const CryptoMainPage = ({
   const openOrders = recentOrders.filter((order) => isOpenOrder(order.state));
   const filledOrders = recentOrders.filter((order) => !isOpenOrder(order.state));
   const autoWatches = autoWatchesQuery.data?.watches ?? [];
-  const selectedAutoHistory = selectedAutoHistoryQuery.data?.history ?? [];
   const allAutoHistory = allAutoHistoryQuery.data?.history ?? [];
-  const autoTemplates = autoTemplatesQuery.data?.templates ?? [];
 
   const openOrderDetail = (panelId: CryptoOrderPanelId, uuid: string): void => {
     setSelectedOrder({ panelId, uuid });
@@ -742,48 +665,7 @@ export const CryptoMainPage = ({
             }
           />
         }
-        right={
-          <CryptoRightPane
-            allHistory={allAutoHistory}
-            cyclesPanel={
-              <CryptoCyclesPanel
-                enabled={privateEnabled}
-                market={market}
-                cycles={cryptoTradeCycles.cycles}
-                quote={quote}
-              />
-            }
-            memoPanel={<CryptoMemoForm market={market} />}
-            configPanel={
-              <CryptoAutoStrategyTabBody
-                accountId={accountId}
-                market={market}
-                onDeleteTemplate={(id) => deleteAutoStrategyTemplate.mutate({ accountId, id })}
-                onSaveTemplate={(name, profile) =>
-                  saveAutoStrategyTemplate.mutate({ accountId, name, strategy: profile })
-                }
-                onStrategySave={(profile) => {
-                  setAutoStrategyProfile(profile);
-                  saveAutoStrategy.mutate({ accountId, market, profile });
-                }}
-                pending={
-                  saveAutoStrategy.isPending ||
-                  saveAutoStrategyTemplate.isPending ||
-                  deleteAutoStrategyTemplate.isPending
-                }
-                strategy={autoStrategyProfile}
-                strategyLoading={autoStrategyQuery.isFetching}
-                templates={autoTemplates}
-              />
-            }
-            onRightTabChange={setRightTab}
-            onRightDetailTabChange={setRightDetailTab}
-            rightTab={rightTab}
-            rightDetailTab={rightDetailTab}
-            selectedMarketLabel={selectedMarketLabel}
-            selectedHistory={selectedAutoHistory}
-          />
-        }
+        right={<CryptoTradeHistoryPanel accountId={accountId} market={market} />}
         bottom={
           <div className="main-bottom-section crypto-main-page crypto-main-page__bottom">
             {marketBar}
@@ -883,102 +765,6 @@ const CryptoLeftPane = ({
         ) : null}
       </div>
       <div className="crypto-split-pane__content">{content}</div>
-    </section>
-  );
-};
-
-const CryptoRightPane = ({
-  allHistory,
-  configPanel,
-  cyclesPanel,
-  memoPanel,
-  onRightTabChange,
-  onRightDetailTabChange,
-  rightTab,
-  rightDetailTab,
-  selectedMarketLabel,
-  selectedHistory,
-}: {
-  allHistory: CryptoAutoTradeHistoryItem[];
-  configPanel: ReactElement;
-  cyclesPanel: ReactElement;
-  memoPanel: ReactElement;
-  onRightTabChange: (tab: CryptoRightTab) => void;
-  onRightDetailTabChange: (tab: CryptoRightDetailTab) => void;
-  rightTab: CryptoRightTab;
-  rightDetailTab: CryptoRightDetailTab;
-  selectedMarketLabel: string;
-  selectedHistory: CryptoAutoTradeHistoryItem[];
-}): ReactElement => {
-  const tabs: ReadonlyArray<HtsTabItem<CryptoRightTab>> = [
-    {
-      id: 'selected-history',
-      label: `${selectedMarketLabel} 매매내역`,
-    },
-    { id: 'all-history', label: '모든 매매내역' },
-  ];
-  const selectedStatus =
-    rightDetailTab === 'strategy'
-      ? null
-      : rightDetailTab === 'open'
-        ? 'open'
-        : rightDetailTab === 'closed'
-          ? 'closed'
-          : 'all';
-  const selectedContent =
-    rightDetailTab === 'strategy' ? (
-      configPanel
-    ) : rightDetailTab === 'memo' ? (
-      memoPanel
-    ) : rightDetailTab === 'closed' ? (
-      cyclesPanel
-    ) : (
-      <CryptoAutoTradeHistoryTable
-        emptyText={`${selectedMarketLabel} 자동감시 매매 이력이 없습니다.`}
-        history={
-          selectedStatus === 'all'
-            ? selectedHistory
-            : selectedHistory.filter((item) => item.status === selectedStatus)
-        }
-      />
-    );
-  const allContent = (
-    <CryptoAutoTradeHistoryTable
-      emptyText="전체 코인 자동감시 매매 이력이 없습니다."
-      history={allHistory}
-    />
-  );
-
-  return (
-    <section
-      className="crypto-split-pane crypto-split-pane--right"
-      aria-label="코인 우측 매매내역 패널"
-    >
-      <div className="main-positions-pane__tabs">
-        <HtsTabs<CryptoRightTab>
-          tabs={tabs}
-          active={rightTab}
-          onChange={onRightTabChange}
-          ariaLabel="우측 외부 탭"
-        />
-      </div>
-      <div className="crypto-split-pane__content crypto-trade-history-pane">
-        {rightTab === 'selected-history' ? (
-          <>
-            <div className="main-positions-pane__tabs">
-              <HtsTabs<CryptoRightDetailTab>
-                tabs={CRYPTO_RIGHT_DETAIL_TABS}
-                active={rightDetailTab}
-                onChange={onRightDetailTabChange}
-                ariaLabel="선택 마켓 매매내역 하위 탭"
-              />
-            </div>
-            {selectedContent}
-          </>
-        ) : (
-          allContent
-        )}
-      </div>
     </section>
   );
 };

@@ -297,8 +297,12 @@ describe('CryptoMainPage layout', () => {
     expect(screen.getByTestId('main-bottom')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '포지션' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '자동감시' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '비트코인 (KRW-BTC) 매매내역' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '모든 매매내역' })).toBeInTheDocument();
+    // 코인 우측 패널은 stock TradeHistoryPanel 과 동일한 5탭 구조 (Q2)
+    expect(screen.getByRole('tab', { name: '자동매매 설정' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '전체보기' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '진행중' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '종료' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '종목메모' })).toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: '실시간/상태' })).not.toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '코인 검색' })).toBeInTheDocument();
     expect(screen.getByTestId('crypto-chart-panel')).toHaveTextContent('D');
@@ -331,16 +335,15 @@ describe('CryptoMainPage layout', () => {
   it('shows stock-like right trade history tabs for crypto automation', () => {
     render(<CryptoMainPage accountId={7} />);
 
+    // Q2 — stock TradeHistoryPanel 과 동일한 5탭 구조 (broker-agnostic shell)
     expect(screen.getByRole('tab', { name: '자동매매 설정' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '전체보기' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '진행중' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '종료' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '종목메모' })).toBeInTheDocument();
     expect(
       screen.getByRole('combobox', { name: '불러올 코인 자동매매 템플릿 선택' }),
     ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('tab', { name: '모든 매매내역' }));
-    expect(screen.getByText('성공한 read-only smoke 기록이 없습니다.')).toBeInTheDocument();
   });
 });
 
