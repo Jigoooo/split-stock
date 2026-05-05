@@ -57,10 +57,9 @@ export async function launchElectron(options: LaunchOptions = {}): Promise<Elect
   const mergedEnv: Record<string, string> | undefined =
     options.env !== undefined
       ? Object.fromEntries(
-          [
-            ...Object.entries(process.env),
-            ...Object.entries(options.env),
-          ].filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+          [...Object.entries(process.env), ...Object.entries(options.env)].filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
         )
       : undefined;
   const app = await electron.launch({
