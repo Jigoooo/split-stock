@@ -13,18 +13,9 @@ const CRYPTO_DEFAULT_STRATEGY_MARKET = 'KRW-BTC';
  *
  * 운영 컨트롤(mode toggle, 글로벌 ON/OFF/소액 실거래/비상중지 chips, 보호 설정·루프
  * 컨트롤 hint) 은 모두 설정 → 고급/안전 탭으로 이동했다 (P0 격리). 이 탭은
- * 종목별 strategy 입력만 담당. onOpenAdvancedSettings 가 주어지면 panel title
- * 옆에 "고급/안전 →" 빠른 진입 링크를 노출한다 (onboarding).
+ * 종목별 strategy 입력만 담당 — stock StrategyTabBody 와 동일하게 외곽 panel /
+ * "자동감시" title / "고급/안전 →" 링크 없이 toolbar + form 만.
  */
-
-const openAdvancedSettingsPopout = (): void => {
-  try {
-    window.localStorage.setItem('popout:settings:initialTab', 'advanced');
-  } catch {
-    // localStorage 차단 시 — settings 페이지가 default 탭으로 열림.
-  }
-  void window.appShell?.openPopout('settings');
-};
 
 const openTemplateManagementPopout = (): void => {
   try {
@@ -182,33 +173,21 @@ export const CryptoAutoPanel = ({
   pending: boolean;
   strategy: CryptoStrategyProfile;
   strategyLoading: boolean;
-}): ReactElement => (
-  <section className="panel crypto-account-panel crypto-auto-panel">
-    <div className="panel__title crypto-auto-panel__title">
-      <span>자동감시</span>
-      <Button
-        dense
-        variant="ghost"
-        aria-label="고급/안전 설정 열기"
-        onClick={openAdvancedSettingsPopout}
-      >
-        고급/안전 →
-      </Button>
+}): ReactElement =>
+  !enabled ? (
+    <div className="muted" style={{ padding: '0.8rem' }}>
+      Upbit KRW 실전 계좌와 KRW 마켓에서만 동작합니다.
     </div>
-    {!enabled ? (
-      <div className="panel__body muted">Upbit KRW 실전 계좌와 KRW 마켓에서만 동작합니다.</div>
-    ) : (
-      <div className="panel__body crypto-auto-panel__body">
-        {strategyLoading ? <span className="muted">차수 전략 로드 중…</span> : null}
-        <CryptoStrategyForm
-          disabled={pending}
-          profile={strategy}
-          onSubmit={onStrategySave}
-          chrome="content"
-          submitLabel="설정 저장"
-          submitAriaLabel="코인 설정 저장"
-        />
-      </div>
-    )}
-  </section>
-);
+  ) : (
+    <div className="crypto-auto-panel__body">
+      {strategyLoading ? <span className="muted">차수 전략 로드 중…</span> : null}
+      <CryptoStrategyForm
+        disabled={pending}
+        profile={strategy}
+        onSubmit={onStrategySave}
+        chrome="content"
+        submitLabel="설정 저장"
+        submitAriaLabel="코인 설정 저장"
+      />
+    </div>
+  );

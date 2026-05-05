@@ -513,11 +513,9 @@ describe('CryptoAutoPanel', () => {
       />,
     );
 
-    expect(screen.getByText('자동감시')).toBeInTheDocument();
     expect(screen.getByText('차수별 규칙')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '코인 설정 저장' })).toBeInTheDocument();
-    // 고급/안전 빠른 진입 링크는 main 에 존재.
-    expect(screen.getByRole('button', { name: '고급/안전 설정 열기' })).toBeInTheDocument();
+    // 고급/안전 빠른 진입 링크 / "자동감시" panel title 제거 — stock StrategyTabBody 동등.
     // 운영 컨트롤은 main 에서 완전 제거 — 고급/안전 탭에서만.
     expect(screen.queryByRole('button', { name: '소액 실거래 1회' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '루프 시작' })).not.toBeInTheDocument();
