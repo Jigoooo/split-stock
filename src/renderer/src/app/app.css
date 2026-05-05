@@ -4337,21 +4337,6 @@ body {
   --table-grid-row-custom-bg: rgba(234, 179, 8, 0.085);
 }
 
-.crypto-watch-board {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.crypto-watch-board__table {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.crypto-watch-board__row-actions,
 .crypto-auto-template-bar {
   display: flex;
   gap: 0.6rem;

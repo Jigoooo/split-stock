@@ -24,10 +24,8 @@ import { PositionsGrid } from './positions-grid';
 import { WatchBoard } from './watch-board';
 
 export { CryptoAutoPanel } from './crypto-auto-panel';
-export { CryptoBalancesPanel } from './crypto-balances-panel';
 export { CryptoOrderbookPanel } from './crypto-orderbook-panel';
 export { CryptoOrdersPanel } from './crypto-orders-panel';
-export { CryptoTransfersPanel } from './crypto-transfers-panel';
 
 import { CryptoChartPanel } from './crypto-chart-panel';
 import { MainThreeSplitLayout } from './main-three-split-layout';

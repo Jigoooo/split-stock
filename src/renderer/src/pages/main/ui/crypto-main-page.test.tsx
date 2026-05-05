@@ -6,10 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildBalanceSummaries,
   CryptoAutoPanel,
-  CryptoBalancesPanel,
   CryptoMainPage,
   CryptoOrderbookPanel,
-  CryptoTransfersPanel,
 } from './crypto-main-page';
 
 const mockMutation = vi.hoisted(() => () => ({
@@ -473,98 +471,6 @@ describe('buildBalanceSummaries', () => {
       profitLoss: '2.46',
       profitLossRate: '0.205',
     });
-  });
-});
-
-describe('CryptoBalancesPanel', () => {
-  it('formats KRW and tiny asset quantities compactly', () => {
-    render(
-      <CryptoBalancesPanel
-        enabled
-        quote="KRW"
-        balances={[
-          {
-            currency: 'KRW',
-            unitCurrency: 'KRW',
-            available: '91.41778162',
-            locked: '0',
-            total: '91.41778162',
-            avgBuyPrice: '0',
-            valuation: '91.41778162',
-            costBasis: '0',
-            profitLoss: '0',
-            profitLossRate: '0',
-          },
-          {
-            currency: 'USDT',
-            unitCurrency: 'KRW',
-            available: '0.00000022',
-            locked: '0',
-            total: '0.00000022',
-            avgBuyPrice: '1491.99999999',
-            valuation: '0',
-            costBasis: '0',
-            profitLoss: '0',
-            profitLossRate: '0',
-          },
-        ]}
-      />,
-    );
-
-    expect(screen.getAllByText('91').length).toBeGreaterThan(0);
-    expect(screen.getByText('0.000001 미만')).toBeInTheDocument();
-    expect(screen.getByText('1,492')).toBeInTheDocument();
-    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
-  });
-});
-
-describe('CryptoTransfersPanel', () => {
-  it('renders read-only transfer and wallet status without execution controls', () => {
-    render(
-      <CryptoTransfersPanel
-        enabled
-        onCloseDetail={vi.fn()}
-        onOpenDetail={vi.fn()}
-        selectedTransfer={null}
-        transferDetailLoading={false}
-        transfers={[
-          {
-            direction: 'withdraw',
-            uuid: 'withdraw-uuid',
-            currency: 'ETH',
-            amount: '1.25',
-            fee: '0.01',
-            state: 'DONE',
-            txid: 'txid',
-            transactionType: 'default',
-            transferType: 'withdraw',
-            netType: 'ETH',
-            createdAt: 1,
-            doneAt: 2,
-            isCancelable: false,
-          },
-        ]}
-        walletStatuses={[
-          {
-            currency: 'ETH',
-            netType: 'ETH',
-            networkName: 'Ethereum',
-            walletState: 'working',
-            blockElapsedMinutes: 1,
-            blockHeight: 1,
-            blockState: 'normal',
-            blockUpdatedAt: 1,
-          },
-        ]}
-      />,
-    );
-
-    expect(screen.getByText(/입출금 현황/)).toBeInTheDocument();
-    expect(screen.getByText('ETH/ETH working')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '상세' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '입금 요청' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '출금 요청' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '출금 취소' })).not.toBeInTheDocument();
   });
 });
 
