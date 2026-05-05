@@ -13,7 +13,6 @@ import { trpc } from '@renderer/shared/api/trpc';
 import { dialog, type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
 import type {
   CryptoAutoTradeHistoryItem,
-  CryptoAutoWatch,
   CryptoBalanceSummary,
   CryptoCandleUnit,
   CryptoStrategyProfile,
@@ -757,6 +756,7 @@ export const CryptoMainPage = ({
             memoPanel={<CryptoMemoForm market={market} />}
             configPanel={
               <CryptoAutoStrategyTabBody
+                accountId={accountId}
                 market={market}
                 onDeleteTemplate={(id) => deleteAutoStrategyTemplate.mutate({ accountId, id })}
                 onSaveTemplate={(name, profile) =>
