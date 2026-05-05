@@ -50,6 +50,7 @@ const CREATE_STATEMENTS: readonly string[] = [
     qty_decimal TEXT,
     buy_price_decimal TEXT,
     amount_krw_decimal TEXT,
+    source TEXT,
     status TEXT NOT NULL,
     bought_at INTEGER NOT NULL,
     sold_at INTEGER,
@@ -88,8 +89,13 @@ const CREATE_STATEMENTS: readonly string[] = [
     category TEXT NOT NULL,
     message TEXT NOT NULL,
     payload_json TEXT,
-    audit_payload TEXT
+    audit_payload TEXT,
+    account_id INTEGER,
+    broker TEXT,
+    pdno TEXT,
+    idempotency_key TEXT
   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS event_logs_idempotency_uniq ON event_logs(account_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
   `CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,

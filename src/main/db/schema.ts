@@ -88,6 +88,11 @@ export const lots = sqliteTable('lots', {
   qtyDecimal: text('qty_decimal'),
   buyPriceDecimal: text('buy_price_decimal'),
   amountKrwDecimal: text('amount_krw_decimal'),
+  /**
+   * Phase R0-6: 코인 자동매매 dry-run/live 분리 — KIS row 는 NULL, UPBIT row 는 'dry-run'|'live'.
+   * exposure gate (live 만 합산) 와 mode 별 lot 분리에 필수.
+   */
+  source: text('source'),
   status: text('status').notNull(), // 'OPEN' | 'SOLD' | 'BUYING' | 'SELLING'
   boughtAt: integer('bought_at', { mode: 'timestamp_ms' }).notNull(),
   soldAt: integer('sold_at', { mode: 'timestamp_ms' }),
@@ -134,15 +139,33 @@ export const trades = sqliteTable('trades', {
  * 이벤트 로그 — 자동매매/주문/오류 타임라인.
  * API 응답 원문을 저장할 때는 토큰/키를 반드시 마스킹한 후 payload에 기록.
  */
-export const eventLogs = sqliteTable('event_logs', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  ts: integer('ts', { mode: 'timestamp_ms' }).notNull(),
-  level: text('level').notNull(), // 'INFO' | 'WARN' | 'ERROR'
-  category: text('category').notNull(), // 'AUTH' | 'ORDER' | 'FSM' | 'WS' | 'SYS'
-  message: text('message').notNull(),
-  payloadJson: text('payload_json'), // nullable JSON text
-  auditPayload: text('audit_payload'), // 차수 수동편집 등 before/after 스냅샷 (JSON 직렬화, NULL 허용)
-});
+export const eventLogs = sqliteTable(
+  'event_logs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    ts: integer('ts', { mode: 'timestamp_ms' }).notNull(),
+    level: text('level').notNull(), // 'INFO' | 'WARN' | 'ERROR'
+    category: text('category').notNull(), // 'AUTH' | 'ORDER' | 'FSM' | 'WS' | 'SYS' | 'AUTO_CRYPTO'
+    message: text('message').notNull(),
+    payloadJson: text('payload_json'), // nullable JSON text
+    auditPayload: text('audit_payload'), // 차수 수동편집 등 before/after 스냅샷 (JSON 직렬화, NULL 허용)
+    /**
+     * Phase R0-6: 코인 자동매매 엔진이 cryptoAutoEvents → event_logs 로 흡수될 때 indexed query 와
+     * idempotency 보장에 필요한 최상위 컬럼들. KIS 자동매매 흐름 row 는 NULL 유지.
+     */
+    accountId: integer('account_id'),
+    broker: text('broker'),
+    pdno: text('pdno'),
+    idempotencyKey: text('idempotency_key'),
+  },
+  (t) => [
+    // partial unique — idempotencyKey 가 있을 때만 (account_id, idempotency_key) 중복 차단.
+    // 코인 자동매매 live tick 의 중복 발사 방지 invariant.
+    uniqueIndex('event_logs_idempotency_uniq')
+      .on(t.accountId, t.idempotencyKey)
+      .where(sql`idempotency_key IS NOT NULL`),
+  ],
+);
 
 /**
  * 앱 설정 — 환경/기본 전략 파라미터 등.
