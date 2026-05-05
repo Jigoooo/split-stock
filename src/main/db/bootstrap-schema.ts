@@ -40,6 +40,7 @@ const CREATE_STATEMENTS: readonly string[] = [
   )`,
   `CREATE TABLE IF NOT EXISTS lots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    broker TEXT NOT NULL DEFAULT 'KIS',
     account_id INTEGER NOT NULL,
     pdno TEXT NOT NULL,
     nth INTEGER NOT NULL,
@@ -53,6 +54,7 @@ const CREATE_STATEMENTS: readonly string[] = [
   )`,
   `CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    broker TEXT NOT NULL DEFAULT 'KIS',
     account_id INTEGER NOT NULL,
     lot_id INTEGER,
     odno TEXT NOT NULL,
@@ -69,6 +71,7 @@ const CREATE_STATEMENTS: readonly string[] = [
   )`,
   `CREATE TABLE IF NOT EXISTS trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    broker TEXT NOT NULL DEFAULT 'KIS',
     order_id INTEGER NOT NULL,
     qty INTEGER NOT NULL,
     price INTEGER NOT NULL,
@@ -283,6 +286,7 @@ const CREATE_STATEMENTS: readonly string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS crypto_auto_events_idempotency_uniq ON crypto_auto_events(account_id, idempotency_key)`,
   `CREATE TABLE IF NOT EXISTS lots_snapshots (
     account_id INTEGER NOT NULL,
+    broker TEXT NOT NULL DEFAULT 'KIS',
     snapshot_date TEXT NOT NULL,
     pdno TEXT NOT NULL,
     name TEXT NOT NULL DEFAULT '',
@@ -303,6 +307,7 @@ const CREATE_STATEMENTS: readonly string[] = [
   )`,
   `CREATE TABLE IF NOT EXISTS watch_orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    broker TEXT NOT NULL DEFAULT 'KIS',
     account_id INTEGER NOT NULL,
     pdno TEXT NOT NULL,
     source TEXT NOT NULL,
@@ -336,6 +341,7 @@ const CREATE_STATEMENTS: readonly string[] = [
   )`,
   `CREATE TABLE IF NOT EXISTS symbol_memos (
     pdno TEXT PRIMARY KEY,
+    broker TEXT NOT NULL DEFAULT 'KIS',
     content TEXT NOT NULL DEFAULT '',
     updated_at INTEGER NOT NULL
   )`,

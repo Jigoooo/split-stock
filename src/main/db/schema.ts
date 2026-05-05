@@ -70,8 +70,10 @@ export const accounts = sqliteTable('accounts', {
  */
 export const lots = sqliteTable('lots', {
   id: integer('id').primaryKey({ autoIncrement: true }),
+  /** Phase R0: broker-agnostic 확장. 'KIS' default — 코인 ETL 후 'UPBIT' row 도 같은 테이블에 들어감. */
+  broker: text('broker').notNull().default('KIS'),
   accountId: integer('account_id').notNull(),
-  pdno: text('pdno').notNull(), // 종목코드
+  pdno: text('pdno').notNull(), // 종목코드 (KIS=6자리, UPBIT=KRW-XXX 등)
   nth: integer('nth').notNull(), // 1..N차
   buyPrice: integer('buy_price').notNull(), // 원(정수)
   qty: integer('qty').notNull(),
@@ -87,6 +89,8 @@ export const lots = sqliteTable('lots', {
  */
 export const orders = sqliteTable('orders', {
   id: integer('id').primaryKey({ autoIncrement: true }),
+  /** Phase R0: broker-agnostic 확장. */
+  broker: text('broker').notNull().default('KIS'),
   accountId: integer('account_id').notNull(),
   lotId: integer('lot_id'), // 매도일 때 해당 차수
   odno: text('odno').notNull(), // KIS 주문번호
@@ -107,6 +111,8 @@ export const orders = sqliteTable('orders', {
  */
 export const trades = sqliteTable('trades', {
   id: integer('id').primaryKey({ autoIncrement: true }),
+  /** Phase R0: broker-agnostic 확장. */
+  broker: text('broker').notNull().default('KIS'),
   orderId: integer('order_id').notNull(),
   qty: integer('qty').notNull(),
   price: integer('price').notNull(),
@@ -431,6 +437,8 @@ export const lotsSnapshots = sqliteTable(
   'lots_snapshots',
   {
     accountId: integer('account_id').notNull(),
+    /** Phase R0: broker-agnostic 확장. */
+    broker: text('broker').notNull().default('KIS'),
     snapshotDate: text('snapshot_date').notNull(), // YYYY-MM-DD (KST)
     pdno: text('pdno').notNull(),
     name: text('name').notNull().default(''), // stock_master에서 캡처
@@ -478,7 +486,9 @@ export const prebuyOrders = sqliteTable('prebuy_orders', {
  * pdno 가 PK. 향후 per-account 가 필요해지면 (account_id, pdno) 복합 PK로 확장 가능.
  */
 export const symbolMemos = sqliteTable('symbol_memos', {
-  pdno: text('pdno').primaryKey(), // 종목코드 6자리
+  pdno: text('pdno').primaryKey(), // 종목코드 (KIS=6자리, UPBIT=KRW-XXX)
+  /** Phase R0: broker-agnostic 확장. KIS pdno '256940' 과 UPBIT 'KRW-BTC' 는 자연 비충돌 — pdno PK 유지. */
+  broker: text('broker').notNull().default('KIS'),
   content: text('content').notNull().default(''), // 메모 본문
   updatedAt: integer('updated_at').notNull(), // unix epoch (ms)
 });
@@ -518,6 +528,8 @@ export const cryptoMarketMemos = sqliteTable('crypto_market_memos', {
  */
 export const watchOrders = sqliteTable('watch_orders', {
   id: integer('id').primaryKey({ autoIncrement: true }),
+  /** Phase R0: broker-agnostic 확장. */
+  broker: text('broker').notNull().default('KIS'),
   accountId: integer('account_id').notNull(), // FK → accounts.id
   pdno: text('pdno').notNull(),
   source: text('source').notNull(), // 'BOOSTER' | 'PREBUY' | 'CUSTOM'
