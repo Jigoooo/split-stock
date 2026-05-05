@@ -1,4 +1,4 @@
-import { Button, Select, TextInput } from '@renderer/shared/ui';
+import { alertDialog, Button, DialogType, Select, TextInput } from '@renderer/shared/ui';
 import type { CryptoAutoTemplate, CryptoStrategyProfile } from '@shared/contracts';
 import { type ReactElement, useState } from 'react';
 import { CryptoStrategyForm } from './crypto-strategy-form';
@@ -15,6 +15,15 @@ import { CryptoStrategyForm } from './crypto-strategy-form';
 const openAdvancedSettingsPopout = (): void => {
   try {
     window.localStorage.setItem('popout:settings:initialTab', 'advanced');
+  } catch {
+    // localStorage 차단 시 — settings 페이지가 default 탭으로 열림.
+  }
+  void window.appShell?.openPopout('settings');
+};
+
+const openTemplateManagementPopout = (): void => {
+  try {
+    window.localStorage.setItem('popout:settings:initialTab', 'strategy');
   } catch {
     // localStorage 차단 시 — settings 페이지가 default 탭으로 열림.
   }
@@ -46,13 +55,14 @@ export const CryptoAutoStrategyTabBody = ({
 
   return (
     <div className="crypto-auto-strategy-tab">
-      <fieldset className="panel crypto-auto-template-bar">
-        <legend className="sr-only">코인 자동매매 템플릿</legend>
+      <div className="crypto-auto-template-bar" role="toolbar" aria-label="코인 자동매매 템플릿">
         <Select
-          aria-label="코인 자동매매 템플릿 선택"
+          aria-label="불러올 코인 자동매매 템플릿 선택"
           dense
           value={templateId}
+          disabled={pending || templates.length === 0}
           onChange={(event) => setTemplateId(event.target.value)}
+          style={{ minWidth: '15rem' }}
         >
           <option value="">템플릿 선택</option>
           {templates.map((template) => (
@@ -61,12 +71,6 @@ export const CryptoAutoStrategyTabBody = ({
             </option>
           ))}
         </Select>
-        <TextInput
-          aria-label="코인 자동매매 템플릿 이름"
-          dense
-          value={templateName}
-          onChange={(event) => setTemplateName(event.target.value)}
-        />
         <Button
           dense
           disabled={!selectedTemplate || pending}
@@ -76,8 +80,18 @@ export const CryptoAutoStrategyTabBody = ({
         >
           불러오기
         </Button>
+        <TextInput
+          aria-label="새 코인 자동매매 템플릿 이름"
+          placeholder="템플릿 이름"
+          dense
+          disabled={pending}
+          value={templateName}
+          onChange={(event) => setTemplateName(event.target.value)}
+          style={{ flex: '0 1 12rem', minWidth: '8rem' }}
+        />
         <Button
           dense
+          variant="primary"
           disabled={pending || templateName.trim().length === 0}
           onClick={() => onSaveTemplate(templateName.trim(), strategy)}
         >
@@ -88,12 +102,27 @@ export const CryptoAutoStrategyTabBody = ({
           variant="destructive"
           disabled={!selectedTemplate || pending}
           onClick={() => {
-            if (selectedTemplate) onDeleteTemplate(selectedTemplate.id);
+            if (!selectedTemplate) return;
+            void (async () => {
+              const confirmed = await alertDialog.confirm({
+                type: DialogType.WARNING,
+                title: '템플릿 삭제',
+                message: `"${selectedTemplate.name}" 템플릿을 삭제합니다. 이 작업은 되돌릴 수 없습니다.`,
+                confirmText: '삭제',
+                cancelText: '취소',
+              });
+              if (!confirmed) return;
+              onDeleteTemplate(selectedTemplate.id);
+              setTemplateId('');
+            })();
           }}
         >
           삭제
         </Button>
-      </fieldset>
+        <Button dense onClick={openTemplateManagementPopout} disabled={pending}>
+          템플릿 관리
+        </Button>
+      </div>
       <CryptoAutoPanel
         enabled={market.startsWith('KRW-')}
         onStrategySave={onStrategySave}

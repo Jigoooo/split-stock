@@ -2,8 +2,9 @@ import type {
   StageRuleField,
   StageRuleRowRaw,
 } from '@renderer/features/edit-strategy/model/strategy-form-types';
+import { NumberField } from '@renderer/features/edit-strategy/ui/number-field';
 import { StageRulesEditor } from '@renderer/features/edit-strategy/ui/stage-rules-editor';
-import { Button, Select, TextInput } from '@renderer/shared/ui';
+import { Button, Select } from '@renderer/shared/ui';
 import type { CryptoStrategyAutoMode, CryptoStrategyProfile } from '@shared/contracts';
 import {
   createCryptoStrategyRules,
@@ -178,22 +179,29 @@ export const CryptoStrategyForm = (props: CryptoStrategyFormProps): ReactElement
       onSubmit={(event) => event.preventDefault()}
     >
       <div className={bodyClassName}>
-        <section className="crypto-strategy-form__top">
-          <label htmlFor="crypto-strategy-max-stages">
-            <span className="muted">최대 관리차수 (1~50)</span>
-            <TextInput
-              id="crypto-strategy-max-stages"
-              aria-label="최대 관리차수"
-              dense
-              disabled={disabled}
-              value={String(draft.maxStages)}
-              onChange={(event) =>
-                setDraft((current) => resizeMaxStages(current, Number(event.target.value)))
-              }
-            />
-          </label>
-          <label htmlFor="crypto-strategy-auto-mode">
-            <span className="muted">자동감시 상태</span>
+        <section
+          style={{
+            display: 'grid',
+            gap: '0.8rem',
+            gridTemplateColumns: 'minmax(180px, 220px) minmax(180px, 240px)',
+            alignItems: 'end',
+          }}
+        >
+          <NumberField
+            id="crypto-strategy-max-stages"
+            label="최대 관리차수 (1~50)"
+            value={String(draft.maxStages)}
+            onValueChange={(value) =>
+              setDraft((current) => resizeMaxStages(current, Number(value)))
+            }
+            error={undefined}
+            disabled={disabled}
+            inputMode="numeric"
+          />
+          <div style={{ display: 'grid', gap: '0.3rem' }}>
+            <span className="muted" style={{ fontSize: '1.1rem' }}>
+              자동감시 상태
+            </span>
             <Select
               id="crypto-strategy-auto-mode"
               aria-label="자동감시 상태"
@@ -215,7 +223,7 @@ export const CryptoStrategyForm = (props: CryptoStrategyFormProps): ReactElement
                 </option>
               ))}
             </Select>
-          </label>
+          </div>
         </section>
         <StageRulesEditor
           activeMaxStages={draft.maxStages}

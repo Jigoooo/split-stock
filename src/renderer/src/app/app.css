@@ -4352,7 +4352,12 @@ body {
 }
 
 .crypto-watch-board__row-actions,
-.crypto-auto-template-bar,
+.crypto-auto-template-bar {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
 .add-crypto-watch-popout__checks {
   display: flex;
   align-items: center;

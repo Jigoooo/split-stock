@@ -335,7 +335,9 @@ describe('CryptoMainPage layout', () => {
     expect(screen.getByRole('tab', { name: '전체보기' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '진행중' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '종료' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: '코인 자동매매 템플릿 선택' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: '불러올 코인 자동매매 템플릿 선택' }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: '모든 매매내역' }));
     expect(screen.getByText('성공한 read-only smoke 기록이 없습니다.')).toBeInTheDocument();
