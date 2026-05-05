@@ -13,6 +13,11 @@ export interface WatchListInput {
   status?: WatchStatus | undefined;
   source?: WatchSource | undefined;
   accountId?: number | undefined;
+  /**
+   * Phase R3-2: client 가 broker 를 통과시킬 수 있도록 schema 에 받아 둔다.
+   * 서버 핸들러(listWatchOrders / watchEngine.list)는 R3-3 까지 STOCK_BROKER('KIS') 하드코딩.
+   */
+  broker?: string | undefined;
 }
 
 export interface AccountScopedInput {
@@ -44,6 +49,8 @@ export interface ReservationBuyUpdateInput extends Omit<ReservationBuyCreateInpu
 
 export interface WatchHistoryInput {
   limit?: number | undefined;
+  /** Phase R3-2: client 가 broker 통과 — 서버측은 R3-3 까지 무시. */
+  broker?: string | undefined;
 }
 
 export interface WatchHistoryItem {

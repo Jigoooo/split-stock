@@ -278,6 +278,76 @@ vi.mock('./crypto-chart-panel', () => ({
   ),
 }));
 
+// Phase R3-2: 좌측 grid 영역은 broker-agnostic stock 컴포넌트 4개를 mock —
+// 본 test 의 관심사는 layout / subtab 전환 / right pane shell 이지 stock 데이터 fetch 가 아님.
+// 실데이터 검증은 각 stock 컴포넌트 단위 test 가 담당.
+vi.mock('./positions-grid', () => ({
+  PositionsGrid: ({
+    accountId,
+    broker,
+    onSelect,
+  }: {
+    accountId: number;
+    broker?: string;
+    onSelect?: (pdno: string) => void;
+  }) => (
+    <section data-testid="positions-grid" data-broker={broker} data-account-id={accountId}>
+      <button type="button" onClick={() => onSelect?.('KRW-BTC')}>
+        잔고 비트코인 행 선택
+      </button>
+    </section>
+  ),
+}));
+
+vi.mock('./filled-pane', () => ({
+  FilledPane: ({ broker, selectedPdno }: { broker?: string; selectedPdno: string | null }) => (
+    <section data-testid="filled-pane" data-broker={broker} data-selected={selectedPdno ?? ''} />
+  ),
+}));
+
+vi.mock('@renderer/widgets/trading-panel', () => ({
+  ActiveOrdersPanel: ({ broker, pdnoFilter }: { broker?: string; pdnoFilter?: string | null }) => (
+    <section
+      data-testid="active-orders-panel"
+      data-broker={broker}
+      data-pdno-filter={pdnoFilter ?? ''}
+    >
+      <span>대기</span>
+    </section>
+  ),
+}));
+
+vi.mock('./watch-board', () => ({
+  WatchBoard: ({ accountId, broker }: { accountId: number; broker?: string }) => (
+    <div data-testid="watch-board" data-broker={broker} data-account-id={accountId}>
+      <div role="tablist" aria-label="자동감시 4탭 (mocked)">
+        <button role="tab" type="button">
+          현황
+        </button>
+        <button role="tab" type="button">
+          실행내역
+        </button>
+        <button role="tab" type="button">
+          실패
+        </button>
+        <button role="tab" type="button">
+          히스토리
+        </button>
+      </div>
+      <button type="button">+ 추가</button>
+      <button type="button" disabled>
+        시작
+      </button>
+      <button type="button" disabled>
+        중지
+      </button>
+      <button type="button" disabled>
+        삭제
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock('react-resizable-panels', () => ({
   Group: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   Panel: ({ children, id }: { children: React.ReactNode; id?: string }) => (

@@ -1,4 +1,3 @@
-import { useCryptoBalanceWithLots } from '@renderer/entities/account-crypto';
 import {
   decimalAdd,
   decimalDiv,
@@ -10,26 +9,19 @@ import {
 } from '@renderer/pages/main/model/crypto-format';
 import { trpc } from '@renderer/shared/api/trpc';
 import { dialog, type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
-import type {
-  CryptoBalanceSummary,
-  CryptoCandleUnit,
-  CryptoStrategyProfile,
-  CryptoTransferStatus,
-} from '@shared/contracts';
+import { ActiveOrdersPanel } from '@renderer/widgets/trading-panel';
+import type { CryptoBalanceSummary, CryptoCandleUnit } from '@shared/contracts';
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { isOpenOrder } from '../model/crypto-formatters';
-import { storeAddCryptoWatchPrefill } from '../model/crypto-watch-popout-prefill';
-import { CryptoBalancesPanel } from './crypto-balances-panel';
 import { CryptoFeedTabs } from './crypto-feed-tabs';
-import { CryptoLotsPanel } from './crypto-lots-panel';
 import { CryptoMarketBar } from './crypto-market-bar';
 import { CryptoOrderTicket } from './crypto-order-ticket';
 import { CryptoOrderbookPanel } from './crypto-orderbook-panel';
-import { CryptoOrdersPanel } from './crypto-orders-panel';
 import { CryptoTradeHistoryPanel } from './crypto-trade-history-panel';
-import { CryptoTransfersPanel } from './crypto-transfers-panel';
-import { CryptoWatchBoard } from './crypto-watch-board';
+import { FilledPane } from './filled-pane';
+import { PositionsGrid } from './positions-grid';
+import { WatchBoard } from './watch-board';
 
 export { CryptoAutoPanel } from './crypto-auto-panel';
 export { CryptoBalancesPanel } from './crypto-balances-panel';
@@ -49,25 +41,19 @@ type Side = 'bid' | 'ask';
 type Mode = 'limit' | 'market';
 type OrderType = 'limit' | 'price' | 'market';
 type CryptoLeftTab = 'holdings' | 'auto';
-type CryptoHoldingsTab = 'balances' | 'lots' | 'filled' | 'open' | 'transfers';
-type CryptoOrderPanelId =
-  | 'left-filled'
-  | 'left-open'
-  | 'right-selected'
-  | 'right-all'
-  | 'feed-tabs';
+type CryptoHoldingsTab = 'balances' | 'filled' | 'open';
+type CryptoOrderPanelId = 'right-selected' | 'right-all' | 'feed-tabs';
 
 const CRYPTO_LEFT_TABS = [
   { id: 'holdings', label: '포지션' },
   { id: 'auto', label: '자동감시' },
 ] as const satisfies ReadonlyArray<HtsTabItem<CryptoLeftTab>>;
 
+// Phase R3-2: 차수 / 입출금 탭 폐기. stock 동등 3탭 (실시간 잔고 / 체결 / 미체결).
 const CRYPTO_HOLDINGS_TABS = [
   { id: 'balances', label: '실시간 잔고' },
-  { id: 'lots', label: '차수' },
   { id: 'filled', label: '체결' },
   { id: 'open', label: '미체결' },
-  { id: 'transfers', label: '입출금' },
 ] as const satisfies ReadonlyArray<HtsTabItem<CryptoHoldingsTab>>;
 
 const LIVE_TRADE_LIMIT = 60;
@@ -130,10 +116,6 @@ export const CryptoMainPage = ({
     panelId: CryptoOrderPanelId;
     uuid: string;
   } | null>(null);
-  const [selectedTransfer, setSelectedTransfer] = useState<{
-    direction: CryptoTransferStatus['direction'];
-    uuid: string;
-  } | null>(null);
   const [leftTab, setLeftTab] = useState<CryptoLeftTab>('holdings');
   const [holdingsTab, setHoldingsTab] = useState<CryptoHoldingsTab>('balances');
   const [liveTrades, setLiveTrades] = useState<
@@ -193,57 +175,9 @@ export const CryptoMainPage = ({
     { accountId, limit: 80 },
     { enabled: privateEnabled, staleTime: 2000, refetchInterval: privateEnabled ? 8000 : false },
   );
-  const transfersQuery = trpc.crypto.listTransfers.useQuery(
-    { accountId, limit: 40 },
-    {
-      enabled: privateEnabled,
-      staleTime: 15_000,
-      refetchInterval: privateEnabled ? 30_000 : false,
-    },
-  );
-  const walletStatusesQuery = trpc.crypto.listWalletStatuses.useQuery(
-    { accountId },
-    {
-      enabled: privateEnabled,
-      staleTime: 30_000,
-      refetchInterval: privateEnabled ? 60_000 : false,
-    },
-  );
   const orderDetailQuery = trpc.crypto.getOrderDetail.useQuery(
     { accountId, uuid: selectedOrder?.uuid ?? '' },
     { enabled: privateEnabled && selectedOrder !== null, staleTime: 5000 },
-  );
-  const transferDetailQuery = trpc.crypto.getTransfer.useQuery(
-    {
-      accountId,
-      direction: selectedTransfer?.direction ?? 'deposit',
-      uuid: selectedTransfer?.uuid ?? '',
-    },
-    { enabled: privateEnabled && selectedTransfer !== null, staleTime: 5000 },
-  );
-  const autoStatusQuery = trpc.crypto.getAutoStatus.useQuery(
-    { accountId, market },
-    {
-      enabled: privateEnabled && market.startsWith('KRW-'),
-      staleTime: 3000,
-      refetchInterval: privateEnabled && market.startsWith('KRW-') ? 5000 : false,
-    },
-  );
-  const autoWatchesQuery = trpc.crypto.listAutoWatches.useQuery(
-    { accountId },
-    {
-      enabled: privateEnabled,
-      staleTime: 3000,
-      refetchInterval: privateEnabled ? 5000 : false,
-    },
-  );
-  const allAutoHistoryQuery = trpc.crypto.listAutoTradeHistory.useQuery(
-    { accountId, status: 'all' },
-    {
-      enabled: privateEnabled,
-      staleTime: 3000,
-      refetchInterval: privateEnabled ? 8000 : false,
-    },
   );
   const watchMarket = trpc.crypto.watchMarket.useMutation();
   const unwatchMarket = trpc.crypto.unwatchMarket.useMutation();
@@ -314,17 +248,7 @@ export const CryptoMainPage = ({
   const ticker = tickerSubscription.data ?? tickerQuery.data ?? null;
   const orderbook = orderbookSubscription.data ?? orderbookQuery.data ?? null;
   const instrument = instrumentsQuery.data?.entries[0] ?? null;
-  const balanceSummaries = useMemo(
-    () =>
-      buildBalanceSummaries({
-        balances: balancesQuery.data?.balances ?? [],
-        market,
-        tradePrice: ticker?.tradePrice,
-      }),
-    [balancesQuery.data?.balances, market, ticker?.tradePrice],
-  );
   const quote = getCryptoQuote(market);
-  const cryptoLotsData = useCryptoBalanceWithLots(accountId, market);
   const selectedMarketLabel = formatCryptoMarketLabel(selectedMarket?.koreanName ?? null, market);
   const ordTypeFor = (chosenSide: Side): OrderType =>
     mode === 'market' ? (chosenSide === 'bid' ? 'price' : 'market') : 'limit';
@@ -349,30 +273,6 @@ export const CryptoMainPage = ({
       void Promise.all([
         utils.crypto.getBalances.invalidate({ accountId }),
         utils.crypto.listRecentOrders.invalidate({ accountId, limit: 80 }),
-      ]);
-    },
-  });
-  const pauseAutoWatches = trpc.crypto.pauseAutoWatches.useMutation({
-    onSuccess: () => {
-      void Promise.all([
-        utils.crypto.listAutoWatches.invalidate({ accountId }),
-        utils.crypto.getAutoStatus.invalidate({ accountId, market }),
-      ]);
-    },
-  });
-  const resumeAutoWatches = trpc.crypto.resumeAutoWatches.useMutation({
-    onSuccess: () => {
-      void Promise.all([
-        utils.crypto.listAutoWatches.invalidate({ accountId }),
-        utils.crypto.getAutoStatus.invalidate({ accountId, market }),
-      ]);
-    },
-  });
-  const deleteAutoWatches = trpc.crypto.deleteAutoWatches.useMutation({
-    onSuccess: () => {
-      void Promise.all([
-        utils.crypto.listAutoWatches.invalidate({ accountId }),
-        utils.crypto.getAutoStatus.invalidate({ accountId, market }),
       ]);
     },
   });
@@ -454,64 +354,11 @@ export const CryptoMainPage = ({
 
   const recentOrders = recentOrdersQuery.data?.orders ?? [];
   const openOrders = recentOrders.filter((order) => isOpenOrder(order.state));
-  const filledOrders = recentOrders.filter((order) => !isOpenOrder(order.state));
-  const autoWatches = autoWatchesQuery.data?.watches ?? [];
-  const allAutoHistory = allAutoHistoryQuery.data?.history ?? [];
 
   const openOrderDetail = (panelId: CryptoOrderPanelId, uuid: string): void => {
     setSelectedOrder({ panelId, uuid });
   };
   const closeOrderDetail = (): void => setSelectedOrder(null);
-
-  const renderOrdersPanel = (
-    panelId: CryptoOrderPanelId,
-    title: string,
-    orders: typeof recentOrders,
-  ): ReactElement => (
-    <CryptoOrdersPanel
-      cancelPending={cancelOrder.isPending}
-      detail={selectedOrder?.panelId === panelId ? (orderDetailQuery.data?.order ?? null) : null}
-      detailLoading={selectedOrder?.panelId === panelId ? orderDetailQuery.isFetching : false}
-      enabled={privateEnabled}
-      onCloseDetail={closeOrderDetail}
-      onCancel={(uuid) => {
-        cancelOrder.mutate({ accountId, uuid });
-      }}
-      onOpenDetail={(uuid) => openOrderDetail(panelId, uuid)}
-      orders={orders}
-      title={title}
-    />
-  );
-
-  const autoActionPending =
-    pauseAutoWatches.isPending || resumeAutoWatches.isPending || deleteAutoWatches.isPending;
-  const autoPanel = (
-    <CryptoWatchBoard
-      enabled={privateEnabled}
-      events={autoStatusQuery.data?.recentEvents ?? []}
-      failedHistory={allAutoHistory.filter((item) => item.status === 'failed')}
-      history={allAutoHistory}
-      loading={autoWatchesQuery.isFetching}
-      onAdd={() => {
-        storeAddCryptoWatchPrefill({
-          accountId,
-          market: market.startsWith('KRW-')
-            ? (market as CryptoStrategyProfile['market'])
-            : 'KRW-BTC',
-        });
-        void window.appShell?.openPopout('add-crypto-watch');
-      }}
-      onDelete={(ids) => deleteAutoWatches.mutate({ accountId, ids })}
-      onEdit={(watch) => {
-        storeAddCryptoWatchPrefill({ accountId, market: watch.market, watchId: watch.id });
-        void window.appShell?.openPopout('add-crypto-watch');
-      }}
-      onPause={(ids) => pauseAutoWatches.mutate({ accountId, ids })}
-      onResume={(ids) => resumeAutoWatches.mutate({ accountId, ids })}
-      pending={autoActionPending}
-      watches={autoWatches}
-    />
-  );
 
   const marketBar = (
     <CryptoMarketBar
@@ -627,42 +474,16 @@ export const CryptoMainPage = ({
         }}
         left={
           <CryptoLeftPane
-            autoPanel={autoPanel}
-            balancesPanel={
-              <CryptoBalancesPanel
-                balances={balanceSummaries}
-                enabled={privateEnabled}
-                quote={quote}
-              />
-            }
-            filledOrdersPanel={renderOrdersPanel('left-filled', '체결', filledOrders)}
+            accountId={accountId}
             holdingsTab={holdingsTab}
             leftTab={leftTab}
-            lotsPanel={
-              <CryptoLotsPanel
-                enabled={privateEnabled}
-                market={market}
-                lots={cryptoLotsData.lots}
-                currentPrice={cryptoLotsData.position?.currentPrice ?? 0}
-                quote={quote}
-              />
-            }
+            market={market}
             onHoldingsTabChange={setHoldingsTab}
             onLeftTabChange={setLeftTab}
-            openOrdersPanel={renderOrdersPanel('left-open', '미체결', openOrders)}
-            transfersPanel={
-              <CryptoTransfersPanel
-                enabled={privateEnabled}
-                onCloseDetail={() => setSelectedTransfer(null)}
-                onOpenDetail={(transfer) =>
-                  setSelectedTransfer({ direction: transfer.direction, uuid: transfer.uuid })
-                }
-                selectedTransfer={transferDetailQuery.data?.transfer ?? null}
-                transferDetailLoading={transferDetailQuery.isFetching}
-                transfers={transfersQuery.data?.transfers ?? []}
-                walletStatuses={walletStatusesQuery.data?.statuses ?? []}
-              />
-            }
+            onSelectMarket={(nextMarket) => {
+              setMarket(nextMarket);
+              setLiveTrades([]);
+            }}
           />
         }
         right={<CryptoTradeHistoryPanel accountId={accountId} market={market} />}
@@ -716,35 +537,50 @@ const CryptoTradingWorkspace = ({
   </div>
 );
 
+/**
+ * Phase R3-2: 코인 좌측 메인 패널 — stock 컴포넌트 (PositionsGrid / FilledPane / ActiveOrdersPanel
+ * / WatchBoard) 를 broker='UPBIT' 로 직접 마운트.
+ *
+ * - L1=포지션 → L2 3탭 (실시간 잔고 / 체결 / 미체결). 차수·입출금 탭은 폐기 (R3 사용자 결정).
+ * - L1=자동감시 → WatchBoard. 서버 핸들러는 R3-3 까지 STOCK_BROKER('KIS') 하드코딩 — UPBIT
+ *   broker prop 은 schema/hook 차원만 prepared. 실제 watchOrder 데이터는 KIS 만 반환.
+ *
+ * PositionsGrid `onSelect(pdno)` → onSelectMarket → 우측 CryptoTradeHistoryPanel 자동 필터.
+ */
 const CryptoLeftPane = ({
-  autoPanel,
-  balancesPanel,
-  filledOrdersPanel,
+  accountId,
   holdingsTab,
   leftTab,
-  lotsPanel,
+  market,
   onHoldingsTabChange,
   onLeftTabChange,
-  openOrdersPanel,
-  transfersPanel,
+  onSelectMarket,
 }: {
-  autoPanel: ReactElement;
-  balancesPanel: ReactElement;
-  filledOrdersPanel: ReactElement;
+  accountId: number;
   holdingsTab: CryptoHoldingsTab;
   leftTab: CryptoLeftTab;
-  lotsPanel: ReactElement;
+  market: string;
   onHoldingsTabChange: (tab: CryptoHoldingsTab) => void;
   onLeftTabChange: (tab: CryptoLeftTab) => void;
-  openOrdersPanel: ReactElement;
-  transfersPanel: ReactElement;
+  onSelectMarket: (market: string) => void;
 }): ReactElement => {
-  let content = balancesPanel;
-  if (leftTab === 'auto') content = autoPanel;
-  if (leftTab === 'holdings' && holdingsTab === 'lots') content = lotsPanel;
-  if (leftTab === 'holdings' && holdingsTab === 'filled') content = filledOrdersPanel;
-  if (leftTab === 'holdings' && holdingsTab === 'open') content = openOrdersPanel;
-  if (leftTab === 'holdings' && holdingsTab === 'transfers') content = transfersPanel;
+  let content: ReactElement;
+  if (leftTab === 'auto') {
+    content = <WatchBoard accountId={accountId} broker="UPBIT" />;
+  } else if (holdingsTab === 'filled') {
+    content = <FilledPane selectedPdno={market} broker="UPBIT" />;
+  } else if (holdingsTab === 'open') {
+    content = <ActiveOrdersPanel pdnoFilter={market} broker="UPBIT" />;
+  } else {
+    content = (
+      <PositionsGrid
+        accountId={accountId}
+        broker="UPBIT"
+        selectedPdno={market}
+        onSelect={onSelectMarket}
+      />
+    );
+  }
 
   return (
     <section className="crypto-split-pane crypto-split-pane--left" aria-label="코인 좌측 메인 패널">

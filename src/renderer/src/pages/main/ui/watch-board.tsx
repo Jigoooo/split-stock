@@ -20,8 +20,10 @@ import { WatchList } from './watch-list';
 export interface WatchBoardProps {
   accountId: number;
   /**
-   * Phase R3-1: broker (default 'KIS'). 코인 page 가 'UPBIT' 로 사용 가능.
-   * 현재 useWatchOrders/useWatchHistory entity hook 은 broker 인자를 미수용 — 후속 phase 에서 hook 확장 시 전달.
+   * Phase R3-2: broker (default 'KIS'). 코인 page 가 'UPBIT' 로 사용 가능.
+   * useWatchOrders / useWatchHistory entity hook 으로 통과시킨다.
+   * 서버 핸들러(watchEngine / listWatchHistory)는 R3-3 까지 STOCK_BROKER('KIS') 하드코딩 —
+   * UPBIT 호출은 client/schema 차원만 prepared 상태이며 실제 데이터는 KIS watchOrder 만 반환.
    */
   broker?: string;
 }
@@ -46,7 +48,7 @@ const TABS: ReadonlyArray<HtsTabItem<WatchTabKey>> = [
  * prefill 데이터는 localStorage 를 통해 핸드오프한다.
  */
 export const WatchBoard = (props: WatchBoardProps): ReactElement => {
-  const { accountId } = props;
+  const { accountId, broker } = props;
   const { setTab, tab } = useWatchTabs();
 
   const status = tabToStatusFilter(tab);
@@ -56,8 +58,8 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
       : status !== undefined
         ? { accountId, status }
         : { accountId };
-  const query = useWatchOrders(watchFilter);
-  const history = useWatchHistory();
+  const query = useWatchOrders(watchFilter, broker);
+  const history = useWatchHistory(200, broker);
   const visible = filterByTab(tab, query.orders);
 
   const openAddWatchOrderPopout = (prefill: WatchOrderFormPrefill | null): void => {

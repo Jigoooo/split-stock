@@ -17,6 +17,9 @@ const ListInputSchema = z.object({
   status: z.enum(['WATCHING', 'PAUSED', 'EXECUTED', 'FAILED', 'EXPIRED', 'CANCELLED']).optional(),
   source: z.enum(['BOOSTER', 'PREBUY', 'CUSTOM']).optional(),
   accountId: z.number().int().positive().optional(),
+  // Phase R3-2: client 가 broker 를 통과시킴 — 서버 측은 R3-3 까지 STOCK_BROKER('KIS') 하드코딩.
+  // schema 에서 받아만 두고 무시하면 zod strip 으로 인한 client 인자 손실 방지.
+  broker: z.string().optional(),
 });
 
 const HistoryItemSchema = z.object({
@@ -127,7 +130,15 @@ export const watchRouter = router({
     .mutation(({ ctx, input }) => updateReservationBuyWatchOrder(ctx, input)),
 
   history: runtimeProcedure
-    .input(z.object({ limit: z.number().int().min(1).max(500).default(200) }).optional())
+    .input(
+      z
+        .object({
+          limit: z.number().int().min(1).max(500).default(200),
+          // Phase R3-2: broker 통과 — 서버측은 R3-3 까지 무시.
+          broker: z.string().optional(),
+        })
+        .optional(),
+    )
     .output(z.object({ items: z.array(HistoryItemSchema) }))
     .query(({ ctx, input }) => listWatchHistory(ctx, input)),
 });
