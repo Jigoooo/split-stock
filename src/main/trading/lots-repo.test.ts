@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bootstrapSchema } from '../db/bootstrap-schema';
-import { createTestDb } from '../db/client';
+import { createTestDb, type Db } from '../db/client';
+import { lotsSnapshots, lots as lotsTable } from '../db/schema';
 import type { LotSnapshotEntry } from './lots-repo';
 import { LotsRepo } from './lots-repo';
 import { StockMasterRepo } from './stock-master-repo';
@@ -940,6 +941,205 @@ describe('LotsRepo', () => {
       if (result.isOk()) {
         expect(result.value.some((lot) => lot.status === 'SELLING')).toBe(true);
         expect(result.value.every((lot) => lot.name === '')).toBe(true);
+      }
+    });
+  });
+
+  /**
+   * Phase R0-3: broker filter 검증 — 동일 (accountId, pdno) 에 KIS+UPBIT row 가 공존할 때
+   * default broker='KIS' 호출은 KIS row 만 반환, 명시적 'UPBIT' 호출은 UPBIT row 만 반환.
+   *
+   * UPBIT row 는 raw drizzle insert 로 시드 (repo API 는 KIS 전용 default 라 우회).
+   */
+  describe('broker filter (Phase R0-3)', () => {
+    function setupRepoRaw(): { repo: LotsRepo; db: Db } {
+      const db = createTestDb();
+      bootstrapSchema(db);
+      return { repo: new LotsRepo(db), db };
+    }
+
+    function seedKisLot(repo: LotsRepo, accountId: number, pdno: string, nth: number): void {
+      const r = repo.insertLot({
+        accountId,
+        pdno,
+        nth,
+        buyPrice: 70000,
+        qty: 10,
+        amountKrw: 700_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-04-01T00:00:00Z'),
+      });
+      if (r.isErr()) throw new Error('KIS seed failed');
+    }
+
+    function seedUpbitLot(db: Db, accountId: number, pdno: string, nth: number): void {
+      db.insert(lotsTable)
+        .values({
+          broker: 'UPBIT',
+          accountId,
+          pdno,
+          nth,
+          buyPrice: 50_000_000,
+          qty: 1,
+          amountKrw: 50_000_000,
+          status: 'OPEN',
+          boughtAt: new Date('2026-04-01T00:00:00Z'),
+        })
+        .run();
+    }
+
+    it('listOpenLots — default broker=KIS 는 KIS row 만 반환 (UPBIT row 무시)', () => {
+      const { repo, db } = setupRepoRaw();
+      seedKisLot(repo, 1, '005930', 1);
+      seedUpbitLot(db, 1, '005930', 2); // pdno collision 인위 시뮬
+
+      const r = repo.listOpenLots(1, '005930');
+      expect(r.isOk()).toBe(true);
+      if (r.isOk()) {
+        expect(r.value).toHaveLength(1);
+        expect(r.value[0]?.buyPrice).toBe(70000);
+        expect(r.value[0]?.nth).toBe(1);
+      }
+    });
+
+    it("listOpenLots — broker='UPBIT' 명시 호출은 UPBIT row 만 반환", () => {
+      const { repo, db } = setupRepoRaw();
+      seedKisLot(repo, 1, '005930', 1);
+      seedUpbitLot(db, 1, '005930', 2);
+      seedUpbitLot(db, 1, 'KRW-BTC', 1);
+
+      const sameSymbol = repo.listOpenLots(1, '005930', 'UPBIT');
+      expect(sameSymbol.isOk()).toBe(true);
+      if (sameSymbol.isOk()) {
+        expect(sameSymbol.value).toHaveLength(1);
+        expect(sameSymbol.value[0]?.buyPrice).toBe(50_000_000);
+        expect(sameSymbol.value[0]?.nth).toBe(2);
+      }
+
+      const upbitOnly = repo.listOpenLots(1, 'KRW-BTC', 'UPBIT');
+      expect(upbitOnly.isOk()).toBe(true);
+      if (upbitOnly.isOk()) {
+        expect(upbitOnly.value).toHaveLength(1);
+        expect(upbitOnly.value[0]?.pdno).toBe('KRW-BTC');
+      }
+
+      // KIS default 호출은 KRW-BTC 미반환 (KIS row 없음)
+      const kisOnly = repo.listOpenLots(1, 'KRW-BTC');
+      expect(kisOnly.isOk()).toBe(true);
+      if (kisOnly.isOk()) expect(kisOnly.value).toHaveLength(0);
+    });
+
+    it('snapshot — default broker=KIS 는 KIS lot 만 반환', () => {
+      const { repo, db } = setupRepoRaw();
+      seedKisLot(repo, 1, '005930', 1);
+      seedUpbitLot(db, 1, '005930', 2);
+
+      const snap = repo.snapshot(1, '005930');
+      expect(snap.isOk()).toBe(true);
+      if (snap.isOk()) {
+        expect(snap.value.lots).toHaveLength(1);
+        expect(snap.value.lots[0]?.nth).toBe(1);
+        expect(snap.value.lots[0]?.buyPrice).toBe(70000);
+      }
+
+      const upbitSnap = repo.snapshot(1, '005930', 'UPBIT');
+      expect(upbitSnap.isOk()).toBe(true);
+      if (upbitSnap.isOk()) {
+        expect(upbitSnap.value.lots).toHaveLength(1);
+        expect(upbitSnap.value.lots[0]?.nth).toBe(2);
+        expect(upbitSnap.value.lots[0]?.buyPrice).toBe(50_000_000);
+      }
+    });
+
+    it('snapshotByDate — broker filter 적용', () => {
+      const { repo, db } = setupRepoRaw();
+      const lots: LotSnapshotEntry[] = [
+        {
+          nth: 1,
+          buyPrice: 70000,
+          qty: 10,
+          amountKrw: 700_000,
+          status: 'OPEN',
+          boughtAt: Date.now(),
+        },
+      ];
+      const r = repo.saveSnapshot({
+        accountId: 1,
+        snapshotDate: '2026-04-01',
+        pdno: '005930',
+        name: '삼성전자',
+        currentPrice: 72000,
+        lots,
+      });
+      expect(r.isOk()).toBe(true);
+
+      // UPBIT 스냅샷을 raw drizzle 로 같은 (accountId, snapshotDate, pdno) 와 다른 broker 로 시드
+      // — 현재 PK 가 (accountId, snapshotDate, pdno) 단일이라 KIS row 와 충돌. 따라서 다른 pdno 사용.
+      db.insert(lotsSnapshots)
+        .values({
+          broker: 'UPBIT',
+          accountId: 1,
+          snapshotDate: '2026-04-01',
+          pdno: 'KRW-BTC',
+          name: 'BTC',
+          currentPrice: 50_000_000,
+          payloadJson: JSON.stringify(lots),
+          createdAt: new Date(),
+        })
+        .run();
+
+      const kis = repo.snapshotByDate(1, '2026-04-01');
+      expect(kis.isOk()).toBe(true);
+      if (kis.isOk()) {
+        expect(kis.value).toHaveLength(1);
+        expect(kis.value[0]?.pdno).toBe('005930');
+      }
+
+      const upbit = repo.snapshotByDate(1, '2026-04-01', undefined, 'UPBIT');
+      expect(upbit.isOk()).toBe(true);
+      if (upbit.isOk()) {
+        expect(upbit.value).toHaveLength(1);
+        expect(upbit.value[0]?.pdno).toBe('KRW-BTC');
+      }
+    });
+
+    it('cyclesByPdno — default 는 KIS, broker=UPBIT 는 UPBIT', () => {
+      const { repo, db } = setupRepoRaw();
+      seedKisLot(repo, 1, '005930', 1);
+      seedUpbitLot(db, 1, 'KRW-BTC', 1);
+
+      const kisAll = repo.cyclesByPdno({ accountId: 1, status: 'all' });
+      expect(kisAll.isOk()).toBe(true);
+      if (kisAll.isOk()) {
+        expect(kisAll.value).toHaveLength(1);
+        expect(kisAll.value[0]?.pdno).toBe('005930');
+      }
+
+      const upbitAll = repo.cyclesByPdno({ accountId: 1, status: 'all' }, 'UPBIT');
+      expect(upbitAll.isOk()).toBe(true);
+      if (upbitAll.isOk()) {
+        expect(upbitAll.value).toHaveLength(1);
+        expect(upbitAll.value[0]?.pdno).toBe('KRW-BTC');
+      }
+    });
+
+    it('listRows — default 는 KIS row 만 반환 (UPBIT 격리)', () => {
+      const { repo, db } = setupRepoRaw();
+      seedKisLot(repo, 1, '005930', 1);
+      seedUpbitLot(db, 1, '005930', 2); // 동일 pdno 충돌 시뮬
+
+      const kis = repo.listRows(1);
+      expect(kis.isOk()).toBe(true);
+      if (kis.isOk()) {
+        expect(kis.value).toHaveLength(1);
+        expect(kis.value[0]?.buyPrice).toBe(70000);
+      }
+
+      const upbit = repo.listRows(1, undefined, 'UPBIT');
+      expect(upbit.isOk()).toBe(true);
+      if (upbit.isOk()) {
+        expect(upbit.value).toHaveLength(1);
+        expect(upbit.value[0]?.buyPrice).toBe(50_000_000);
       }
     });
   });

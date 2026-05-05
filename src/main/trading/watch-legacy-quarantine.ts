@@ -3,6 +3,9 @@ import type { Db } from '../db/client';
 import { watchOrders } from '../db/schema';
 import type { EventLogger } from '../logging/event-logger';
 
+/** Phase R0: stock(KIS) watch_orders 만 quarantine 대상. UPBIT 는 별도 crypto-* 모듈. */
+const STOCK_BROKER = 'KIS' as const;
+
 export const LEGACY_WATCH_CONTRACTION_REASON =
   'LEGACY_RULE_NOT_SUPPORTED_AFTER_RESERVATION_BUY_CONTRACTION' as const;
 export const BOOSTER_FEATURE_REMOVED_REASON = 'BOOSTER_FEATURE_REMOVED' as const;
@@ -15,7 +18,13 @@ export function quarantineLegacyWatchRows(db: Db, logger: EventLogger): number {
   const rows = db
     .select()
     .from(watchOrders)
-    .where(and(inArray(watchOrders.status, ['WATCHING', 'PAUSED']), legacyWatchCondition()))
+    .where(
+      and(
+        eq(watchOrders.broker, STOCK_BROKER),
+        inArray(watchOrders.status, ['WATCHING', 'PAUSED']),
+        legacyWatchCondition(),
+      ),
+    )
     .all();
 
   for (const row of rows) {
@@ -27,7 +36,7 @@ export function quarantineLegacyWatchRows(db: Db, logger: EventLogger): number {
         lastFailureReason: reason,
         updatedAt: new Date(),
       })
-      .where(eq(watchOrders.id, row.id))
+      .where(and(eq(watchOrders.broker, STOCK_BROKER), eq(watchOrders.id, row.id)))
       .run();
     logger.log({
       level: 'WARN',

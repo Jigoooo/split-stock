@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Result } from 'neverthrow';
 import { watchOrders } from '../db/schema';
 import {
@@ -23,6 +23,9 @@ import {
   updateWatchOrder,
   upsertWatchOrder,
 } from './watch-order-store';
+
+/** Phase R0: WatchEngine 은 stock-context 전용 (KIS broker). UPBIT 는 별도 crypto-* 모듈. */
+const STOCK_BROKER = 'KIS' as const;
 
 export type {
   ExecutionResult,
@@ -194,7 +197,11 @@ export class WatchEngine {
     const coordinator = this.opts.inFlightCoordinator;
     let stillQueued = true;
     try {
-      const row = this.opts.db.select().from(watchOrders).where(eq(watchOrders.id, entry.id)).get();
+      const row = this.opts.db
+        .select()
+        .from(watchOrders)
+        .where(and(eq(watchOrders.broker, STOCK_BROKER), eq(watchOrders.id, entry.id)))
+        .get();
       if (!row) {
         this.dequeue(entry.id);
         stillQueued = false;
@@ -215,7 +222,7 @@ export class WatchEngine {
         this.opts.db
           .update(watchOrders)
           .set({ status: 'EXECUTED', executedAt: now, updatedAt: now })
-          .where(eq(watchOrders.id, order.id))
+          .where(and(eq(watchOrders.broker, STOCK_BROKER), eq(watchOrders.id, order.id)))
           .run();
         this.dequeue(order.id);
         stillQueued = false;
@@ -229,7 +236,7 @@ export class WatchEngine {
       this.opts.db
         .update(watchOrders)
         .set({ status: 'FAILED', lastFailureReason: reason, updatedAt: now })
-        .where(eq(watchOrders.id, order.id))
+        .where(and(eq(watchOrders.broker, STOCK_BROKER), eq(watchOrders.id, order.id)))
         .run();
       this.dequeue(order.id);
       stillQueued = false;

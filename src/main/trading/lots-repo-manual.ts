@@ -19,15 +19,17 @@ import type {
 export function manualInsert(
   db: Db,
   input: ManualInsertInput,
+  broker: string = 'KIS',
 ): Result<ManualEditResult, LotsRepoError> {
   try {
     const result = db.transaction((tx) => {
-      const fullSnapshot = snapshotRowsTx(tx, input.accountId, input.pdno);
+      const fullSnapshot = snapshotRowsTx(tx, input.accountId, input.pdno, broker);
       const existing = tx
         .select({ id: lotsTable.id })
         .from(lotsTable)
         .where(
           and(
+            eq(lotsTable.broker, broker),
             eq(lotsTable.accountId, input.accountId),
             eq(lotsTable.pdno, input.pdno),
             eq(lotsTable.nth, input.nth),
@@ -42,6 +44,7 @@ export function manualInsert(
       const inserted = tx
         .insert(lotsTable)
         .values({
+          broker,
           accountId: input.accountId,
           pdno: input.pdno,
           nth: input.nth,
@@ -80,17 +83,24 @@ export function manualUpdate(
   accountId: number,
   lotId: number,
   changes: ManualUpdateChanges,
+  broker: string = 'KIS',
 ): Result<ManualEditResult, LotsRepoError> {
   try {
     const result = db.transaction((tx) => {
       const rows = tx
         .select()
         .from(lotsTable)
-        .where(and(eq(lotsTable.id, lotId), eq(lotsTable.accountId, accountId)))
+        .where(
+          and(
+            eq(lotsTable.broker, broker),
+            eq(lotsTable.id, lotId),
+            eq(lotsTable.accountId, accountId),
+          ),
+        )
         .all();
       const target = rows[0];
       if (!target) throw new Error(`NOT_FOUND: lot id=${lotId} (account=${accountId})`);
-      const fullSnapshot = snapshotRowsTx(tx, accountId, target.pdno);
+      const fullSnapshot = snapshotRowsTx(tx, accountId, target.pdno, broker);
       const before = toLotRow(target);
       // nth 변경 시 충돌 검사
       if (changes.nth !== undefined && changes.nth !== target.nth) {
@@ -99,6 +109,7 @@ export function manualUpdate(
           .from(lotsTable)
           .where(
             and(
+              eq(lotsTable.broker, broker),
               eq(lotsTable.accountId, accountId),
               eq(lotsTable.pdno, target.pdno),
               eq(lotsTable.nth, changes.nth),
@@ -149,17 +160,24 @@ export function manualDelete(
   db: Db,
   accountId: number,
   lotId: number,
+  broker: string = 'KIS',
 ): Result<ManualEditResult, LotsRepoError> {
   try {
     const result = db.transaction((tx) => {
       const rows = tx
         .select()
         .from(lotsTable)
-        .where(and(eq(lotsTable.id, lotId), eq(lotsTable.accountId, accountId)))
+        .where(
+          and(
+            eq(lotsTable.broker, broker),
+            eq(lotsTable.id, lotId),
+            eq(lotsTable.accountId, accountId),
+          ),
+        )
         .all();
       const target = rows[0];
       if (!target) throw new Error(`NOT_FOUND: lot id=${lotId} (account=${accountId})`);
-      const fullSnapshot = snapshotRowsTx(tx, accountId, target.pdno);
+      const fullSnapshot = snapshotRowsTx(tx, accountId, target.pdno, broker);
       const before = toLotRow(target);
       tx.delete(lotsTable).where(eq(lotsTable.id, lotId)).run();
       return {
@@ -188,6 +206,7 @@ export function applyStockSplitRatio(
   accountId: number,
   pdno: string,
   ratioPct: number,
+  broker: string = 'KIS',
 ): Result<{ before: LotRow[]; after: LotRow[] }, LotsRepoError> {
   if (!Number.isFinite(ratioPct) || ratioPct <= -100 || ratioPct === 0) {
     return err({
@@ -197,7 +216,7 @@ export function applyStockSplitRatio(
   }
   try {
     const result = db.transaction((tx) => {
-      const before = snapshotRowsTx(tx, accountId, pdno);
+      const before = snapshotRowsTx(tx, accountId, pdno, broker);
       if (before.length === 0) {
         throw new Error(`NOT_FOUND: 종목 차수 없음 (account=${accountId} pdno=${pdno})`);
       }
@@ -232,6 +251,7 @@ export function restoreFromSnapshot(
   accountId: number,
   pdno: string,
   snapshot: LotRow[],
+  broker: string = 'KIS',
 ): Result<{ restored: number }, LotsRepoError> {
   for (const row of snapshot) {
     if (row.accountId !== accountId || row.pdno !== pdno) {
@@ -244,12 +264,19 @@ export function restoreFromSnapshot(
   try {
     const restored = db.transaction((tx) => {
       tx.delete(lotsTable)
-        .where(and(eq(lotsTable.accountId, accountId), eq(lotsTable.pdno, pdno)))
+        .where(
+          and(
+            eq(lotsTable.broker, broker),
+            eq(lotsTable.accountId, accountId),
+            eq(lotsTable.pdno, pdno),
+          ),
+        )
         .run();
       let count = 0;
       for (const row of snapshot) {
         tx.insert(lotsTable)
           .values({
+            broker,
             accountId: row.accountId,
             pdno: row.pdno,
             nth: row.nth,

@@ -11,12 +11,19 @@ export function snapshot(
   db: Db,
   accountId: number,
   pdno: string,
+  broker: string = 'KIS',
 ): Result<PositionSnapshot, LotsRepoError> {
   try {
     const rows = db
       .select()
       .from(lotsTable)
-      .where(and(eq(lotsTable.accountId, accountId), eq(lotsTable.pdno, pdno)))
+      .where(
+        and(
+          eq(lotsTable.broker, broker),
+          eq(lotsTable.accountId, accountId),
+          eq(lotsTable.pdno, pdno),
+        ),
+      )
       .all();
     return ok({
       pdno,
@@ -36,7 +43,11 @@ export function snapshot(
  * 원자적 insert — 이미 존재하는 (accountId, pdno, nth) 차수는 거부.
  * 동시성 안전: transaction으로 select-then-insert 사이 경합 차단.
  */
-export function insertLot(db: Db, input: InsertLotInput): Result<number, LotsRepoError> {
+export function insertLot(
+  db: Db,
+  input: InsertLotInput,
+  broker: string = 'KIS',
+): Result<number, LotsRepoError> {
   try {
     const id = db.transaction((tx) => {
       const existing = tx
@@ -44,6 +55,7 @@ export function insertLot(db: Db, input: InsertLotInput): Result<number, LotsRep
         .from(lotsTable)
         .where(
           and(
+            eq(lotsTable.broker, broker),
             eq(lotsTable.accountId, input.accountId),
             eq(lotsTable.pdno, input.pdno),
             eq(lotsTable.nth, input.nth),
@@ -58,6 +70,7 @@ export function insertLot(db: Db, input: InsertLotInput): Result<number, LotsRep
       const inserted = tx
         .insert(lotsTable)
         .values({
+          broker,
           accountId: input.accountId,
           pdno: input.pdno,
           nth: input.nth,
@@ -88,6 +101,7 @@ export function replan(
   db: Db,
   accountId: number,
   plan: RespiitPlan,
+  broker: string = 'KIS',
 ): Result<{ insertedIds: number[] }, LotsRepoError> {
   try {
     const insertedIds = db.transaction((tx) => {
@@ -95,6 +109,7 @@ export function replan(
       tx.delete(lotsTable)
         .where(
           and(
+            eq(lotsTable.broker, broker),
             eq(lotsTable.accountId, accountId),
             eq(lotsTable.pdno, plan.pdno),
             eq(lotsTable.status, 'OPEN'),
@@ -107,6 +122,7 @@ export function replan(
         .from(lotsTable)
         .where(
           and(
+            eq(lotsTable.broker, broker),
             eq(lotsTable.accountId, accountId),
             eq(lotsTable.pdno, plan.pdno),
             ne(lotsTable.status, 'OPEN'),
@@ -126,6 +142,7 @@ export function replan(
         const inserted = tx
           .insert(lotsTable)
           .values({
+            broker,
             accountId,
             pdno: plan.pdno,
             nth: e.nth,

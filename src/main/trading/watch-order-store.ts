@@ -13,16 +13,20 @@ import {
   type WatchStatus,
 } from './watch-engine-types';
 
-export function loadWatchingOrders(db: Db): WatchOrder[] {
+export function loadWatchingOrders(db: Db, broker: string = 'KIS'): WatchOrder[] {
   return db
     .select()
     .from(watchOrders)
-    .where(eq(watchOrders.status, 'WATCHING'))
+    .where(and(eq(watchOrders.broker, broker), eq(watchOrders.status, 'WATCHING')))
     .all()
     .map(rowToOrder);
 }
 
-export function upsertWatchOrder(db: Db, input: WatchOrderInput): Result<WatchOrder, WatchError> {
+export function upsertWatchOrder(
+  db: Db,
+  input: WatchOrderInput,
+  broker: string = 'KIS',
+): Result<WatchOrder, WatchError> {
   const parsed = WatchOrderInputSchema.safeParse(input);
   if (!parsed.success) {
     return err({ kind: 'VALIDATION', message: parsed.error.issues[0]?.message ?? 'invalid' });
@@ -45,6 +49,7 @@ export function upsertWatchOrder(db: Db, input: WatchOrderInput): Result<WatchOr
             .from(watchOrders)
             .where(
               and(
+                eq(watchOrders.broker, broker),
                 eq(watchOrders.accountId, v.accountId),
                 eq(watchOrders.source, v.source),
                 eq(watchOrders.sourceRefId, v.sourceRefId),
@@ -81,6 +86,7 @@ export function upsertWatchOrder(db: Db, input: WatchOrderInput): Result<WatchOr
     const row = db
       .insert(watchOrders)
       .values({
+        broker,
         accountId: v.accountId,
         pdno: v.pdno,
         source: v.source,
@@ -110,13 +116,23 @@ export function upsertWatchOrder(db: Db, input: WatchOrderInput): Result<WatchOr
   }
 }
 
-export function cancelWatchOrder(db: Db, id: number): Result<void, WatchError> {
+export function cancelWatchOrder(
+  db: Db,
+  id: number,
+  broker: string = 'KIS',
+): Result<void, WatchError> {
   try {
     const now = new Date();
     const res = db
       .update(watchOrders)
       .set({ status: 'CANCELLED', updatedAt: now })
-      .where(and(eq(watchOrders.id, id), inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES)))
+      .where(
+        and(
+          eq(watchOrders.broker, broker),
+          eq(watchOrders.id, id),
+          inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES),
+        ),
+      )
       .run();
     if (res.changes === 0) return err({ kind: 'NOT_FOUND', id });
     return ok(undefined);
@@ -125,12 +141,22 @@ export function cancelWatchOrder(db: Db, id: number): Result<void, WatchError> {
   }
 }
 
-export function pauseWatchOrder(db: Db, id: number): Result<void, WatchError> {
+export function pauseWatchOrder(
+  db: Db,
+  id: number,
+  broker: string = 'KIS',
+): Result<void, WatchError> {
   try {
     const res = db
       .update(watchOrders)
       .set({ status: 'PAUSED', updatedAt: new Date() })
-      .where(and(eq(watchOrders.id, id), eq(watchOrders.status, 'WATCHING')))
+      .where(
+        and(
+          eq(watchOrders.broker, broker),
+          eq(watchOrders.id, id),
+          eq(watchOrders.status, 'WATCHING'),
+        ),
+      )
       .run();
     if (res.changes === 0) return err({ kind: 'NOT_FOUND', id });
     return ok(undefined);
@@ -143,6 +169,7 @@ export function updateWatchOrder(
   db: Db,
   id: number,
   input: WatchOrderInput,
+  broker: string = 'KIS',
 ): Result<WatchOrder, WatchError> {
   const parsed = WatchOrderInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -174,7 +201,13 @@ export function updateWatchOrder(
         metadata: v.metadata ?? null,
         updatedAt: new Date(),
       })
-      .where(and(eq(watchOrders.id, id), inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES)))
+      .where(
+        and(
+          eq(watchOrders.broker, broker),
+          eq(watchOrders.id, id),
+          inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES),
+        ),
+      )
       .returning()
       .all()[0];
     if (!row) return err({ kind: 'NOT_FOUND', id });
@@ -184,12 +217,22 @@ export function updateWatchOrder(
   }
 }
 
-export function resumeWatchOrder(db: Db, id: number): Result<WatchOrder, WatchError> {
+export function resumeWatchOrder(
+  db: Db,
+  id: number,
+  broker: string = 'KIS',
+): Result<WatchOrder, WatchError> {
   try {
     const row = db
       .update(watchOrders)
       .set({ status: 'WATCHING', updatedAt: new Date() })
-      .where(and(eq(watchOrders.id, id), eq(watchOrders.status, 'PAUSED')))
+      .where(
+        and(
+          eq(watchOrders.broker, broker),
+          eq(watchOrders.id, id),
+          eq(watchOrders.status, 'PAUSED'),
+        ),
+      )
       .returning()
       .all()[0];
     if (!row) return err({ kind: 'NOT_FOUND', id });
@@ -206,30 +249,31 @@ export function listWatchOrders(
     source?: WatchSource | undefined;
     accountId?: number | undefined;
   } = {},
+  broker: string = 'KIS',
 ): WatchOrder[] {
-  const clauses = [];
+  const clauses = [eq(watchOrders.broker, broker)];
   if (filter.status) clauses.push(eq(watchOrders.status, filter.status));
   if (filter.source) clauses.push(eq(watchOrders.source, filter.source));
   if (filter.accountId) clauses.push(eq(watchOrders.accountId, filter.accountId));
-  const rows =
-    clauses.length > 0
-      ? db
-          .select()
-          .from(watchOrders)
-          .where(clauses.length === 1 ? clauses[0] : and(...clauses))
-          .all()
-      : db.select().from(watchOrders).all();
+  const rows = db
+    .select()
+    .from(watchOrders)
+    .where(clauses.length === 1 ? clauses[0] : and(...clauses))
+    .all();
   return rows.map(rowToOrder);
 }
 
 export function expireStaleWatchOrders(
   db: Db,
   now: number,
+  broker: string = 'KIS',
 ): Array<{ id: number; expiredOrder: WatchOrder | null }> {
   const rows = db
     .select()
     .from(watchOrders)
-    .where(inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES))
+    .where(
+      and(eq(watchOrders.broker, broker), inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES)),
+    )
     .all()
     .filter((row) => row.expiresAt !== null && row.expiresAt.getTime() <= now);
 
@@ -237,7 +281,13 @@ export function expireStaleWatchOrders(
     const res = db
       .update(watchOrders)
       .set({ status: 'EXPIRED', updatedAt: new Date(now) })
-      .where(and(eq(watchOrders.id, row.id), inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES)))
+      .where(
+        and(
+          eq(watchOrders.broker, broker),
+          eq(watchOrders.id, row.id),
+          inArray(watchOrders.status, ACTIVE_CONTROL_STATUSES),
+        ),
+      )
       .run();
     if (res.changes === 0) return { id: row.id, expiredOrder: null };
     const next = db.select().from(watchOrders).where(eq(watchOrders.id, row.id)).get();

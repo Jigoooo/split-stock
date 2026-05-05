@@ -14,9 +14,11 @@ export function snapshotByDate(
   accountId: number,
   snapshotDate: string,
   pdno?: string,
+  broker: string = 'KIS',
 ): Result<LotsSnapshot[], LotsRepoError> {
   try {
     const conditions = [
+      eq(lotsSnapshots.broker, broker),
       eq(lotsSnapshots.accountId, accountId),
       eq(lotsSnapshots.snapshotDate, snapshotDate),
     ];
@@ -45,12 +47,16 @@ export function snapshotByDate(
 /**
  * 스냅샷이 존재하는 날짜 목록 조회 (최신순).
  */
-export function listSnapshotDates(db: Db, accountId: number): Result<string[], LotsRepoError> {
+export function listSnapshotDates(
+  db: Db,
+  accountId: number,
+  broker: string = 'KIS',
+): Result<string[], LotsRepoError> {
   try {
     const rows = db
       .selectDistinct({ snapshotDate: lotsSnapshots.snapshotDate })
       .from(lotsSnapshots)
-      .where(eq(lotsSnapshots.accountId, accountId))
+      .where(and(eq(lotsSnapshots.broker, broker), eq(lotsSnapshots.accountId, accountId)))
       .orderBy(desc(lotsSnapshots.snapshotDate))
       .all();
     return ok(rows.map((r) => r.snapshotDate));
@@ -63,11 +69,16 @@ export function listSnapshotDates(db: Db, accountId: number): Result<string[], L
  * 차수 스냅샷 저장 (upsert — 같은 날짜/종목이면 덮어씀).
  * 장마감 스케줄러 또는 수동 트리거에서 호출.
  */
-export function saveSnapshot(db: Db, input: SaveSnapshotInput): Result<void, LotsRepoError> {
+export function saveSnapshot(
+  db: Db,
+  input: SaveSnapshotInput,
+  broker: string = 'KIS',
+): Result<void, LotsRepoError> {
   try {
     const now = new Date();
     db.insert(lotsSnapshots)
       .values({
+        broker,
         accountId: input.accountId,
         snapshotDate: input.snapshotDate,
         pdno: input.pdno,
@@ -79,6 +90,7 @@ export function saveSnapshot(db: Db, input: SaveSnapshotInput): Result<void, Lot
       .onConflictDoUpdate({
         target: [lotsSnapshots.accountId, lotsSnapshots.snapshotDate, lotsSnapshots.pdno],
         set: {
+          broker,
           name: input.name,
           currentPrice: input.currentPrice,
           payloadJson: JSON.stringify(input.lots),

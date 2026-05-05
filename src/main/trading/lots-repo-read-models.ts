@@ -25,6 +25,7 @@ export function listOpenLots(
   db: Db,
   accountId: number,
   pdno: string,
+  broker: string = 'KIS',
 ): Result<LotRow[], LotsRepoError> {
   try {
     const rows = db
@@ -32,6 +33,7 @@ export function listOpenLots(
       .from(lotsTable)
       .where(
         and(
+          eq(lotsTable.broker, broker),
           eq(lotsTable.accountId, accountId),
           eq(lotsTable.pdno, pdno),
           eq(lotsTable.status, 'OPEN'),
@@ -60,9 +62,10 @@ export function cyclesByPdno(
   db: Db,
   stockMasterRepo: StockMasterRepo | undefined,
   input: CyclesByPdnoInput,
+  broker: string = 'KIS',
 ): Result<TradeCycle[], LotsRepoError> {
   try {
-    const conditions = [eq(lotsTable.accountId, input.accountId)];
+    const conditions = [eq(lotsTable.broker, broker), eq(lotsTable.accountId, input.accountId)];
     if (input.pdno !== undefined) {
       conditions.push(eq(lotsTable.pdno, input.pdno));
     }
@@ -125,9 +128,14 @@ export function listTradeHistoryLots(
   db: Db,
   stockMasterRepo: StockMasterRepo | undefined,
   input: TradeHistoryFilters,
+  broker: string = 'KIS',
 ): Result<TradeHistoryLot[], LotsRepoError> {
   try {
-    const rows = db.select().from(lotsTable).where(eq(lotsTable.accountId, input.accountId)).all();
+    const rows = db
+      .select()
+      .from(lotsTable)
+      .where(and(eq(lotsTable.broker, broker), eq(lotsTable.accountId, input.accountId)))
+      .all();
     const trimmedSearch = input.search?.trim() ?? '';
     const normalizedSearch = trimmedSearch.toLowerCase();
     const resolveName = createNameResolver(stockMasterRepo);
@@ -193,9 +201,10 @@ export function listRows(
   db: Db,
   accountId: number,
   pdno?: string,
+  broker: string = 'KIS',
 ): Result<LotRow[], LotsRepoError> {
   try {
-    const conditions = [eq(lotsTable.accountId, accountId)];
+    const conditions = [eq(lotsTable.broker, broker), eq(lotsTable.accountId, accountId)];
     if (pdno !== undefined) conditions.push(eq(lotsTable.pdno, pdno));
     const rows = db
       .select()

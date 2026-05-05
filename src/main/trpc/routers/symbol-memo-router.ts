@@ -1,8 +1,11 @@
 import { TRPCError } from '@trpc/server';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { symbolMemos } from '../../db/schema';
 import { authedProcedure, router } from '../trpc-core';
+
+/** Phase R0: stock-context 전용 라우터 — broker='KIS' 만 다룬다. UPBIT 메모는 cryptoMarketMemos 사용. */
+const STOCK_BROKER = 'KIS' as const;
 
 /**
  * 종목 메모 라우터 — 글로벌(계좌 비종속) 종목별 단일 메모.
@@ -20,7 +23,11 @@ const ContentSchema = z.string().max(10_000, '메모는 최대 10,000자까지 �
 export const symbolMemoRouter = router({
   get: authedProcedure.input(z.object({ pdno: PdnoSchema })).query(({ ctx, input }) => {
     try {
-      const rows = ctx.db.select().from(symbolMemos).where(eq(symbolMemos.pdno, input.pdno)).all();
+      const rows = ctx.db
+        .select()
+        .from(symbolMemos)
+        .where(and(eq(symbolMemos.broker, STOCK_BROKER), eq(symbolMemos.pdno, input.pdno)))
+        .all();
       const row = rows[0];
       if (!row) return null;
       return { content: row.content, updatedAt: row.updatedAt };
@@ -39,7 +46,12 @@ export const symbolMemoRouter = router({
         const now = Date.now();
         ctx.db
           .insert(symbolMemos)
-          .values({ pdno: input.pdno, content: input.content, updatedAt: now })
+          .values({
+            broker: STOCK_BROKER,
+            pdno: input.pdno,
+            content: input.content,
+            updatedAt: now,
+          })
           .onConflictDoUpdate({
             target: symbolMemos.pdno,
             set: { content: input.content, updatedAt: now },

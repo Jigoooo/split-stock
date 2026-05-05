@@ -26,11 +26,22 @@ export function toLotRow(r: typeof lotsTable.$inferSelect): LotRow {
 }
 
 /** (accountId, pdno) 기준 전체 차수 스냅샷 — undo 복원 baseline. */
-export function snapshotRowsTx(tx: LotsTransaction, accountId: number, pdno: string): LotRow[] {
+export function snapshotRowsTx(
+  tx: LotsTransaction,
+  accountId: number,
+  pdno: string,
+  broker: string = 'KIS',
+): LotRow[] {
   const rows = tx
     .select()
     .from(lotsTable)
-    .where(and(eq(lotsTable.accountId, accountId), eq(lotsTable.pdno, pdno)))
+    .where(
+      and(
+        eq(lotsTable.broker, broker),
+        eq(lotsTable.accountId, accountId),
+        eq(lotsTable.pdno, pdno),
+      ),
+    )
     .all();
   return rows.map((r) => toLotRow(r));
 }

@@ -487,7 +487,13 @@ export const prebuyOrders = sqliteTable('prebuy_orders', {
  */
 export const symbolMemos = sqliteTable('symbol_memos', {
   pdno: text('pdno').primaryKey(), // 종목코드 (KIS=6자리, UPBIT=KRW-XXX)
-  /** Phase R0: broker-agnostic 확장. KIS pdno '256940' 과 UPBIT 'KRW-BTC' 는 자연 비충돌 — pdno PK 유지. */
+  /**
+   * Phase R0: broker-agnostic 확장.
+   *
+   * **PK 가정**: KIS pdno '256940' (6자리) 과 UPBIT 'KRW-BTC' (대시 포함) 는 자연 비충돌 — pdno
+   * 단일 PK 유지. Kiwoom 등 신규 broker 가 6자리 numeric pdno 를 사용한다면 (KIS와 충돌)
+   * 이 PK 가정을 (pdno, broker) 복합 PK 로 확장 필요.
+   */
   broker: text('broker').notNull().default('KIS'),
   content: text('content').notNull().default(''), // 메모 본문
   updatedAt: integer('updated_at').notNull(), // unix epoch (ms)
