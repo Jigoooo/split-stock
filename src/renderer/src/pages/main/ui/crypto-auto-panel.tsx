@@ -1,7 +1,12 @@
+import { trpc } from '@renderer/shared/api/trpc';
 import { alertDialog, Button, DialogType, Select, TextInput } from '@renderer/shared/ui';
 import type { CryptoAutoTemplate, CryptoStrategyProfile } from '@shared/contracts';
 import { type ReactElement, useState } from 'react';
 import { CryptoStrategyForm } from './crypto-strategy-form';
+
+/** 설정 → 코인 매매설정관리 의 "기본 매매 설정" 이 저장되는 마켓 키.
+ *  crypto-strategy-settings-section 의 DEFAULT_MARKET 과 동일해야 함. */
+const CRYPTO_DEFAULT_STRATEGY_MARKET = 'KRW-BTC';
 
 /**
  * 코인 자동매매 설정 탭 (main 우측 패널).
@@ -31,6 +36,7 @@ const openTemplateManagementPopout = (): void => {
 };
 
 export const CryptoAutoStrategyTabBody = ({
+  accountId,
   market,
   onDeleteTemplate,
   onSaveTemplate,
@@ -40,6 +46,7 @@ export const CryptoAutoStrategyTabBody = ({
   strategyLoading,
   templates,
 }: {
+  accountId: number;
   market: string;
   onDeleteTemplate: (id: number) => void;
   onSaveTemplate: (name: string, profile: CryptoStrategyProfile) => void;
@@ -52,10 +59,39 @@ export const CryptoAutoStrategyTabBody = ({
   const [templateId, setTemplateId] = useState('');
   const [templateName, setTemplateName] = useState('기본 코인 차수 전략');
   const selectedTemplate = templates.find((template) => String(template.id) === templateId) ?? null;
+  // "기본값 사용" — 설정 → 매매설정관리 에서 저장한 기본 코인 차수 전략을 가져온다.
+  const defaultStrategyQuery = trpc.crypto.getAutoStrategy.useQuery(
+    { accountId, market: CRYPTO_DEFAULT_STRATEGY_MARKET },
+    { enabled: accountId > 0, staleTime: 30_000 },
+  );
+  const defaultProfile = defaultStrategyQuery.data?.profile ?? null;
+  const isCurrentMarketDefault = market === CRYPTO_DEFAULT_STRATEGY_MARKET;
 
   return (
     <div className="crypto-auto-strategy-tab">
       <div className="crypto-auto-template-bar" role="toolbar" aria-label="코인 자동매매 템플릿">
+        {!isCurrentMarketDefault && defaultProfile ? (
+          <Button
+            dense
+            disabled={pending}
+            onClick={() => {
+              void (async () => {
+                const confirmed = await alertDialog.confirm({
+                  type: DialogType.WARNING,
+                  title: '기본값 사용',
+                  message:
+                    '이 마켓의 차수 전략을 설정 → 코인 매매설정관리의 기본값으로 덮어씁니다. 기존 차수 입력값은 사라집니다. 계속할까요?',
+                  confirmText: '기본값으로',
+                  cancelText: '취소',
+                });
+                if (!confirmed || !defaultProfile) return;
+                onStrategySave(defaultProfile);
+              })();
+            }}
+          >
+            기본값 사용
+          </Button>
+        ) : null}
         <Select
           aria-label="불러올 코인 자동매매 템플릿 선택"
           dense

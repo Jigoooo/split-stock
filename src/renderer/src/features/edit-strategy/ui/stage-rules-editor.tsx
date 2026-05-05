@@ -116,8 +116,8 @@ export const StageRulesEditor = ({
           차수별 규칙
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'end', flexWrap: 'wrap' }}>
-          <div style={{ display: 'grid', gap: '0.2rem' }}>
-            <span className="muted" style={{ fontSize: '0.95rem' }}>
+          <div style={{ display: 'grid', gap: '0.3rem' }}>
+            <span className="muted" style={{ fontSize: '1.1rem' }}>
               기준 차수
             </span>
             <Select

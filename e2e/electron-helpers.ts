@@ -52,9 +52,20 @@ export async function launchElectron(options: LaunchOptions = {}): Promise<Elect
   const screenshotDir = resolve(SCREENSHOT_ROOT, specName);
   mkdirSync(screenshotDir, { recursive: true });
 
+  // process.env 의 값은 string | undefined — Playwright 의 env 는 Record<string, string> 요구.
+  // undefined 항목은 제외하고 병합.
+  const mergedEnv: Record<string, string> | undefined =
+    options.env !== undefined
+      ? Object.fromEntries(
+          [
+            ...Object.entries(process.env),
+            ...Object.entries(options.env),
+          ].filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+        )
+      : undefined;
   const app = await electron.launch({
     args: [DEFAULT_MAIN_ENTRY, ...(options.args ?? [])],
-    ...(options.env !== undefined ? { env: { ...process.env, ...options.env } } : {}),
+    ...(mergedEnv !== undefined ? { env: mergedEnv } : {}),
   });
   const win = await app.firstWindow();
   await win.waitForLoadState('domcontentloaded');
