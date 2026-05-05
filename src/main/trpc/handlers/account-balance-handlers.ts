@@ -19,7 +19,7 @@ const STOCK_BROKER = 'KIS';
 
 export async function getBalanceHandler(
   ctx: Context,
-  input: { accountId?: number | undefined } = {},
+  input: { accountId?: number | undefined; broker?: string | undefined } = {},
 ) {
   const { accountId, balance, broker, env } = await fetchLegacyBalance(ctx, input, {
     logMessage: 'account.getBalance.failed',
@@ -32,19 +32,20 @@ export async function getBalanceHandler(
 
 export async function getBalanceWithLotsHandler(
   ctx: Context,
-  input: { accountId?: number | undefined } = {},
+  input: { accountId?: number | undefined; broker?: string | undefined } = {},
 ) {
   const { accountId, balance, broker } = await fetchLegacyBalance(ctx, input, {
     logMessage: 'account.getBalanceWithLots.failed',
   });
-  const lotsByPdno = readLotsByPdno(ctx, accountId);
+  const brokerKey = input.broker ?? STOCK_BROKER;
+  const lotsByPdno = readLotsByPdno(ctx, accountId, brokerKey);
   const strategiesByPdno = readStrategiesByPdno(
     ctx,
     accountId,
     balance.value.positions,
     lotsByPdno,
   );
-  const recentSellOrderPdnos = readRecentSellOrderPdnos(ctx.db, accountId);
+  const recentSellOrderPdnos = readRecentSellOrderPdnos(ctx.db, accountId, brokerKey);
   const syncState = buildLotSyncState({
     positions: balance.value.positions.map((position) => ({
       code: position.code,
@@ -82,10 +83,16 @@ export async function getBalanceWithLotsHandler(
 
 export function getPositionOverlayHandler(
   ctx: Context,
-  input: { pdno: string; accountId?: number | undefined; includeSold: boolean },
+  input: {
+    pdno: string;
+    accountId?: number | undefined;
+    broker?: string | undefined;
+    includeSold: boolean;
+  },
 ) {
   const accountId = resolveAccountId(ctx, input);
-  const snap = ctx.lotsRepo.snapshot(accountId, input.pdno);
+  const brokerKey = input.broker ?? STOCK_BROKER;
+  const snap = ctx.lotsRepo.snapshot(accountId, input.pdno, brokerKey);
   if (snap.isErr()) {
     throw new TRPCError({
       code: 'INTERNAL_SERVER_ERROR',
@@ -170,7 +177,11 @@ async function fetchLegacyBalance(
   };
 }
 
-function readLotsByPdno(ctx: Context, accountId: number): Record<string, LotSnapshotEntry[]> {
+function readLotsByPdno(
+  ctx: Context,
+  accountId: number,
+  broker: string = STOCK_BROKER,
+): Record<string, LotSnapshotEntry[]> {
   let lotsByPdno: Record<string, LotSnapshotEntry[]> = {};
   try {
     const lotRows = ctx.db
@@ -178,7 +189,7 @@ function readLotsByPdno(ctx: Context, accountId: number): Record<string, LotSnap
       .from(lotsTable)
       .where(
         and(
-          eq(lotsTable.broker, STOCK_BROKER),
+          eq(lotsTable.broker, broker),
           eq(lotsTable.accountId, accountId),
           inArray(lotsTable.status, ['OPEN', 'BUYING', 'SELLING']),
         ),

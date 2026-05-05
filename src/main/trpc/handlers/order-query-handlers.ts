@@ -23,15 +23,16 @@ function readNamesByPdno(ctx: Context, pdnos: readonly string[]): Map<string, st
 
 export function listActiveOrdersHandler(
   ctx: Context,
-  input: { accountId?: number | undefined } = {},
+  input: { accountId?: number | undefined; broker?: string | undefined } = {},
 ) {
   const accountId = resolveAccountId(ctx, input);
+  const brokerKey = input.broker ?? STOCK_BROKER;
   const rows = ctx.db
     .select()
     .from(orders)
     .where(
       and(
-        eq(orders.broker, STOCK_BROKER),
+        eq(orders.broker, brokerKey),
         eq(orders.accountId, accountId),
         inArray(orders.status, ['PENDING', 'PARTIAL']),
       ),
@@ -56,6 +57,7 @@ export function listMyFillsHandler(
   ctx: Context,
   input: {
     accountId?: number | undefined;
+    broker?: string | undefined;
     pdno?: string | undefined;
     limit?: number | undefined;
   } = {},
@@ -63,7 +65,8 @@ export function listMyFillsHandler(
   const accountId = resolveAccountId(ctx, input);
   const pdno = input.pdno;
   const limit = input.limit ?? 100;
-  const conditions = [eq(orders.broker, STOCK_BROKER), eq(orders.accountId, accountId)];
+  const brokerKey = input.broker ?? STOCK_BROKER;
+  const conditions = [eq(orders.broker, brokerKey), eq(orders.accountId, accountId)];
   if (pdno) conditions.push(eq(orders.pdno, pdno));
   const rows = ctx.db
     .select()

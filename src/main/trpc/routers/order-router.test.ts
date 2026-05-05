@@ -37,6 +37,7 @@ function createOrderCtx(broker = new FakeBrokerAdapter({ startOrderId: 9000 })) 
     db,
     settingsRepo: new SettingsRepo(db),
     lotsRepo: new LotsRepo(db),
+    stockMasterRepo: { find: () => null },
     logger: { log: vi.fn() },
     pendingOrderWatcher: null,
     currentStateSync: { trigger },
@@ -296,6 +297,50 @@ describe('orderRouter.placeCash', () => {
       lotId: 2,
       status: 'PENDING',
     });
+  });
+
+  it("listActive: broker='UPBIT' 명시 호출은 UPBIT 주문만 반환 (KIS row 무시)", async () => {
+    const { ctx, db } = createOrderCtx();
+    // KIS PENDING 주문 (default)
+    db.insert(orders)
+      .values({
+        broker: 'KIS',
+        accountId: 1,
+        odno: 'KIS-1',
+        pdno: '005930',
+        side: 'BUY',
+        division: 'LIMIT',
+        qty: 1,
+        price: 70000,
+        status: 'PENDING',
+        placedAt: new Date('2026-04-30T09:00:00+09:00'),
+      })
+      .run();
+    // UPBIT PENDING 주문 (raw insert)
+    db.insert(orders)
+      .values({
+        broker: 'UPBIT',
+        accountId: 1,
+        odno: 'UPBIT-1',
+        pdno: 'KRW-BTC',
+        side: 'BUY',
+        division: 'LIMIT',
+        qty: 1,
+        price: 50_000_000,
+        status: 'PENDING',
+        placedAt: new Date('2026-04-30T09:00:00+09:00'),
+      })
+      .run();
+    const caller = createCaller(ctx);
+
+    const upbitResult = await caller.listActive({ accountId: 1, broker: 'UPBIT' });
+    expect(upbitResult.orders).toHaveLength(1);
+    expect(upbitResult.orders[0]?.pdno).toBe('KRW-BTC');
+
+    // broker 미전달 (default 'KIS')
+    const kisResult = await caller.listActive({ accountId: 1 });
+    expect(kisResult.orders).toHaveLength(1);
+    expect(kisResult.orders[0]?.pdno).toBe('005930');
   });
 
   it('수동매도는 broker 호출 전에 차수를 선점하고 broker 실패 시 OPEN으로 되돌린다', async () => {

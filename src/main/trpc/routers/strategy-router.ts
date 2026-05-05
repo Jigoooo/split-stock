@@ -15,7 +15,7 @@ const AccountIdField = z.number().int().positive().optional();
 const ActiveSelectorSchema = z.object({
   pdno: z
     .string()
-    .regex(/^\d{6}$/)
+    .refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol')
     .nullable(),
   accountId: AccountIdField,
 });
@@ -74,7 +74,13 @@ export const strategyRouter = router({
     .input(
       z.object({
         accountId: AccountIdField,
-        pdnos: z.array(z.string().regex(/^\d{6}$/)).max(200),
+        pdnos: z
+          .array(
+            z
+              .string()
+              .refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol'),
+          )
+          .max(200),
       }),
     )
     .query(({ ctx, input }) => {
@@ -129,7 +135,9 @@ export const strategyRouter = router({
   setAutoModeQuick: publicProcedure
     .input(
       ActiveSelectorSchema.extend({
-        pdno: z.string().regex(/^\d{6}$/),
+        pdno: z
+          .string()
+          .refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol'),
         mode: z.enum(['ALL_ON', 'ALL_OFF', 'BUY_ONLY', 'SELL_ONLY']),
       }),
     )
@@ -191,7 +199,9 @@ export const strategyRouter = router({
   applyPriceRatio: publicProcedure
     .input(
       z.object({
-        pdno: z.string().regex(/^\d{6}$/),
+        pdno: z
+          .string()
+          .refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol'),
         stages: z.union([z.array(z.number().int().min(1)), z.literal('all')]),
         ratioPct: z.number().min(-100).max(100),
         accountId: AccountIdField,

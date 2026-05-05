@@ -18,6 +18,7 @@ import { listAccountsWithActiveRepair } from '../handlers/account-shared';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 const AccountIdField = z.number().int().positive();
+const BrokerField = z.string().optional().default('KIS');
 
 export const accountRouter = router({
   listAccounts: publicProcedure.query(({ ctx }) => listAccountsWithActiveRepair(ctx)),
@@ -65,18 +66,19 @@ export const accountRouter = router({
     .mutation(({ ctx, input }) => deleteAccountHandler(ctx, input)),
 
   getBalance: authedProcedure
-    .input(z.object({ accountId: AccountIdField.optional() }).optional())
-    .query(({ ctx, input }) => getBalanceHandler(ctx, input ?? {})),
+    .input(z.object({ accountId: AccountIdField.optional(), broker: BrokerField }).optional())
+    .query(({ ctx, input }) => getBalanceHandler(ctx, input ?? { broker: 'KIS' })),
 
   getBalanceWithLots: authedProcedure
-    .input(z.object({ accountId: AccountIdField.optional() }).optional())
-    .query(({ ctx, input }) => getBalanceWithLotsHandler(ctx, input ?? {})),
+    .input(z.object({ accountId: AccountIdField.optional(), broker: BrokerField }).optional())
+    .query(({ ctx, input }) => getBalanceWithLotsHandler(ctx, input ?? { broker: 'KIS' })),
 
   getPositionOverlay: authedProcedure
     .input(
       z.object({
         pdno: z.string().regex(/^\d{6}$/),
         accountId: AccountIdField.optional(),
+        broker: BrokerField,
         includeSold: z.boolean().default(false),
       }),
     )

@@ -4,6 +4,11 @@ import { lotsRepoErrorMessage } from '../../trading/lots-repo';
 import { requireAccountId, resolveAccountId } from '../router-helpers';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
+const BrokerField = z.string().optional().default('KIS');
+const SymbolSchema = z
+  .string()
+  .refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol');
+
 export const lotsRouter = router({
   /**
    * 특정 일자의 차수 스냅샷 조회.
@@ -13,13 +18,14 @@ export const lotsRouter = router({
     .input(
       z.object({
         accountId: z.number().int().positive().optional(),
+        broker: BrokerField,
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD 형식 필요'),
         pdno: z.string().optional(),
       }),
     )
     .query(({ ctx, input }) => {
       const accountId = resolveAccountId(ctx, input);
-      const result = ctx.lotsRepo.snapshotByDate(accountId, input.date, input.pdno);
+      const result = ctx.lotsRepo.snapshotByDate(accountId, input.date, input.pdno, input.broker);
       if (result.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -39,20 +45,21 @@ export const lotsRouter = router({
     .input(
       z.object({
         accountId: z.number().int().positive(),
-        pdno: z
-          .string()
-          .regex(/^\d{6}$/, '종목코드는 6자리 숫자')
-          .optional(),
+        broker: BrokerField,
+        pdno: SymbolSchema.optional(),
         status: z.enum(['all', 'open', 'closed']),
       }),
     )
     .query(({ ctx, input }) => {
       const accountId = requireAccountId(input);
-      const result = ctx.lotsRepo.cyclesByPdno({
-        accountId,
-        status: input.status,
-        ...(input.pdno !== undefined ? { pdno: input.pdno } : {}),
-      });
+      const result = ctx.lotsRepo.cyclesByPdno(
+        {
+          accountId,
+          status: input.status,
+          ...(input.pdno !== undefined ? { pdno: input.pdno } : {}),
+        },
+        input.broker,
+      );
       if (result.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -70,6 +77,7 @@ export const lotsRouter = router({
     .input(
       z.object({
         accountId: z.number().int().positive(),
+        broker: BrokerField,
         year: z.number().int().min(2000).max(2100),
         month: z.number().int().min(1).max(12),
         day: z.number().int().min(1).max(31).optional(),
@@ -78,13 +86,16 @@ export const lotsRouter = router({
     )
     .query(({ ctx, input }) => {
       const accountId = requireAccountId(input);
-      const result = ctx.lotsRepo.listTradeHistoryLots({
-        accountId,
-        year: input.year,
-        month: input.month,
-        ...(input.day !== undefined ? { day: input.day } : {}),
-        ...(input.search !== undefined ? { search: input.search } : {}),
-      });
+      const result = ctx.lotsRepo.listTradeHistoryLots(
+        {
+          accountId,
+          year: input.year,
+          month: input.month,
+          ...(input.day !== undefined ? { day: input.day } : {}),
+          ...(input.search !== undefined ? { search: input.search } : {}),
+        },
+        input.broker,
+      );
       if (result.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -104,12 +115,13 @@ export const lotsRouter = router({
     .input(
       z.object({
         accountId: z.number().int().positive(),
-        pdno: z.string().regex(/^\d{6}$/, '종목코드는 6자리 숫자'),
+        broker: BrokerField,
+        pdno: SymbolSchema,
       }),
     )
     .query(({ ctx, input }) => {
       const accountId = requireAccountId(input);
-      const result = ctx.lotsRepo.listOpenLots(accountId, input.pdno);
+      const result = ctx.lotsRepo.listOpenLots(accountId, input.pdno, input.broker);
       if (result.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -126,11 +138,12 @@ export const lotsRouter = router({
     .input(
       z.object({
         accountId: z.number().int().positive().optional(),
+        broker: BrokerField,
       }),
     )
     .query(({ ctx, input }) => {
       const accountId = resolveAccountId(ctx, input);
-      const result = ctx.lotsRepo.listSnapshotDates(accountId);
+      const result = ctx.lotsRepo.listSnapshotDates(accountId, input.broker);
       if (result.isErr()) {
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',

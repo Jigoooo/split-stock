@@ -171,10 +171,15 @@ function writeCachedSnapshot(accountId: number | null, data: BalanceWithLotsSnap
  * 잔고 + 차수(lots) + 종목별 전략 메타를 1-roundtrip 으로 합성.
  * accountId 는 useActiveAccountId 로 자동 주입.
  * 활성 계좌가 없으면 쿼리 disabled.
+ *
+ * Phase R2: broker 인자 (default 'KIS').
+ * broker 가 명시 전달되면 account.broker !== 'UPBIT' UPBIT 가드 우회 — 호출처가
+ * UPBIT 잔고 hook 을 의식적으로 사용함을 의미.
  */
-export function useBalanceWithLots(): UseBalanceWithLotsResult {
+export function useBalanceWithLots(broker?: string): UseBalanceWithLotsResult {
   const { account, accountId } = useActiveAccountId();
-  const stockBalanceEnabled = accountId !== null && account?.broker !== 'UPBIT';
+  const stockBalanceEnabled =
+    accountId !== null && (broker !== undefined || account?.broker !== 'UPBIT');
   const stockAccountId = stockBalanceEnabled ? accountId : null;
   const cachedSnapshot = useMemo(
     () => (stockAccountId !== null ? readCachedSnapshot(stockAccountId) : null),
@@ -198,7 +203,9 @@ export function useBalanceWithLots(): UseBalanceWithLotsResult {
   }, [cachedSnapshot, stockBalanceEnabled]);
 
   const query = trpc.account.getBalanceWithLots.useQuery(
-    stockAccountId !== null ? { accountId: stockAccountId } : skipToken,
+    stockAccountId !== null
+      ? { accountId: stockAccountId, ...(broker !== undefined ? { broker } : {}) }
+      : skipToken,
     {
       enabled: stockBalanceEnabled && queryReady,
       refetchInterval: 4000,

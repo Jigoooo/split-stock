@@ -4,10 +4,12 @@ import { thousandSeparator } from '@renderer/shared/lib/formatter';
 import { alertDialog } from '@renderer/shared/ui';
 import { useState } from 'react';
 
-export function useActiveOrders(pdnoFilter?: string | null) {
+export function useActiveOrders(pdnoFilter?: string | null, broker?: string) {
   const utils = trpc.useUtils();
   const { accountId } = useActiveAccountId();
-  const query = trpc.order.listActive.useQuery(undefined, { refetchInterval: 2000 });
+  const query = trpc.order.listActive.useQuery(broker !== undefined ? { broker } : undefined, {
+    refetchInterval: 2000,
+  });
   const cancelMany = trpc.order.cancelMany.useMutation({
     onSuccess: () => utils.order.listActive.invalidate(),
   });

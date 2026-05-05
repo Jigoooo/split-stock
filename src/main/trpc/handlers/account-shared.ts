@@ -108,14 +108,18 @@ export function balanceErrorMessage(e: KisError): string {
   }
 }
 
-export function readRecentSellOrderPdnos(db: Db, accountId: number): Set<string> {
+export function readRecentSellOrderPdnos(
+  db: Db,
+  accountId: number,
+  broker: string = STOCK_BROKER,
+): Set<string> {
   const cutoff = new Date(Date.now() - SELL_SETTLEMENT_GRACE_MS);
   const rows = db
     .select({ pdno: ordersTable.pdno })
     .from(ordersTable)
     .where(
       and(
-        eq(ordersTable.broker, STOCK_BROKER),
+        eq(ordersTable.broker, broker),
         eq(ordersTable.accountId, accountId),
         eq(ordersTable.side, 'SELL'),
         inArray(ordersTable.status, ['PENDING', 'PARTIAL', 'FILLED']),

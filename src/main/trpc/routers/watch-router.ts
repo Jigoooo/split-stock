@@ -33,7 +33,7 @@ const HistoryItemSchema = z.object({
 
 const ReservationBuyBaseShape = {
   accountId: z.number().int().positive(),
-  pdno: z.string().regex(/^\d{6}$/),
+  pdno: z.string().refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol'),
   targetPrice: z.number().int().positive(),
   orderType: z.enum(['MARKET', 'LIMIT']),
   qtyOrAmountMode: z.enum(['QTY', 'AMOUNT']),
@@ -44,7 +44,7 @@ const ReservationBuyBaseShape = {
 
 const ReservationBuyDraftInputSchema = z.object({
   accountId: z.number().int().positive(),
-  pdno: z.string().regex(/^\d{6}$/),
+  pdno: z.string().refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol'),
 });
 
 const ReservationBuyCreateInputSchema = z

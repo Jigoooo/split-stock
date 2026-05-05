@@ -6,6 +6,7 @@ import { listActiveOrdersHandler, listMyFillsHandler } from '../handlers/order-q
 import { router, runtimeProcedure } from '../trpc-core';
 
 const AccountIdField = z.number().int().positive();
+const BrokerField = z.string().optional().default('KIS');
 
 export const orderRouter = router({
   /**
@@ -27,8 +28,8 @@ export const orderRouter = router({
    * 미체결 주문 목록 (PENDING/PARTIAL) — 활성 계좌 한정.
    */
   listActive: runtimeProcedure
-    .input(z.object({ accountId: AccountIdField.optional() }).optional())
-    .query(({ ctx, input }) => listActiveOrdersHandler(ctx, input ?? {})),
+    .input(z.object({ accountId: AccountIdField.optional(), broker: BrokerField }).optional())
+    .query(({ ctx, input }) => listActiveOrdersHandler(ctx, input ?? { broker: 'KIS' })),
 
   /**
    * 내 체결 주문 목록 — 활성 계좌 한정. FilledPane (MainPositionsPane L2 "실시간 체결") 용도.
@@ -38,15 +39,16 @@ export const orderRouter = router({
       z
         .object({
           accountId: AccountIdField.optional(),
+          broker: BrokerField,
           pdno: z
             .string()
-            .regex(/^\d{6}$/)
+            .refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol')
             .optional(),
           limit: z.number().int().min(1).max(500).default(100),
         })
         .optional(),
     )
-    .query(({ ctx, input }) => listMyFillsHandler(ctx, input ?? {})),
+    .query(({ ctx, input }) => listMyFillsHandler(ctx, input ?? { broker: 'KIS', limit: 100 })),
 
   /**
    * 선택 주문 일괄 취소 — accountId 명시 필수. 호가창 UI에서 호출.

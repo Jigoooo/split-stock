@@ -3,12 +3,18 @@ import { z } from 'zod';
 import type { OrderbookUpdate, TickUpdate } from '../../kis/ws-frame-parser';
 import { router, runtimeProcedure } from '../trpc-core';
 
-const PdnoSchema = z.object({ pdno: z.string().regex(/^\d{6}$/) });
+const PdnoSchema = z.object({
+  pdno: z.string().refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol'),
+});
 const PdnosSchema = z.object({
-  pdnos: z.array(z.string().regex(/^\d{6}$/)).max(200),
+  pdnos: z
+    .array(
+      z.string().refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol'),
+    )
+    .max(200),
 });
 const TopicSchema = z.object({
-  pdno: z.string().regex(/^\d{6}$/),
+  pdno: z.string().refine((v) => /^\d{6}$/.test(v) || /^KRW-[A-Z0-9]+$/.test(v), 'invalid symbol'),
   topic: z.enum(['tick', 'orderbook']),
 });
 

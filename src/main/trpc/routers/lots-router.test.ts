@@ -2,6 +2,7 @@ import type { TRPCError } from '@trpc/server';
 import { describe, expect, it } from 'vitest';
 import { bootstrapSchema } from '../../db/bootstrap-schema';
 import { createTestDb, type Db } from '../../db/client';
+import { lots as lotsTable } from '../../db/schema';
 import { LotsRepo } from '../../trading/lots-repo';
 import { StockMasterRepo } from '../../trading/stock-master-repo';
 import type { Context } from '../context';
@@ -110,5 +111,66 @@ describe('lots-router', () => {
         month: 13,
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' } satisfies Partial<TRPCError>);
+  });
+
+  it("cyclesByPdno: broker='UPBIT' 명시 호출은 UPBIT lot 만 반환 (KIS row 무시)", async () => {
+    const s = setup();
+    // KIS lot 시드 (default)
+    s.lotsRepo.insertLot({
+      accountId: 1,
+      pdno: '005930',
+      nth: 1,
+      buyPrice: 70000,
+      qty: 10,
+      amountKrw: 700_000,
+      status: 'OPEN',
+      boughtAt: new Date('2026-04-01T00:00:00Z'),
+    });
+    // UPBIT lot 시드 (raw drizzle — broker='UPBIT')
+    s.db
+      .insert(lotsTable)
+      .values({
+        broker: 'UPBIT',
+        accountId: 1,
+        pdno: 'KRW-BTC',
+        nth: 1,
+        buyPrice: 50_000_000,
+        qty: 1,
+        amountKrw: 50_000_000,
+        status: 'OPEN',
+        boughtAt: new Date('2026-04-01T00:00:00Z'),
+      })
+      .run();
+    const caller = createCaller(ctxFor(s.baseCtx, 1));
+
+    const upbitResult = await caller.cyclesByPdno({
+      accountId: 1,
+      broker: 'UPBIT',
+      status: 'open',
+    });
+    expect(upbitResult.cycles).toHaveLength(1);
+    expect(upbitResult.cycles[0]?.pdno).toBe('KRW-BTC');
+
+    // broker 미전달 (default 'KIS') 은 KIS row 만
+    const kisResult = await caller.cyclesByPdno({
+      accountId: 1,
+      status: 'open',
+    });
+    expect(kisResult.cycles).toHaveLength(1);
+    expect(kisResult.cycles[0]?.pdno).toBe('005930');
+  });
+
+  it("cyclesByPdno: pdno regex — UPBIT 심볼 'KRW-BTC' 통과", async () => {
+    const s = setup();
+    const caller = createCaller(ctxFor(s.baseCtx, 1));
+
+    // pdno 가 'KRW-BTC' 형식이어도 zod refine 통과 — 빈 결과 반환
+    const result = await caller.cyclesByPdno({
+      accountId: 1,
+      broker: 'UPBIT',
+      pdno: 'KRW-BTC',
+      status: 'open',
+    });
+    expect(result.cycles).toEqual([]);
   });
 });
