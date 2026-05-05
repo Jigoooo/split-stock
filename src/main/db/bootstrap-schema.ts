@@ -262,38 +262,8 @@ const CREATE_STATEMENTS: readonly string[] = [
     updated_at INTEGER NOT NULL
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS crypto_auto_templates_account_name_uniq ON crypto_auto_templates(account_id, name)`,
-  `CREATE TABLE IF NOT EXISTS crypto_auto_lots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_id INTEGER NOT NULL,
-    exchange TEXT NOT NULL DEFAULT 'UPBIT',
-    market TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'dry-run',
-    sequence INTEGER NOT NULL,
-    quantity TEXT NOT NULL,
-    avg_entry_krw TEXT NOT NULL,
-    allocated_krw TEXT NOT NULL,
-    realized_pnl TEXT NOT NULL DEFAULT '0',
-    fees_paid TEXT NOT NULL DEFAULT '0',
-    status TEXT NOT NULL,
-    opened_at INTEGER NOT NULL,
-    closed_at INTEGER,
-    updated_at INTEGER NOT NULL
-  )`,
-  `CREATE TABLE IF NOT EXISTS crypto_auto_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_id INTEGER NOT NULL,
-    exchange TEXT NOT NULL DEFAULT 'UPBIT',
-    market TEXT NOT NULL,
-    mode TEXT NOT NULL,
-    kind TEXT NOT NULL,
-    action TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    intent_json TEXT,
-    result_json TEXT,
-    idempotency_key TEXT,
-    created_at INTEGER NOT NULL
-  )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS crypto_auto_events_idempotency_uniq ON crypto_auto_events(account_id, idempotency_key)`,
+  // Phase R4-3: crypto_auto_lots / crypto_auto_events CREATE 제거.
+  // 자동매매 엔진은 R3-3 (commit 0cb70be) 에서 stock lots/event_logs 로 write 전환됨.
   `CREATE TABLE IF NOT EXISTS lots_snapshots (
     account_id INTEGER NOT NULL,
     broker TEXT NOT NULL DEFAULT 'KIS',

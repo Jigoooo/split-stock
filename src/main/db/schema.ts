@@ -424,42 +424,9 @@ export const cryptoAutoTemplates = sqliteTable(
   (t) => [uniqueIndex('crypto_auto_templates_account_name_uniq').on(t.accountId, t.name)],
 );
 
-export const cryptoAutoLots = sqliteTable('crypto_auto_lots', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  accountId: integer('account_id').notNull(),
-  exchange: text('exchange').notNull().default('UPBIT'),
-  market: text('market').notNull(),
-  source: text('source').notNull().default('dry-run'),
-  sequence: integer('sequence').notNull(),
-  quantity: text('quantity').notNull(),
-  avgEntryKrw: text('avg_entry_krw').notNull(),
-  allocatedKrw: text('allocated_krw').notNull(),
-  realizedPnl: text('realized_pnl').notNull().default('0'),
-  feesPaid: text('fees_paid').notNull().default('0'),
-  status: text('status').notNull(),
-  openedAt: integer('opened_at', { mode: 'timestamp_ms' }).notNull(),
-  closedAt: integer('closed_at', { mode: 'timestamp_ms' }),
-  updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-});
-
-export const cryptoAutoEvents = sqliteTable(
-  'crypto_auto_events',
-  {
-    id: integer('id').primaryKey({ autoIncrement: true }),
-    accountId: integer('account_id').notNull(),
-    exchange: text('exchange').notNull().default('UPBIT'),
-    market: text('market').notNull(),
-    mode: text('mode').notNull(),
-    kind: text('kind').notNull(),
-    action: text('action').notNull(),
-    reason: text('reason').notNull(),
-    intentJson: text('intent_json'),
-    resultJson: text('result_json'),
-    idempotencyKey: text('idempotency_key'),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  },
-  (t) => [uniqueIndex('crypto_auto_events_idempotency_uniq').on(t.accountId, t.idempotencyKey)],
-);
+// Phase R4-3: cryptoAutoLots / cryptoAutoEvents 테이블 정의 제거.
+// R3-3 (commit 0cb70be) 에서 자동매매 엔진이 stock lots / event_logs 로 write 전환됨.
+// DROP migration: drizzle/0023_drop_dead_crypto_auto_tables.sql
 
 /**
  * 잔고(차수) 스냅샷 — 일자별 종목 차수 이력.

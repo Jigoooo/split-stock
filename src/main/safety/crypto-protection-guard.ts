@@ -1,7 +1,9 @@
 import { and, eq, gte, inArray } from 'drizzle-orm';
 import type { Db } from '../db/client';
-import { cryptoAutoLots, cryptoOrders } from '../db/schema';
+import { cryptoOrders, lots } from '../db/schema';
 import type { ProtectionLimitsRepo } from './protection-limits-repo';
+
+const UPBIT_BROKER = 'UPBIT';
 
 /**
  * 코인 자동매매 보호 한도 가드 — placeOrder 진입 전 검사. (RALPLAN P6 A3)
@@ -110,12 +112,20 @@ export class CryptoProtectionGuard {
       }
 
       if (limits.accountTotalMaxAmountEnabled && limits.accountTotalMaxAmount !== null) {
+        // Phase R3-3 후속: cryptoAutoLots → lots (broker='UPBIT', status='open') 로 read 전환.
+        // status 는 R3-3 매핑 그대로 lowercase ('open'/'closed'). amountKrwDecimal 은 nullable —
+        // 코인 row 만 들어가므로 항상 값 있음. NULL 가드는 안전망.
         const rows = this.db
-          .select({ allocatedKrw: cryptoAutoLots.allocatedKrw })
-          .from(cryptoAutoLots)
-          .where(and(eq(cryptoAutoLots.accountId, accountId), eq(cryptoAutoLots.status, 'open')))
+          .select({ amountKrwDecimal: lots.amountKrwDecimal })
+          .from(lots)
+          .where(
+            and(eq(lots.broker, UPBIT_BROKER), eq(lots.accountId, accountId), eq(lots.status, 'open')),
+          )
           .all();
-        const exposureKrw = rows.reduce((acc, row) => acc + Number(row.allocatedKrw || '0'), 0);
+        const exposureKrw = rows.reduce(
+          (acc, row) => acc + Number(row.amountKrwDecimal || '0'),
+          0,
+        );
         if (exposureKrw + amountKrw > limits.accountTotalMaxAmount) {
           return {
             ok: false,

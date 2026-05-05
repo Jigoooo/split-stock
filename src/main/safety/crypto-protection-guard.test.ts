@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
-import { cryptoAutoLots, cryptoOrders } from '../db/schema';
+import { cryptoOrders, lots } from '../db/schema';
 import { CryptoProtectionGuard } from './crypto-protection-guard';
 import { ProtectionLimitsRepo } from './protection-limits-repo';
 
@@ -43,19 +43,21 @@ describe('CryptoProtectionGuard', () => {
   it('blocks when account total exposure would be exceeded', () => {
     const { db, repo, guard } = setup();
     repo.upsert(1, { accountTotalMaxAmount: 20_000, accountTotalMaxAmountEnabled: true });
-    db.insert(cryptoAutoLots)
+    db.insert(lots)
       .values({
+        broker: 'UPBIT',
         accountId: 1,
-        exchange: 'UPBIT',
-        market: 'KRW-BTC',
+        pdno: 'KRW-BTC',
+        nth: 1,
+        buyPrice: 0,
+        qty: 0,
+        amountKrw: 0,
+        qtyDecimal: '0.001',
+        buyPriceDecimal: '50000000',
+        amountKrwDecimal: '15000',
         source: 'live',
-        sequence: 1,
-        quantity: '0.001',
-        avgEntryKrw: '50000000',
-        allocatedKrw: '15000',
         status: 'open',
-        openedAt: new Date('2026-05-03T10:00:00+09:00'),
-        updatedAt: new Date('2026-05-03T10:00:00+09:00'),
+        boughtAt: new Date('2026-05-03T10:00:00+09:00'),
       })
       .run();
     const verdict = guard.canBuyToday(1, 'KRW-BTC', 6000);
