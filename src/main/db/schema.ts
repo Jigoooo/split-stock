@@ -75,13 +75,24 @@ export const lots = sqliteTable('lots', {
   accountId: integer('account_id').notNull(),
   pdno: text('pdno').notNull(), // 종목코드 (KIS=6자리, UPBIT=KRW-XXX 등)
   nth: integer('nth').notNull(), // 1..N차
-  buyPrice: integer('buy_price').notNull(), // 원(정수)
-  qty: integer('qty').notNull(),
-  amountKrw: integer('amount_krw').notNull(),
+  buyPrice: integer('buy_price').notNull(), // KIS 원(정수). UPBIT 는 buyPriceDecimal 우선.
+  qty: integer('qty').notNull(), // KIS 정수 수량. UPBIT 는 qtyDecimal 우선.
+  amountKrw: integer('amount_krw').notNull(), // KIS 매입금(원). UPBIT 는 amountKrwDecimal 우선.
+  /**
+   * Phase R0-5: 코인 fractional 수량/가격/매입금을 위한 nullable text 컬럼.
+   *
+   * KIS row 는 NULL — 기존 integer 컬럼 그대로 사용.
+   * UPBIT row 는 DecimalString (예: BTC 0.00125 = "0.00125") 으로 저장.
+   * UI/repo 는 broker 분기로 적절한 컬럼 read.
+   */
+  qtyDecimal: text('qty_decimal'),
+  buyPriceDecimal: text('buy_price_decimal'),
+  amountKrwDecimal: text('amount_krw_decimal'),
   status: text('status').notNull(), // 'OPEN' | 'SOLD' | 'BUYING' | 'SELLING'
   boughtAt: integer('bought_at', { mode: 'timestamp_ms' }).notNull(),
   soldAt: integer('sold_at', { mode: 'timestamp_ms' }),
   sellPrice: integer('sell_price'),
+  sellPriceDecimal: text('sell_price_decimal'),
 });
 
 /**

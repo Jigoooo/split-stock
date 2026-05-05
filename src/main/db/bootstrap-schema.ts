@@ -47,10 +47,14 @@ const CREATE_STATEMENTS: readonly string[] = [
     buy_price INTEGER NOT NULL,
     qty INTEGER NOT NULL,
     amount_krw INTEGER NOT NULL,
+    qty_decimal TEXT,
+    buy_price_decimal TEXT,
+    amount_krw_decimal TEXT,
     status TEXT NOT NULL,
     bought_at INTEGER NOT NULL,
     sold_at INTEGER,
-    sell_price INTEGER
+    sell_price INTEGER,
+    sell_price_decimal TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

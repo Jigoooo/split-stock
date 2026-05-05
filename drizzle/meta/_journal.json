@@ -148,6 +148,13 @@
       "when": 1782300000000,
       "tag": "0020_broker_column",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1782301000000,
+      "tag": "0021_lots_decimal",
+      "breakpoints": true
     }
   ]
 }
