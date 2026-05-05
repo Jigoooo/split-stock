@@ -12,6 +12,8 @@ import { type ReactElement, useState } from 'react';
 
 export interface PastTradesPaneProps {
   accountId: number;
+  /** Phase R3-1: broker (default 'KIS'). 코인 page 가 'UPBIT' 로 사용 가능. */
+  broker?: string;
 }
 
 interface PdnoGroup {
@@ -49,9 +51,13 @@ const PAST_DETAIL_COLS = {
  * closed(SOLD) 사이클 중 현재 미보유 종목만 종목 단위로 집계해서 표시한다.
  * 행 클릭은 전역 선택 상태를 바꾸지 않고 이 패널 안에서 상세로 전환한다.
  */
-export const PastTradesPane = ({ accountId }: PastTradesPaneProps): ReactElement => {
-  const balance = useBalanceWithLots();
-  const { cycles, isPending, error } = useTradeCycles({ accountId, status: 'closed' });
+export const PastTradesPane = ({ accountId, broker }: PastTradesPaneProps): ReactElement => {
+  const balance = useBalanceWithLots(broker);
+  const { cycles, isPending, error } = useTradeCycles({
+    accountId,
+    status: 'closed',
+    ...(broker !== undefined ? { broker } : {}),
+  });
   const [selectedPdno, setSelectedPdno] = useState<string | null>(null);
 
   if (isPending || balance.isPending) {

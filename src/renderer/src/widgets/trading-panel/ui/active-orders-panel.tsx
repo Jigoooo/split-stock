@@ -9,6 +9,8 @@ export interface ActiveOrdersPanelProps {
   pdnoFilter?: string | null;
   /** pdnoFilter에 해당하는 종목명 (선택). 헤더 및 그리드 표시용. */
   nameFilter?: string | null;
+  /** Phase R3-1: broker (default 'KIS'). 코인 page 가 'UPBIT' 로 사용 가능. */
+  broker?: string;
 }
 
 const ACTIVE_COLUMNS = [
@@ -31,9 +33,11 @@ const ACTIVE_COLUMNS = [
  * OrdersPanel base 는 broker prop 분기 없이 NormalizedOrder shape 만 소비.
  */
 export const ActiveOrdersPanel = (props: ActiveOrdersPanelProps): ReactElement => {
-  const { pdnoFilter, nameFilter } = props;
-  const { cancelError, cancelPending, cancelSelected, orders, selected, toggle } =
-    useActiveOrders(pdnoFilter);
+  const { pdnoFilter, nameFilter, broker } = props;
+  const { cancelError, cancelPending, cancelSelected, orders, selected, toggle } = useActiveOrders(
+    pdnoFilter,
+    broker,
+  );
 
   const normalized = useMemo<NormalizedOrder[]>(
     () =>

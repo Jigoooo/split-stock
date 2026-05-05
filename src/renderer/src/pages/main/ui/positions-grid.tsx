@@ -23,10 +23,12 @@ export interface PositionsGridProps {
   accountId: number;
   selectedPdno?: string | null;
   onSelect?: (pdno: string) => void;
+  /** Phase R3-1: broker (default 'KIS'). 코인 page 가 'UPBIT' 로 사용 가능. */
+  broker?: string;
 }
 
 export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
-  const { accountId, onSelect, selectedPdno = null } = props;
+  const { accountId, broker, onSelect, selectedPdno = null } = props;
   const {
     brokerLabel,
     error,
@@ -37,7 +39,7 @@ export const PositionsGrid = (props: PositionsGridProps): ReactElement => {
     rows,
     summary,
     syncStatus,
-  } = usePositionsGrid();
+  } = usePositionsGrid(broker);
   const displaySettings = useGetDisplaySettings();
   const updateDisplaySettings = useUpdateDisplaySettings();
   const syncCurrentState = useSyncCurrentState(accountId);

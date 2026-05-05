@@ -5,6 +5,8 @@ import { type ReactElement, useMemo } from 'react';
 
 export interface FilledPaneProps {
   selectedPdno: string | null;
+  /** Phase R3-1: broker (default 'KIS'). 코인 page 가 'UPBIT' 로 사용 가능. */
+  broker?: string;
 }
 
 const FILLED_COLUMNS = ['time', 'symbol', 'side', 'qty', 'price', 'state'] as const;
@@ -26,9 +28,13 @@ const FILLED_COLUMNS = ['time', 'symbol', 'side', 'qty', 'price', 'state'] as co
  * P2: broker-agnostic OrdersPanel 위에서 wrap. KIS-specific (division==='MARKET' 시 "시장가"
  * 라벨, status==='PARTIAL' chip) 은 어댑터 단계에서 NormalizedOrder 로 흡수.
  */
-export const FilledPane = ({ selectedPdno }: FilledPaneProps): ReactElement => {
+export const FilledPane = ({ selectedPdno, broker }: FilledPaneProps): ReactElement => {
   const query = trpc.order.listMyFills.useQuery(
-    { pdno: selectedPdno ?? undefined, limit: 100 },
+    {
+      pdno: selectedPdno ?? undefined,
+      limit: 100,
+      ...(broker !== undefined ? { broker } : {}),
+    },
     { refetchInterval: 3000 },
   );
 

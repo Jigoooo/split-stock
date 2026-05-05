@@ -34,8 +34,10 @@ export interface UsePositionsGridResult {
  *  - useBalanceWithLots 한 번만 호출 (positions+lots+strategies)
  *  - 행 단위 정규화 + 그리드 단위 maxStages 도출
  *  - 정렬은 서버 응답 순서 유지 (W6 에서 컬럼 정렬 추가 예정)
+ *
+ * Phase R3-1: broker 인자 (default 'KIS'). 코인 page 가 'UPBIT' 로 호출 가능.
  */
-export function usePositionsGrid(): UsePositionsGridResult {
+export function usePositionsGrid(broker?: string): UsePositionsGridResult {
   const {
     error,
     isPending,
@@ -47,7 +49,7 @@ export function usePositionsGrid(): UsePositionsGridResult {
     strategiesByPdno,
     summary,
     syncStatus,
-  } = useBalanceWithLots();
+  } = useBalanceWithLots(broker);
 
   const rows: PositionsGridRow[] = positions.map((position) => ({
     position,

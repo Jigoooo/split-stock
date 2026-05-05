@@ -19,6 +19,11 @@ import { WatchList } from './watch-list';
 
 export interface WatchBoardProps {
   accountId: number;
+  /**
+   * Phase R3-1: broker (default 'KIS'). 코인 page 가 'UPBIT' 로 사용 가능.
+   * 현재 useWatchOrders/useWatchHistory entity hook 은 broker 인자를 미수용 — 후속 phase 에서 hook 확장 시 전달.
+   */
+  broker?: string;
 }
 
 const TABS: ReadonlyArray<HtsTabItem<WatchTabKey>> = [
