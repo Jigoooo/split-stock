@@ -8,16 +8,17 @@ import {
   alertDialog,
   Button,
   DialogType,
-  type HtsTabItem,
-  HtsTabs,
   OverlayScrollbar,
   Select,
   TextInput,
 } from '@renderer/shared/ui';
+import {
+  TradeHistoryShell,
+  type TradeHistoryShellSlots,
+} from '@renderer/widgets/trade-history-panel';
 import type { StrategyProfile } from '@shared/contracts';
 import type { CSSProperties } from 'react';
-import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
-import { type TradeHistoryTabKey, useTradeHistoryTabs } from '../model/use-trade-history-tabs';
+import { type ReactElement, useEffect, useRef, useState } from 'react';
 import { TradeHistoryList } from './trade-history-list';
 
 export interface TradeHistoryPanelProps {
@@ -27,17 +28,10 @@ export interface TradeHistoryPanelProps {
   onOpenStrategySettings?: (() => void) | undefined;
 }
 
-const ALL_TABS: ReadonlyArray<HtsTabItem<TradeHistoryTabKey>> = [
-  { id: 'strategy', label: '자동매매 설정' },
-  { id: 'all', label: '전체보기' },
-  { id: 'open', label: '진행중' },
-  { id: 'closed', label: '종료' },
-  { id: 'memo', label: '종목메모' },
-];
 const STRATEGY_STICKY_ACTION_BAR_SCROLLBAR_OFFSET_PX = 52;
 
 /**
- * 우측 매매내역 패널 — R2 5탭.
+ * 우측 매매내역 패널 — R2 5탭. broker-agnostic shell 사용.
  *
  * 탭별 내용:
  *  - all/open/closed : TradeHistoryList (status 필터)
@@ -45,64 +39,23 @@ const STRATEGY_STICKY_ACTION_BAR_SCROLLBAR_OFFSET_PX = 52;
  *  - memo            : pdno 필요. features/symbol-memo 의 SymbolMemoForm 마운트
  *
  * pdno 가 null 이면 strategy/memo 탭은 비활성화 (탭 자체는 노출 — 라벨에 안내).
+ *
+ * 외부 prop 시그니처 무변경 — shell 도입은 내부 layout 만 변경. stock 동작 무영향.
  */
 export const TradeHistoryPanel = (props: TradeHistoryPanelProps): ReactElement => {
   const { accountId, pdno } = props;
-  const { setTab, tab } = useTradeHistoryTabs();
-  const tabs = useMemo<ReadonlyArray<HtsTabItem<TradeHistoryTabKey>>>(
-    () =>
-      pdno === null
-        ? ALL_TABS.map((t) =>
-            t.id === 'strategy' || t.id === 'memo' ? { ...t, badge: '종목 선택' } : t,
-          )
-        : ALL_TABS,
-    [pdno],
-  );
 
-  return (
-    <section
-      className="panel"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        minHeight: 0,
-        overflow: 'hidden',
-      }}
-      aria-label="매매내역 패널"
-    >
-      <HtsTabs tabs={tabs} active={tab} onChange={setTab} ariaLabel="매매내역 5탭" />
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        {(tab === 'all' || tab === 'open' || tab === 'closed') && (
-          <TradeHistoryList
-            accountId={accountId}
-            pdno={pdno}
-            status={tab === 'all' ? 'all' : tab === 'open' ? 'open' : 'closed'}
-          />
-        )}
-        {tab === 'strategy' &&
-          (pdno !== null ? (
-            <StrategyTabBody pdno={pdno} onOpenStrategySettings={props.onOpenStrategySettings} />
-          ) : (
-            <EmptyHint message="좌측에서 종목을 선택하면 해당 종목의 자동매매 설정을 편집할 수 있습니다." />
-          ))}
-        {tab === 'memo' &&
-          (pdno !== null ? (
-            <MemoTabBody pdno={pdno} />
-          ) : (
-            <EmptyHint message="좌측에서 종목을 선택하면 해당 종목의 메모를 편집할 수 있습니다." />
-          ))}
-      </div>
-    </section>
-  );
+  const slots: TradeHistoryShellSlots = {
+    configPanel: (symbol) => (
+      <StrategyTabBody pdno={symbol} onOpenStrategySettings={props.onOpenStrategySettings} />
+    ),
+    historyPanel: (status, symbol) => (
+      <TradeHistoryList accountId={accountId} pdno={symbol} status={status} />
+    ),
+    memoPanel: (symbol) => <MemoTabBody pdno={symbol} />,
+  };
+
+  return <TradeHistoryShell symbol={pdno} ariaLabel="매매내역 패널" slots={slots} />;
 };
 
 interface StrategyTabBodyProps {
@@ -347,9 +300,3 @@ const MemoTabBody = ({ pdno }: { pdno: string }): ReactElement => {
     </div>
   );
 };
-
-const EmptyHint = ({ message }: { message: string }): ReactElement => (
-  <div className="muted" style={{ padding: '1rem', fontSize: '1.1rem' }}>
-    {message}
-  </div>
-);
