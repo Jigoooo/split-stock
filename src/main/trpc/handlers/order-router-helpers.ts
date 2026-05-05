@@ -11,6 +11,8 @@ import type { EventLogger } from '../../logging/event-logger';
 import type { LotsRepo } from '../../trading/lots-repo';
 import { createPendingBuyLot } from '../../trading/order-lot-link';
 
+const STOCK_BROKER = 'KIS';
+
 /** 도메인 OrderAck → KIS NormalizedOrderAck shape (renderer wire compat). */
 export function toLegacyAck(ack: OrderAck) {
   return {
@@ -137,7 +139,11 @@ function parseYyyymmdd(yyyymmdd: string): Date {
 
 export function readFilledQtyByOrderId(db: Db, orderIds: number[]): Map<number, number> {
   if (orderIds.length === 0) return new Map();
-  const tradeRows = db.select().from(trades).where(inArray(trades.orderId, orderIds)).all();
+  const tradeRows = db
+    .select()
+    .from(trades)
+    .where(and(eq(trades.broker, STOCK_BROKER), inArray(trades.orderId, orderIds)))
+    .all();
   const filledQtyByOrderId = new Map<number, number>();
   for (const trade of tradeRows) {
     const prev = filledQtyByOrderId.get(trade.orderId) ?? 0;
@@ -220,7 +226,7 @@ export function reserveManualSellLot(
   const reserved = ctx.db
     .update(lots)
     .set({ status: 'SELLING' })
-    .where(and(eq(lots.id, target.id), eq(lots.status, 'OPEN')))
+    .where(and(eq(lots.broker, STOCK_BROKER), eq(lots.id, target.id), eq(lots.status, 'OPEN')))
     .run();
   if (reserved.changes === 0) {
     throw new TRPCError({
@@ -240,7 +246,10 @@ export function rollbackManualOrderLot(
       ctx.lotsRepo.updateLotStatus({ lotId: linkedLot.lotId, status: 'OPEN' });
       return;
     }
-    ctx.db.delete(lots).where(eq(lots.id, linkedLot.lotId)).run();
+    ctx.db
+      .delete(lots)
+      .where(and(eq(lots.id, linkedLot.lotId), eq(lots.broker, STOCK_BROKER)))
+      .run();
   } catch (cause) {
     ctx.logger.log({
       level: 'WARN',

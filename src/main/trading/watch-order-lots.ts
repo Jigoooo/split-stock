@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { lots } from '../db/schema';
 import { createPendingBuyLot, linkPendingSellLot } from './order-lot-link';
 import type { WatchOrder } from './watch-engine';
@@ -8,6 +8,8 @@ import type {
   StrategyOrderInput,
   WatchOrderExecutorDeps,
 } from './watch-order-types';
+
+const STOCK_BROKER = 'KIS';
 
 export function prepareWatchOrderLot(
   deps: WatchOrderExecutorDeps,
@@ -114,13 +116,16 @@ export function rollbackPreparedOrderLot(
 ): void {
   try {
     if (linkedLot.side === 'BUY') {
-      deps.db.delete(lots).where(eq(lots.id, linkedLot.lotId)).run();
+      deps.db
+        .delete(lots)
+        .where(and(eq(lots.id, linkedLot.lotId), eq(lots.broker, STOCK_BROKER)))
+        .run();
       return;
     }
     deps.db
       .update(lots)
       .set({ status: 'OPEN', soldAt: null, sellPrice: null })
-      .where(eq(lots.id, linkedLot.lotId))
+      .where(and(eq(lots.id, linkedLot.lotId), eq(lots.broker, STOCK_BROKER)))
       .run();
   } catch (cause) {
     deps.logger.log({

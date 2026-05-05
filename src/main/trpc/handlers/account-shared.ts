@@ -8,6 +8,8 @@ import type { EventLogger } from '../../logging/event-logger';
 import type { CredentialsRepo } from '../../security/credentials-repo';
 import { SELL_SETTLEMENT_GRACE_MS } from '../../trading/current-state-sync';
 
+const STOCK_BROKER = 'KIS';
+
 export function listAccountsWithActiveRepair(ctx: {
   activeAccounts: ActiveAccountRepo;
   credentialsRepo: CredentialsRepo;
@@ -113,6 +115,7 @@ export function readRecentSellOrderPdnos(db: Db, accountId: number): Set<string>
     .from(ordersTable)
     .where(
       and(
+        eq(ordersTable.broker, STOCK_BROKER),
         eq(ordersTable.accountId, accountId),
         eq(ordersTable.side, 'SELL'),
         inArray(ordersTable.status, ['PENDING', 'PARTIAL', 'FILLED']),

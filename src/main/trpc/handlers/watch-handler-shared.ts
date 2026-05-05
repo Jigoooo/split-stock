@@ -4,6 +4,8 @@ import { watchOrders } from '../../db/schema';
 import type { EventLogger } from '../../logging/event-logger';
 import type { Context } from '../context';
 
+const STOCK_BROKER = 'KIS';
+
 export type WatchStatus = 'WATCHING' | 'PAUSED' | 'EXECUTED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
 export type WatchSource = 'BOOSTER' | 'PREBUY' | 'CUSTOM';
 
@@ -121,7 +123,13 @@ export function getOwnedWatchOrder(ctx: Context, id: number, activeAccountId: nu
   const owned = ctx.db
     .select()
     .from(watchOrders)
-    .where(and(eq(watchOrders.id, id), eq(watchOrders.accountId, activeAccountId)))
+    .where(
+      and(
+        eq(watchOrders.broker, STOCK_BROKER),
+        eq(watchOrders.id, id),
+        eq(watchOrders.accountId, activeAccountId),
+      ),
+    )
     .get();
   if (!owned) {
     throw new TRPCError({

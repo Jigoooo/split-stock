@@ -16,6 +16,8 @@ import {
   toLegacyAck,
 } from './order-router-helpers';
 
+const STOCK_BROKER = 'KIS';
+
 type PlaceCashInput = z.infer<typeof KisOrderRequestSchema> & { accountId: number };
 
 export async function placeCashHandler(ctx: Context, input: PlaceCashInput) {
@@ -97,6 +99,7 @@ export async function placeCashHandler(ctx: Context, input: PlaceCashInput) {
     ctx.db
       .insert(orders)
       .values({
+        broker: STOCK_BROKER,
         accountId,
         lotId: linkedLot.lotId,
         odno: result.value.odno,

@@ -1,8 +1,10 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { lots } from '../db/schema';
 import type { ReconcileDecision } from './manual-order-reconciliation-policy';
 import { reconcileCancelledSellLot } from './partial-sell-lot-reconciliation';
+
+const STOCK_BROKER = 'KIS';
 
 export function toDate(value: Date | number | string): Date {
   return value instanceof Date ? value : new Date(value);
@@ -16,7 +18,11 @@ export function weightedAvgTradePrice(rows: Array<{ qty: number; price: number }
 }
 
 export function readLotNth(db: Db, lotId: number): number | null {
-  const row = db.select({ nth: lots.nth }).from(lots).where(eq(lots.id, lotId)).get();
+  const row = db
+    .select({ nth: lots.nth })
+    .from(lots)
+    .where(and(eq(lots.id, lotId), eq(lots.broker, STOCK_BROKER)))
+    .get();
   return row?.nth ?? null;
 }
 
@@ -31,7 +37,9 @@ export function reconcileLinkedLot(
 ): void {
   if (input.side === 'BUY') {
     if (input.decision.nextStatus === 'CANCELLED' && input.decision.totalFilledQty === 0) {
-      db.delete(lots).where(eq(lots.id, input.lotId)).run();
+      db.delete(lots)
+        .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
+        .run();
       return;
     }
 
@@ -42,7 +50,7 @@ export function reconcileLinkedLot(
         amountKrw: input.decision.executionPrice * input.decision.totalFilledQty,
         status: input.decision.nextStatus === 'PARTIAL' ? 'BUYING' : 'OPEN',
       })
-      .where(eq(lots.id, input.lotId))
+      .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
       .run();
     return;
   }
@@ -54,7 +62,7 @@ export function reconcileLinkedLot(
         soldAt: input.now,
         sellPrice: input.decision.executionPrice,
       })
-      .where(eq(lots.id, input.lotId))
+      .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
       .run();
     return;
   }

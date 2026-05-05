@@ -13,6 +13,8 @@ import {
   toLegacyAck,
 } from './order-router-helpers';
 
+const STOCK_BROKER = 'KIS';
+
 type AmendInput = z.infer<typeof KisOrderAmendRequestSchema> & { accountId: number };
 
 export async function amendOrderHandler(ctx: Context, input: AmendInput) {
@@ -26,7 +28,13 @@ export async function amendOrderHandler(ctx: Context, input: AmendInput) {
   const orderRow = ctx.db
     .select({ pdno: orders.pdno })
     .from(orders)
-    .where(and(eq(orders.odno, input.orgOdno), eq(orders.accountId, accountId)))
+    .where(
+      and(
+        eq(orders.broker, STOCK_BROKER),
+        eq(orders.odno, input.orgOdno),
+        eq(orders.accountId, accountId),
+      ),
+    )
     .get();
   const amendParams = {
     orgOrgNo: input.orgOrgNo,
@@ -52,7 +60,13 @@ export async function amendOrderHandler(ctx: Context, input: AmendInput) {
     ctx.db
       .update(orders)
       .set({ status: 'CANCELLED' })
-      .where(and(eq(orders.odno, input.orgOdno), eq(orders.accountId, accountId)))
+      .where(
+        and(
+          eq(orders.broker, STOCK_BROKER),
+          eq(orders.odno, input.orgOdno),
+          eq(orders.accountId, accountId),
+        ),
+      )
       .run();
     cancelPendingWatcherEntry(ctx, input.orgOdno);
   }
@@ -69,7 +83,13 @@ export async function cancelManyOrdersHandler(
   const rows = ctx.db
     .select()
     .from(orders)
-    .where(and(inArray(orders.odno, input.odnos), eq(orders.accountId, accountId)))
+    .where(
+      and(
+        eq(orders.broker, STOCK_BROKER),
+        inArray(orders.odno, input.odnos),
+        eq(orders.accountId, accountId),
+      ),
+    )
     .all();
   const broker = ctx.brokerForAccount(accountId);
   if (!broker) {
@@ -87,7 +107,13 @@ export async function cancelManyOrdersHandler(
       ctx.db
         .update(orders)
         .set({ status: 'FILLED', filledAt: row.filledAt ?? new Date() })
-        .where(and(eq(orders.odno, row.odno), eq(orders.accountId, accountId)))
+        .where(
+          and(
+            eq(orders.broker, STOCK_BROKER),
+            eq(orders.odno, row.odno),
+            eq(orders.accountId, accountId),
+          ),
+        )
         .run();
       results.push({
         odno: row.odno,
@@ -133,12 +159,21 @@ function markCancelledOrder(
   ctx.db
     .update(orders)
     .set({ status: 'CANCELLED' })
-    .where(and(eq(orders.odno, row.odno), eq(orders.accountId, accountId)))
+    .where(
+      and(
+        eq(orders.broker, STOCK_BROKER),
+        eq(orders.odno, row.odno),
+        eq(orders.accountId, accountId),
+      ),
+    )
     .run();
   if (row.lotId === null) return;
   if (row.side === 'BUY') {
     if (filledQty === 0) {
-      ctx.db.delete(lots).where(eq(lots.id, row.lotId)).run();
+      ctx.db
+        .delete(lots)
+        .where(and(eq(lots.id, row.lotId), eq(lots.broker, STOCK_BROKER)))
+        .run();
     } else {
       ctx.db
         .update(lots)
@@ -148,7 +183,7 @@ function markCancelledOrder(
           qty: filledQty,
           amountKrw: row.price * filledQty,
         })
-        .where(eq(lots.id, row.lotId))
+        .where(and(eq(lots.id, row.lotId), eq(lots.broker, STOCK_BROKER)))
         .run();
     }
   } else if (row.side === 'SELL') {

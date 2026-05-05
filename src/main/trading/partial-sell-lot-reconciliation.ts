@@ -1,6 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { lots } from '../db/schema';
+
+const STOCK_BROKER = 'KIS';
 
 export function reconcileCancelledSellLot(
   db: Db,
@@ -17,7 +19,7 @@ export function reconcileCancelledSellLot(
       qty: lots.qty,
     })
     .from(lots)
-    .where(eq(lots.id, input.lotId))
+    .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
     .get();
   if (!current) return;
 
@@ -29,7 +31,7 @@ export function reconcileCancelledSellLot(
         soldAt: null,
         sellPrice: null,
       })
-      .where(eq(lots.id, input.lotId))
+      .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
       .run();
     return;
   }
@@ -42,7 +44,7 @@ export function reconcileCancelledSellLot(
         soldAt: input.now,
         sellPrice: input.executionPrice,
       })
-      .where(eq(lots.id, input.lotId))
+      .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
       .run();
     return;
   }
@@ -55,6 +57,6 @@ export function reconcileCancelledSellLot(
       soldAt: null,
       sellPrice: null,
     })
-    .where(eq(lots.id, input.lotId))
+    .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
     .run();
 }

@@ -4,6 +4,8 @@ import type { Context } from '../context';
 import { resolveAccountId } from '../router-helpers';
 import { buildActiveOrderViews, readFilledQtyByOrderId } from './order-router-helpers';
 
+const STOCK_BROKER = 'KIS';
+
 /**
  * 주어진 pdno 목록에 대응하는 종목명 lookup map 을 stock_master 에서 일괄 조회.
  * 미존재 종목은 map 에 없음 → caller 가 fallback 처리.
@@ -27,7 +29,13 @@ export function listActiveOrdersHandler(
   const rows = ctx.db
     .select()
     .from(orders)
-    .where(and(eq(orders.accountId, accountId), inArray(orders.status, ['PENDING', 'PARTIAL'])))
+    .where(
+      and(
+        eq(orders.broker, STOCK_BROKER),
+        eq(orders.accountId, accountId),
+        inArray(orders.status, ['PENDING', 'PARTIAL']),
+      ),
+    )
     .orderBy(asc(orders.placedAt))
     .all();
   const filledQtyByOrderId = readFilledQtyByOrderId(
@@ -55,7 +63,7 @@ export function listMyFillsHandler(
   const accountId = resolveAccountId(ctx, input);
   const pdno = input.pdno;
   const limit = input.limit ?? 100;
-  const conditions = [eq(orders.accountId, accountId)];
+  const conditions = [eq(orders.broker, STOCK_BROKER), eq(orders.accountId, accountId)];
   if (pdno) conditions.push(eq(orders.pdno, pdno));
   const rows = ctx.db
     .select()

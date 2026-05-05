@@ -15,6 +15,8 @@ import {
   toLegacyKisError,
 } from './account-shared';
 
+const STOCK_BROKER = 'KIS';
+
 export async function getBalanceHandler(
   ctx: Context,
   input: { accountId?: number | undefined } = {},
@@ -176,6 +178,7 @@ function readLotsByPdno(ctx: Context, accountId: number): Record<string, LotSnap
       .from(lotsTable)
       .where(
         and(
+          eq(lotsTable.broker, STOCK_BROKER),
           eq(lotsTable.accountId, accountId),
           inArray(lotsTable.status, ['OPEN', 'BUYING', 'SELLING']),
         ),

@@ -8,6 +8,8 @@ import { SETTING_KEYS } from '../../db/settings-repo';
 import type { Context } from '../context';
 import { listAccountsWithActiveRepair } from './account-shared';
 
+const STOCK_BROKER = 'KIS';
+
 type AddAccountInput = z.infer<typeof CredentialsSchema> & { displayName?: string | undefined };
 
 export function getActiveAccountHandler(ctx: Context) {
@@ -165,7 +167,13 @@ export function deleteAccountHandler(ctx: Context, input: { accountId: number })
   const lotRows = ctx.db
     .select({ id: lotsTable.id })
     .from(lotsTable)
-    .where(and(eq(lotsTable.accountId, input.accountId), eq(lotsTable.status, 'OPEN')))
+    .where(
+      and(
+        eq(lotsTable.broker, STOCK_BROKER),
+        eq(lotsTable.accountId, input.accountId),
+        eq(lotsTable.status, 'OPEN'),
+      ),
+    )
     .limit(1)
     .all();
   if (lotRows.length > 0) {

@@ -1,5 +1,5 @@
 import type { TradeExecutionEvent } from '@shared/contracts';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { realTimer, type Timer } from '../brokers/core/types';
 import type { BrokerPort } from '../brokers/ports/broker-port';
 import type { Db } from '../db/client';
@@ -16,6 +16,8 @@ import {
   resolveMarketFillWithoutPrice,
   resolveServerPendingAbsenceDecision,
 } from './manual-order-reconciliation-policy';
+
+const STOCK_BROKER = 'KIS';
 
 export type { ReconcileDecision } from './manual-order-reconciliation-policy';
 export {
@@ -100,7 +102,7 @@ export class ManualOrderReconciler {
       let pending = this.opts.db
         .select()
         .from(orders)
-        .where(inArray(orders.status, ['PENDING', 'PARTIAL']))
+        .where(and(eq(orders.broker, STOCK_BROKER), inArray(orders.status, ['PENDING', 'PARTIAL'])))
         .all() as PendingOrderRow[];
       if (target?.accountId !== undefined) {
         pending = pending.filter((row) => row.accountId === target.accountId);
@@ -203,7 +205,7 @@ export class ManualOrderReconciler {
         const localTrades = this.opts.db
           .select()
           .from(trades)
-          .where(eq(trades.orderId, row.id))
+          .where(and(eq(trades.orderId, row.id), eq(trades.broker, STOCK_BROKER)))
           .all();
         const localFilledQty = localTrades.reduce((sum, trade) => sum + trade.qty, 0);
         const localExecutionPrice = weightedAvgTradePrice(localTrades);
@@ -243,6 +245,7 @@ export class ManualOrderReconciler {
           this.opts.db
             .insert(trades)
             .values({
+              broker: STOCK_BROKER,
               orderId: row.id,
               qty: decision.deltaFilledQty,
               price: decision.executionPrice,
@@ -287,7 +290,7 @@ export class ManualOrderReconciler {
                   ? toDate(row.filledAt)
                   : null,
           })
-          .where(eq(orders.id, row.id))
+          .where(and(eq(orders.id, row.id), eq(orders.broker, STOCK_BROKER)))
           .run();
 
         this.opts.logger.log({

@@ -7,6 +7,8 @@ import { lots, orders } from '../db/schema';
 import type { PendingOrderWatcher } from './pending-order-watcher';
 import type { WatchOrderExecutorDeps } from './watch-order-types';
 
+const STOCK_BROKER = 'KIS';
+
 export async function cancelAcceptedBrokerOrderAfterLocalFailure(
   deps: WatchOrderExecutorDeps,
   broker: BrokerPort,
@@ -68,19 +70,25 @@ export function cancelPendingByOdno(
   const row = db
     .select()
     .from(orders)
-    .where(and(eq(orders.odno, odno), eq(orders.accountId, accountId)))
+    .where(
+      and(eq(orders.broker, STOCK_BROKER), eq(orders.odno, odno), eq(orders.accountId, accountId)),
+    )
     .get();
   db.update(orders)
     .set({ status: 'CANCELLED' })
-    .where(and(eq(orders.odno, odno), eq(orders.accountId, accountId)))
+    .where(
+      and(eq(orders.broker, STOCK_BROKER), eq(orders.odno, odno), eq(orders.accountId, accountId)),
+    )
     .run();
   if (row?.lotId !== null && row?.lotId !== undefined) {
     if (row.side === 'BUY') {
-      db.delete(lots).where(eq(lots.id, row.lotId)).run();
+      db.delete(lots)
+        .where(and(eq(lots.id, row.lotId), eq(lots.broker, STOCK_BROKER)))
+        .run();
     } else if (row.side === 'SELL') {
       db.update(lots)
         .set({ status: 'OPEN', soldAt: null, sellPrice: null })
-        .where(eq(lots.id, row.lotId))
+        .where(and(eq(lots.id, row.lotId), eq(lots.broker, STOCK_BROKER)))
         .run();
     }
   }

@@ -8,6 +8,8 @@ import type {
   WatchOrderExecutorDeps,
 } from './watch-order-types';
 
+const STOCK_BROKER = 'KIS';
+
 export function seedFirstEntryStrategyIfNeeded(
   deps: WatchOrderExecutorDeps,
   order: WatchOrder,
@@ -53,6 +55,7 @@ export function recordStrategyOrder(
   deps.db
     .insert(orders)
     .values({
+      broker: STOCK_BROKER,
       accountId: input.accountId,
       lotId: linkedLot.lotId,
       odno: ack.brokerOrderId,

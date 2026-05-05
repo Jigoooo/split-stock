@@ -4,6 +4,8 @@ import { lots as lotsTable, stockMaster, watchOrders } from '../db/schema';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import { screenRangeCycleFit } from './algo/screen-range-cycle-fit';
 
+const STOCK_BROKER = 'KIS';
+
 export type CandidateSource = 'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO';
 
 export interface CandidatePoolInput {
@@ -65,7 +67,13 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
   const ownedRows = input.db
     .selectDistinct({ pdno: lotsTable.pdno })
     .from(lotsTable)
-    .where(and(eq(lotsTable.accountId, input.accountId), ne(lotsTable.status, 'SOLD')))
+    .where(
+      and(
+        eq(lotsTable.broker, STOCK_BROKER),
+        eq(lotsTable.accountId, input.accountId),
+        ne(lotsTable.status, 'SOLD'),
+      ),
+    )
     .all();
   for (const row of ownedRows) addPdno(row.pdno, 'OWNED');
 
@@ -75,6 +83,7 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
     .from(watchOrders)
     .where(
       and(
+        eq(watchOrders.broker, STOCK_BROKER),
         eq(watchOrders.accountId, input.accountId),
         inArray(watchOrders.status, ['WATCHING', 'PAUSED']),
       ),

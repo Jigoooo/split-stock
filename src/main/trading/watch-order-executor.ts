@@ -25,6 +25,8 @@ import {
   type WatchOrderExecutorDeps,
 } from './watch-order-types';
 
+const STOCK_BROKER = 'KIS';
+
 export {
   cancelPendingByOdno,
   isStrategyOrderError,
@@ -126,6 +128,7 @@ export async function executeWatchOrder(
     deps.db
       .insert(orders)
       .values({
+        broker: STOCK_BROKER,
         accountId: order.accountId,
         lotId: linkedLot.lotId,
         odno: result.value.brokerOrderId,
