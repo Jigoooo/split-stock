@@ -1,4 +1,3 @@
-import { useCryptoTradeCycles } from '@renderer/entities/account-crypto';
 import { CryptoMemoForm } from '@renderer/features/crypto-memo';
 import { trpc } from '@renderer/shared/api/trpc';
 import {
@@ -8,9 +7,8 @@ import {
 import type { CryptoStrategyProfile } from '@shared/contracts';
 import { createDefaultCryptoStrategyProfile } from '@shared/contracts';
 import { type ReactElement, useEffect, useState } from 'react';
-import { getCryptoQuote } from '../model/crypto-format';
 import { CryptoAutoStrategyTabBody } from './crypto-auto-panel';
-import { CryptoCyclesPanel } from './crypto-cycles-panel';
+import { CryptoTradeHistoryList } from './crypto-trade-history-list';
 
 export interface CryptoTradeHistoryPanelProps {
   accountId: number;
@@ -40,11 +38,7 @@ export const CryptoTradeHistoryPanel = ({
       <CryptoStrategyTabBodyContainer accountId={accountId} market={selectedMarket} />
     ),
     historyPanel: (status, selectedSymbol) => (
-      <CryptoCyclesContainer
-        accountId={accountId}
-        market={selectedSymbol ?? market}
-        status={status}
-      />
+      <CryptoTradeHistoryList accountId={accountId} market={selectedSymbol} status={status} />
     ),
     memoPanel: (selectedMarket) => <CryptoMemoForm market={selectedMarket} />,
   };
@@ -143,32 +137,5 @@ const CryptoStrategyTabBodyContainer = ({
       strategyLoading={autoStrategyQuery.isFetching}
       templates={autoTemplatesQuery.data?.templates ?? []}
     />
-  );
-};
-
-/**
- * 코인 cycles container — Q3 (TradeHistoryList 동등 컬럼 통일) 전 임시. closed 만 의미있는 데이터,
- * all/open 도 동일 컴포넌트에 status pass 하지만 현재 CryptoCyclesPanel 은 closed-only 표시.
- *
- * Q3 에서 status 별 적절한 컬럼/필터로 분기 — adapter 도입 예정.
- */
-const CryptoCyclesContainer = ({
-  accountId,
-  market,
-  status,
-}: {
-  accountId: number;
-  market: string;
-  status: 'all' | 'open' | 'closed';
-}): ReactElement => {
-  const enabled = accountId > 0 && market.startsWith('KRW-');
-  const cycles = useCryptoTradeCycles(accountId, market);
-  const quote = getCryptoQuote(market);
-
-  // Q3 전 임시: status 무관하게 closed 사이클 표시 (closed-only 데이터). all/open 도 동일 .
-  void status;
-
-  return (
-    <CryptoCyclesPanel enabled={enabled} market={market} cycles={cycles.cycles} quote={quote} />
   );
 };
