@@ -26,15 +26,15 @@ import {
   CryptoStrategyProfileSchema,
   createCryptoStrategyRules,
 } from '@shared/contracts';
-import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, like, or, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import {
   cryptoAutoConfigs,
-  cryptoAutoEvents,
-  cryptoAutoLots,
   cryptoAutoTemplates,
   cryptoAutoWatches,
   cryptoOrders,
+  eventLogs,
+  lots,
 } from '../db/schema';
 
 export const DEFAULT_CRYPTO_AUTO_CONFIG: CryptoAutoGuardConfig = {
@@ -127,40 +127,84 @@ function mapConfigRow(
   };
 }
 
-function mapLot(row: typeof cryptoAutoLots.$inferSelect): CryptoLot {
+/**
+ * Phase R3-3: cryptoAutoLots → lots (broker='UPBIT') 매핑.
+ *
+ * KIS row 는 integer columns(`buy_price`/`qty`/`amount_krw`) 사용, UPBIT row 는 nullable
+ * decimal columns 우선. integer columns 는 0 placeholder 로 INSERT 됨 — 코인 read 경로는
+ * decimal columns 만 참조한다. status: lots 컬럼은 free-form text — broker filter 로
+ * 분리되므로 'open'/'closed' (소문자, CryptoLot 컨트랙트 그대로) 저장.
+ *
+ * realizedPnl/feesPaid 는 stock lots 에 존재하지 않으므로 drop. mapLot 은 '0' placeholder
+ * 반환하여 CryptoLot interface 호환 유지.
+ */
+function mapLot(row: typeof lots.$inferSelect): CryptoLot {
   return {
     id: row.id,
     accountId: row.accountId,
     exchange: 'UPBIT',
-    market: row.market as CryptoKrwMarketCode,
-    source: row.source as CryptoAutoLotSource,
-    sequence: row.sequence,
-    quantity: row.quantity,
-    avgEntryKrw: row.avgEntryKrw,
-    allocatedKrw: row.allocatedKrw,
-    realizedPnl: row.realizedPnl,
-    feesPaid: row.feesPaid,
+    market: row.pdno as CryptoKrwMarketCode,
+    source: (row.source ?? 'dry-run') as CryptoAutoLotSource,
+    sequence: row.nth,
+    quantity: row.qtyDecimal ?? '0',
+    avgEntryKrw: row.buyPriceDecimal ?? '0',
+    allocatedKrw: row.amountKrwDecimal ?? '0',
+    realizedPnl: '0',
+    feesPaid: '0',
     status: row.status as CryptoLot['status'],
-    openedAt: row.openedAt.getTime(),
-    closedAt: row.closedAt?.getTime() ?? null,
-    updatedAt: row.updatedAt.getTime(),
+    openedAt: row.boughtAt.getTime(),
+    closedAt: row.soldAt?.getTime() ?? null,
+    updatedAt: row.boughtAt.getTime(),
   };
 }
 
-function mapEvent(row: typeof cryptoAutoEvents.$inferSelect): CryptoAutoEvent {
+/**
+ * Phase R3-3: cryptoAutoEvents → event_logs 매핑.
+ *
+ * event_logs 는 `kind`/`action`/`mode` 컬럼이 없으므로 message="auto-crypto.${kind}.${action}"
+ * 패턴으로 인코딩하고 payloadJson 에 mode/intent/result/reason/exchange 보존. SQL 필터는
+ * message LIKE prefix 로 처리 (countEventsSince, listTradeHistory).
+ */
+type AutoCryptoPayload = {
+  exchange: 'UPBIT';
+  market: string;
+  mode: CryptoAutoMode;
+  kind: CryptoAutoEvent['kind'];
+  action: CryptoAutoEvent['action'];
+  reason: string;
+  intent: CryptoAutoIntent | null;
+  result: unknown;
+};
+
+function buildAutoCryptoMessage(
+  kind: CryptoAutoEvent['kind'],
+  action: CryptoAutoEvent['action'],
+): string {
+  return `auto-crypto.${kind}.${action}`;
+}
+
+function eventLevelFor(kind: CryptoAutoEvent['kind']): 'INFO' | 'WARN' | 'ERROR' {
+  if (kind === 'decimal-error') return 'ERROR';
+  if (kind === 'blocked') return 'WARN';
+  return 'INFO';
+}
+
+function mapEvent(row: typeof eventLogs.$inferSelect): CryptoAutoEvent {
+  const payload = parseJson(row.payloadJson) as AutoCryptoPayload | null;
+  const market = (payload?.market ?? row.pdno ?? '') as CryptoKrwMarketCode;
   return {
     id: row.id,
-    accountId: row.accountId,
+    accountId: row.accountId ?? 0,
     exchange: 'UPBIT',
-    market: row.market as CryptoKrwMarketCode,
-    mode: row.mode as CryptoAutoMode,
-    kind: row.kind as CryptoAutoEvent['kind'],
-    action: row.action as CryptoAutoEvent['action'],
-    reason: row.reason,
-    intent: parseJson(row.intentJson) as CryptoAutoIntent | null,
-    result: parseJson(row.resultJson),
+    market,
+    mode: (payload?.mode ?? 'disabled') as CryptoAutoMode,
+    kind: (payload?.kind ?? 'config') as CryptoAutoEvent['kind'],
+    action: (payload?.action ?? 'config') as CryptoAutoEvent['action'],
+    reason: payload?.reason ?? row.message,
+    intent: payload?.intent ?? null,
+    result: payload?.result ?? null,
     idempotencyKey: row.idempotencyKey,
-    createdAt: row.createdAt.getTime(),
+    createdAt: row.ts.getTime(),
   };
 }
 
@@ -474,42 +518,65 @@ export class CryptoAutoTradingRepo {
     accountId: number,
     filter: CryptoAutoTradeHistoryFilter = undefined,
   ): CryptoAutoTradeHistoryItem[] {
+    // Phase R3-3: event_logs 의 message="auto-crypto.${kind}.${action}" 패턴으로 필터링.
     const filters = [
-      eq(cryptoAutoEvents.accountId, accountId),
-      eq(cryptoAutoEvents.exchange, 'UPBIT'),
+      eq(eventLogs.accountId, accountId),
+      eq(eventLogs.broker, 'UPBIT'),
+      eq(eventLogs.category, 'AUTO_CRYPTO'),
     ];
-    if (filter?.market) filters.push(eq(cryptoAutoEvents.market, filter.market));
+    if (filter?.market) filters.push(eq(eventLogs.pdno, filter.market));
     if (filter?.status === 'failed') {
-      filters.push(sql`${cryptoAutoEvents.kind} in ('blocked', 'decimal-error')`);
+      filters.push(
+        or(
+          like(eventLogs.message, 'auto-crypto.blocked.%'),
+          like(eventLogs.message, 'auto-crypto.decimal-error.%'),
+        ) ?? sql`1=1`,
+      );
     } else if (filter?.status === 'open') {
-      filters.push(sql`${cryptoAutoEvents.action} in ('plan-buy', 'plan-sell', 'cancel-stale')`);
+      filters.push(
+        or(
+          like(eventLogs.message, 'auto-crypto.%.plan-buy'),
+          like(eventLogs.message, 'auto-crypto.%.plan-sell'),
+          like(eventLogs.message, 'auto-crypto.%.cancel-stale'),
+        ) ?? sql`1=1`,
+      );
     } else if (filter?.status === 'closed') {
-      filters.push(sql`${cryptoAutoEvents.kind} in ('live-place', 'live-cancel')`);
+      filters.push(
+        or(
+          like(eventLogs.message, 'auto-crypto.live-place.%'),
+          like(eventLogs.message, 'auto-crypto.live-cancel.%'),
+        ) ?? sql`1=1`,
+      );
     }
     const limit = Math.max(1, Math.min(200, Math.trunc(filter?.limit ?? 80)));
     return this.db
       .select()
-      .from(cryptoAutoEvents)
+      .from(eventLogs)
       .where(and(...filters))
-      .orderBy(desc(cryptoAutoEvents.createdAt))
+      .orderBy(desc(eventLogs.ts))
       .limit(limit)
       .all()
-      .map((row) => ({
-        id: row.id,
-        accountId: row.accountId,
-        exchange: 'UPBIT',
-        market: row.market as CryptoKrwMarketCode,
-        status:
-          row.kind === 'blocked' || row.kind === 'decimal-error'
-            ? 'failed'
-            : row.kind === 'live-cancel'
-              ? 'closed'
-              : 'event',
-        action: row.action,
-        reason: row.reason,
-        mode: row.mode as CryptoAutoMode,
-        createdAt: row.createdAt.getTime(),
-      }));
+      .map((row) => {
+        const payload = parseJson(row.payloadJson) as AutoCryptoPayload | null;
+        const kind = (payload?.kind ?? 'config') as CryptoAutoEvent['kind'];
+        const action = payload?.action ?? 'config';
+        return {
+          id: row.id,
+          accountId: row.accountId ?? accountId,
+          exchange: 'UPBIT',
+          market: (payload?.market ?? row.pdno ?? '') as CryptoKrwMarketCode,
+          status:
+            kind === 'blocked' || kind === 'decimal-error'
+              ? 'failed'
+              : kind === 'live-cancel'
+                ? 'closed'
+                : 'event',
+          action,
+          reason: payload?.reason ?? row.message,
+          mode: (payload?.mode ?? 'disabled') as CryptoAutoMode,
+          createdAt: row.ts.getTime(),
+        };
+      });
   }
 
   listTemplates(accountId: number): CryptoAutoTemplate[] {
@@ -642,18 +709,19 @@ export class CryptoAutoTradingRepo {
     market: CryptoKrwMarketCode,
     source?: CryptoAutoLotSource,
   ): CryptoLot[] {
+    // Phase R3-3: lots 테이블 broker='UPBIT' row 만 read. status='open' (소문자, CryptoLot 컨트랙트).
     const filters = [
-      eq(cryptoAutoLots.accountId, accountId),
-      eq(cryptoAutoLots.exchange, 'UPBIT'),
-      eq(cryptoAutoLots.market, market),
-      eq(cryptoAutoLots.status, 'open'),
+      eq(lots.broker, 'UPBIT'),
+      eq(lots.accountId, accountId),
+      eq(lots.pdno, market),
+      eq(lots.status, 'open'),
     ];
-    if (source !== undefined) filters.push(eq(cryptoAutoLots.source, source));
+    if (source !== undefined) filters.push(eq(lots.source, source));
     return this.db
       .select()
-      .from(cryptoAutoLots)
+      .from(lots)
       .where(and(...filters))
-      .orderBy(cryptoAutoLots.sequence)
+      .orderBy(asc(lots.nth))
       .all()
       .map(mapLot);
   }
@@ -668,17 +736,17 @@ export class CryptoAutoTradingRepo {
     options: { source?: CryptoAutoLotSource; limit?: number } = {},
   ): CryptoLot[] {
     const filters = [
-      eq(cryptoAutoLots.accountId, accountId),
-      eq(cryptoAutoLots.exchange, 'UPBIT'),
-      eq(cryptoAutoLots.market, market),
-      eq(cryptoAutoLots.status, 'closed'),
+      eq(lots.broker, 'UPBIT'),
+      eq(lots.accountId, accountId),
+      eq(lots.pdno, market),
+      eq(lots.status, 'closed'),
     ];
-    if (options.source !== undefined) filters.push(eq(cryptoAutoLots.source, options.source));
+    if (options.source !== undefined) filters.push(eq(lots.source, options.source));
     return this.db
       .select()
-      .from(cryptoAutoLots)
+      .from(lots)
       .where(and(...filters))
-      .orderBy(desc(cryptoAutoLots.closedAt))
+      .orderBy(desc(lots.soldAt))
       .limit(options.limit ?? 100)
       .all()
       .map(mapLot);
@@ -696,27 +764,31 @@ export class CryptoAutoTradingRepo {
     const now = new Date(input.openedAt ?? Date.now());
     const source = input.source ?? 'dry-run';
     const sequence = this.nextLotSequence(input.accountId, input.market, source);
+    // Phase R3-3: lots(broker='UPBIT') INSERT. KIS-only integer 컬럼은 0 placeholder,
+    // 코인 read 경로는 항상 *Decimal 컬럼 우선.
     const result = this.db
-      .insert(cryptoAutoLots)
+      .insert(lots)
       .values({
+        broker: 'UPBIT',
         accountId: input.accountId,
-        exchange: 'UPBIT',
-        market: input.market,
+        pdno: input.market,
+        nth: sequence,
+        buyPrice: 0,
+        qty: 0,
+        amountKrw: 0,
+        qtyDecimal: input.quantity,
+        buyPriceDecimal: input.avgEntryKrw,
+        amountKrwDecimal: input.allocatedKrw,
         source,
-        sequence,
-        quantity: input.quantity,
-        avgEntryKrw: input.avgEntryKrw,
-        allocatedKrw: input.allocatedKrw,
-        realizedPnl: '0',
-        feesPaid: '0',
         status: 'open',
-        openedAt: now,
-        closedAt: null,
-        updatedAt: now,
+        boughtAt: now,
+        soldAt: null,
+        sellPrice: null,
+        sellPriceDecimal: null,
       })
       .run();
     const id = Number(result.lastInsertRowid);
-    const row = this.db.select().from(cryptoAutoLots).where(eq(cryptoAutoLots.id, id)).get();
+    const row = this.db.select().from(lots).where(eq(lots.id, id)).get();
     if (!row) throw new Error('crypto auto lot insert failed');
     return mapLot(row);
   }
@@ -727,41 +799,51 @@ export class CryptoAutoTradingRepo {
     feesPaid?: string;
     closedAt?: number;
   }): void {
+    // Phase R3-3: lots(broker='UPBIT') UPDATE. realizedPnl/feesPaid 는 lots 에 없으므로 drop.
+    // sellPriceDecimal 도 차후 fill 통합 시 update — 현재는 status/soldAt 만 갱신.
     const now = new Date(input.closedAt ?? Date.now());
     this.db
-      .update(cryptoAutoLots)
+      .update(lots)
       .set({
         status: 'closed',
-        realizedPnl: input.realizedPnl,
-        ...(input.feesPaid !== undefined ? { feesPaid: input.feesPaid } : {}),
-        closedAt: now,
-        updatedAt: now,
+        soldAt: now,
       })
-      .where(eq(cryptoAutoLots.id, input.lotId))
+      .where(and(eq(lots.id, input.lotId), eq(lots.broker, 'UPBIT')))
       .run();
   }
 
   insertEvent(input: PersistEventInput): CryptoAutoEvent {
+    // Phase R3-3: cryptoAutoEvents → event_logs (category='AUTO_CRYPTO').
+    // message="auto-crypto.${kind}.${action}" 으로 인코딩 (SQL 필터용),
+    // payloadJson 에 mode/intent/result/reason/exchange 보존.
     const createdAt = new Date(input.createdAt ?? Date.now());
+    const payload: AutoCryptoPayload = {
+      exchange: 'UPBIT',
+      market: input.market,
+      mode: input.mode,
+      kind: input.kind,
+      action: input.action,
+      reason: input.reason,
+      intent: input.intent ?? null,
+      result: input.result ?? null,
+    };
     const result = this.db
-      .insert(cryptoAutoEvents)
+      .insert(eventLogs)
       .values({
+        ts: createdAt,
+        level: eventLevelFor(input.kind),
+        category: 'AUTO_CRYPTO',
+        message: buildAutoCryptoMessage(input.kind, input.action),
+        payloadJson: JSON.stringify(payload),
+        auditPayload: null,
         accountId: input.accountId,
-        exchange: 'UPBIT',
-        market: input.market,
-        mode: input.mode,
-        kind: input.kind,
-        action: input.action,
-        reason: input.reason,
-        intentJson:
-          input.intent === undefined || input.intent === null ? null : JSON.stringify(input.intent),
-        resultJson: input.result === undefined ? null : JSON.stringify(input.result),
+        broker: 'UPBIT',
+        pdno: input.market,
         idempotencyKey: input.idempotencyKey ?? null,
-        createdAt,
       })
       .run();
     const id = Number(result.lastInsertRowid);
-    const row = this.db.select().from(cryptoAutoEvents).where(eq(cryptoAutoEvents.id, id)).get();
+    const row = this.db.select().from(eventLogs).where(eq(eventLogs.id, id)).get();
     if (!row) throw new Error('crypto auto event insert failed');
     return mapEvent(row);
   }
@@ -769,15 +851,16 @@ export class CryptoAutoTradingRepo {
   listRecentEvents(accountId: number, market: CryptoKrwMarketCode, limit = 50): CryptoAutoEvent[] {
     return this.db
       .select()
-      .from(cryptoAutoEvents)
+      .from(eventLogs)
       .where(
         and(
-          eq(cryptoAutoEvents.accountId, accountId),
-          eq(cryptoAutoEvents.exchange, 'UPBIT'),
-          eq(cryptoAutoEvents.market, market),
+          eq(eventLogs.accountId, accountId),
+          eq(eventLogs.broker, 'UPBIT'),
+          eq(eventLogs.category, 'AUTO_CRYPTO'),
+          eq(eventLogs.pdno, market),
         ),
       )
-      .orderBy(desc(cryptoAutoEvents.createdAt))
+      .orderBy(desc(eventLogs.ts))
       .limit(Math.max(1, Math.min(200, Math.trunc(limit))))
       .all()
       .map(mapEvent);
@@ -789,16 +872,18 @@ export class CryptoAutoTradingRepo {
     kind: CryptoAutoEvent['kind'];
     sinceMs: number;
   }): number {
+    // Phase R3-3: kind 컬럼이 message prefix 로 인코딩됨 — LIKE 'auto-crypto.${kind}.%'.
     const row = this.db
       .select({ count: sql<number>`count(*)` })
-      .from(cryptoAutoEvents)
+      .from(eventLogs)
       .where(
         and(
-          eq(cryptoAutoEvents.accountId, input.accountId),
-          eq(cryptoAutoEvents.exchange, 'UPBIT'),
-          eq(cryptoAutoEvents.market, input.market),
-          eq(cryptoAutoEvents.kind, input.kind),
-          gte(cryptoAutoEvents.createdAt, new Date(input.sinceMs)),
+          eq(eventLogs.accountId, input.accountId),
+          eq(eventLogs.broker, 'UPBIT'),
+          eq(eventLogs.category, 'AUTO_CRYPTO'),
+          eq(eventLogs.pdno, input.market),
+          like(eventLogs.message, `auto-crypto.${input.kind}.%`),
+          gte(eventLogs.ts, new Date(input.sinceMs)),
         ),
       )
       .get();
@@ -925,15 +1010,16 @@ export class CryptoAutoTradingRepo {
     market: CryptoKrwMarketCode,
     source: CryptoAutoLotSource,
   ): number {
+    // Phase R3-3: lots(broker='UPBIT') 의 (accountId, pdno, source) 쌍별 max(nth) + 1.
     const row = this.db
-      .select({ maxSequence: sql<number>`coalesce(max(${cryptoAutoLots.sequence}), 0)` })
-      .from(cryptoAutoLots)
+      .select({ maxSequence: sql<number>`coalesce(max(${lots.nth}), 0)` })
+      .from(lots)
       .where(
         and(
-          eq(cryptoAutoLots.accountId, accountId),
-          eq(cryptoAutoLots.exchange, 'UPBIT'),
-          eq(cryptoAutoLots.market, market),
-          eq(cryptoAutoLots.source, source),
+          eq(lots.broker, 'UPBIT'),
+          eq(lots.accountId, accountId),
+          eq(lots.pdno, market),
+          eq(lots.source, source),
         ),
       )
       .get();
