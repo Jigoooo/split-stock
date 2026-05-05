@@ -7,8 +7,6 @@ import type {
   CryptoAutoMode,
   CryptoAutoTemplate,
   CryptoAutoTemplateUpsertInput,
-  CryptoAutoTradeHistoryFilter,
-  CryptoAutoTradeHistoryItem,
   CryptoAutoWatch,
   CryptoAutoWatchEntryCondition,
   CryptoAutoWatchListFilter,
@@ -26,7 +24,7 @@ import {
   CryptoStrategyProfileSchema,
   createCryptoStrategyRules,
 } from '@shared/contracts';
-import { and, asc, desc, eq, gte, inArray, like, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, like, sql } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import {
   cryptoAutoConfigs,
@@ -502,83 +500,6 @@ export class CryptoAutoTradingRepo {
     return this.mapWatch(row);
   }
 
-  pauseWatches(accountId: number, ids: number[]): number {
-    return this.updateWatchStatuses(accountId, ids, 'PAUSED');
-  }
-
-  resumeWatches(accountId: number, ids: number[]): number {
-    return this.updateWatchStatuses(accountId, ids, 'WATCHING');
-  }
-
-  deleteWatches(accountId: number, ids: number[]): number {
-    return this.updateWatchStatuses(accountId, ids, 'CANCELLED');
-  }
-
-  listTradeHistory(
-    accountId: number,
-    filter: CryptoAutoTradeHistoryFilter = undefined,
-  ): CryptoAutoTradeHistoryItem[] {
-    // Phase R3-3: event_logs 의 message="auto-crypto.${kind}.${action}" 패턴으로 필터링.
-    const filters = [
-      eq(eventLogs.accountId, accountId),
-      eq(eventLogs.broker, 'UPBIT'),
-      eq(eventLogs.category, 'AUTO_CRYPTO'),
-    ];
-    if (filter?.market) filters.push(eq(eventLogs.pdno, filter.market));
-    if (filter?.status === 'failed') {
-      filters.push(
-        or(
-          like(eventLogs.message, 'auto-crypto.blocked.%'),
-          like(eventLogs.message, 'auto-crypto.decimal-error.%'),
-        ) ?? sql`1=1`,
-      );
-    } else if (filter?.status === 'open') {
-      filters.push(
-        or(
-          like(eventLogs.message, 'auto-crypto.%.plan-buy'),
-          like(eventLogs.message, 'auto-crypto.%.plan-sell'),
-          like(eventLogs.message, 'auto-crypto.%.cancel-stale'),
-        ) ?? sql`1=1`,
-      );
-    } else if (filter?.status === 'closed') {
-      filters.push(
-        or(
-          like(eventLogs.message, 'auto-crypto.live-place.%'),
-          like(eventLogs.message, 'auto-crypto.live-cancel.%'),
-        ) ?? sql`1=1`,
-      );
-    }
-    const limit = Math.max(1, Math.min(200, Math.trunc(filter?.limit ?? 80)));
-    return this.db
-      .select()
-      .from(eventLogs)
-      .where(and(...filters))
-      .orderBy(desc(eventLogs.ts))
-      .limit(limit)
-      .all()
-      .map((row) => {
-        const payload = parseJson(row.payloadJson) as AutoCryptoPayload | null;
-        const kind = (payload?.kind ?? 'config') as CryptoAutoEvent['kind'];
-        const action = payload?.action ?? 'config';
-        return {
-          id: row.id,
-          accountId: row.accountId ?? accountId,
-          exchange: 'UPBIT',
-          market: (payload?.market ?? row.pdno ?? '') as CryptoKrwMarketCode,
-          status:
-            kind === 'blocked' || kind === 'decimal-error'
-              ? 'failed'
-              : kind === 'live-cancel'
-                ? 'closed'
-                : 'event',
-          action,
-          reason: payload?.reason ?? row.message,
-          mode: (payload?.mode ?? 'disabled') as CryptoAutoMode,
-          createdAt: row.ts.getTime(),
-        };
-      });
-  }
-
   listTemplates(accountId: number): CryptoAutoTemplate[] {
     return this.db
       .select()
@@ -978,31 +899,6 @@ export class CryptoAutoTradingRepo {
       createdAt: row.createdAt.getTime(),
       updatedAt: row.updatedAt.getTime(),
     };
-  }
-
-  private updateWatchStatuses(
-    accountId: number,
-    ids: number[],
-    status: CryptoAutoWatchStatus,
-  ): number {
-    if (ids.length === 0) return 0;
-    const rows = this.db
-      .select()
-      .from(cryptoAutoWatches)
-      .where(and(eq(cryptoAutoWatches.accountId, accountId), inArray(cryptoAutoWatches.id, ids)))
-      .all();
-    const now = new Date();
-    this.db
-      .update(cryptoAutoWatches)
-      .set({ status, updatedAt: now })
-      .where(and(eq(cryptoAutoWatches.accountId, accountId), inArray(cryptoAutoWatches.id, ids)))
-      .run();
-    for (const row of rows) {
-      this.upsertConfig(accountId, row.market as CryptoKrwMarketCode, {
-        mode: status === 'WATCHING' ? 'live-small' : 'disabled',
-      });
-    }
-    return rows.length;
   }
 
   private nextLotSequence(

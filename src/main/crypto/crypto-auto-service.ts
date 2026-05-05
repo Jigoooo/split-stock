@@ -3,7 +3,6 @@ import {
   type CryptoAutoGateResult,
   CryptoAutoGuardConfigSchema,
   type CryptoAutoIntent,
-  CryptoAutoIntentSchema,
   type CryptoAutoLotSource,
   type CryptoAutoRunResult,
   type CryptoAutoWatchEntryCondition,
@@ -84,14 +83,6 @@ export interface CryptoAutoTickInput {
 
 export interface CryptoAutoLiveTickInput extends CryptoAutoTickInput {
   adapter: CryptoAutoLiveAdapter;
-}
-
-export interface CryptoAutoCancelInput {
-  accountId: number;
-  market: string;
-  adapter: CryptoAutoLiveAdapter;
-  uuid?: string;
-  identifier?: string;
 }
 
 function cryptoExchangeError(message: string, raw?: unknown): CryptoExchangeError {
@@ -623,81 +614,6 @@ export class CryptoAutoTradingService {
       gate: gate.value,
       event,
       ...(orderUuid !== undefined ? { orderUuid } : {}),
-    });
-  }
-
-  async cancelLiveOrder(
-    input: CryptoAutoCancelInput,
-  ): Promise<Result<CryptoAutoRunResult, CryptoExchangeError>> {
-    const market = safeKrwMarket(input.market);
-    if (market.isErr()) return err(market.error);
-    const intent = CryptoAutoIntentSchema.parse({
-      kind: 'cancel-stale',
-      market: market.value,
-      orderId: input.uuid ?? input.identifier ?? '',
-      reason: 'manual auto cancel',
-    });
-    const idempotencyKey = buildIdentifier({
-      accountId: input.accountId,
-      market: market.value,
-      intent,
-      now: this.now(),
-    });
-    const gate = this.getGate({
-      accountId: input.accountId,
-      market: market.value,
-      intent,
-      requireIdempotency: true,
-      idempotencyKey,
-    });
-    if (gate.isErr()) return err(gate.error);
-    if (!gate.value.ok) {
-      const event = this.repo.insertEvent({
-        accountId: input.accountId,
-        market: market.value,
-        mode: 'live-small',
-        kind: 'blocked',
-        action: intent.kind,
-        reason: gate.value.blockedReasons.join(', '),
-        intent,
-        result: gate.value,
-        idempotencyKey,
-        createdAt: this.now(),
-      });
-      return ok({
-        accountId: input.accountId,
-        market: market.value,
-        mode: 'live-small',
-        intent,
-        gate: gate.value,
-        event,
-      });
-    }
-    const cancelled = await input.adapter.cancelOrder({
-      ...(input.uuid !== undefined ? { uuid: input.uuid } : {}),
-      ...(input.identifier !== undefined ? { identifier: input.identifier } : {}),
-    });
-    if (cancelled.isErr()) return err(cancelled.error);
-    this.repo.markLiveAction(input.accountId, market.value, this.now());
-    const event = this.repo.insertEvent({
-      accountId: input.accountId,
-      market: market.value,
-      mode: 'live-small',
-      kind: 'live-cancel',
-      action: intent.kind,
-      reason: 'live-small order cancelled',
-      intent,
-      result: cancelled.value,
-      idempotencyKey,
-      createdAt: this.now(),
-    });
-    return ok({
-      accountId: input.accountId,
-      market: market.value,
-      mode: 'live-small',
-      intent,
-      gate: gate.value,
-      event,
     });
   }
 

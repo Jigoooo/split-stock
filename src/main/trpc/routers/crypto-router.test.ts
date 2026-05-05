@@ -363,77 +363,6 @@ describe('cryptoRouter session boundary', () => {
     expect(adapterMocks.createOrder).toHaveBeenCalledOnce();
   });
 
-  it('returns crypto realtime service status without requiring a private session', async () => {
-    const deps = setup();
-    deps.ctx.cryptoRealtime = {
-      getStatus: () => ({
-        publicSessions: [
-          {
-            key: 'KRW-BTC|1m',
-            kind: 'public',
-            state: 'open',
-            refs: 1,
-            market: 'KRW-BTC',
-            candleUnit: '1m',
-            lastMessageAt: 1,
-            lastError: null,
-            reconnectAttempts: 0,
-            reconnectDelayMs: null,
-            staleAfterMs: 15000,
-          },
-        ],
-        privateSessions: [],
-      }),
-    } as never;
-
-    const result = await createCaller(deps.ctx).getRealtimeStatus();
-
-    expect(result.status.publicSessions[0]?.state).toBe('open');
-  });
-
-  it('runs manual order reconciliation through the crypto realtime service', async () => {
-    const deps = setup();
-    const upbitAccountId = seedCredential(
-      deps,
-      {
-        env: 'PROD',
-        broker: 'UPBIT',
-        accessKey: 'upbit-access-key-12345678',
-        secretKey: 'upbit-secret-key-12345678',
-      },
-      { accountNo8: 'UPBIT***', accountProdCd: 'CRYPTO' },
-    );
-    deps.ctx.activeAccountId = upbitAccountId;
-    deps.ctx.currentEnv = 'PROD';
-    const reconcilePrivate = vi.fn(async () =>
-      ok({
-        accountId: upbitAccountId,
-        exchange: 'UPBIT',
-        reason: 'manual',
-        openOrders: 1,
-        closedOrders: 1,
-        detailedOrders: 1,
-        persistedFills: 1,
-        checkpointAt: 1,
-      }),
-    );
-    deps.ctx.cryptoRealtime = { reconcilePrivate } as never;
-
-    const result = await createCaller(deps.ctx).reconcileOrders({
-      accountId: upbitAccountId,
-      market: 'KRW-BTC',
-    });
-
-    expect(result.persistedFills).toBe(1);
-    expect(reconcilePrivate).toHaveBeenCalledWith({
-      accountId: upbitAccountId,
-      accessKey: 'upbit-access-key-12345678',
-      secretKey: 'upbit-secret-key-12345678',
-      market: 'KRW-BTC',
-      reason: 'manual',
-    });
-  });
-
   it('runs read-only live smoke without placing or cancelling orders', async () => {
     const deps = setup();
     const upbitAccountId = seedActiveUpbit(deps);
@@ -492,38 +421,6 @@ describe('cryptoRouter session boundary', () => {
       reason: 'manual',
     });
     expect(adapterMocks.createOrder).not.toHaveBeenCalled();
-  });
-
-  it('exposes transfer and wallet status queries without execution routes', async () => {
-    const deps = setup();
-    const upbitAccountId = seedActiveUpbit(deps);
-    const caller = createCaller(deps.ctx);
-
-    const transfers = await caller.listTransfers({ accountId: upbitAccountId, limit: 10 });
-    const deposit = await caller.getTransfer({
-      accountId: upbitAccountId,
-      direction: 'deposit',
-      uuid: 'deposit-uuid',
-    });
-    const wallets = await caller.listWalletStatuses({ accountId: upbitAccountId });
-
-    expect(transfers.transfers.map((transfer) => transfer.direction)).toEqual([
-      'withdraw',
-      'deposit',
-    ]);
-    expect(deposit.transfer.uuid).toBe('deposit-uuid');
-    expect(wallets.statuses[0]?.walletState).toBe('working');
-    expect(adapterMocks.listDeposits).toHaveBeenCalledWith({ limit: 10 });
-    expect(adapterMocks.listWithdrawals).toHaveBeenCalledWith({ limit: 10 });
-    expect(Object.keys(cryptoRouter._def.procedures)).not.toEqual(
-      expect.arrayContaining([
-        'createDepositAddress',
-        'depositKrw',
-        'createWithdrawal',
-        'createKrwWithdrawal',
-        'cancelWithdrawal',
-      ]),
-    );
   });
 
   it('returns persisted order detail with fills', async () => {
@@ -631,7 +528,7 @@ describe('cryptoRouter session boundary', () => {
     expect(loaded.profile).toMatchObject({ maxStages: 2, sellRules: profile.sellRules });
   });
 
-  it('manages crypto auto watches, history, and strategy templates', async () => {
+  it('manages crypto auto watches and strategy templates', async () => {
     const deps = setup();
     const upbitAccountId = seedActiveUpbit(deps);
     const caller = createCaller(deps.ctx);
@@ -658,16 +555,11 @@ describe('cryptoRouter session boundary', () => {
     });
     expect(listed.watches).toHaveLength(1);
 
-    const resumed = await caller.resumeAutoWatches({
-      accountId: upbitAccountId,
-      ids: [createdWatch.id],
-    });
-    expect(resumed.affected).toBe(1);
-    const resumedWatch = (
+    const fetchedWatch = (
       await caller.getAutoWatch({ accountId: upbitAccountId, id: createdWatch.id })
     ).watch;
-    if (!resumedWatch) throw new Error('resumed watch missing');
-    expect(resumedWatch.status).toBe('WATCHING');
+    if (!fetchedWatch) throw new Error('fetched watch missing');
+    expect(fetchedWatch.market).toBe('KRW-BTC');
 
     const template = await caller.saveAutoStrategyTemplate({
       accountId: upbitAccountId,
@@ -678,23 +570,6 @@ describe('cryptoRouter session boundary', () => {
     expect(
       (await caller.listAutoStrategyTemplates({ accountId: upbitAccountId })).templates,
     ).toHaveLength(1);
-
-    const history = await caller.listAutoTradeHistory({
-      accountId: upbitAccountId,
-      market: 'KRW-BTC',
-      status: 'all',
-    });
-    expect(history.history.some((item) => item.reason === 'crypto auto watch saved')).toBe(true);
-
-    const deleted = await caller.deleteAutoWatches({
-      accountId: upbitAccountId,
-      ids: [createdWatch.id],
-    });
-    expect(deleted.affected).toBe(1);
-    expect(
-      (await caller.listAutoWatches({ accountId: upbitAccountId, includeCancelled: false }))
-        .watches,
-    ).toHaveLength(0);
   });
 
   it('rejects crypto auto status for non-KRW automation markets', async () => {

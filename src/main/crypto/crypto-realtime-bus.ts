@@ -23,36 +23,6 @@ export class CryptoRealtimeBus {
     Map<number, Set<Listener<unknown>>>
   >();
 
-  getLatestTicker(market: string): CryptoRealtimeTicker | null {
-    return this.latestTicker.get(market) ?? null;
-  }
-
-  getLatestTrade(market: string): CryptoRealtimeTrade | null {
-    return this.latestTrade.get(market) ?? null;
-  }
-
-  getLatestOrderbook(market: string): CryptoRealtimeOrderbook | null {
-    return this.latestOrderbook.get(market) ?? null;
-  }
-
-  getLatestCandle(market: string): CryptoRealtimeCandle | null {
-    return this.latestCandle.get(market) ?? null;
-  }
-
-  getLatestRealtime(market: string): {
-    ticker: CryptoRealtimeTicker | null;
-    trade: CryptoRealtimeTrade | null;
-    orderbook: CryptoRealtimeOrderbook | null;
-    candle: CryptoRealtimeCandle | null;
-  } {
-    return {
-      ticker: this.getLatestTicker(market),
-      trade: this.getLatestTrade(market),
-      orderbook: this.getLatestOrderbook(market),
-      candle: this.getLatestCandle(market),
-    };
-  }
-
   publishTicker(value: CryptoRealtimeTicker): void {
     this.latestTicker.set(value.market, value);
     this.emitMarket('ticker', value.market, value);

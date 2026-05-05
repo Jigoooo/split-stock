@@ -2,8 +2,6 @@ import {
   type CryptoAutoGuardConfig,
   CryptoAutoGuardConfigSchema,
   CryptoAutoTemplateUpsertInputSchema,
-  CryptoAutoTradeHistoryFilterSchema,
-  CryptoAutoWatchActionInputSchema,
   CryptoAutoWatchListFilterSchema,
   CryptoAutoWatchUpsertInputSchema,
   CryptoCandleUnitSchema,
@@ -18,7 +16,6 @@ import {
   type CryptoRealtimeTicker,
   type CryptoRealtimeTrade,
   CryptoStrategyProfileSchema,
-  CryptoTransferDirectionSchema,
   isUpbitCredentials,
   type UpbitCredentials,
 } from '@shared/contracts';
@@ -45,27 +42,6 @@ const MarketWatchInputSchema = z.object({
   market: CryptoMarketCodeSchema,
   unit: CryptoCandleUnitSchema.default('1m'),
 });
-const TransferListInputSchema = z
-  .object({
-    accountId: AccountIdField.optional(),
-    direction: CryptoTransferDirectionSchema.optional(),
-    currency: z.string().trim().toUpperCase().min(2).max(20).optional(),
-    state: z.string().trim().min(1).max(40).optional(),
-    limit: z.number().int().min(1).max(100).default(50),
-  })
-  .optional();
-const TransferDetailInputSchema = z
-  .object({
-    accountId: AccountIdField.optional(),
-    direction: CryptoTransferDirectionSchema,
-    uuid: z.string().trim().min(1).optional(),
-    txid: z.string().trim().min(1).optional(),
-    currency: z.string().trim().toUpperCase().min(2).max(20).optional(),
-  })
-  .refine((value) => value.uuid || value.txid, {
-    message: 'uuid 또는 txid가 필요합니다.',
-    path: ['uuid'],
-  });
 const AutoMarketInputSchema = z.object({
   accountId: AccountIdField.optional(),
   market: CryptoKrwMarketCodeSchema,
@@ -78,13 +54,6 @@ const AutoStrategyInputSchema = AutoMarketInputSchema.extend({
 });
 const AutoRunInputSchema = AutoMarketInputSchema.extend({
   tradePrice: z.string().trim().optional(),
-});
-const AutoCancelInputSchema = AutoMarketInputSchema.extend({
-  uuid: z.string().trim().min(1).optional(),
-  identifier: z.string().trim().min(1).optional(),
-}).refine((value) => value.uuid || value.identifier, {
-  message: 'uuid 또는 identifier가 필요합니다.',
-  path: ['uuid'],
 });
 const AutoStartInputSchema = AutoMarketInputSchema.extend({
   intervalMs: z.number().int().min(5000).max(3_600_000).default(60_000),
@@ -425,21 +394,6 @@ export const cryptoRouter = router({
     return { ok: true as const };
   }),
 
-  getLatestRealtime: publicProcedure
-    .input(z.object({ market: CryptoMarketCodeSchema }))
-    .query(({ ctx, input }) => ({
-      realtime: ctx.cryptoRealtime?.bus.getLatestRealtime(input.market) ?? {
-        ticker: null,
-        trade: null,
-        orderbook: null,
-        candle: null,
-      },
-    })),
-
-  getRealtimeStatus: publicProcedure.query(({ ctx }) => ({
-    status: ctx.cryptoRealtime?.getStatus() ?? { publicSessions: [], privateSessions: [] },
-  })),
-
   onTicker: publicProcedure
     .input(z.object({ market: CryptoMarketCodeSchema }))
     .subscription(({ ctx, input, signal }) => {
@@ -706,42 +660,6 @@ export const cryptoRouter = router({
       return { accountId, watch: withWatchRuntimeState(ctx, [watch])[0] };
     }),
 
-  pauseAutoWatches: runtimeProcedure
-    .input(CryptoAutoWatchActionInputSchema)
-    .mutation(({ ctx, input }) => {
-      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
-      loadPrivateUpbitCredentials(ctx, accountId);
-      const affected = new CryptoAutoTradingRepo(ctx.db).pauseWatches(accountId, input.ids);
-      return { accountId, ids: input.ids, affected };
-    }),
-
-  resumeAutoWatches: runtimeProcedure
-    .input(CryptoAutoWatchActionInputSchema)
-    .mutation(({ ctx, input }) => {
-      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
-      loadPrivateUpbitCredentials(ctx, accountId);
-      const affected = new CryptoAutoTradingRepo(ctx.db).resumeWatches(accountId, input.ids);
-      return { accountId, ids: input.ids, affected };
-    }),
-
-  deleteAutoWatches: runtimeProcedure
-    .input(CryptoAutoWatchActionInputSchema)
-    .mutation(({ ctx, input }) => {
-      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
-      loadPrivateUpbitCredentials(ctx, accountId);
-      const affected = new CryptoAutoTradingRepo(ctx.db).deleteWatches(accountId, input.ids);
-      return { accountId, ids: input.ids, affected };
-    }),
-
-  listAutoTradeHistory: runtimeProcedure
-    .input(CryptoAutoTradeHistoryFilterSchema)
-    .query(({ ctx, input }) => {
-      const accountId = activeAccountIdOrThrow(ctx, input?.accountId);
-      loadPrivateUpbitCredentials(ctx, accountId);
-      const history = new CryptoAutoTradingRepo(ctx.db).listTradeHistory(accountId, input);
-      return { accountId, history };
-    }),
-
   listClosedLots: runtimeProcedure
     .input(
       AutoMarketInputSchema.extend({
@@ -832,23 +750,6 @@ export const cryptoRouter = router({
     return result.value;
   }),
 
-  cancelAutoOrder: runtimeProcedure
-    .input(AutoCancelInputSchema)
-    .mutation(async ({ ctx, input }) => {
-      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
-      const adapter = createPrivateUpbit(ctx, accountId);
-      const result = await createCryptoAutoService(ctx).cancelLiveOrder({
-        accountId,
-        market: input.market,
-        adapter,
-        ...(input.uuid !== undefined ? { uuid: input.uuid } : {}),
-        ...(input.identifier !== undefined ? { identifier: input.identifier } : {}),
-      });
-      if (result.isErr()) throwUpbitError(result.error);
-      persistAutoOrderIfPresent(ctx, accountId, result.value.event.result);
-      return result.value;
-    }),
-
   startAuto: runtimeProcedure.input(AutoStartInputSchema).mutation(({ ctx, input }) => {
     const accountId = activeAccountIdOrThrow(ctx, input.accountId);
     loadPrivateUpbitCredentials(ctx, accountId);
@@ -925,67 +826,6 @@ export const cryptoRouter = router({
     loadPrivateUpbitCredentials(ctx, accountId);
     return { accountId, market: input.market, stopped: stopCryptoAutoJob(accountId, input.market) };
   }),
-
-  listTransfers: runtimeProcedure.input(TransferListInputSchema).query(async ({ ctx, input }) => {
-    const accountId = activeAccountIdOrThrow(ctx, input?.accountId);
-    const adapter = createPrivateUpbit(ctx, accountId);
-    const query = {
-      ...(input?.currency !== undefined ? { currency: input.currency } : {}),
-      ...(input?.state !== undefined ? { state: input.state } : {}),
-      limit: input?.limit ?? 50,
-    };
-    const results =
-      input?.direction === 'deposit'
-        ? [await adapter.listDeposits(query)]
-        : input?.direction === 'withdraw'
-          ? [await adapter.listWithdrawals(query)]
-          : [await adapter.listDeposits(query), await adapter.listWithdrawals(query)];
-    for (const result of results) {
-      if (result.isErr()) throwUpbitError(result.error);
-    }
-    const transfers = results
-      .flatMap((result) => (result.isOk() ? result.value : []))
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, input?.limit ?? 50);
-    return { accountId, transfers };
-  }),
-
-  getTransfer: runtimeProcedure.input(TransferDetailInputSchema).query(async ({ ctx, input }) => {
-    const accountId = activeAccountIdOrThrow(ctx, input.accountId);
-    const adapter = createPrivateUpbit(ctx, accountId);
-    const query = {
-      ...(input.uuid !== undefined ? { uuid: input.uuid } : {}),
-      ...(input.txid !== undefined ? { txid: input.txid } : {}),
-      ...(input.currency !== undefined ? { currency: input.currency } : {}),
-    };
-    const result =
-      input.direction === 'deposit'
-        ? await adapter.getDeposit(query)
-        : await adapter.getWithdrawal(query);
-    if (result.isErr()) throwUpbitError(result.error);
-    return { accountId, transfer: result.value };
-  }),
-
-  listWalletStatuses: runtimeProcedure
-    .input(
-      z
-        .object({
-          accountId: AccountIdField.optional(),
-          currency: z.string().trim().toUpperCase().min(2).max(20).optional(),
-        })
-        .optional(),
-    )
-    .query(async ({ ctx, input }) => {
-      const accountId = activeAccountIdOrThrow(ctx, input?.accountId);
-      const adapter = createPrivateUpbit(ctx, accountId);
-      const result = await adapter.listWalletStatuses();
-      if (result.isErr()) throwUpbitError(result.error);
-      const statuses =
-        input?.currency === undefined
-          ? result.value
-          : result.value.filter((status) => status.currency === input.currency);
-      return { accountId, statuses };
-    }),
 
   placeOrder: runtimeProcedure
     .input(CryptoOrderIntentSchema.and(z.object({ accountId: AccountIdField })))
@@ -1118,35 +958,6 @@ export const cryptoRouter = router({
         ...(input.market ? { markets: [input.market] } : {}),
       });
       return { ok: ctx.cryptoRealtime != null };
-    }),
-
-  reconcileOrders: runtimeProcedure
-    .input(
-      z
-        .object({ accountId: AccountIdField.optional(), market: CryptoMarketCodeSchema.optional() })
-        .optional(),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const accountId = input?.accountId ?? ctx.activeAccountId;
-      if (accountId === null) {
-        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: '활성 계좌가 없습니다.' });
-      }
-      const credentials = loadPrivateUpbitCredentials(ctx, accountId);
-      const result = await ctx.cryptoRealtime?.reconcilePrivate({
-        accountId,
-        accessKey: credentials.accessKey,
-        secretKey: credentials.secretKey,
-        reason: 'manual',
-        ...(input?.market !== undefined ? { market: input.market } : {}),
-      });
-      if (!result) {
-        throw new TRPCError({
-          code: 'PRECONDITION_FAILED',
-          message: '코인 실시간 서비스가 준비되지 않았습니다.',
-        });
-      }
-      if (result.isErr()) throwUpbitError(result.error);
-      return result.value;
     }),
 
   unwatchPrivate: runtimeProcedure
