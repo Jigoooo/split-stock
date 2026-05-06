@@ -1,9 +1,8 @@
-import { BROKERS } from '@shared/contracts';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { lots } from '../db/schema';
 
-const STOCK_BROKER = BROKERS.KIS;
+// Phase 6: lots.id 는 PK — broker 필터 불필요. 도메스틱(KIS/KIWOOM) 모두 처리.
 
 export function reconcileCancelledSellLot(
   db: Db,
@@ -20,7 +19,7 @@ export function reconcileCancelledSellLot(
       qty: lots.qty,
     })
     .from(lots)
-    .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
+    .where(eq(lots.id, input.lotId))
     .get();
   if (!current) return;
 
@@ -32,7 +31,7 @@ export function reconcileCancelledSellLot(
         soldAt: null,
         sellPrice: null,
       })
-      .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
+      .where(eq(lots.id, input.lotId))
       .run();
     return;
   }
@@ -45,7 +44,7 @@ export function reconcileCancelledSellLot(
         soldAt: input.now,
         sellPrice: input.executionPrice,
       })
-      .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
+      .where(eq(lots.id, input.lotId))
       .run();
     return;
   }
@@ -58,6 +57,6 @@ export function reconcileCancelledSellLot(
       soldAt: null,
       sellPrice: null,
     })
-    .where(and(eq(lots.id, input.lotId), eq(lots.broker, STOCK_BROKER)))
+    .where(eq(lots.id, input.lotId))
     .run();
 }

@@ -5,7 +5,8 @@ import { lots as lotsTable, stockMaster, watchOrders } from '../db/schema';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import { screenRangeCycleFit } from './algo/screen-range-cycle-fit';
 
-const STOCK_BROKER = BROKERS.KIS;
+/** Phase 6: AI 추천은 도메스틱(KIS+KIWOOM) 보유/감시 종목 모두 후보 풀에 포함. UPBIT 별도. */
+const DOMESTIC_BROKERS = [BROKERS.KIS, BROKERS.KIWOOM] as const;
 
 export type CandidateSource = 'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO';
 
@@ -70,7 +71,7 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
     .from(lotsTable)
     .where(
       and(
-        eq(lotsTable.broker, STOCK_BROKER),
+        inArray(lotsTable.broker, [...DOMESTIC_BROKERS]),
         eq(lotsTable.accountId, input.accountId),
         ne(lotsTable.status, 'SOLD'),
       ),
@@ -84,7 +85,7 @@ export function buildCandidatePool(input: CandidatePoolInput): CandidateEntry[] 
     .from(watchOrders)
     .where(
       and(
-        eq(watchOrders.broker, STOCK_BROKER),
+        inArray(watchOrders.broker, [...DOMESTIC_BROKERS]),
         eq(watchOrders.accountId, input.accountId),
         inArray(watchOrders.status, ['WATCHING', 'PAUSED']),
       ),
