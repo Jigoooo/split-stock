@@ -74,13 +74,18 @@ export interface CryptoStrategyFormProps {
   submitLabel?: string;
   /** 제출 버튼 aria-label. */
   submitAriaLabel?: string;
+  /** disabled 와 별개로 제출 버튼만 비활성화 (예: 템플릿 이름 미입력). */
+  submitDisabled?: boolean;
+  /** sticky bar 좌측 안내 라벨 — 'panel'/'content' 컨텍스트 별 노출 문구. */
+  submitContextLabel?: string;
 }
 
 export const CryptoStrategyForm = (props: CryptoStrategyFormProps): ReactElement => {
-  const { disabled, onSubmit, profile } = props;
+  const { disabled, onSubmit, profile, submitDisabled = false } = props;
   const chrome: CryptoStrategyFormChrome = props.chrome ?? 'content';
   const submitLabel = props.submitLabel ?? '자동감시 설정 저장';
   const submitAriaLabel = props.submitAriaLabel ?? submitLabel;
+  const submitContextLabel = props.submitContextLabel ?? '코인 차수 전략';
   const [draft, setDraft] = useState(profile);
   const [templateNth, setTemplateNth] = useState<string>('1');
 
@@ -247,11 +252,11 @@ export const CryptoStrategyForm = (props: CryptoStrategyFormProps): ReactElement
         />
       </div>
       <div className="form-sticky-action-bar crypto-strategy-form__actions">
-        <span className="muted">저장 대상 · 코인 차수 전략</span>
+        <span className="muted">저장 대상 · {submitContextLabel}</span>
         <Button
           dense
           variant="primary"
-          disabled={disabled}
+          disabled={disabled || submitDisabled}
           aria-label={submitAriaLabel}
           onClick={() => onSubmit(normalizeProfileForSubmit(draft))}
         >

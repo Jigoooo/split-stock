@@ -84,6 +84,22 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
       }}
       aria-label={`자동감시 보드 (계좌 ${accountId})`}
     >
+      {broker !== undefined && broker !== 'KIS' ? (
+        <div
+          role="status"
+          style={{
+            flexShrink: 0,
+            padding: '0.5rem 0.8rem',
+            background: 'rgba(234, 179, 8, 0.12)',
+            borderBottom: '0.1rem solid rgba(234, 179, 8, 0.35)',
+            fontSize: '1rem',
+            color: 'var(--fg)',
+          }}
+        >
+          ⚠ 코인({broker}) 자동감시는 백엔드 준비 중입니다. 현재 데이터/액션은 국내주식(KIS)
+          기준이므로 코인 환경에서는 표시 결과를 신뢰하지 마세요.
+        </div>
+      ) : null}
       <div
         style={{
           display: 'flex',

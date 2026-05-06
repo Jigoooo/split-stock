@@ -673,6 +673,72 @@ export class CryptoAutoTradingRepo {
       .map(mapLot);
   }
 
+  /**
+   * 계좌 전체 종료 차수(market 무관). 좌측 '과거 거래 종목' 탭 — stock PastTradesPane 동등.
+   * 닫힌 시각 내림차순 정렬, 옵션 limit (default 500).
+   */
+  listAllClosedLots(accountId: number, options: { limit?: number } = {}): CryptoLot[] {
+    return this.db
+      .select()
+      .from(lots)
+      .where(
+        and(eq(lots.broker, 'UPBIT'), eq(lots.accountId, accountId), eq(lots.status, 'closed')),
+      )
+      .orderBy(desc(lots.soldAt))
+      .limit(options.limit ?? 500)
+      .all()
+      .map(mapLot);
+  }
+
+  /**
+   * 매매내역 전용 lot 조회 — market 무관, 모든 status 포함.
+   * 우측 '모든 매매내역' 탭 (stock listTradeHistoryLots 동등).
+   *
+   * 날짜 기준 = relevantAt = soldAt ?? boughtAt.
+   * search 는 market(pdno) substring 매치 (대소문자 무시).
+   */
+  listAllTradeHistoryLots(
+    accountId: number,
+    filters: { year: number; month: number; day?: number; search?: string },
+  ): CryptoLot[] {
+    const rows = this.db
+      .select()
+      .from(lots)
+      .where(and(eq(lots.broker, 'UPBIT'), eq(lots.accountId, accountId)))
+      .all();
+    const trimmedSearch = filters.search?.trim() ?? '';
+    const normalizedSearch = trimmedSearch.toLowerCase();
+    const out: CryptoLot[] = [];
+    for (const row of rows) {
+      const soldAtMs =
+        row.soldAt === null
+          ? undefined
+          : row.soldAt instanceof Date
+            ? row.soldAt.getTime()
+            : Number(row.soldAt);
+      const boughtAtMs =
+        row.boughtAt instanceof Date ? row.boughtAt.getTime() : Number(row.boughtAt);
+      const relevantAt = soldAtMs ?? boughtAtMs;
+      const date = new Date(relevantAt);
+      const year = date.getUTCFullYear();
+      const month = date.getUTCMonth() + 1;
+      const day = date.getUTCDate();
+      if (year !== filters.year || month !== filters.month) continue;
+      if (filters.day !== undefined && day !== filters.day) continue;
+      if (normalizedSearch !== '' && !row.pdno.toLowerCase().includes(normalizedSearch)) {
+        continue;
+      }
+      out.push(mapLot(row));
+    }
+    out.sort((a, b) => {
+      const ra = a.closedAt ?? a.openedAt;
+      const rb = b.closedAt ?? b.openedAt;
+      if (rb !== ra) return rb - ra;
+      return a.sequence - b.sequence;
+    });
+    return out;
+  }
+
   createLot(input: {
     accountId: number;
     market: CryptoKrwMarketCode;

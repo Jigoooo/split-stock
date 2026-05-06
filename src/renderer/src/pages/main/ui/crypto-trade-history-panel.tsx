@@ -1,36 +1,113 @@
 import { CryptoMemoForm } from '@renderer/features/crypto-memo';
 import { trpc } from '@renderer/shared/api/trpc';
+import { type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
 import {
   TradeHistoryShell,
   type TradeHistoryShellSlots,
 } from '@renderer/widgets/trade-history-panel';
 import type { CryptoStrategyProfile } from '@shared/contracts';
-import { createDefaultCryptoStrategyProfile } from '@shared/contracts';
-import { type ReactElement, useEffect, useState } from 'react';
+import { createDefaultCryptoStrategyProfile, DEFAULT_CRYPTO_MARKET } from '@shared/contracts';
+import { type ReactElement, useEffect, useMemo, useState, useTransition } from 'react';
+import { CryptoAllTradeHistoryPanel } from './crypto-all-trade-history-panel';
 import { CryptoAutoStrategyTabBody } from './crypto-auto-panel';
 import { CryptoTradeHistoryList } from './crypto-trade-history-list';
 
 export interface CryptoTradeHistoryPanelProps {
   accountId: number;
-  /** KRW-BTC 등. 빈 문자열이면 strategy/memo 탭 비활성화 (TradeHistoryShell 동작). */
+  /** KRW-BTC 등. 빈 문자열이면 R1 외부 탭은 "모든 매매내역" 한 개. */
   market: string;
 }
 
+type R1 = 'symbol' | 'all';
+
 /**
- * 코인 우측 매매내역 패널 — TradeHistoryShell 사용으로 stock TradeHistoryPanel
- * 과 5탭 layout 100% 동등.
+ * 코인 우측 매매내역 컨테이너 — stock MainTradeHistoryPane 와 동등 R1 외부 탭 구조.
  *
- * 탭별 내용:
- *  - all/open/closed : (Q3 통합 컬럼 적용 전 임시) CryptoCyclesPanel — closed 탭 외에는 동일 표시
- *  - strategy        : market 필요. CryptoAutoStrategyTabBody (코인 자동매매 설정 + 템플릿)
- *  - memo            : market 필요. CryptoMemoForm
+ * R1 외부 탭:
+ *   - market !== '' → ['<마켓> 매매내역', '모든 매매내역']
+ *   - market === '' → ['모든 매매내역'] 한 개
  *
- * market 이 빈 문자열이면 shell 이 strategy/memo 탭 비활성화 + "종목 선택" badge.
+ * 선택된 R1 에 따라 렌더 대상 분기:
+ *   - 'symbol' → CryptoSymbolTradeHistoryPanel (TradeHistoryShell — 5탭)
+ *   - 'all'    → CryptoAllTradeHistoryPanel (보유 마켓 통합 매매현황)
  */
 export const CryptoTradeHistoryPanel = ({
   accountId,
   market,
 }: CryptoTradeHistoryPanelProps): ReactElement => {
+  const [r1, setR1Raw] = useState<R1>(market.length > 0 ? 'symbol' : 'all');
+  const [, startTransition] = useTransition();
+  const setR1 = (next: R1): void => {
+    startTransition(() => setR1Raw(next));
+  };
+
+  const effectiveR1: R1 = market.length === 0 ? 'all' : r1;
+
+  const marketsQuery = trpc.crypto.listMarkets.useQuery(
+    { quoteCurrency: 'KRW', limit: 200 },
+    { enabled: market.length > 0, staleTime: 60_000 },
+  );
+  const marketEntry = useMemo(
+    () => marketsQuery.data?.entries.find((entry) => entry.market === market) ?? null,
+    [market, marketsQuery.data?.entries],
+  );
+  const symbolTabLabel =
+    market.length === 0 ? null : `${formatMarketLabel(marketEntry?.koreanName, market)} 매매내역`;
+
+  const tabs: ReadonlyArray<HtsTabItem<R1>> =
+    market.length > 0
+      ? [
+          { id: 'symbol', label: symbolTabLabel ?? `${market} 매매내역` },
+          { id: 'all', label: '모든 매매내역' },
+        ]
+      : [{ id: 'all', label: '모든 매매내역' }];
+
+  return (
+    <section
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: 0,
+        overflow: 'hidden',
+      }}
+      aria-label="코인 우측 매매내역 패널"
+    >
+      <HtsTabs tabs={tabs} active={effectiveR1} onChange={setR1} ariaLabel="코인 우측 외부 탭" />
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {effectiveR1 === 'all' ? (
+          <CryptoAllTradeHistoryPanel accountId={accountId} />
+        ) : (
+          <CryptoSymbolTradeHistoryPanel accountId={accountId} market={market} />
+        )}
+      </div>
+    </section>
+  );
+};
+
+/**
+ * 코인 단일 마켓 매매내역 패널 — 기존 5탭 구조 (TradeHistoryShell).
+ *
+ * 탭별 내용:
+ *  - all/open/closed : CryptoTradeHistoryList (status 필터)
+ *  - strategy        : market 필요. CryptoAutoStrategyTabBody
+ *  - memo            : market 필요. CryptoMemoForm
+ */
+const CryptoSymbolTradeHistoryPanel = ({
+  accountId,
+  market,
+}: {
+  accountId: number;
+  market: string;
+}): ReactElement => {
   const symbol = market.length > 0 ? market : null;
 
   const slots: TradeHistoryShellSlots = {
@@ -71,7 +148,9 @@ const CryptoStrategyTabBodyContainer = ({
   const enabled = accountId > 0 && market.startsWith('KRW-');
 
   const [autoStrategyProfile, setAutoStrategyProfile] = useState<CryptoStrategyProfile>(() =>
-    createDefaultCryptoStrategyProfile((market || 'KRW-BTC') as CryptoStrategyProfile['market']),
+    createDefaultCryptoStrategyProfile(
+      (market || DEFAULT_CRYPTO_MARKET) as CryptoStrategyProfile['market'],
+    ),
   );
 
   const autoStrategyQuery = trpc.crypto.getAutoStrategy.useQuery(
@@ -112,7 +191,9 @@ const CryptoStrategyTabBodyContainer = ({
       return;
     }
     applyProfile(
-      createDefaultCryptoStrategyProfile((market || 'KRW-BTC') as CryptoStrategyProfile['market']),
+      createDefaultCryptoStrategyProfile(
+        (market || DEFAULT_CRYPTO_MARKET) as CryptoStrategyProfile['market'],
+      ),
     );
   }, [autoStrategyQuery.data?.profile, market]);
 
@@ -139,3 +220,9 @@ const CryptoStrategyTabBodyContainer = ({
     />
   );
 };
+
+function formatMarketLabel(name: string | null | undefined, market: string): string {
+  const trimmedName = name?.trim();
+  if (!trimmedName || trimmedName === market) return market;
+  return `${trimmedName} (${market})`;
+}

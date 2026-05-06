@@ -1,14 +1,14 @@
 import { useActiveAccountId } from '@renderer/entities/account';
 import { CryptoStrategyForm } from '@renderer/pages/main/ui/crypto-strategy-form';
 import { trpc } from '@renderer/shared/api/trpc';
-import { Button, Checkbox, Select, TextInput } from '@renderer/shared/ui';
+import { alertDialog, Button, Checkbox, DialogType, Select, TextInput } from '@renderer/shared/ui';
 import type {
   CryptoAutoGuardConfig,
   CryptoAutoTemplate,
   CryptoKrwMarketCode,
   CryptoStrategyProfile,
 } from '@shared/contracts';
-import { createDefaultCryptoStrategyProfile } from '@shared/contracts';
+import { createDefaultCryptoStrategyProfile, DEFAULT_CRYPTO_MARKET } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -20,7 +20,8 @@ interface CryptoStrategySettingsSectionProps {
 
 // 매매설정관리는 코인별로 분기하지 않고 단일 default(KRW-BTC를 키로 사용)로 통합한다.
 // 자동감시 등록 시 이 default가 마켓별로 복사된다. (RALPLAN P4 — 항목 7)
-const DEFAULT_MARKET = 'KRW-BTC' as CryptoKrwMarketCode;
+// `@shared/contracts` 의 DEFAULT_CRYPTO_MARKET (= 'KRW-BTC') 을 그대로 사용한다.
+const DEFAULT_MARKET = DEFAULT_CRYPTO_MARKET as CryptoKrwMarketCode;
 
 export function CryptoStrategySettingsSection({
   activeTab,
@@ -34,9 +35,6 @@ export function CryptoStrategySettingsSection({
   const [maxOrderKrw, setMaxOrderKrw] = useState('5000');
   const [maxExposureKrw, setMaxExposureKrw] = useState('50000');
   const [emergencyDisabled, setEmergencyDisabled] = useState(true);
-  const [templateId, setTemplateId] = useState('');
-  const [templateName, setTemplateName] = useState('기본 코인 차수 전략');
-
   const autoInput = useMemo(
     () => ({
       ...(accountId !== null ? { accountId } : {}),
@@ -89,7 +87,6 @@ export function CryptoStrategySettingsSection({
   }, [statusQuery.data?.config]);
 
   const templates = templatesQuery.data?.templates ?? [];
-  const selectedTemplate = templates.find((template) => String(template.id) === templateId) ?? null;
   const pending =
     saveStrategy.isPending ||
     saveConfig.isPending ||
@@ -132,30 +129,20 @@ export function CryptoStrategySettingsSection({
           }}
         />
       ) : activeTab === 'templates' ? (
-        <CryptoTemplateForm
-          disabled={pending}
-          draft={draft}
-          onDelete={() => {
-            if (accountId !== null && selectedTemplate) {
-              deleteTemplate.mutate({ accountId, id: selectedTemplate.id });
-            }
-          }}
-          onLoad={() => {
-            if (!selectedTemplate) return;
-            const next = { ...selectedTemplate.strategy, market };
-            setDraft(next);
-            saveDraft(next);
-          }}
-          onNameChange={setTemplateName}
-          onSave={() => {
-            if (accountId !== null && templateName.trim()) {
-              saveTemplate.mutate({ accountId, name: templateName.trim(), strategy: draft });
-            }
-          }}
-          onTemplateChange={setTemplateId}
-          selectedTemplate={selectedTemplate}
-          templateId={templateId}
-          templateName={templateName}
+        <CryptoTemplateManagementPanel
+          accountId={accountId}
+          activeProfile={draft}
+          market={market}
+          onDelete={(id) => deleteTemplate.mutate({ accountId, id })}
+          onSave={(name, profile, id) =>
+            saveTemplate.mutate({
+              accountId,
+              name,
+              strategy: profile,
+              ...(id !== undefined ? { id } : {}),
+            })
+          }
+          pending={pending}
           templates={templates}
         />
       ) : activeTab === 'protection' ? (
@@ -315,74 +302,179 @@ function CryptoProtectionForm({
   );
 }
 
-function CryptoTemplateForm({
-  disabled,
+/**
+ * 코인 템플릿 관리 패널 — stock TemplateManagementPanel 와 동등 UX.
+ *
+ * - Select: 기존 템플릿 선택 (편집 모드)
+ * - "새로 추가" 버튼: 새 이름 입력 모드 전환
+ * - "템플릿 삭제" 버튼: 선택한 템플릿 confirm 후 삭제
+ * - 차수 grid: CryptoStrategyForm chrome="content" 마운트 — 우측 자동매매 설정 탭과 동일 폼
+ *
+ * 저장 동작:
+ * - 새로 추가: 입력한 이름으로 saveTemplate({name, profile}) — name 미입력 시 비활성
+ * - 편집: confirm dialog → saveTemplate({name, profile, id})
+ */
+function CryptoTemplateManagementPanel({
+  accountId,
+  activeProfile,
+  market,
   onDelete,
-  onLoad,
-  onNameChange,
   onSave,
-  onTemplateChange,
-  selectedTemplate,
-  templateId,
-  templateName,
+  pending,
   templates,
 }: {
-  disabled: boolean;
-  draft: CryptoStrategyProfile;
-  onDelete: () => void;
-  onLoad: () => void;
-  onNameChange: (value: string) => void;
-  onSave: () => void;
-  onTemplateChange: (value: string) => void;
-  selectedTemplate: CryptoAutoTemplate | null;
-  templateId: string;
-  templateName: string;
+  accountId: number;
+  activeProfile: CryptoStrategyProfile;
+  market: CryptoKrwMarketCode;
+  onDelete: (id: number) => void;
+  onSave: (name: string, profile: CryptoStrategyProfile, id?: number) => void;
+  pending: boolean;
   templates: CryptoAutoTemplate[];
 }): ReactElement {
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [draftOverride, setDraftOverride] = useState<CryptoStrategyProfile | null>(null);
+  const [newTemplateName, setNewTemplateName] = useState('');
+
+  const selectedTemplate =
+    templates.find((template) => String(template.id) === selectedTemplateId) ?? null;
+  const initial: CryptoStrategyProfile =
+    draftOverride ?? (selectedTemplate ? { ...selectedTemplate.strategy, market } : activeProfile);
+  const isEditingExisting = selectedTemplateId.length > 0;
+  const trimmedNewTemplateName = newTemplateName.trim();
+  const submitDisabled = isEditingExisting
+    ? !selectedTemplate
+    : trimmedNewTemplateName.length === 0;
+
+  if (accountId <= 0) {
+    return <div className="panel__body muted">활성 Upbit 계좌가 필요합니다.</div>;
+  }
+
   return (
     <div className="panel__body crypto-settings-form">
-      <Select
-        aria-label="코인 전략 템플릿"
-        dense
-        disabled={disabled}
-        value={templateId}
-        onChange={(event) => onTemplateChange(event.target.value)}
-      >
-        <option value="">템플릿 선택</option>
-        {templates.map((template) => (
-          <option key={template.id} value={template.id}>
-            {template.name}
-          </option>
-        ))}
-      </Select>
-      <TextInput
-        aria-label="코인 전략 템플릿 이름"
-        dense
-        disabled={disabled}
-        value={templateName}
-        onChange={(event) => onNameChange(event.target.value)}
-      />
-      <div className="form-sticky-action-bar">
-        <Button dense disabled={disabled || !selectedTemplate} onClick={onLoad}>
-          불러오기
-        </Button>
+      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <Select
+          aria-label="코인 전략 템플릿"
+          dense
+          disabled={pending || templates.length === 0}
+          value={selectedTemplateId}
+          onChange={(event) => {
+            setSelectedTemplateId(event.target.value);
+            setDraftOverride(null);
+            setNewTemplateName('');
+          }}
+          style={{ minWidth: '18rem' }}
+        >
+          <option value="">템플릿 선택</option>
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+            </option>
+          ))}
+        </Select>
         <Button
           dense
-          variant="primary"
-          disabled={disabled || !templateName.trim()}
-          onClick={onSave}
+          disabled={pending}
+          onClick={() => {
+            setSelectedTemplateId('');
+            setDraftOverride(activeProfile);
+            setNewTemplateName('');
+          }}
         >
-          저장
+          새로 추가
         </Button>
         <Button
           dense
           variant="destructive"
-          disabled={disabled || !selectedTemplate}
-          onClick={onDelete}
+          disabled={!selectedTemplate || pending}
+          onClick={() => {
+            if (!selectedTemplate) return;
+            void (async () => {
+              const confirmed = await alertDialog.confirm({
+                type: DialogType.WARNING,
+                title: '템플릿 삭제',
+                message: `"${selectedTemplate.name}" 템플릿을 삭제합니다. 이 작업은 되돌릴 수 없습니다.`,
+                confirmText: '삭제',
+                cancelText: '취소',
+              });
+              if (!confirmed) return;
+              onDelete(selectedTemplate.id);
+              setSelectedTemplateId('');
+              setDraftOverride(null);
+            })();
+          }}
         >
-          삭제
+          템플릿 삭제
         </Button>
+        {templates.length === 0 ? (
+          <span className="muted">저장된 템플릿이 없습니다. 새로 추가해서 생성할 수 있습니다.</span>
+        ) : null}
       </div>
+
+      {isEditingExisting && selectedTemplate ? (
+        <div className="chip" style={{ justifySelf: 'start' }}>
+          편집 중 · {selectedTemplate.name}
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.6rem',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            padding: '0.8rem',
+            border: '0.1rem solid var(--border)',
+            borderRadius: '0.6rem',
+            background: 'var(--bg-2, rgba(0,0,0,0.03))',
+          }}
+        >
+          <div style={{ display: 'grid', gap: '0.2rem', minWidth: '12rem' }}>
+            <strong style={{ color: 'var(--fg)' }}>새 템플릿 작성</strong>
+            <span className="muted" style={{ fontSize: '0.95rem' }}>
+              이름을 입력하면 하단 저장 버튼으로 템플릿을 생성합니다.
+            </span>
+          </div>
+          <TextInput
+            aria-label="코인 전략 템플릿 이름"
+            dense
+            disabled={pending}
+            placeholder="템플릿 이름"
+            value={newTemplateName}
+            onChange={(event) => setNewTemplateName(event.target.value)}
+            style={{ flex: '1 1 16rem', minWidth: '14rem' }}
+          />
+        </div>
+      )}
+
+      <CryptoStrategyForm
+        key={`${selectedTemplateId || 'new'}:${JSON.stringify(initial)}`}
+        chrome="content"
+        disabled={pending}
+        profile={initial}
+        submitAriaLabel={isEditingExisting ? '코인 템플릿 덮어쓰기' : '코인 템플릿 저장'}
+        submitContextLabel="코인 템플릿"
+        submitDisabled={submitDisabled}
+        submitLabel={isEditingExisting ? '템플릿 덮어쓰기' : '템플릿 저장'}
+        onSubmit={(profile) => {
+          if (isEditingExisting && selectedTemplate) {
+            void (async () => {
+              const confirmed = await alertDialog.confirm({
+                type: DialogType.WARNING,
+                title: '템플릿 덮어쓰기',
+                message: `"${selectedTemplate.name}" 템플릿을 현재 차수 설정으로 덮어씁니다.`,
+                confirmText: '덮어쓰기',
+                cancelText: '취소',
+              });
+              if (!confirmed) return;
+              onSave(selectedTemplate.name, profile, selectedTemplate.id);
+            })();
+            return;
+          }
+          if (trimmedNewTemplateName.length === 0) return;
+          onSave(trimmedNewTemplateName, profile);
+          setNewTemplateName('');
+          setDraftOverride(profile);
+        }}
+      />
     </div>
   );
 }

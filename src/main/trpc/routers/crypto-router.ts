@@ -675,6 +675,46 @@ export const cryptoRouter = router({
       return { accountId, market: input.market, lots };
     }),
 
+  /** 계좌 전체 종료 차수 (market 무관). 좌측 '과거 거래 종목' 탭 — stock cyclesByPdno(status='closed') 동등. */
+  listAllClosedLots: runtimeProcedure
+    .input(
+      z.object({
+        accountId: AccountIdField.optional(),
+        limit: z.number().int().min(1).max(2000).default(500),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const lots = new CryptoAutoTradingRepo(ctx.db).listAllClosedLots(accountId, {
+        limit: input.limit,
+      });
+      return { accountId, lots };
+    }),
+
+  /** 매매내역 전용 lot 조회 (market 무관). 우측 '모든 매매내역' 탭 — stock lots.tradeHistory 동등. */
+  listAllTradeHistoryLots: runtimeProcedure
+    .input(
+      z.object({
+        accountId: AccountIdField.optional(),
+        year: z.number().int().min(2000).max(2100),
+        month: z.number().int().min(1).max(12),
+        day: z.number().int().min(1).max(31).optional(),
+        search: z.string().trim().max(100).optional(),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const accountId = activeAccountIdOrThrow(ctx, input.accountId);
+      loadPrivateUpbitCredentials(ctx, accountId);
+      const lots = new CryptoAutoTradingRepo(ctx.db).listAllTradeHistoryLots(accountId, {
+        year: input.year,
+        month: input.month,
+        ...(input.day !== undefined ? { day: input.day } : {}),
+        ...(input.search !== undefined ? { search: input.search } : {}),
+      });
+      return { accountId, lots };
+    }),
+
   listAutoStrategyTemplates: runtimeProcedure
     .input(z.object({ accountId: AccountIdField.optional() }).optional())
     .query(({ ctx, input }) => {

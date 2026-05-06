@@ -10,7 +10,11 @@ import {
 import { trpc } from '@renderer/shared/api/trpc';
 import { dialog, type HtsTabItem, HtsTabs } from '@renderer/shared/ui';
 import { ActiveOrdersPanel } from '@renderer/widgets/trading-panel';
-import type { CryptoBalanceSummary, CryptoCandleUnit } from '@shared/contracts';
+import {
+  type CryptoBalanceSummary,
+  type CryptoCandleUnit,
+  DEFAULT_CRYPTO_MARKET,
+} from '@shared/contracts';
 import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { isOpenOrder } from '../model/crypto-formatters';
@@ -28,6 +32,7 @@ export { CryptoOrderbookPanel } from './crypto-orderbook-panel';
 export { CryptoOrdersPanel } from './crypto-orders-panel';
 
 import { CryptoChartPanel } from './crypto-chart-panel';
+import { CryptoPastTradesPane } from './crypto-past-trades-pane';
 import { MainThreeSplitLayout } from './main-three-split-layout';
 
 interface CryptoMainPageProps {
@@ -39,7 +44,7 @@ type Side = 'bid' | 'ask';
 type Mode = 'limit' | 'market';
 type OrderType = 'limit' | 'price' | 'market';
 type CryptoLeftTab = 'holdings' | 'auto';
-type CryptoHoldingsTab = 'balances' | 'filled' | 'open';
+type CryptoHoldingsTab = 'balances' | 'filled' | 'open' | 'past';
 type CryptoOrderPanelId = 'right-selected' | 'right-all' | 'feed-tabs';
 
 const CRYPTO_LEFT_TABS = [
@@ -47,11 +52,12 @@ const CRYPTO_LEFT_TABS = [
   { id: 'auto', label: '자동감시' },
 ] as const satisfies ReadonlyArray<HtsTabItem<CryptoLeftTab>>;
 
-// Phase R3-2: 차수 / 입출금 탭 폐기. stock 동등 3탭 (실시간 잔고 / 체결 / 미체결).
+// Phase R3-2: 차수 / 입출금 탭 폐기. stock 동등 4탭 (실시간 잔고 / 체결 / 미체결 / 과거 거래 종목).
 const CRYPTO_HOLDINGS_TABS = [
   { id: 'balances', label: '실시간 잔고' },
   { id: 'filled', label: '체결' },
   { id: 'open', label: '미체결' },
+  { id: 'past', label: '과거 거래 종목' },
 ] as const satisfies ReadonlyArray<HtsTabItem<CryptoHoldingsTab>>;
 
 const LIVE_TRADE_LIMIT = 60;
@@ -100,8 +106,8 @@ export const CryptoMainPage = ({
   variant = 'main',
 }: CryptoMainPageProps): ReactElement => {
   const utils = trpc.useUtils();
-  const [term, setTerm] = useState('KRW-BTC');
-  const [market, setMarket] = useState('KRW-BTC');
+  const [term, setTerm] = useState<string>(DEFAULT_CRYPTO_MARKET);
+  const [market, setMarket] = useState<string>(DEFAULT_CRYPTO_MARKET);
   const [unit, setUnit] = useState<CryptoCandleUnit>('D');
   const [side, setSide] = useState<Side>('bid');
   const [mode, setMode] = useState<Mode>('limit');
@@ -569,6 +575,8 @@ const CryptoLeftPane = ({
     content = <FilledPane selectedPdno={market} broker="UPBIT" />;
   } else if (holdingsTab === 'open') {
     content = <ActiveOrdersPanel pdnoFilter={market} broker="UPBIT" />;
+  } else if (holdingsTab === 'past') {
+    content = <CryptoPastTradesPane accountId={accountId} />;
   } else {
     content = (
       <PositionsGrid
