@@ -278,3 +278,97 @@ export function repairCryptoRuntimeSchema(db: Db): void {
     return;
   }
 }
+
+/**
+ * Phase R0-1+R0-2 (drizzle 0020) fallback — 6개 stock 테이블에 broker 컬럼 idempotent ADD.
+ *
+ * 사용자 dev 환경에서 schema.ts 변경분이 db:push 등으로 미리 반영됐는데 _journal 의 0020 entry 는
+ * 누락된 경우, drizzle migrate 가 ALTER TABLE 충돌로 실패한다. 여기서 PRAGMA 체크 후 누락 컬럼만
+ * 추가하여 invariant 를 강제한다.
+ */
+export function repairBrokerColumnsRuntimeSchema(db: Db): void {
+  const tables = ['lots', 'orders', 'trades', 'symbol_memos', 'watch_orders', 'lots_snapshots'];
+  for (const table of tables) {
+    try {
+      const columns = new Set(listColumns(db, table));
+      if (columns.size === 0) continue;
+      if (!columns.has('broker')) {
+        db.run(sql.raw(`ALTER TABLE ${table} ADD COLUMN broker TEXT NOT NULL DEFAULT 'KIS'`));
+      }
+    } catch {
+      // 다음 테이블로 — 단일 테이블 실패가 전체를 막지 않도록.
+    }
+  }
+}
+
+/**
+ * Phase R0-5 (drizzle 0021) fallback — lots 테이블에 nullable decimal 컬럼 4개 idempotent ADD.
+ */
+export function repairLotsDecimalRuntimeSchema(db: Db): void {
+  try {
+    const columns = new Set(listColumns(db, 'lots'));
+    if (columns.size === 0) return;
+    const decimals = [
+      'qty_decimal',
+      'buy_price_decimal',
+      'amount_krw_decimal',
+      'sell_price_decimal',
+    ];
+    for (const col of decimals) {
+      if (!columns.has(col)) {
+        db.run(sql.raw(`ALTER TABLE lots ADD COLUMN ${col} TEXT`));
+      }
+    }
+  } catch {
+    return;
+  }
+}
+
+/**
+ * Phase R0-6 (drizzle 0022) fallback — lots.source + event_logs 4컬럼 + UNIQUE INDEX idempotent ADD.
+ */
+export function repairLotsSourceEventLogsRuntimeSchema(db: Db): void {
+  try {
+    const lotsColumns = new Set(listColumns(db, 'lots'));
+    if (lotsColumns.size > 0 && !lotsColumns.has('source')) {
+      db.run(sql.raw('ALTER TABLE lots ADD COLUMN source TEXT'));
+    }
+    const eventLogColumns = new Set(listColumns(db, 'event_logs'));
+    if (eventLogColumns.size > 0) {
+      const additions: Array<[string, string]> = [
+        ['account_id', 'INTEGER'],
+        ['broker', 'TEXT'],
+        ['pdno', 'TEXT'],
+        ['idempotency_key', 'TEXT'],
+      ];
+      for (const [col, type] of additions) {
+        if (!eventLogColumns.has(col)) {
+          db.run(sql.raw(`ALTER TABLE event_logs ADD COLUMN ${col} ${type}`));
+        }
+      }
+      db.run(
+        sql.raw(
+          'CREATE UNIQUE INDEX IF NOT EXISTS event_logs_idempotency_uniq ON event_logs(account_id, idempotency_key) WHERE idempotency_key IS NOT NULL',
+        ),
+      );
+    }
+  } catch {
+    return;
+  }
+}
+
+/**
+ * Phase R4-3 (drizzle 0023) fallback — crypto_auto_lots / crypto_auto_events 테이블 DROP idempotent.
+ *
+ * R3-3 에서 자동매매 엔진이 stock lots / event_logs 로 write 전환되어 잔존 테이블은 dead.
+ * 0023 마이그레이션이 이미 적용된 사용자에게는 no-op (DROP IF EXISTS 안전).
+ */
+export function repairCryptoAutoTablesDropRuntimeSchema(db: Db): void {
+  try {
+    db.run(sql.raw('DROP INDEX IF EXISTS crypto_auto_events_idempotency_uniq'));
+    db.run(sql.raw('DROP TABLE IF EXISTS crypto_auto_lots'));
+    db.run(sql.raw('DROP TABLE IF EXISTS crypto_auto_events'));
+  } catch {
+    return;
+  }
+}

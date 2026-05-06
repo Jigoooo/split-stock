@@ -21,7 +21,11 @@ import { CryptoRealtimeService } from '../crypto/crypto-realtime-service';
 import { defaultDbPath, migrate, openDb } from '../db/client';
 import {
   repairAccountsRuntimeSchema,
+  repairBrokerColumnsRuntimeSchema,
+  repairCryptoAutoTablesDropRuntimeSchema,
   repairCryptoRuntimeSchema,
+  repairLotsDecimalRuntimeSchema,
+  repairLotsSourceEventLogsRuntimeSchema,
   repairMarketContextRuntimeSchema,
   repairTradingCalendarRuntimeSchema,
 } from '../db/runtime-schema-repair';
@@ -84,10 +88,26 @@ export function bootstrapDeps(userDataDir: string) {
   const db = openDb(defaultDbPath(userDataDir));
   markStartup('db.open.end');
   markStartup('db.migrate.start');
-  migrate(db, resolveMigrationsDir());
+  try {
+    migrate(db, resolveMigrationsDir());
+  } catch (error) {
+    // 사용자 dev 환경에서 schema.ts 변경이 db:push 등으로 미리 반영됐을 때 _journal 0020+
+    // 마이그레이션이 ALTER TABLE 충돌로 실패할 수 있다. 후속 runtime-schema-repair 가
+    // idempotent ADD COLUMN / DROP IF EXISTS 로 invariant 를 강제하므로 무시하고 진행한다.
+    // (drizzle 자체는 transaction 안에서 실패한 마이그레이션 외 statement 는 적용 안 함.)
+    console.warn(
+      '[bootstrap] drizzle migrate failed, falling back to runtime-schema-repair:',
+      error,
+    );
+  }
   markStartup('db.migrate.end');
   markStartup('db.runtime-repair.start');
   repairAccountsRuntimeSchema(db);
+  // Phase R0-R4 마이그레이션 (0020-0023) idempotent fallback — drizzle migrate 실패 시 복구.
+  repairBrokerColumnsRuntimeSchema(db);
+  repairLotsDecimalRuntimeSchema(db);
+  repairLotsSourceEventLogsRuntimeSchema(db);
+  repairCryptoAutoTablesDropRuntimeSchema(db);
   repairMarketContextRuntimeSchema(db);
   repairTradingCalendarRuntimeSchema(db);
   repairCryptoRuntimeSchema(db);
