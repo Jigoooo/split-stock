@@ -1,5 +1,6 @@
-import type { CryptoAutoWatch, CryptoAutoWatchStatus } from '@shared/contracts';
+import type { CryptoAutoEvent, CryptoAutoWatch, CryptoAutoWatchStatus } from '@shared/contracts';
 import { BROKERS } from '@shared/contracts';
+import type { WatchHistoryItem } from '../trpc/handlers/watch-handler-shared';
 import type { WatchOrder, WatchSource, WatchStatus } from './watch-engine-types';
 
 /**
@@ -75,6 +76,34 @@ export function cryptoWatchToWatchOrder(watch: CryptoAutoWatch): WatchOrder {
 /** UPBIT broker 자동감시 → WatchOrder list. CryptoAutoTradingRepo.listWatches 결과를 변환. */
 export function cryptoWatchesToWatchOrders(watches: CryptoAutoWatch[]): WatchOrder[] {
   return watches.map(cryptoWatchToWatchOrder);
+}
+
+/**
+ * Phase 4-bis: 코인 자동매매 event → WatchHistoryItem 변환.
+ *
+ * CryptoAutoEvent 의 kind/action/reason 을 history 메시지로 매핑하고, blocked/decimal-error
+ * 는 WARN/ERROR 로 강등한다. 다른 kind 는 INFO.
+ */
+export function cryptoEventToWatchHistoryItem(event: CryptoAutoEvent): WatchHistoryItem {
+  const level: WatchHistoryItem['level'] =
+    event.kind === 'decimal-error' ? 'ERROR' : event.kind === 'blocked' ? 'WARN' : 'INFO';
+  const message = `auto-crypto.${event.kind}.${event.action}`;
+  return {
+    id: event.id,
+    at: new Date(event.createdAt),
+    level,
+    message,
+    accountId: event.accountId,
+    pdno: event.market,
+    // 코인 events 는 stock source('PREBUY'/'CUSTOM') 개념이 없음 — 'CUSTOM' 으로 통일.
+    source: 'CUSTOM',
+    watchId: null,
+    reason: event.reason || null,
+  };
+}
+
+export function cryptoEventsToWatchHistoryItems(events: CryptoAutoEvent[]): WatchHistoryItem[] {
+  return events.map(cryptoEventToWatchHistoryItem);
 }
 
 export const CRYPTO_DISPATCH_BROKER = BROKERS.UPBIT;

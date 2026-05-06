@@ -3,7 +3,10 @@ import { TRPCError } from '@trpc/server';
 import { desc, eq } from 'drizzle-orm';
 import { CryptoAutoTradingRepo } from '../../crypto/crypto-auto-repo';
 import { eventLogs } from '../../db/schema';
-import { cryptoWatchesToWatchOrders } from '../../trading/watch-order-broker-adapter';
+import {
+  cryptoEventsToWatchHistoryItems,
+  cryptoWatchesToWatchOrders,
+} from '../../trading/watch-order-broker-adapter';
 import type { Context } from '../context';
 import {
   ensureActiveAccountId,
@@ -53,11 +56,14 @@ export function listWatchOrders(ctx: Context, input: WatchListInput) {
 export function listWatchHistory(ctx: Context, input: WatchHistoryInput | undefined) {
   const activeAccountId = ensureActiveAccountId(ctx.activeAccountId);
   if (isCryptoBroker(input?.broker)) {
-    // Phase 3: 코인 자동감시 history 는 event_logs `auto-crypto.*` prefix 로 별도 기록.
-    // 현재 단계는 dispatch 골격만 — UI 가 빈 결과를 정상 처리하므로 빈 list 반환.
-    // 코인 사이클 history 는 별도 entity (crypto.listClosedLots 등) 로 노출 중이라
-    // WatchBoard 의 history 탭은 Phase 4 에서 상세 매핑.
-    return { items: [] satisfies WatchHistoryItem[] };
+    // Phase 4-bis: 코인 자동매매 event_logs(category='AUTO_CRYPTO', message='auto-crypto.*')
+    // 를 WatchHistoryItem shape 으로 변환해 WatchBoard history 탭에 노출.
+    const limit = input?.limit ?? 200;
+    const events = new CryptoAutoTradingRepo(ctx.db).listRecentEventsAcrossMarkets(
+      activeAccountId,
+      limit,
+    );
+    return { items: cryptoEventsToWatchHistoryItems(events) };
   }
   const rows = ctx.db
     .select()

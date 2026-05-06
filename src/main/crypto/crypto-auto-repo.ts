@@ -853,6 +853,27 @@ export class CryptoAutoTradingRepo {
       .map(mapEvent);
   }
 
+  /**
+   * Phase 4-bis: 계좌 전체 (market 무관) 자동매매 events. WatchBoard history 탭의 코인 dispatch.
+   * 최근 limit 건을 ts 내림차순으로 반환.
+   */
+  listRecentEventsAcrossMarkets(accountId: number, limit = 200): CryptoAutoEvent[] {
+    return this.db
+      .select()
+      .from(eventLogs)
+      .where(
+        and(
+          eq(eventLogs.accountId, accountId),
+          eq(eventLogs.broker, 'UPBIT'),
+          eq(eventLogs.category, 'AUTO_CRYPTO'),
+        ),
+      )
+      .orderBy(desc(eventLogs.ts))
+      .limit(Math.max(1, Math.min(500, Math.trunc(limit))))
+      .all()
+      .map(mapEvent);
+  }
+
   countEventsSince(input: {
     accountId: number;
     market: CryptoKrwMarketCode;
