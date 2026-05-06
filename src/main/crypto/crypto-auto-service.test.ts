@@ -25,6 +25,24 @@ function setup(now = 100_000) {
   return { db, logger, repo, service };
 }
 
+/**
+ * Phase 4-3: ensureLegacyConfigWatches 제거 후 — 자동매매 service 가 listWatches
+ * 결과가 비어있으면 noop 을 반환하므로, 테스트 setup 시 명시적으로 WATCHING watch
+ * 를 생성한다. autoBuyEnabled/autoSellEnabled=true 로 설정해 plan-buy/sell 트리거 가능.
+ * 이전 legacy hack 의 strategyFromConfig (mode != 'disabled' → autoBuyEnabled=true) 와
+ * 동등 의미.
+ */
+function seedWatching(repo: CryptoAutoTradingRepo, accountId: number, market: 'KRW-BTC'): void {
+  const profile = createDefaultCryptoStrategyProfile(market);
+  repo.upsertWatch(accountId, {
+    market,
+    status: 'WATCHING',
+    entryCondition: { type: 'immediate', price: null },
+    strategy: { ...profile, autoBuyEnabled: true, autoSellEnabled: true },
+    guard: {},
+  });
+}
+
 function fakeAdapter(): CryptoAutoLiveAdapter & {
   createOrder: ReturnType<typeof vi.fn>;
   cancelOrder: ReturnType<typeof vi.fn>;
@@ -66,6 +84,7 @@ describe('CryptoAutoTradingService', () => {
   it('dry-run simulates split-buy lots without calling live exchange methods', () => {
     const { repo, service } = setup();
     const adapter = fakeAdapter();
+    seedWatching(repo, 1, 'KRW-BTC');
     repo.upsertConfig(1, 'KRW-BTC', { mode: 'dry-run', emergencyDisabled: true });
 
     const result = service.runDryTick({
@@ -84,6 +103,7 @@ describe('CryptoAutoTradingService', () => {
 
   it('uses stage-specific crypto strategy amount, trigger, and take-profit rules', () => {
     const { repo, service } = setup();
+    seedWatching(repo, 1, 'KRW-BTC');
     repo.upsertConfig(1, 'KRW-BTC', { mode: 'dry-run', emergencyDisabled: true });
     repo.upsertStrategy(1, 'KRW-BTC', {
       ...createDefaultCryptoStrategyProfile('KRW-BTC'),
@@ -204,6 +224,7 @@ describe('CryptoAutoTradingService', () => {
   it('places a live-small market-buy only after every live gate passes', async () => {
     const { repo, service } = setup();
     const adapter = fakeAdapter();
+    seedWatching(repo, 1, 'KRW-BTC');
     repo.upsertConfig(1, 'KRW-BTC', {
       mode: 'dry-run',
       emergencyDisabled: true,
@@ -248,6 +269,7 @@ describe('CryptoAutoTradingService', () => {
   it('keeps dry-run lots out of live planning and exposure gates', async () => {
     const { repo, service } = setup();
     const adapter = fakeAdapter();
+    seedWatching(repo, 1, 'KRW-BTC');
     repo.upsertConfig(1, 'KRW-BTC', {
       mode: 'dry-run',
       emergencyDisabled: true,
@@ -328,6 +350,7 @@ describe('CryptoAutoTradingService', () => {
     adapter.createOrder.mockResolvedValueOnce(
       err({ exchangeId: 'UPBIT', kind: 'VALIDATION', message: 'invalid' }),
     );
+    seedWatching(repo, 1, 'KRW-BTC');
     repo.upsertConfig(1, 'KRW-BTC', {
       mode: 'live-small',
       emergencyDisabled: false,

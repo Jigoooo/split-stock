@@ -29,10 +29,10 @@ import type { Db } from '../db/client';
 import {
   cryptoAutoConfigs,
   cryptoAutoTemplates,
-  cryptoAutoWatches,
   cryptoOrders,
   eventLogs,
   lots,
+  watchOrders,
 } from '../db/schema';
 
 export const DEFAULT_CRYPTO_AUTO_CONFIG: CryptoAutoGuardConfig = {
@@ -405,22 +405,31 @@ export class CryptoAutoTradingRepo {
     return this.getStrategy(accountId, market);
   }
 
+  /**
+   * Phase 4-3: cryptoAutoWatches → watchOrders(broker='UPBIT') 전환.
+   *
+   * watchOrders 가 source-of-truth — cryptoAutoWatches 는 P4-2 백업으로 frozen.
+   * 단, status filter 정책:
+   *  - 기본: WATCHING / PAUSED 만 노출 (UPBIT 자동감시는 이 두 상태만 의미 있음)
+   *  - includeCancelled=true: CANCELLED 도 포함
+   *  - EXECUTED / EXPIRED / FAILED: stock 전용 terminal status — UPBIT row 에서는
+   *    원칙적으로 발생하지 않지만, 발생 시 listWatches 에서는 제외 (UI 가 cycle UI 가 아님).
+   */
   listWatches(accountId: number, filter: CryptoAutoWatchListFilter = undefined): CryptoAutoWatch[] {
-    this.ensureLegacyConfigWatches(accountId);
-    const filters = [
-      eq(cryptoAutoWatches.accountId, accountId),
-      eq(cryptoAutoWatches.exchange, 'UPBIT'),
-    ];
-    if (filter?.market) filters.push(eq(cryptoAutoWatches.market, filter.market));
-    if (filter?.status) filters.push(eq(cryptoAutoWatches.status, filter.status));
-    if (!filter?.includeCancelled) {
-      filters.push(sql`${cryptoAutoWatches.status} <> 'CANCELLED'`);
+    const filters = [eq(watchOrders.broker, 'UPBIT'), eq(watchOrders.accountId, accountId)];
+    if (filter?.market) filters.push(eq(watchOrders.pdno, filter.market));
+    if (filter?.status) {
+      filters.push(eq(watchOrders.status, filter.status));
+    } else if (filter?.includeCancelled) {
+      filters.push(sql`${watchOrders.status} IN ('WATCHING', 'PAUSED', 'CANCELLED')`);
+    } else {
+      filters.push(sql`${watchOrders.status} IN ('WATCHING', 'PAUSED')`);
     }
     return this.db
       .select()
-      .from(cryptoAutoWatches)
+      .from(watchOrders)
       .where(and(...filters))
-      .orderBy(desc(cryptoAutoWatches.updatedAt))
+      .orderBy(desc(watchOrders.updatedAt))
       .all()
       .map((row) => this.mapWatch(row));
   }
@@ -428,8 +437,14 @@ export class CryptoAutoTradingRepo {
   getWatch(accountId: number, id: number): CryptoAutoWatch | null {
     const row = this.db
       .select()
-      .from(cryptoAutoWatches)
-      .where(and(eq(cryptoAutoWatches.accountId, accountId), eq(cryptoAutoWatches.id, id)))
+      .from(watchOrders)
+      .where(
+        and(
+          eq(watchOrders.broker, 'UPBIT'),
+          eq(watchOrders.accountId, accountId),
+          eq(watchOrders.id, id),
+        ),
+      )
       .get();
     return row ? this.mapWatch(row) : null;
   }
@@ -450,54 +465,107 @@ export class CryptoAutoTradingRepo {
     this.upsertStrategy(accountId, parsed.market, strategy);
 
     const now = new Date();
-    const values = {
-      accountId,
-      exchange: 'UPBIT',
-      market: parsed.market,
-      label: parsed.label ?? null,
-      status: parsed.status,
-      entryConditionJson: JSON.stringify(parsed.entryCondition),
-      strategyJson: JSON.stringify(strategy),
-      guardJson: JSON.stringify({ ...config, ...guard }),
-      updatedAt: now,
-    };
+    const guardJson = JSON.stringify({ ...config, ...guard });
+    const strategyJson = JSON.stringify(strategy);
+    const entryConditionJson = JSON.stringify(parsed.entryCondition);
+    const orderType = strategy.autoBuyOrderType === 'MARKET' ? 'MARKET' : 'LIMIT';
+    const amountKrwNum = Number(config.maxOrderKrw);
+    const amountKrw =
+      Number.isFinite(amountKrwNum) && amountKrwNum > 0 ? Math.floor(amountKrwNum) : 5000;
 
     if (parsed.id !== undefined) {
       this.db
-        .update(cryptoAutoWatches)
-        .set(values)
-        .where(and(eq(cryptoAutoWatches.accountId, accountId), eq(cryptoAutoWatches.id, parsed.id)))
+        .update(watchOrders)
+        .set({
+          status: parsed.status,
+          metadata: parsed.label ?? null,
+          entryConditionJson,
+          strategyJson,
+          guardJson,
+          orderType,
+          amountKrw,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(watchOrders.broker, 'UPBIT'),
+            eq(watchOrders.accountId, accountId),
+            eq(watchOrders.id, parsed.id),
+          ),
+        )
         .run();
-      return (
-        this.getWatch(accountId, parsed.id) ??
-        this.upsertWatch(accountId, { ...parsed, id: undefined })
-      );
+      const reloaded = this.getWatch(accountId, parsed.id);
+      if (reloaded) return reloaded;
+      // id 가 다른 broker 거나 없으면 새로 INSERT 경로로 fallback.
+      return this.upsertWatch(accountId, { ...parsed, id: undefined });
+    }
+
+    // 동일 (broker, accountId, market) 의 active row 가 있으면 UPDATE, 없으면 INSERT.
+    const existing = this.db
+      .select({ id: watchOrders.id })
+      .from(watchOrders)
+      .where(
+        and(
+          eq(watchOrders.broker, 'UPBIT'),
+          eq(watchOrders.accountId, accountId),
+          eq(watchOrders.pdno, parsed.market),
+          sql`${watchOrders.status} <> 'CANCELLED'`,
+        ),
+      )
+      .get();
+
+    if (existing) {
+      this.db
+        .update(watchOrders)
+        .set({
+          status: parsed.status,
+          metadata: parsed.label ?? null,
+          entryConditionJson,
+          strategyJson,
+          guardJson,
+          orderType,
+          amountKrw,
+          updatedAt: now,
+        })
+        .where(eq(watchOrders.id, existing.id))
+        .run();
+      const reloaded = this.getWatch(accountId, existing.id);
+      if (!reloaded) throw new Error('crypto auto watch update failed');
+      return reloaded;
     }
 
     const result = this.db
-      .insert(cryptoAutoWatches)
-      .values({ ...values, createdAt: now })
-      .onConflictDoUpdate({
-        target: [cryptoAutoWatches.accountId, cryptoAutoWatches.exchange, cryptoAutoWatches.market],
-        set: values,
+      .insert(watchOrders)
+      .values({
+        broker: 'UPBIT',
+        accountId,
+        pdno: parsed.market,
+        source: 'CUSTOM',
+        side: 'BUY',
+        targetPrice: 0,
+        comparator: 'LTE',
+        orderType,
+        qtyOrAmountMode: 'AMOUNT',
+        qty: null,
+        amountKrw,
+        nth: null,
+        sourceRefId: null,
+        expiresAt: null,
+        status: parsed.status,
+        lastFailureReason: null,
+        metadata: parsed.label ?? null,
+        createdAt: now,
+        updatedAt: now,
+        executedAt: null,
+        entryConditionJson,
+        strategyJson,
+        guardJson,
       })
       .run();
     const id = Number(result.lastInsertRowid);
-    const row =
-      this.db.select().from(cryptoAutoWatches).where(eq(cryptoAutoWatches.id, id)).get() ??
-      this.db
-        .select()
-        .from(cryptoAutoWatches)
-        .where(
-          and(
-            eq(cryptoAutoWatches.accountId, accountId),
-            eq(cryptoAutoWatches.exchange, 'UPBIT'),
-            eq(cryptoAutoWatches.market, parsed.market),
-          ),
-        )
-        .get();
-    if (!row) throw new Error('crypto auto watch upsert failed');
-    return this.mapWatch(row);
+    const reloaded = this.getWatch(accountId, id);
+    if (!reloaded) throw new Error('crypto auto watch insert failed');
+    return reloaded;
   }
 
   listTemplates(accountId: number): CryptoAutoTemplate[] {
@@ -909,45 +977,19 @@ export class CryptoAutoTradingRepo {
     );
   }
 
-  private ensureLegacyConfigWatches(accountId: number): void {
-    const configs = this.db
-      .select()
-      .from(cryptoAutoConfigs)
-      .where(
-        and(eq(cryptoAutoConfigs.accountId, accountId), eq(cryptoAutoConfigs.exchange, 'UPBIT')),
-      )
-      .all()
-      .map((row) => mapConfigRow(accountId, row.market as CryptoKrwMarketCode, row));
-    for (const config of configs) {
-      const strategy = this.getStrategy(accountId, config.market);
-      const now = new Date(config.updatedAt || Date.now());
-      this.db
-        .insert(cryptoAutoWatches)
-        .values({
-          accountId,
-          exchange: 'UPBIT',
-          market: config.market,
-          label: null,
-          status: config.mode === 'disabled' ? 'PAUSED' : 'WATCHING',
-          entryConditionJson: JSON.stringify({ type: 'immediate', price: null }),
-          strategyJson: JSON.stringify(strategy),
-          guardJson: JSON.stringify(config),
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing({
-          target: [
-            cryptoAutoWatches.accountId,
-            cryptoAutoWatches.exchange,
-            cryptoAutoWatches.market,
-          ],
-        })
-        .run();
-    }
-  }
-
-  private mapWatch(row: typeof cryptoAutoWatches.$inferSelect): CryptoAutoWatch {
-    const market = row.market as CryptoKrwMarketCode;
+  /**
+   * Phase 4-3: watchOrders 행 → CryptoAutoWatch 매핑.
+   *
+   * Derived state 산출:
+   *  - strategy/entryCondition: row.strategyJson / row.entryConditionJson 우선, fallback config-based
+   *  - currentStage: 본 (account, market) 의 open live lots 수 (broker='UPBIT' 필터)
+   *  - openOrderCount: cryptoOrders.state IN ('wait','watch') 인 주문 수
+   *  - lastDecision/lastDecisionAt: 본 (account, market) 의 가장 최근 AUTO_CRYPTO event
+   *  - lastActionAt: config.lastLiveActionAt 또는 lastEvent createdAt
+   *  - blockedReasons / runtimeRunning: runtime 시점 derived (repo level 에서는 빈 배열 / false)
+   */
+  private mapWatch(row: typeof watchOrders.$inferSelect): CryptoAutoWatch {
+    const market = row.pdno as CryptoKrwMarketCode;
     const config = this.getConfig(row.accountId, market);
     const strategy =
       parseStrategyJson(market, row.strategyJson) ?? this.getStrategy(row.accountId, market);
@@ -971,7 +1013,7 @@ export class CryptoAutoTradingRepo {
       accountId: row.accountId,
       exchange: 'UPBIT',
       market,
-      label: row.label,
+      label: row.metadata,
       status: row.status as CryptoAutoWatchStatus,
       entryCondition: parseEntryCondition(row.entryConditionJson),
       strategy,

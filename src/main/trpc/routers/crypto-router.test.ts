@@ -475,6 +475,19 @@ describe('cryptoRouter session boundary', () => {
     const upbitAccountId = seedActiveUpbit(deps);
     const caller = createCaller(deps.ctx);
 
+    // Phase 4-3: ensureLegacyConfigWatches 제거 — 명시적 WATCHING watch 필요.
+    await caller.createAutoWatch({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      status: 'WATCHING',
+      entryCondition: { type: 'immediate', price: null },
+      strategy: {
+        ...createDefaultCryptoStrategyProfile('KRW-BTC'),
+        autoBuyEnabled: true,
+        autoSellEnabled: true,
+      },
+      guard: {},
+    });
     await caller.saveAutoConfig({
       accountId: upbitAccountId,
       market: 'KRW-BTC',
@@ -672,6 +685,19 @@ describe('cryptoRouter session boundary', () => {
       watchPrivate: vi.fn(),
     } as never;
 
+    // Phase 4-3: ensureLegacyConfigWatches 제거 — 명시적 WATCHING watch 필요.
+    await caller.createAutoWatch({
+      accountId: upbitAccountId,
+      market: 'KRW-BTC',
+      status: 'WATCHING',
+      entryCondition: { type: 'immediate', price: null },
+      strategy: {
+        ...createDefaultCryptoStrategyProfile('KRW-BTC'),
+        autoBuyEnabled: true,
+        autoSellEnabled: true,
+      },
+      guard: {},
+    });
     await caller.saveAutoConfig({
       accountId: upbitAccountId,
       market: 'KRW-BTC',
