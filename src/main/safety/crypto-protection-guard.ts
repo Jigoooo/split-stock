@@ -119,13 +119,14 @@ export class CryptoProtectionGuard {
           .select({ amountKrwDecimal: lots.amountKrwDecimal })
           .from(lots)
           .where(
-            and(eq(lots.broker, UPBIT_BROKER), eq(lots.accountId, accountId), eq(lots.status, 'open')),
+            and(
+              eq(lots.broker, UPBIT_BROKER),
+              eq(lots.accountId, accountId),
+              eq(lots.status, 'open'),
+            ),
           )
           .all();
-        const exposureKrw = rows.reduce(
-          (acc, row) => acc + Number(row.amountKrwDecimal || '0'),
-          0,
-        );
+        const exposureKrw = rows.reduce((acc, row) => acc + Number(row.amountKrwDecimal || '0'), 0);
         if (exposureKrw + amountKrw > limits.accountTotalMaxAmount) {
           return {
             ok: false,
