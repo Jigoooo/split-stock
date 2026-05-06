@@ -557,6 +557,15 @@ export const watchOrders = sqliteTable('watch_orders', {
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   executedAt: integer('executed_at', { mode: 'timestamp_ms' }),
+  /**
+   * Phase 4-1 (additive, KIS=NULL):
+   * cryptoAutoWatches → watchOrders 통합 준비. UPBIT 자동감시는 entry condition / 차수
+   * strategy / guard config 를 JSON snapshot 으로 보관. KIS/KIWOOM 행은 NULL — 도메스틱
+   * 자동감시는 별도 strategy 테이블이 진실의 원천이라 watchOrder 단계에서 snapshot 불필요.
+   */
+  entryConditionJson: text('entry_condition_json'),
+  strategyJson: text('strategy_json'),
+  guardJson: text('guard_json'),
 });
 
 /**

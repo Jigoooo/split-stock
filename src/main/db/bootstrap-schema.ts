@@ -310,7 +310,10 @@ const CREATE_STATEMENTS: readonly string[] = [
     metadata TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    executed_at INTEGER
+    executed_at INTEGER,
+    entry_condition_json TEXT,
+    strategy_json TEXT,
+    guard_json TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS time_windows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

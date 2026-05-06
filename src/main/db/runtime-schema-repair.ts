@@ -372,3 +372,23 @@ export function repairCryptoAutoTablesDropRuntimeSchema(db: Db): void {
     return;
   }
 }
+
+/**
+ * Phase 4-1 (drizzle 0001_youthful_kronos) fallback — watch_orders 에 nullable JSON 컬럼 3개
+ * idempotent ADD. cryptoAutoWatches → watchOrders 통합 준비. KIS/KIWOOM 행은 NULL 그대로,
+ * UPBIT 자동감시가 entryCondition / strategy / guard snapshot 을 보관할 자리.
+ */
+export function repairWatchOrdersJsonColumnsRuntimeSchema(db: Db): void {
+  try {
+    const columns = new Set(listColumns(db, 'watch_orders'));
+    if (columns.size === 0) return;
+    const additions = ['entry_condition_json', 'strategy_json', 'guard_json'];
+    for (const col of additions) {
+      if (!columns.has(col)) {
+        db.run(sql.raw(`ALTER TABLE watch_orders ADD COLUMN ${col} TEXT`));
+      }
+    }
+  } catch {
+    return;
+  }
+}

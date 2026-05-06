@@ -29,6 +29,7 @@ import {
   repairLotsSourceEventLogsRuntimeSchema,
   repairMarketContextRuntimeSchema,
   repairTradingCalendarRuntimeSchema,
+  repairWatchOrdersJsonColumnsRuntimeSchema,
 } from '../db/runtime-schema-repair';
 import {
   readSafetyMaster,
@@ -100,6 +101,8 @@ export function bootstrapDeps(userDataDir: string) {
   repairMarketContextRuntimeSchema(db);
   repairTradingCalendarRuntimeSchema(db);
   repairCryptoRuntimeSchema(db);
+  // Phase 4-1 (drizzle 0001_youthful_kronos) — watch_orders JSON 컬럼 3개 (additive).
+  repairWatchOrdersJsonColumnsRuntimeSchema(db);
   markStartup('db.runtime-repair.end');
 
   markStartup('bootstrap.repos.start');
