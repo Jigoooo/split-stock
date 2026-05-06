@@ -1,5 +1,4 @@
 import type { TradeExecutionEvent } from '@shared/contracts';
-import { BROKERS } from '@shared/contracts';
 import { and, eq, inArray } from 'drizzle-orm';
 import { realTimer, type Timer } from '../brokers/core/types';
 import type { BrokerPort } from '../brokers/ports/broker-port';
@@ -18,8 +17,6 @@ import {
   resolveServerPendingAbsenceDecision,
 } from './manual-order-reconciliation-policy';
 
-const STOCK_BROKER = BROKERS.KIS;
-
 export type { ReconcileDecision } from './manual-order-reconciliation-policy';
 export {
   resolveManualOrderDecision,
@@ -28,6 +25,7 @@ export {
 
 interface PendingOrderRow {
   id: number;
+  broker: string;
   accountId: number;
   lotId: number | null;
   odno: string;
@@ -100,10 +98,11 @@ export class ManualOrderReconciler {
     if (this.disposed || this.running) return;
     this.running = true;
     try {
+      // Phase 6: 도메스틱 broker (KIS+KIWOOM) 모두 폴링. 행 단위 broker dispatch.
       let pending = this.opts.db
         .select()
         .from(orders)
-        .where(and(eq(orders.broker, STOCK_BROKER), inArray(orders.status, ['PENDING', 'PARTIAL'])))
+        .where(inArray(orders.status, ['PENDING', 'PARTIAL']))
         .all() as PendingOrderRow[];
       if (target?.accountId !== undefined) {
         pending = pending.filter((row) => row.accountId === target.accountId);
@@ -206,7 +205,7 @@ export class ManualOrderReconciler {
         const localTrades = this.opts.db
           .select()
           .from(trades)
-          .where(and(eq(trades.orderId, row.id), eq(trades.broker, STOCK_BROKER)))
+          .where(and(eq(trades.orderId, row.id), eq(trades.broker, row.broker)))
           .all();
         const localFilledQty = localTrades.reduce((sum, trade) => sum + trade.qty, 0);
         const localExecutionPrice = weightedAvgTradePrice(localTrades);
@@ -246,7 +245,7 @@ export class ManualOrderReconciler {
           this.opts.db
             .insert(trades)
             .values({
-              broker: STOCK_BROKER,
+              broker: row.broker,
               orderId: row.id,
               qty: decision.deltaFilledQty,
               price: decision.executionPrice,
@@ -291,7 +290,7 @@ export class ManualOrderReconciler {
                   ? toDate(row.filledAt)
                   : null,
           })
-          .where(and(eq(orders.id, row.id), eq(orders.broker, STOCK_BROKER)))
+          .where(and(eq(orders.id, row.id), eq(orders.broker, row.broker)))
           .run();
 
         this.opts.logger.log({
