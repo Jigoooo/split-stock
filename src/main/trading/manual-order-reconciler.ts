@@ -61,12 +61,22 @@ export interface ManualOrderReconcilerOptions {
   timer?: Timer;
   pollMs?: number;
   stalePendingGraceMs?: number;
+  /**
+   * M2 self-healing: brokerForAccount 가 지속 null 일 때 PENDING row 가 영구 잔존하지
+   * 않도록 placedAt 기준 grace 후 status='CANCELLED' 로 마킹. 기본 24h.
+   *
+   * 자격증명 미등록/만료/계좌 삭제 등으로 broker 가 사라진 row 가 매 cycle 마다 동일 WARN
+   * 을 무한 반복하는 것을 막는다. 마킹 시 lot cleanup 은 수행 X — admin/사용자가 lot 상태
+   * 점검 후 수동 정리.
+   */
+  staleBrokerMissingMs?: number;
 }
 
 export class ManualOrderReconciler {
   private readonly timer: Timer;
   private readonly pollMs: number;
   private readonly stalePendingGraceMs: number;
+  private readonly staleBrokerMissingMs: number;
   private handle: { clear: () => void } | null = null;
   private running = false;
   private disposed = false;
@@ -75,6 +85,7 @@ export class ManualOrderReconciler {
     this.timer = opts.timer ?? realTimer;
     this.pollMs = opts.pollMs ?? 3000;
     this.stalePendingGraceMs = opts.stalePendingGraceMs ?? 10_000;
+    this.staleBrokerMissingMs = opts.staleBrokerMissingMs ?? 24 * 60 * 60 * 1000;
   }
 
   start(): void {
@@ -147,7 +158,33 @@ export class ManualOrderReconciler {
             });
           }
         }
-        if (!broker) continue;
+        if (!broker) {
+          // M2 self-healing: placedAt 이후 staleBrokerMissingMs 경과한 PENDING row 를
+          // CANCELLED 로 마킹해 영구 WARN 루프 차단. lot cleanup 은 수행 X (수동 정리 영역).
+          const placedAt = toDate(row.placedAt);
+          const ageMs = now.getTime() - placedAt.getTime();
+          if (ageMs >= this.staleBrokerMissingMs) {
+            this.opts.db
+              .update(orders)
+              .set({ status: 'CANCELLED' })
+              .where(and(eq(orders.id, row.id), eq(orders.broker, row.broker)))
+              .run();
+            this.opts.logger.log({
+              level: 'ERROR',
+              category: 'ORDER',
+              message: 'manual-order-reconciler.broker_missing.stale-cancelled',
+              payload: {
+                accountId: row.accountId,
+                odno: row.odno,
+                broker: row.broker,
+                lotId: row.lotId,
+                ageMs,
+                placedAt: placedAt.toISOString(),
+              },
+            });
+          }
+          continue;
+        }
 
         let serverPendingSet = serverPendingByAccount.get(row.accountId);
         if (serverPendingSet === undefined) {
