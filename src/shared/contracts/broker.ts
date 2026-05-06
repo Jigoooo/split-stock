@@ -2,17 +2,56 @@ import { z } from 'zod';
 import { AppEnvSchema } from './app';
 
 /**
+ * Broker/Exchange 식별자 — 컴파일 타임 상수.
+ *
+ * 기존 zod schema(`BrokerIdSchema`/`DomesticBrokerIdSchema`) 와 동일한 string literal 을
+ * 단일 출처로 노출. 새 broker 추가 시 BROKERS 객체와 zod enum 양쪽을 갱신.
+ *
+ * 사용:
+ *   import { BROKERS, isCryptoBroker } from '@shared/contracts';
+ *   if (account.broker === BROKERS.UPBIT) ...
+ *   if (isCryptoBroker(broker)) ...
+ */
+export const BROKERS = {
+  KIS: 'KIS',
+  KIWOOM: 'KIWOOM',
+  UPBIT: 'UPBIT',
+} as const;
+export type Broker = (typeof BROKERS)[keyof typeof BROKERS];
+
+export const DOMESTIC_BROKERS = {
+  KIS: BROKERS.KIS,
+  KIWOOM: BROKERS.KIWOOM,
+} as const;
+export type DomesticBroker = (typeof DOMESTIC_BROKERS)[keyof typeof DOMESTIC_BROKERS];
+
+export const CRYPTO_BROKERS = {
+  UPBIT: BROKERS.UPBIT,
+} as const;
+export type CryptoBroker = (typeof CRYPTO_BROKERS)[keyof typeof CRYPTO_BROKERS];
+
+/** 코인 거래소 broker 판별 — 모르는 값 / null / undefined 는 false. */
+export function isCryptoBroker(broker: string | null | undefined): broker is CryptoBroker {
+  return broker === BROKERS.UPBIT;
+}
+
+/** 국내주식 broker 판별 — 모르는 값 / null / undefined 는 false. */
+export function isDomesticBroker(broker: string | null | undefined): broker is DomesticBroker {
+  return broker === BROKERS.KIS || broker === BROKERS.KIWOOM;
+}
+
+/**
  * 국내주식 Broker(증권사) 식별자.
  * BrokerPort 는 이 범위만 구현한다. 코인거래소는 별도 CryptoExchangePort 로 분리한다.
  */
-export const DomesticBrokerIdSchema = z.enum(['KIS', 'KIWOOM']);
+export const DomesticBrokerIdSchema = z.enum([DOMESTIC_BROKERS.KIS, DOMESTIC_BROKERS.KIWOOM]);
 export type DomesticBrokerId = z.infer<typeof DomesticBrokerIdSchema>;
 
 /**
  * 계좌 provider 식별자.
  * 기존 이름 호환을 위해 BrokerId 를 유지하지만, UPBIT 은 국내주식 BrokerPort 가 아니다.
  */
-export const BrokerIdSchema = z.enum(['KIS', 'KIWOOM', 'UPBIT']);
+export const BrokerIdSchema = z.enum([BROKERS.KIS, BROKERS.KIWOOM, BROKERS.UPBIT]);
 export type BrokerId = z.infer<typeof BrokerIdSchema>;
 
 /**

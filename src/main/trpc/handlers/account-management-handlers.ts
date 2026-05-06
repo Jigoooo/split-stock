@@ -1,4 +1,4 @@
-import { type CredentialsSchema, getCredentialsAccountRef } from '@shared/contracts';
+import { BROKERS, type CredentialsSchema, getCredentialsAccountRef } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { and, eq } from 'drizzle-orm';
 import type { z } from 'zod';
@@ -8,7 +8,7 @@ import { SETTING_KEYS } from '../../db/settings-repo';
 import type { Context } from '../context';
 import { listAccountsWithActiveRepair } from './account-shared';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 type AddAccountInput = z.infer<typeof CredentialsSchema> & { displayName?: string | undefined };
 

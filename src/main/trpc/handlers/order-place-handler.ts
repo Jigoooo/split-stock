@@ -1,4 +1,5 @@
 import type { KisOrderRequestSchema } from '@shared/contracts';
+import { BROKERS } from '@shared/contracts';
 import { correctLimitPrice } from '@shared/market-rules';
 import { TRPCError } from '@trpc/server';
 import type { z } from 'zod';
@@ -16,7 +17,7 @@ import {
   toLegacyAck,
 } from './order-router-helpers';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 type PlaceCashInput = z.infer<typeof KisOrderRequestSchema> & { accountId: number };
 

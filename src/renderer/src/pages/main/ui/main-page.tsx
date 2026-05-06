@@ -1,4 +1,4 @@
-import { useActiveAccountId } from '@renderer/entities/account';
+import { isCryptoAccount, useActiveAccountId } from '@renderer/entities/account';
 import {
   type AddWatchOrderPrefillPayload,
   storeAddWatchOrderPrefill,
@@ -45,7 +45,7 @@ export const MainPage = ({
     return <MainNoAccount />;
   }
 
-  if (account?.broker === 'UPBIT') {
+  if (isCryptoAccount(account)) {
     return <CryptoMainPage accountId={accountId} />;
   }
 

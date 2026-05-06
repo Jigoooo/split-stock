@@ -1,3 +1,4 @@
+import { BROKERS } from '@shared/contracts';
 import { buildLotOverlay, type LotOverlaySnapshot } from '@shared/trading/lot-overlay';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -15,7 +16,7 @@ import {
   toLegacyKisError,
 } from './account-shared';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export async function getBalanceHandler(
   ctx: Context,

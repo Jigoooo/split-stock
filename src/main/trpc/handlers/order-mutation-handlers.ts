@@ -1,4 +1,5 @@
 import type { KisOrderAmendRequestSchema } from '@shared/contracts';
+import { BROKERS } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { z } from 'zod';
@@ -13,7 +14,7 @@ import {
   toLegacyAck,
 } from './order-router-helpers';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 type AmendInput = z.infer<typeof KisOrderAmendRequestSchema> & { accountId: number };
 

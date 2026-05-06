@@ -1,10 +1,11 @@
+import { BROKERS } from '@shared/contracts';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { lots } from '../db/schema';
 import type { ReconcileDecision } from './manual-order-reconciliation-policy';
 import { reconcileCancelledSellLot } from './partial-sell-lot-reconciliation';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export function toDate(value: Date | number | string): Date {
   return value instanceof Date ? value : new Date(value);

@@ -1,4 +1,5 @@
 import type { AppEnv, Balance, BrokerError, KisError } from '@shared/contracts';
+import { BROKERS } from '@shared/contracts';
 import { and, eq, gte, inArray, or } from 'drizzle-orm';
 import type { ActiveAccountRepo } from '../../account/active-account';
 import { repairStoredCredentialAccounts } from '../../account/repair-stored-accounts';
@@ -8,7 +9,7 @@ import type { EventLogger } from '../../logging/event-logger';
 import type { CredentialsRepo } from '../../security/credentials-repo';
 import { SELL_SETTLEMENT_GRACE_MS } from '../../trading/current-state-sync';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export function listAccountsWithActiveRepair(ctx: {
   activeAccounts: ActiveAccountRepo;

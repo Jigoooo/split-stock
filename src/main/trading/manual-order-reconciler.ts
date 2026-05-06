@@ -1,4 +1,5 @@
 import type { TradeExecutionEvent } from '@shared/contracts';
+import { BROKERS } from '@shared/contracts';
 import { and, eq, inArray } from 'drizzle-orm';
 import { realTimer, type Timer } from '../brokers/core/types';
 import type { BrokerPort } from '../brokers/ports/broker-port';
@@ -17,7 +18,7 @@ import {
   resolveServerPendingAbsenceDecision,
 } from './manual-order-reconciliation-policy';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export type { ReconcileDecision } from './manual-order-reconciliation-policy';
 export {

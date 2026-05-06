@@ -1,10 +1,11 @@
+import { BROKERS } from '@shared/contracts';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { orders } from '../../db/schema';
 import type { Context } from '../context';
 import { resolveAccountId } from '../router-helpers';
 import { buildActiveOrderViews, readFilledQtyByOrderId } from './order-router-helpers';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 /**
  * 주어진 pdno 목록에 대응하는 종목명 lookup map 을 stock_master 에서 일괄 조회.

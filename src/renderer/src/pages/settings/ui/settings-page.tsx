@@ -1,4 +1,4 @@
-import { useActiveAccountId } from '@renderer/entities/account';
+import { isCryptoAccount, useActiveAccountId } from '@renderer/entities/account';
 import {
   AiKeysSection,
   DartCorpCodeSection,
@@ -118,7 +118,7 @@ function consumeSettingsTabIntent(
 
 export const SettingsPage = ({ activationKey }: SettingsPageProps = {}): ReactElement => {
   const { account } = useActiveAccountId();
-  const isCrypto = account?.broker === 'UPBIT';
+  const isCrypto = isCryptoAccount(account);
   const topTabs: ReadonlyArray<HtsTabItem<SettingsTopTab>> = isCrypto
     ? CRYPTO_TOP_TABS
     : STOCK_TOP_TABS;

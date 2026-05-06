@@ -3,8 +3,31 @@ import { z } from 'zod';
 export const TradingAssetClassSchema = z.enum(['DOMESTIC_STOCK', 'CRYPTO']);
 export type TradingAssetClass = z.infer<typeof TradingAssetClassSchema>;
 
-export const CryptoExchangeIdSchema = z.enum(['UPBIT']);
+/**
+ * 코인 거래소 식별자 — 컴파일 타임 상수.
+ * 새 거래소 추가 시 EXCHANGES 와 CryptoExchangeIdSchema 양쪽 갱신.
+ */
+export const EXCHANGES = {
+  UPBIT: 'UPBIT',
+} as const;
+export type Exchange = (typeof EXCHANGES)[keyof typeof EXCHANGES];
+
+export const CryptoExchangeIdSchema = z.enum([EXCHANGES.UPBIT]);
 export type CryptoExchangeId = z.infer<typeof CryptoExchangeIdSchema>;
+
+/** 코인 quote currency — 거래쌍의 결제 통화. */
+export const QUOTE_CURRENCIES = {
+  KRW: 'KRW',
+  BTC: 'BTC',
+  USDT: 'USDT',
+} as const;
+export type QuoteCurrency = (typeof QUOTE_CURRENCIES)[keyof typeof QUOTE_CURRENCIES];
+
+/** 기본 quote currency — 한국 기반 사용자 default. */
+export const DEFAULT_CRYPTO_QUOTE: QuoteCurrency = QUOTE_CURRENCIES.KRW;
+
+/** 기본 코인 마켓 — settings/main 화면 default. */
+export const DEFAULT_CRYPTO_MARKET = `${DEFAULT_CRYPTO_QUOTE}-BTC` as const;
 
 export const CryptoMarketCodeSchema = z
   .string()

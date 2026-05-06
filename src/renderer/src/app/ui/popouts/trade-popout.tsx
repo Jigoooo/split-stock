@@ -1,4 +1,4 @@
-import { useActiveAccountId } from '@renderer/entities/account';
+import { isCryptoAccount, useActiveAccountId } from '@renderer/entities/account';
 import { CryptoMainPage } from '@renderer/pages/main/ui/crypto-main-page';
 import { TradePage } from '@renderer/pages/trade';
 import type { ReactElement } from 'react';
@@ -11,7 +11,7 @@ export const TradePopout = ({ popout }: { popout: PopoutApi }): ReactElement => 
     return <div className="panel__body muted">계좌 확인 중…</div>;
   }
 
-  if (account?.broker === 'UPBIT') {
+  if (isCryptoAccount(account)) {
     if (accountId === null) {
       return <div className="panel__body muted">활성 Upbit 계좌가 없습니다.</div>;
     }

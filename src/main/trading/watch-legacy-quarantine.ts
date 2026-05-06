@@ -1,10 +1,11 @@
+import { BROKERS } from '@shared/contracts';
 import { and, eq, inArray, not, or } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { watchOrders } from '../db/schema';
 import type { EventLogger } from '../logging/event-logger';
 
 /** Phase R0: stock(KIS) watch_orders 만 quarantine 대상. UPBIT 는 별도 crypto-* 모듈. */
-const STOCK_BROKER = 'KIS' as const;
+const STOCK_BROKER = BROKERS.KIS;
 
 export const LEGACY_WATCH_CONTRACTION_REASON =
   'LEGACY_RULE_NOT_SUPPORTED_AFTER_RESERVATION_BUY_CONTRACTION' as const;

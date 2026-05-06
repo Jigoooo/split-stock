@@ -1,8 +1,9 @@
+import { BROKERS } from '@shared/contracts';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { lots } from '../db/schema';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export function reconcileCancelledSellLot(
   db: Db,

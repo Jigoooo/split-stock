@@ -1,5 +1,5 @@
 import type { OrderAck } from '@shared/contracts';
-import { makeBrokerError } from '@shared/contracts';
+import { BROKERS, makeBrokerError } from '@shared/contracts';
 import { getRegularMarketSessionKst } from '@shared/trading/market-session';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -11,7 +11,7 @@ import type { EventLogger } from '../../logging/event-logger';
 import type { LotsRepo } from '../../trading/lots-repo';
 import { createPendingBuyLot } from '../../trading/order-lot-link';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 /** 도메인 OrderAck → KIS NormalizedOrderAck shape (renderer wire compat). */
 export function toLegacyAck(ack: OrderAck) {

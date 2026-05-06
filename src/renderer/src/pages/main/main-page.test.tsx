@@ -21,6 +21,10 @@ vi.mock('@renderer/entities/account', () => ({
   usePositionOverlay: () => ({
     lines: [],
   }),
+  isCryptoAccount: (account: { broker?: string | null } | null | undefined) =>
+    account != null && account.broker === 'UPBIT',
+  isDomesticAccount: (account: { broker?: string | null } | null | undefined) =>
+    account != null && (account.broker === 'KIS' || account.broker === 'KIWOOM'),
 }));
 
 vi.mock('@renderer/pages/main/model/use-main-realtime', () => ({

@@ -1,4 +1,4 @@
-import { makeBrokerError, type OrderAck } from '@shared/contracts';
+import { BROKERS, makeBrokerError, type OrderAck } from '@shared/contracts';
 import { and, eq } from 'drizzle-orm';
 import { err } from 'neverthrow';
 import type { BrokerPort } from '../brokers/ports/broker-port';
@@ -7,7 +7,7 @@ import { lots, orders } from '../db/schema';
 import type { PendingOrderWatcher } from './pending-order-watcher';
 import type { WatchOrderExecutorDeps } from './watch-order-types';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export async function cancelAcceptedBrokerOrderAfterLocalFailure(
   deps: WatchOrderExecutorDeps,

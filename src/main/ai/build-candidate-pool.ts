@@ -1,10 +1,11 @@
+import { BROKERS } from '@shared/contracts';
 import { and, eq, inArray, ne } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { lots as lotsTable, stockMaster, watchOrders } from '../db/schema';
 import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import { screenRangeCycleFit } from './algo/screen-range-cycle-fit';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export type CandidateSource = 'OWNED' | 'WATCH' | 'MANUAL' | 'AUTO';
 

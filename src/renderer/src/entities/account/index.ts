@@ -1,4 +1,5 @@
 export { ACCOUNT_ENTITY } from './api/account-keys';
+export { isCryptoAccount, isDomesticAccount } from './lib/is-crypto';
 export { useAccountBalance } from './model/use-account-balance';
 export { useActiveAccountId } from './model/use-active-account-id';
 export type {

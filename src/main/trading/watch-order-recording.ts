@@ -1,4 +1,5 @@
 import type { OrderAck } from '@shared/contracts';
+import { BROKERS } from '@shared/contracts';
 import { orders } from '../db/schema';
 import { readPendingCancelConfig } from '../db/settings-repo';
 import type { WatchOrder } from './watch-engine';
@@ -8,7 +9,7 @@ import type {
   WatchOrderExecutorDeps,
 } from './watch-order-types';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export function seedFirstEntryStrategyIfNeeded(
   deps: WatchOrderExecutorDeps,

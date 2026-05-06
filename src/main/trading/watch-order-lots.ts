@@ -1,3 +1,4 @@
+import { BROKERS } from '@shared/contracts';
 import { and, eq } from 'drizzle-orm';
 import { lots } from '../db/schema';
 import { createPendingBuyLot, linkPendingSellLot } from './order-lot-link';
@@ -9,7 +10,7 @@ import type {
   WatchOrderExecutorDeps,
 } from './watch-order-types';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export function prepareWatchOrderLot(
   deps: WatchOrderExecutorDeps,

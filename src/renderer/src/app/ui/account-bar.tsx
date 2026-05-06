@@ -1,4 +1,4 @@
-import { useActiveAccountId } from '@renderer/entities/account';
+import { isCryptoAccount, useActiveAccountId } from '@renderer/entities/account';
 import { StrategyRecommendStatusButton } from '@renderer/features/ai-strategy-recommend';
 import { RecommendStatusButton } from '@renderer/features/ai-symbol-recommend';
 import { SafetySwitchHeader } from '@renderer/features/safety-switch';
@@ -40,7 +40,7 @@ export interface AccountBarProps {
  */
 export const AccountBar = ({ env }: AccountBarProps): ReactElement => {
   const { account, accountId } = useActiveAccountId();
-  const isCrypto = account?.broker === 'UPBIT';
+  const isCrypto = isCryptoAccount(account);
 
   return (
     <div className="app-header__cluster app-header__cluster--account">

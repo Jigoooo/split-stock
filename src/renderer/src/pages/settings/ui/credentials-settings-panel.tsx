@@ -4,7 +4,7 @@ import { WatchGlobalToggle } from '@renderer/features/watch-global-toggle';
 import { trpc } from '@renderer/shared/api/trpc';
 import { Button, TableGrid, TextInput } from '@renderer/shared/ui';
 import { dialog } from '@renderer/shared/ui/dialog';
-import type { AppEnv, BrokerId } from '@shared/contracts';
+import { type AppEnv, BROKERS, type BrokerId, isCryptoBroker } from '@shared/contracts';
 import { Check, LogIn, Trash2 } from 'lucide-react';
 import { type CSSProperties, type ReactElement, type ReactNode, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -202,7 +202,7 @@ function CredentialsListSection(): ReactElement {
     }
   };
 
-  const handleDeleteOne = async (env: AppEnv, broker: BrokerId = 'KIS'): Promise<void> => {
+  const handleDeleteOne = async (env: AppEnv, broker: BrokerId = BROKERS.KIS): Promise<void> => {
     // PROD 또는 활성 자격증명 삭제는 phrase 게이트 강제 — 우발적 손실 방지.
     const target = entries.find((entry) => entry.env === env && entry.broker === broker);
     if (env === 'PROD' || (target && target.accountId === activeAccountId)) {
@@ -298,18 +298,16 @@ function CredentialsListSection(): ReactElement {
                       <span
                         className="chip"
                         style={{
-                          background:
-                            e.broker === 'UPBIT'
-                              ? '#e8f4ff'
-                              : e.broker === 'KIWOOM'
-                                ? '#ffe6e8'
-                                : '#fff7d6',
-                          color:
-                            e.broker === 'UPBIT'
-                              ? '#165a9f'
-                              : e.broker === 'KIWOOM'
-                                ? '#c41e2c'
-                                : '#7c5e00',
+                          background: isCryptoBroker(e.broker)
+                            ? '#e8f4ff'
+                            : e.broker === BROKERS.KIWOOM
+                              ? '#ffe6e8'
+                              : '#fff7d6',
+                          color: isCryptoBroker(e.broker)
+                            ? '#165a9f'
+                            : e.broker === BROKERS.KIWOOM
+                              ? '#c41e2c'
+                              : '#7c5e00',
                           fontWeight: 600,
                         }}
                       >
@@ -417,7 +415,7 @@ function CredentialsListSection(): ReactElement {
               환경의 저장된 App Key / Secret 을 삭제합니다.
               <span className="muted">
                 이후 재로그인 시 App Key / Secret 재입력이 필요합니다.
-                {currentEnv === phraseGate.env && phraseGate.broker === 'KIS'
+                {currentEnv === phraseGate.env && phraseGate.broker === BROKERS.KIS
                   ? ' 현재 활성 환경이므로 자동으로 로그아웃됩니다.'
                   : ''}
               </span>

@@ -1,3 +1,4 @@
+import { BROKERS } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
@@ -5,7 +6,7 @@ import { symbolMemos } from '../../db/schema';
 import { authedProcedure, router } from '../trpc-core';
 
 /** Phase R0: stock-context 전용 라우터 — broker='KIS' 만 다룬다. UPBIT 메모는 cryptoMarketMemos 사용. */
-const STOCK_BROKER = 'KIS' as const;
+const STOCK_BROKER = BROKERS.KIS;
 
 /**
  * 종목 메모 라우터 — 글로벌(계좌 비종속) 종목별 단일 메모.

@@ -1,3 +1,4 @@
+import { BROKERS } from '@shared/contracts';
 import { and, eq } from 'drizzle-orm';
 import type { Result } from 'neverthrow';
 import { watchOrders } from '../db/schema';
@@ -25,7 +26,7 @@ import {
 } from './watch-order-store';
 
 /** Phase R0: WatchEngine 은 stock-context 전용 (KIS broker). UPBIT 는 별도 crypto-* 모듈. */
-const STOCK_BROKER = 'KIS' as const;
+const STOCK_BROKER = BROKERS.KIS;
 
 export type {
   ExecutionResult,

@@ -1,10 +1,11 @@
+import { BROKERS } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { and, eq } from 'drizzle-orm';
 import { watchOrders } from '../../db/schema';
 import type { EventLogger } from '../../logging/event-logger';
 import type { Context } from '../context';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export type WatchStatus = 'WATCHING' | 'PAUSED' | 'EXECUTED' | 'FAILED' | 'EXPIRED' | 'CANCELLED';
 export type WatchSource = 'BOOSTER' | 'PREBUY' | 'CUSTOM';

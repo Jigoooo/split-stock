@@ -1,3 +1,4 @@
+import { BROKERS } from '@shared/contracts';
 import { sql } from 'drizzle-orm';
 import {
   blob,
@@ -23,7 +24,7 @@ export const credentials = sqliteTable(
     accountId: integer('account_id').primaryKey(),
     env: text('env').notNull(), // 'MOCK' | 'PROD'
     /** 'KIS' | 'KIWOOM' — Stage 5a 추가. 기존 row 는 'KIS' default backfill. */
-    broker: text('broker').notNull().default('KIS'),
+    broker: text('broker').notNull().default(BROKERS.KIS),
     payload: blob('payload', { mode: 'buffer' }).notNull(), // safeStorage.encryptString(JSON.stringify(Credentials))
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
@@ -38,7 +39,7 @@ export const credentials = sqliteTable(
 export const accessTokens = sqliteTable(
   'access_tokens',
   {
-    broker: text('broker').notNull().default('KIS'),
+    broker: text('broker').notNull().default(BROKERS.KIS),
     env: text('env').notNull(),
     token: text('token').notNull(),
     tokenType: text('token_type').notNull().default('Bearer'),
@@ -54,7 +55,7 @@ export const accessTokens = sqliteTable(
 export const accounts = sqliteTable('accounts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   env: text('env').notNull(), // 'MOCK' | 'PROD'
-  broker: text('broker').notNull().default('KIS'), // 'KIS' | 'KIWOOM' | 'UPBIT' — provider 라벨 prefix
+  broker: text('broker').notNull().default(BROKERS.KIS), // 'KIS' | 'KIWOOM' | 'UPBIT' — provider 라벨 prefix
   accountNo8: text('account_no_8').notNull(),
   accountProdCd: text('account_prod_cd').notNull(),
   nickname: text('nickname').notNull().default(''),
@@ -71,7 +72,7 @@ export const accounts = sqliteTable('accounts', {
 export const lots = sqliteTable('lots', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   /** Phase R0: broker-agnostic 확장. 'KIS' default — 코인 ETL 후 'UPBIT' row 도 같은 테이블에 들어감. */
-  broker: text('broker').notNull().default('KIS'),
+  broker: text('broker').notNull().default(BROKERS.KIS),
   accountId: integer('account_id').notNull(),
   pdno: text('pdno').notNull(), // 종목코드 (KIS=6자리, UPBIT=KRW-XXX 등)
   nth: integer('nth').notNull(), // 1..N차
@@ -106,7 +107,7 @@ export const lots = sqliteTable('lots', {
 export const orders = sqliteTable('orders', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   /** Phase R0: broker-agnostic 확장. */
-  broker: text('broker').notNull().default('KIS'),
+  broker: text('broker').notNull().default(BROKERS.KIS),
   accountId: integer('account_id').notNull(),
   lotId: integer('lot_id'), // 매도일 때 해당 차수
   odno: text('odno').notNull(), // KIS 주문번호
@@ -128,7 +129,7 @@ export const orders = sqliteTable('orders', {
 export const trades = sqliteTable('trades', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   /** Phase R0: broker-agnostic 확장. */
-  broker: text('broker').notNull().default('KIS'),
+  broker: text('broker').notNull().default(BROKERS.KIS),
   orderId: integer('order_id').notNull(),
   qty: integer('qty').notNull(),
   price: integer('price').notNull(),
@@ -439,7 +440,7 @@ export const lotsSnapshots = sqliteTable(
   {
     accountId: integer('account_id').notNull(),
     /** Phase R0: broker-agnostic 확장. */
-    broker: text('broker').notNull().default('KIS'),
+    broker: text('broker').notNull().default(BROKERS.KIS),
     snapshotDate: text('snapshot_date').notNull(), // YYYY-MM-DD (KST)
     pdno: text('pdno').notNull(),
     name: text('name').notNull().default(''), // stock_master에서 캡처
@@ -495,7 +496,7 @@ export const symbolMemos = sqliteTable('symbol_memos', {
    * 단일 PK 유지. Kiwoom 등 신규 broker 가 6자리 numeric pdno 를 사용한다면 (KIS와 충돌)
    * 이 PK 가정을 (pdno, broker) 복합 PK 로 확장 필요.
    */
-  broker: text('broker').notNull().default('KIS'),
+  broker: text('broker').notNull().default(BROKERS.KIS),
   content: text('content').notNull().default(''), // 메모 본문
   updatedAt: integer('updated_at').notNull(), // unix epoch (ms)
 });
@@ -536,7 +537,7 @@ export const cryptoMarketMemos = sqliteTable('crypto_market_memos', {
 export const watchOrders = sqliteTable('watch_orders', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   /** Phase R0: broker-agnostic 확장. */
-  broker: text('broker').notNull().default('KIS'),
+  broker: text('broker').notNull().default(BROKERS.KIS),
   accountId: integer('account_id').notNull(), // FK → accounts.id
   pdno: text('pdno').notNull(),
   source: text('source').notNull(), // 'BOOSTER' | 'PREBUY' | 'CUSTOM'

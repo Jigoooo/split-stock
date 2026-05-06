@@ -12,8 +12,10 @@ import {
   ACCOUNT_PROD_CODE_OPTIONS,
   type AccountProdCode,
   type AppEnv,
+  BROKERS,
   type BrokerId,
   type Credentials,
+  isCryptoBroker,
 } from '@shared/contracts';
 import { AlertCircle, Eye, EyeOff, Lock, X } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
@@ -36,7 +38,7 @@ const ENV_LABEL: Record<AppEnv, string> = { MOCK: '모의(MOCK)', PROD: '실전(
  * 첫 계좌라면 서버 측 자동 활성화, 그 외엔 비활성. 성공 시 query invalidate 후 창 close.
  */
 export const AddAccountPage = (): ReactElement => {
-  const [broker, setBroker] = useState<BrokerId>('KIS');
+  const [broker, setBroker] = useState<BrokerId>(BROKERS.KIS);
   const [env, setEnv] = useState<AppEnv>('MOCK');
   const [displayName, setDisplayName] = useState('');
   const [appKey, setAppKey] = useState('');
@@ -71,25 +73,24 @@ export const AddAccountPage = (): ReactElement => {
     e.preventDefault();
     const trimmedName = displayName.trim();
     const displayNameValue = trimmedName.length > 0 ? { displayName: trimmedName } : {};
-    const value: Credentials & { displayName?: string } =
-      broker === 'UPBIT'
-        ? {
-            env: 'PROD',
-            broker: 'UPBIT',
-            accessKey: appKey,
-            secretKey: appSecret,
-            ...displayNameValue,
-          }
-        : {
-            env,
-            broker,
-            appKey,
-            appSecret,
-            accountNo8: broker === 'KIS' ? accountNo8 : kiwoomAccountNo.slice(0, 8),
-            accountProdCd: broker === 'KIS' ? accountProdCd : '01',
-            ...(broker === 'KIS' && htsId.trim().length > 0 ? { htsId: htsId.trim() } : {}),
-            ...displayNameValue,
-          };
+    const value: Credentials & { displayName?: string } = isCryptoBroker(broker)
+      ? {
+          env: 'PROD',
+          broker: BROKERS.UPBIT,
+          accessKey: appKey,
+          secretKey: appSecret,
+          ...displayNameValue,
+        }
+      : {
+          env,
+          broker,
+          appKey,
+          appSecret,
+          accountNo8: broker === BROKERS.KIS ? accountNo8 : kiwoomAccountNo.slice(0, 8),
+          accountProdCd: broker === BROKERS.KIS ? accountProdCd : '01',
+          ...(broker === BROKERS.KIS && htsId.trim().length > 0 ? { htsId: htsId.trim() } : {}),
+          ...displayNameValue,
+        };
     if (value.env === 'PROD') {
       setPendingProdValue(value);
       return;
@@ -100,13 +101,13 @@ export const AddAccountPage = (): ReactElement => {
   const canSubmit =
     appKey.length > 0 &&
     appSecret.length > 0 &&
-    (broker === 'UPBIT'
+    (isCryptoBroker(broker)
       ? true
-      : broker === 'KIS'
+      : broker === BROKERS.KIS
         ? accountNo8.length === 8
         : kiwoomAccountNo.length === 10);
 
-  const effectiveEnv = broker === 'UPBIT' ? 'PROD' : env;
+  const effectiveEnv = isCryptoBroker(broker) ? 'PROD' : env;
   const isProd = effectiveEnv === 'PROD';
 
   return (
@@ -195,21 +196,21 @@ export const AddAccountPage = (): ReactElement => {
                 value={broker}
                 onChange={(next) => {
                   setBroker(next);
-                  if (next === 'UPBIT') setEnv('PROD');
+                  if (isCryptoBroker(next)) setEnv('PROD');
                 }}
                 items={[
                   {
-                    value: 'KIS',
+                    value: BROKERS.KIS,
                     label: <BrokerLabel code="KIS" name="한국투자증권" bg="#003c7c" />,
                     description: '국내 / 해외 / 모의 / 실전',
                   },
                   {
-                    value: 'KIWOOM',
+                    value: BROKERS.KIWOOM,
                     label: <BrokerLabel code="KW" name="키움증권" bg="#ff5e00" />,
                     description: '국내 / 모의 / 실전 (NXT·SOR 전용)',
                   },
                   {
-                    value: 'UPBIT',
+                    value: BROKERS.UPBIT,
                     label: <BrokerLabel code="UP" name="업비트" bg="#165a9f" />,
                     description: '코인거래소 / 실전',
                   },
@@ -219,7 +220,7 @@ export const AddAccountPage = (): ReactElement => {
 
             {/* ② 환경 — 라디오 자체 색 위계 외 추가 강조는 두지 않음 (사용자 피드백). */}
             <FormSection number={2} title="환경">
-              {broker === 'UPBIT' ? (
+              {isCryptoBroker(broker) ? (
                 <span
                   className="chip chip--down"
                   style={{
@@ -249,7 +250,7 @@ export const AddAccountPage = (): ReactElement => {
           <div className="form-grid-2col">
             <FormSection number={3} title="자격증명">
               <Row
-                label={broker === 'UPBIT' ? 'Access Key' : 'App Key'}
+                label={isCryptoBroker(broker) ? 'Access Key' : 'App Key'}
                 inputId="add-account-app-key"
               >
                 <TextInput
@@ -264,7 +265,7 @@ export const AddAccountPage = (): ReactElement => {
               </Row>
 
               <Row
-                label={broker === 'KIS' ? 'App Secret' : 'Secret Key'}
+                label={broker === BROKERS.KIS ? 'App Secret' : 'Secret Key'}
                 inputId="add-account-app-secret"
               >
                 <TextInput
@@ -292,7 +293,7 @@ export const AddAccountPage = (): ReactElement => {
             </FormSection>
 
             <FormSection number={4} title="계좌 정보">
-              {broker === 'UPBIT' ? (
+              {isCryptoBroker(broker) ? (
                 <Row label="계좌 기준" inputId="add-account-upbit-readonly">
                   <span
                     id="add-account-upbit-readonly"
@@ -309,7 +310,7 @@ export const AddAccountPage = (): ReactElement => {
                     <span>Access Key</span>
                   </span>
                 </Row>
-              ) : broker === 'KIS' ? (
+              ) : broker === BROKERS.KIS ? (
                 <>
                   <Row label="계좌번호 (앞 8자리)" inputId="add-account-no8">
                     <TextInput
@@ -403,7 +404,7 @@ export const AddAccountPage = (): ReactElement => {
                 id="add-account-display-name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value.slice(0, 20))}
-                placeholder={broker === 'UPBIT' ? '예: 업비트 실전' : '예: 메인 KIS 실전'}
+                placeholder={isCryptoBroker(broker) ? '예: 업비트 실전' : '예: 메인 KIS 실전'}
                 maxLength={20}
                 autoComplete="off"
                 spellCheck={false}

@@ -1,4 +1,4 @@
-import { type BrokerError, makeBrokerError } from '@shared/contracts';
+import { BROKERS, type BrokerError, makeBrokerError } from '@shared/contracts';
 import { correctLimitPrice } from '@shared/market-rules';
 import { hasActiveCycle } from '@shared/trading/next-nth';
 import type { BrokerPort } from '../brokers/ports/broker-port';
@@ -25,7 +25,7 @@ import {
   type WatchOrderExecutorDeps,
 } from './watch-order-types';
 
-const STOCK_BROKER = 'KIS';
+const STOCK_BROKER = BROKERS.KIS;
 
 export {
   cancelPendingByOdno,
