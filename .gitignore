@@ -7,9 +7,6 @@ out
 dist
 *.tsbuildinfo
 
-# drizzle artifacts
-drizzle/meta
-
 # test
 coverage
 playwright-report
