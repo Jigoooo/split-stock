@@ -1,8 +1,9 @@
+import { BROKERS } from '@shared/contracts';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb, type Db } from '../db/client';
-import { watchOrders } from '../db/schema';
+import { accounts, watchOrders } from '../db/schema';
 import { FakeTimer } from '../testing/fake-timer';
 import {
   type ExecutionResult,
@@ -11,9 +12,25 @@ import {
   type WatchOrderInput,
 } from './watch-engine';
 
+/** Phase 6 H1: upsertWatchOrder 가 accounts.broker 를 lookup 하므로 테스트도 account row 필요. */
+function insertTestAccount(db: Db, id: number, broker: string = BROKERS.KIS): void {
+  db.insert(accounts)
+    .values({
+      id,
+      env: 'MOCK',
+      broker,
+      accountNo8: `${id}`.padStart(8, '0'),
+      accountProdCd: '01',
+      createdAt: new Date(),
+    })
+    .run();
+}
+
 function setup(): { db: Db; timer: FakeTimer } {
   const db = createTestDb();
   bootstrapSchema(db);
+  // 테스트에서 사용하는 모든 accountId 에 대해 도메스틱 KIS 계좌 사전 등록.
+  for (const id of [1, 2, 7]) insertTestAccount(db, id);
   return { db, timer: new FakeTimer() };
 }
 

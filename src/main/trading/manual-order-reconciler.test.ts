@@ -1,3 +1,4 @@
+import { BROKERS } from '@shared/contracts';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import type { BrokerPort } from '../brokers/ports/broker-port';
@@ -403,5 +404,253 @@ describe('ManualOrderReconciler lot reconciliation', () => {
     });
     expect(updatedOrder).toMatchObject({ status: 'CANCELLED' });
     expect(updatedTrades.map((trade) => trade.qty)).toEqual([2, 2]);
+  });
+
+  // Phase 6 multi-broker — KIS+KIWOOM mixed pending 모두 row.broker 기반 dispatch.
+  it('도메스틱 broker 별 PENDING row 가 각자의 BrokerPort 로 dispatch 된다', async () => {
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const now = new Date('2026-04-22T09:00:00+09:00');
+
+    const kisOrder = db
+      .insert(orders)
+      .values({
+        broker: BROKERS.KIS,
+        accountId: 1,
+        odno: 'KIS-1',
+        pdno: '005930',
+        side: 'BUY',
+        division: 'LIMIT',
+        qty: 10,
+        price: 70000,
+        status: 'PENDING',
+        placedAt: now,
+      })
+      .returning({ id: orders.id })
+      .get();
+
+    const kiwoomOrder = db
+      .insert(orders)
+      .values({
+        broker: BROKERS.KIWOOM,
+        accountId: 2,
+        odno: 'KW-1',
+        pdno: '005930',
+        side: 'BUY',
+        division: 'LIMIT',
+        qty: 5,
+        price: 70000,
+        status: 'PENDING',
+        placedAt: now,
+      })
+      .returning({ id: orders.id })
+      .get();
+
+    const kisBroker = {
+      brokerId: BROKERS.KIS,
+      env: 'MOCK',
+      listDailyExecutions: async () => ({
+        isOk: () => true,
+        isErr: () => false,
+        value: [
+          {
+            brokerOrderId: 'KIS-1',
+            symbol: '005930',
+            name: '삼성전자',
+            side: 'BUY',
+            orderQty: 10,
+            orderPrice: 70000,
+            orderedAt: '090000',
+            totalFilledQty: 10,
+            remainingQty: 0,
+            avgFillPrice: 70000,
+            cancelled: false,
+            rejectedQty: 0,
+          },
+        ],
+      }),
+    } as unknown as BrokerPort;
+
+    const kiwoomBroker = {
+      brokerId: BROKERS.KIWOOM,
+      env: 'MOCK',
+      listDailyExecutions: async () => ({
+        isOk: () => true,
+        isErr: () => false,
+        value: [
+          {
+            brokerOrderId: 'KW-1',
+            symbol: '005930',
+            name: '삼성전자',
+            side: 'BUY',
+            orderQty: 5,
+            orderPrice: 70000,
+            orderedAt: '090000',
+            totalFilledQty: 5,
+            remainingQty: 0,
+            avgFillPrice: 71000,
+            cancelled: false,
+            rejectedQty: 0,
+          },
+        ],
+      }),
+    } as unknown as BrokerPort;
+
+    const reconciler = new ManualOrderReconciler({
+      db,
+      getBrokerForAccount: (accountId) => (accountId === 1 ? kisBroker : kiwoomBroker),
+      logger: { log: () => undefined } satisfies EventLogger,
+      onTradeExecution: () => undefined,
+      stalePendingGraceMs: 0,
+    });
+
+    await reconciler.poll();
+
+    // KIS row → KIS broker 로 trade insert (row.broker = KIS).
+    const kisTrades = db.select().from(trades).where(eq(trades.orderId, kisOrder.id)).all();
+    expect(kisTrades).toHaveLength(1);
+    expect(kisTrades[0]).toMatchObject({ broker: BROKERS.KIS, qty: 10, price: 70000 });
+
+    // KIWOOM row → KIWOOM broker 로 trade insert. avgFillPrice 71000 사용.
+    const kiwoomTrades = db.select().from(trades).where(eq(trades.orderId, kiwoomOrder.id)).all();
+    expect(kiwoomTrades).toHaveLength(1);
+    expect(kiwoomTrades[0]).toMatchObject({ broker: BROKERS.KIWOOM, qty: 5, price: 71000 });
+
+    // 두 order 모두 FILLED.
+    expect(db.select().from(orders).where(eq(orders.id, kisOrder.id)).get()).toMatchObject({
+      status: 'FILLED',
+    });
+    expect(db.select().from(orders).where(eq(orders.id, kiwoomOrder.id)).get()).toMatchObject({
+      status: 'FILLED',
+    });
+  });
+
+  // Phase 6 M1 — orders 테이블에 도메스틱 외 broker 가 잘못 들어가도 무시.
+  it('orders broker 화이트리스트 — 도메스틱 외 broker row 는 폴링 대상에서 제외', async () => {
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const now = new Date('2026-04-22T09:00:00+09:00');
+
+    // 비도메스틱 broker row (방어 테스트용 — 실제로는 orders 에 들어가지 않음).
+    db.insert(orders)
+      .values({
+        broker: 'UPBIT',
+        accountId: 1,
+        odno: 'UB-1',
+        pdno: 'KRW-BTC',
+        side: 'BUY',
+        division: 'LIMIT',
+        qty: 1,
+        price: 100000,
+        status: 'PENDING',
+        placedAt: now,
+      })
+      .run();
+
+    let getBrokerCalled = false;
+    const reconciler = new ManualOrderReconciler({
+      db,
+      getBrokerForAccount: () => {
+        getBrokerCalled = true;
+        return null;
+      },
+      logger: { log: () => undefined } satisfies EventLogger,
+      onTradeExecution: () => undefined,
+      stalePendingGraceMs: 0,
+    });
+
+    await reconciler.poll();
+
+    // UPBIT row 가 화이트리스트로 걸러져 getBrokerForAccount 가 호출되지 않아야 함.
+    expect(getBrokerCalled).toBe(false);
+  });
+
+  // Phase 6 M2 — broker null 이 staleBrokerMissingMs 이상 지속되면 CANCELLED 마킹.
+  // reconciler 가 시스템 Date.now() 를 사용하므로 placedAt 도 시스템 시각 기준으로 산출.
+  it('M2 self-healing — broker null + 24h 경과 PENDING row 는 CANCELLED 로 마킹된다', async () => {
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const placedAt = new Date(Date.now() - 25 * 60 * 60 * 1000); // 시스템 시각 기준 25h 전
+
+    const order = db
+      .insert(orders)
+      .values({
+        accountId: 1,
+        odno: 'STALE-1',
+        pdno: '005930',
+        side: 'BUY',
+        division: 'LIMIT',
+        qty: 10,
+        price: 70000,
+        status: 'PENDING',
+        placedAt,
+      })
+      .returning({ id: orders.id })
+      .get();
+
+    const errorLogs: Array<{ level: string; message: string }> = [];
+    const reconciler = new ManualOrderReconciler({
+      db,
+      getBrokerForAccount: () => null,
+      logger: {
+        log: (entry) => {
+          errorLogs.push({ level: entry.level, message: entry.message });
+        },
+      } satisfies EventLogger,
+      onTradeExecution: () => undefined,
+      stalePendingGraceMs: 0,
+      staleBrokerMissingMs: 24 * 60 * 60 * 1000,
+    });
+
+    await reconciler.poll();
+
+    expect(db.select().from(orders).where(eq(orders.id, order.id)).get()).toMatchObject({
+      status: 'CANCELLED',
+    });
+    expect(
+      errorLogs.some(
+        (l) =>
+          l.level === 'ERROR' &&
+          l.message === 'manual-order-reconciler.broker_missing.stale-cancelled',
+      ),
+    ).toBe(true);
+  });
+
+  it('M2 self-healing — broker null + 24h 미만 PENDING 은 WARN 만, CANCELLED 안 됨', async () => {
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const placedAt = new Date(Date.now() - 1 * 60 * 60 * 1000); // 시스템 시각 기준 1h 전
+
+    const order = db
+      .insert(orders)
+      .values({
+        accountId: 1,
+        odno: 'FRESH-1',
+        pdno: '005930',
+        side: 'BUY',
+        division: 'LIMIT',
+        qty: 10,
+        price: 70000,
+        status: 'PENDING',
+        placedAt,
+      })
+      .returning({ id: orders.id })
+      .get();
+
+    const reconciler = new ManualOrderReconciler({
+      db,
+      getBrokerForAccount: () => null,
+      logger: { log: () => undefined } satisfies EventLogger,
+      onTradeExecution: () => undefined,
+      stalePendingGraceMs: 0,
+      staleBrokerMissingMs: 24 * 60 * 60 * 1000,
+    });
+
+    await reconciler.poll();
+
+    // 1h 만 경과한 row 는 PENDING 유지.
+    expect(db.select().from(orders).where(eq(orders.id, order.id)).get()).toMatchObject({
+      status: 'PENDING',
+    });
   });
 });

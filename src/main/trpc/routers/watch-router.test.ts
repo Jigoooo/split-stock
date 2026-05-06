@@ -1,8 +1,10 @@
+import { BROKERS } from '@shared/contracts';
 import type { TRPCError } from '@trpc/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeBrokerAdapter } from '../../brokers/__tests__/fake-broker-adapter';
 import { bootstrapSchema } from '../../db/bootstrap-schema';
 import { createTestDb, type Db } from '../../db/client';
+import { accounts } from '../../db/schema';
 import { SettingsRepo } from '../../db/settings-repo';
 import { FakeTimer } from '../../testing/fake-timer';
 import { type DailyCandle, DailyCandlesRepo } from '../../trading/daily-candles-repo';
@@ -26,6 +28,19 @@ interface SetupResult {
 function setup(): SetupResult {
   const db = createTestDb();
   bootstrapSchema(db);
+  // Phase 6 H1: upsertWatchOrder 가 accounts.broker 를 lookup → 테스트 fixture 도 KIS 계좌 사전 등록.
+  for (const id of [1, 2, 7, 99]) {
+    db.insert(accounts)
+      .values({
+        id,
+        env: 'MOCK',
+        broker: BROKERS.KIS,
+        accountNo8: `${id}`.padStart(8, '0'),
+        accountProdCd: '01',
+        createdAt: new Date(),
+      })
+      .run();
+  }
   const engine = new WatchEngine({ db, timer: new FakeTimer() });
   const logger = { log: () => {} };
   const settingsRepo = new SettingsRepo(db);
