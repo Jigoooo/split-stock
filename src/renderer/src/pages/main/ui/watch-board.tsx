@@ -20,10 +20,10 @@ import { WatchList } from './watch-list';
 export interface WatchBoardProps {
   accountId: number;
   /**
-   * Phase R3-2: broker (default 'KIS'). 코인 page 가 'UPBIT' 로 사용 가능.
+   * broker (default 'KIS'). 코인 page 가 'UPBIT' 로 사용 가능.
    * useWatchOrders / useWatchHistory entity hook 으로 통과시킨다.
-   * 서버 핸들러(watchEngine / listWatchHistory)는 R3-3 까지 STOCK_BROKER('KIS') 하드코딩 —
-   * UPBIT 호출은 client/schema 차원만 prepared 상태이며 실제 데이터는 KIS watchOrder 만 반환.
+   * Phase 3: 서버 listWatchOrders 핸들러가 broker 별로 dispatch (KIS=watchEngine,
+   * UPBIT=cryptoAutoWatches → WatchOrder shape 변환). history 탭은 코인의 경우 빈 결과.
    */
   broker?: string;
 }
@@ -84,22 +84,6 @@ export const WatchBoard = (props: WatchBoardProps): ReactElement => {
       }}
       aria-label={`자동감시 보드 (계좌 ${accountId})`}
     >
-      {broker !== undefined && broker !== 'KIS' ? (
-        <div
-          role="status"
-          style={{
-            flexShrink: 0,
-            padding: '0.5rem 0.8rem',
-            background: 'rgba(234, 179, 8, 0.12)',
-            borderBottom: '0.1rem solid rgba(234, 179, 8, 0.35)',
-            fontSize: '1rem',
-            color: 'var(--fg)',
-          }}
-        >
-          ⚠ 코인({broker}) 자동감시는 백엔드 준비 중입니다. 현재 데이터/액션은 국내주식(KIS)
-          기준이므로 코인 환경에서는 표시 결과를 신뢰하지 마세요.
-        </div>
-      ) : null}
       <div
         style={{
           display: 'flex',

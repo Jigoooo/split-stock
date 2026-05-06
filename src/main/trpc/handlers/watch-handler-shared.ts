@@ -15,8 +15,9 @@ export interface WatchListInput {
   source?: WatchSource | undefined;
   accountId?: number | undefined;
   /**
-   * Phase R3-2: client 가 broker 를 통과시킬 수 있도록 schema 에 받아 둔다.
-   * 서버 핸들러(listWatchOrders / watchEngine.list)는 R3-3 까지 STOCK_BROKER('KIS') 하드코딩.
+   * Phase 3: listWatchOrders 핸들러가 broker 를 dispatch 한다.
+   * - KIS / KIWOOM: watchEngine.list (watchOrders 테이블)
+   * - UPBIT: CryptoAutoTradingRepo.listWatches → WatchOrder shape 변환
    */
   broker?: string | undefined;
 }
@@ -50,7 +51,7 @@ export interface ReservationBuyUpdateInput extends Omit<ReservationBuyCreateInpu
 
 export interface WatchHistoryInput {
   limit?: number | undefined;
-  /** Phase R3-2: client 가 broker 통과 — 서버측은 R3-3 까지 무시. */
+  /** Phase 3: broker 별 dispatch — UPBIT 시 코인 자동감시 history (현재 빈 결과, Phase 4 매핑 예정). */
   broker?: string | undefined;
 }
 

@@ -82,6 +82,12 @@ export type WatchHandler = (order: WatchOrder, ctx: { price: number }) => Promis
 export interface WatchEngineOptions {
   db: Db;
   timer: Timer;
+  /**
+   * Phase 3: WatchEngine 인스턴스가 다룰 broker. 기본 'KIS'.
+   * 한 인스턴스는 단일 broker 의 watchOrders 만 다룬다 — UPBIT 자동감시는 별도
+   * cryptoAutoWatches 테이블 + dispatch layer 로 라우팅.
+   */
+  broker?: import('@shared/contracts').Broker;
   /** 만료 체크 주기 ms (기본 60s). */
   expiryCheckMs?: number;
   /**
