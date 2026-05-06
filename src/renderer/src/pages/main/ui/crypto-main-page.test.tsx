@@ -206,6 +206,9 @@ vi.mock('@renderer/shared/api/trpc', () => ({
         }),
       },
       listAutoStrategyTemplates: { useQuery: () => ({ data: { templates: [] } }) },
+      listAllTradeHistoryLots: {
+        useQuery: () => ({ data: { lots: [] }, isPending: false, error: null }),
+      },
       listRecentOrders: {
         useQuery: () => ({
           data: {
@@ -412,6 +415,30 @@ describe('CryptoMainPage layout', () => {
     expect(
       screen.getByRole('combobox', { name: '불러올 코인 자동매매 템플릿 선택' }),
     ).toBeInTheDocument();
+  });
+
+  it('renders R1 outer tabs (symbol/all) — stock MainTradeHistoryPane parity', () => {
+    // Q2-bis: 우측 패널 외부(R1) 탭 — 개별 마켓 매매내역 + 모든 매매내역.
+    // stock MainTradeHistoryPane 와 동등한 2단 탭 구조 (R1 외부 + R2 5탭).
+    render(<CryptoMainPage accountId={7} />);
+
+    // 기본 market = KRW-BTC → R1 'symbol' 탭 + 'all' 탭 모두 노출.
+    expect(
+      screen.getByRole('tab', { name: /비트코인.*KRW-BTC.*매매내역|KRW-BTC 매매내역/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '모든 매매내역' })).toBeInTheDocument();
+  });
+
+  it('switches right pane content when R1 outer tab toggles to 모든 매매내역', () => {
+    render(<CryptoMainPage accountId={7} />);
+
+    // 초기엔 R2 5탭 (자동매매 설정) 보임.
+    expect(screen.getByRole('tab', { name: '자동매매 설정' })).toBeInTheDocument();
+
+    // 모든 매매내역 탭 클릭 시 R2 사라지고 통합 grid 패널이 마운트됨.
+    fireEvent.click(screen.getByRole('tab', { name: '모든 매매내역' }));
+    expect(screen.queryByRole('tab', { name: '자동매매 설정' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '코인 모든 매매내역 패널' })).toBeInTheDocument();
   });
 });
 

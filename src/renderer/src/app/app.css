@@ -3341,10 +3341,10 @@ body {
 .crypto-auto-panel__body {
   display: grid;
   gap: 0.55rem;
-  overflow: auto;
-  /* sticky 액션 바가 패널 바닥에 정확히 붙도록 panel__body 의 0.8rem 하단 padding 제거.
-     좌우/상단 padding 은 유지 — 액션 바 좌우 negative margin (bleed) 와 짝을 이룬다. */
-  padding-bottom: 0;
+  /* 외부 .crypto-auto-strategy-tab 가 단일 scroll container — 여기서 overflow:auto 를
+     걸면 nested scroll 이 발생해 우측 패딩이 dead space 로 남고 form 이 스크롤바에 붙어
+     보인다. stock TradeHistoryPanel.StrategyTabBody 패턴과 동일하게 단일 스크롤 유지. */
+  min-height: 0;
 }
 
 .crypto-auto-panel__controls,
@@ -4360,12 +4360,14 @@ body {
 
 /* stock StrategyTabBody 와 동등 — 좌우/상하 padding + sticky action bar bleed 변수.
    bleed 변수는 CryptoStrategyForm 의 form-sticky-action-bar 가 음수 마진으로
-   container 좌우/하단까지 닿게 해 시각 안정성 유지. */
+   container 좌우/하단까지 닿게 해 시각 안정성 유지.
+   gap 0.8rem (stock parity) — 토큰바와 form 사이 간격. */
 .crypto-auto-strategy-tab {
   --form-sticky-action-bar-bleed-left: 0.8rem;
   --form-sticky-action-bar-bleed-right: 1.6rem;
   --form-sticky-action-bar-bleed-bottom: 0.8rem;
   padding: 0.8rem 1.6rem 0.8rem 0.8rem;
+  gap: 0.8rem;
   overflow: auto;
 }
 
