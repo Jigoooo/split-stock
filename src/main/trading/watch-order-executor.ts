@@ -1,4 +1,4 @@
-import { BROKERS, type BrokerError, makeBrokerError } from '@shared/contracts';
+import { type BrokerError, makeBrokerError } from '@shared/contracts';
 import { correctLimitPrice } from '@shared/market-rules';
 import { hasActiveCycle } from '@shared/trading/next-nth';
 import type { BrokerPort } from '../brokers/ports/broker-port';
@@ -24,8 +24,6 @@ import {
   type StrategyOrderInput,
   type WatchOrderExecutorDeps,
 } from './watch-order-types';
-
-const STOCK_BROKER = BROKERS.KIS;
 
 export {
   cancelPendingByOdno,
@@ -128,7 +126,7 @@ export async function executeWatchOrder(
     deps.db
       .insert(orders)
       .values({
-        broker: STOCK_BROKER,
+        broker: broker.brokerId,
         accountId: order.accountId,
         lotId: linkedLot.lotId,
         odno: result.value.brokerOrderId,

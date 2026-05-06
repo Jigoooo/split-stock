@@ -1,5 +1,4 @@
-import { BROKERS, type Broker } from '@shared/contracts';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import type { Result } from 'neverthrow';
 import { watchOrders } from '../db/schema';
 import {
@@ -26,9 +25,9 @@ import {
 } from './watch-order-store';
 
 /**
- * Phase R3-3 ~ Phase 3: WatchEngine 은 단일 broker 인스턴스. broker 는 생성자에서 주입.
- * UPBIT 자동감시는 별도 cryptoAutoWatches 테이블 + CryptoAutoTradingRepo 로 운영하지만
- * dispatch layer (watch-list-handlers) 가 broker 별로 데이터 소스를 라우팅한다.
+ * Phase 6: WatchEngine 은 도메스틱 broker(KIS+KIWOOM) 모두 처리. 행 단위 dispatch —
+ * watchOrders.broker 컬럼을 read 결과에 그대로 보존, 트리거 시점에 brokerForAccount(accountId)
+ * 로 BrokerPort 라우팅. UPBIT 자동감시는 별도 cryptoAutoWatches 테이블에서 운영.
  */
 
 export type {
@@ -68,10 +67,7 @@ export class WatchEngine {
   private intervalHandle: { clear: () => void } | null = null;
   private disposed = false;
 
-  private readonly broker: Broker;
-
   constructor(private readonly opts: WatchEngineOptions) {
-    this.broker = opts.broker ?? BROKERS.KIS;
     this.expiryCheckMs = opts.expiryCheckMs ?? 60_000;
     for (const [source, handler] of Object.entries(opts.handlers ?? {})) {
       if (handler) this.fallbackHandlers.set(source as WatchSource, handler);
@@ -204,11 +200,7 @@ export class WatchEngine {
     const coordinator = this.opts.inFlightCoordinator;
     let stillQueued = true;
     try {
-      const row = this.opts.db
-        .select()
-        .from(watchOrders)
-        .where(and(eq(watchOrders.broker, this.broker), eq(watchOrders.id, entry.id)))
-        .get();
+      const row = this.opts.db.select().from(watchOrders).where(eq(watchOrders.id, entry.id)).get();
       if (!row) {
         this.dequeue(entry.id);
         stillQueued = false;
@@ -229,7 +221,7 @@ export class WatchEngine {
         this.opts.db
           .update(watchOrders)
           .set({ status: 'EXECUTED', executedAt: now, updatedAt: now })
-          .where(and(eq(watchOrders.broker, this.broker), eq(watchOrders.id, order.id)))
+          .where(eq(watchOrders.id, order.id))
           .run();
         this.dequeue(order.id);
         stillQueued = false;
@@ -243,7 +235,7 @@ export class WatchEngine {
       this.opts.db
         .update(watchOrders)
         .set({ status: 'FAILED', lastFailureReason: reason, updatedAt: now })
-        .where(and(eq(watchOrders.broker, this.broker), eq(watchOrders.id, order.id)))
+        .where(eq(watchOrders.id, order.id))
         .run();
       this.dequeue(order.id);
       stillQueued = false;

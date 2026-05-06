@@ -1,4 +1,4 @@
-import { BROKERS, makeBrokerError, type OrderAck } from '@shared/contracts';
+import { makeBrokerError, type OrderAck } from '@shared/contracts';
 import { and, eq } from 'drizzle-orm';
 import { err } from 'neverthrow';
 import type { BrokerPort } from '../brokers/ports/broker-port';
@@ -6,8 +6,6 @@ import type { Db } from '../db/client';
 import { lots, orders } from '../db/schema';
 import type { PendingOrderWatcher } from './pending-order-watcher';
 import type { WatchOrderExecutorDeps } from './watch-order-types';
-
-const STOCK_BROKER = BROKERS.KIS;
 
 export async function cancelAcceptedBrokerOrderAfterLocalFailure(
   deps: WatchOrderExecutorDeps,
@@ -67,28 +65,28 @@ export function cancelPendingByOdno(
   accountId: number,
   odno: string,
 ): void {
+  // Phase 6: orders.odno + accountId 조합으로 도메스틱 broker 모두 lookup. row.broker 로 downstream dispatch.
   const row = db
     .select()
     .from(orders)
-    .where(
-      and(eq(orders.broker, STOCK_BROKER), eq(orders.odno, odno), eq(orders.accountId, accountId)),
-    )
+    .where(and(eq(orders.odno, odno), eq(orders.accountId, accountId)))
     .get();
+  if (!row) return;
   db.update(orders)
     .set({ status: 'CANCELLED' })
     .where(
-      and(eq(orders.broker, STOCK_BROKER), eq(orders.odno, odno), eq(orders.accountId, accountId)),
+      and(eq(orders.broker, row.broker), eq(orders.odno, odno), eq(orders.accountId, accountId)),
     )
     .run();
-  if (row?.lotId !== null && row?.lotId !== undefined) {
+  if (row.lotId !== null && row.lotId !== undefined) {
     if (row.side === 'BUY') {
       db.delete(lots)
-        .where(and(eq(lots.id, row.lotId), eq(lots.broker, STOCK_BROKER)))
+        .where(and(eq(lots.id, row.lotId), eq(lots.broker, row.broker)))
         .run();
     } else if (row.side === 'SELL') {
       db.update(lots)
         .set({ status: 'OPEN', soldAt: null, sellPrice: null })
-        .where(and(eq(lots.id, row.lotId), eq(lots.broker, STOCK_BROKER)))
+        .where(and(eq(lots.id, row.lotId), eq(lots.broker, row.broker)))
         .run();
     }
   }

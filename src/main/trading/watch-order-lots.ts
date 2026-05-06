@@ -1,5 +1,4 @@
-import { BROKERS } from '@shared/contracts';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { lots } from '../db/schema';
 import { createPendingBuyLot, linkPendingSellLot } from './order-lot-link';
 import type { WatchOrder } from './watch-engine';
@@ -9,8 +8,6 @@ import type {
   StrategyOrderInput,
   WatchOrderExecutorDeps,
 } from './watch-order-types';
-
-const STOCK_BROKER = BROKERS.KIS;
 
 export function prepareWatchOrderLot(
   deps: WatchOrderExecutorDeps,
@@ -116,17 +113,15 @@ export function rollbackPreparedOrderLot(
   linkedLot: PreparedOrderLot,
 ): void {
   try {
+    // Phase 6: lots.id 는 PK — broker 필터 불필요. 도메스틱(KIS/KIWOOM) 모두 처리.
     if (linkedLot.side === 'BUY') {
-      deps.db
-        .delete(lots)
-        .where(and(eq(lots.id, linkedLot.lotId), eq(lots.broker, STOCK_BROKER)))
-        .run();
+      deps.db.delete(lots).where(eq(lots.id, linkedLot.lotId)).run();
       return;
     }
     deps.db
       .update(lots)
       .set({ status: 'OPEN', soldAt: null, sellPrice: null })
-      .where(and(eq(lots.id, linkedLot.lotId), eq(lots.broker, STOCK_BROKER)))
+      .where(eq(lots.id, linkedLot.lotId))
       .run();
   } catch (cause) {
     deps.logger.log({

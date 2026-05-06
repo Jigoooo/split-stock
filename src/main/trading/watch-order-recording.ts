@@ -1,6 +1,7 @@
 import type { OrderAck } from '@shared/contracts';
 import { BROKERS } from '@shared/contracts';
-import { orders } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { accounts, orders } from '../db/schema';
 import { readPendingCancelConfig } from '../db/settings-repo';
 import type { WatchOrder } from './watch-engine';
 import type {
@@ -9,7 +10,15 @@ import type {
   WatchOrderExecutorDeps,
 } from './watch-order-types';
 
-const STOCK_BROKER = BROKERS.KIS;
+/** Phase 6: 자동매매 orders insert 시 accountId 의 도메스틱 broker(KIS/KIWOOM) 를 read. */
+function resolveDomesticBrokerForAccount(deps: WatchOrderExecutorDeps, accountId: number): string {
+  const row = deps.db
+    .select({ broker: accounts.broker })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
+    .get();
+  return row?.broker === BROKERS.KIWOOM ? BROKERS.KIWOOM : BROKERS.KIS;
+}
 
 export function seedFirstEntryStrategyIfNeeded(
   deps: WatchOrderExecutorDeps,
@@ -56,7 +65,7 @@ export function recordStrategyOrder(
   deps.db
     .insert(orders)
     .values({
-      broker: STOCK_BROKER,
+      broker: resolveDomesticBrokerForAccount(deps, input.accountId),
       accountId: input.accountId,
       lotId: linkedLot.lotId,
       odno: ack.brokerOrderId,
