@@ -20,6 +20,7 @@ import { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
 import { CryptoRealtimeService } from '../crypto/crypto-realtime-service';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { defaultDbPath, openDb } from '../db/client';
+import { migrateCryptoAutoWatchesToWatchOrders } from '../db/migrate-p4-2';
 import {
   repairAccountsRuntimeSchema,
   repairBrokerColumnsRuntimeSchema,
@@ -104,6 +105,14 @@ export function bootstrapDeps(userDataDir: string) {
   // Phase 4-1 (drizzle 0001_youthful_kronos) — watch_orders JSON 컬럼 3개 (additive).
   repairWatchOrdersJsonColumnsRuntimeSchema(db);
   markStartup('db.runtime-repair.end');
+
+  // Phase 4-2: cryptoAutoWatches → watchOrders(broker='UPBIT') 데이터 migration.
+  // settings.phase_4_2_migrated_at 플래그로 1회만 실행. 백업 snapshot 은
+  // settings.phase_4_2_backup. 부팅 시 silent 실행 — log 는 dbLogger 가 준비된 뒤
+  // 별도 호출하기 어려우므로 console fallback (boot 시점엔 logger 없음).
+  markStartup('db.phase-4-2.start');
+  migrateCryptoAutoWatchesToWatchOrders(db);
+  markStartup('db.phase-4-2.end');
 
   markStartup('bootstrap.repos.start');
   const credentialsRepo = new CredentialsRepo(db, {
