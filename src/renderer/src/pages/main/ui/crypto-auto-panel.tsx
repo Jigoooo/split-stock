@@ -1,12 +1,17 @@
 import { trpc } from '@renderer/shared/api/trpc';
 import { alertDialog, Button, DialogType, Select, TextInput } from '@renderer/shared/ui';
-import type { CryptoAutoTemplate, CryptoStrategyProfile } from '@shared/contracts';
+import {
+  type CryptoAutoTemplate,
+  type CryptoStrategyProfile,
+  DEFAULT_CRYPTO_MARKET,
+} from '@shared/contracts';
 import { type ReactElement, useState } from 'react';
 import { CryptoStrategyForm } from './crypto-strategy-form';
 
 /** 설정 → 코인 매매설정관리 의 "기본 매매 설정" 이 저장되는 마켓 키.
- *  crypto-strategy-settings-section 의 DEFAULT_MARKET 과 동일해야 함. */
-const CRYPTO_DEFAULT_STRATEGY_MARKET = 'KRW-BTC';
+ *  crypto-strategy-settings-section 의 DEFAULT_MARKET 과 동일해야 함.
+ *  단일 출처: @shared/contracts.DEFAULT_CRYPTO_MARKET. */
+const CRYPTO_DEFAULT_STRATEGY_MARKET = DEFAULT_CRYPTO_MARKET;
 
 /**
  * 코인 자동매매 설정 탭 (main 우측 패널).

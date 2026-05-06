@@ -29,6 +29,10 @@ const cryptoProfile = vi.hoisted(() => ({
 
 vi.mock('@renderer/entities/account', () => ({
   useActiveAccountId: () => mockUseActiveAccountId(),
+  isCryptoAccount: (account: { broker?: string | null } | null | undefined) =>
+    account != null && account.broker === 'UPBIT',
+  isDomesticAccount: (account: { broker?: string | null } | null | undefined) =>
+    account != null && (account.broker === 'KIS' || account.broker === 'KIWOOM'),
 }));
 
 vi.mock('@renderer/shared/api/trpc', () => ({

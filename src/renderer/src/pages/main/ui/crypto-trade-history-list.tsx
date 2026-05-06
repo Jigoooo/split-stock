@@ -5,6 +5,7 @@ import {
 } from '@renderer/entities/account-crypto';
 import { formatDateOnly } from '@renderer/shared/lib/formatter';
 import { TableGrid } from '@renderer/shared/ui';
+import { BROKERS, LOT_STATUS, type LotStatus, normalizeLotStatus } from '@shared/contracts';
 import type { ReactElement } from 'react';
 import { formatCryptoPrice, formatCryptoVolume, getCryptoQuote } from '../model/crypto-format';
 
@@ -51,7 +52,7 @@ interface CryptoTradeRow {
   sellPrice: number | undefined;
   pnl: number | undefined;
   pnlRate: number | undefined;
-  status: string;
+  status: LotStatus;
   boughtAt: number;
   soldAt: number | undefined;
 }
@@ -68,7 +69,7 @@ function fromClosed(cycle: CryptoTradeCycle, market: string): CryptoTradeRow {
     sellPrice,
     pnl: cycle.realizedPnl,
     pnlRate: cycle.pnlRate * 100,
-    status: 'SOLD',
+    status: LOT_STATUS.SOLD,
     boughtAt: cycle.openedAt,
     soldAt: cycle.closedAt ?? undefined,
   };
@@ -88,7 +89,7 @@ function fromOpen(
     sellPrice: undefined,
     pnl: undefined,
     pnlRate: undefined,
-    status: lot.status === 'reducing' ? 'SELLING' : 'OPEN',
+    status: normalizeLotStatus(BROKERS.UPBIT, lot.status),
     boughtAt: lot.boughtAt,
     soldAt: undefined,
   };

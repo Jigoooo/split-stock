@@ -8,6 +8,7 @@ import {
   type CryptoStrategyProfile,
   createCryptoStrategyRules,
   createDefaultCryptoStrategyProfile,
+  DEFAULT_CRYPTO_MARKET,
 } from '@shared/contracts';
 import { type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -27,7 +28,9 @@ export const AddCryptoWatchPopout = (): ReactElement => {
     }
   }, []);
   const accountId = payload?.accountId ?? 0;
-  const [market, setMarket] = useState<CryptoKrwMarketCode>(payload?.market ?? 'KRW-BTC');
+  const [market, setMarket] = useState<CryptoKrwMarketCode>(
+    payload?.market ?? (DEFAULT_CRYPTO_MARKET as CryptoKrwMarketCode),
+  );
   const [label, setLabel] = useState('');
   const [status, setStatus] = useState<CryptoAutoWatchStatus>('PAUSED');
   const [entryType, setEntryType] = useState<CryptoAutoWatchEntryCondition['type']>('immediate');

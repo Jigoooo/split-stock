@@ -1,4 +1,6 @@
-export function getCryptoQuote(market: string): 'KRW' | 'BTC' | 'USDT' | string {
+import { QUOTE_CURRENCIES, type QuoteCurrency } from '@shared/contracts';
+
+export function getCryptoQuote(market: string): QuoteCurrency | string {
   return market.split('-')[0] ?? '';
 }
 
@@ -21,8 +23,8 @@ export function formatCryptoPrice(
   marketOrQuote: string,
 ): string {
   const quote = marketOrQuote.includes('-') ? getCryptoQuote(marketOrQuote) : marketOrQuote;
-  if (quote === 'KRW') return formatCryptoDecimal(value, { maxFractionDigits: 0 });
-  if (quote === 'USDT') return formatCryptoDecimal(value, { maxFractionDigits: 6 });
+  if (quote === QUOTE_CURRENCIES.KRW) return formatCryptoDecimal(value, { maxFractionDigits: 0 });
+  if (quote === QUOTE_CURRENCIES.USDT) return formatCryptoDecimal(value, { maxFractionDigits: 6 });
   return formatCryptoDecimal(value, { maxFractionDigits: 8 });
 }
 
