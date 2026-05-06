@@ -3,6 +3,7 @@ import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
 import type { EventLogger } from '../logging/event-logger';
 import { createSafetyState } from '../safety/safety-state';
+import { seedDomesticAccounts } from '../testing/seed-accounts';
 import { LotsRepo } from './lots-repo';
 import { applyRespiit } from './respiit-orchestrator';
 
@@ -17,6 +18,7 @@ function buildLogger(): EventLogger & { entries: Array<{ level: string; message:
 function setup() {
   const db = createTestDb();
   bootstrapSchema(db);
+  seedDomesticAccounts(db);
   const lots = new LotsRepo(db);
   const logger = buildLogger();
   const safety = createSafetyState({ logger });

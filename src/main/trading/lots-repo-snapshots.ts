@@ -13,8 +13,8 @@ export function snapshotByDate(
   db: Db,
   accountId: number,
   snapshotDate: string,
-  pdno?: string,
-  broker: string = 'KIS',
+  pdno: string | undefined,
+  broker: string,
 ): Result<LotsSnapshot[], LotsRepoError> {
   try {
     const conditions = [
@@ -50,7 +50,7 @@ export function snapshotByDate(
 export function listSnapshotDates(
   db: Db,
   accountId: number,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<string[], LotsRepoError> {
   try {
     const rows = db
@@ -72,7 +72,7 @@ export function listSnapshotDates(
 export function saveSnapshot(
   db: Db,
   input: SaveSnapshotInput,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<void, LotsRepoError> {
   try {
     const now = new Date();

@@ -30,7 +30,7 @@ export function snapshotRowsTx(
   tx: LotsTransaction,
   accountId: number,
   pdno: string,
-  broker: string = 'KIS',
+  broker: string,
 ): LotRow[] {
   const rows = tx
     .select()

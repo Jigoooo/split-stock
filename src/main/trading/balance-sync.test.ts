@@ -5,6 +5,7 @@ import type { Timer } from '../brokers/core/types';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
 import type { EventLogger } from '../logging/event-logger';
+import { seedDomesticAccounts } from '../testing/seed-accounts';
 import { BalanceSync } from './balance-sync';
 import { LotsRepo } from './lots-repo';
 
@@ -93,6 +94,7 @@ function makeFakeBroker(holdings: Holding[]): FakeBrokerAdapter {
 function setupDb(): { lotsRepo: LotsRepo } {
   const db = createTestDb();
   bootstrapSchema(db);
+  seedDomesticAccounts(db);
   return { lotsRepo: new LotsRepo(db) };
 }
 

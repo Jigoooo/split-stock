@@ -8,6 +8,7 @@ import { createTestDb } from '../db/client';
 import { lots, orders } from '../db/schema';
 import { SettingsRepo } from '../db/settings-repo';
 import { SafetyStateRegistry } from '../safety/safety-state';
+import { seedDomesticAccounts } from '../testing/seed-accounts';
 import { LotsRepo } from './lots-repo';
 import { StockMasterRepo } from './stock-master-repo';
 import { StrategyRepo } from './strategy-repo';
@@ -24,6 +25,7 @@ function setupDeps(
 ): WatchOrderExecutorDeps & { db: ReturnType<typeof createTestDb> } {
   const db = createTestDb();
   bootstrapSchema(db);
+  seedDomesticAccounts(db);
   const logger = { log: vi.fn() };
   const settingsRepo = new SettingsRepo(db);
   const stockMasterRepo = new StockMasterRepo(db);

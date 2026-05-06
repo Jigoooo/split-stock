@@ -19,7 +19,7 @@ import type {
 export function manualInsert(
   db: Db,
   input: ManualInsertInput,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<ManualEditResult, LotsRepoError> {
   try {
     const result = db.transaction((tx) => {
@@ -83,7 +83,7 @@ export function manualUpdate(
   accountId: number,
   lotId: number,
   changes: ManualUpdateChanges,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<ManualEditResult, LotsRepoError> {
   try {
     const result = db.transaction((tx) => {
@@ -160,7 +160,7 @@ export function manualDelete(
   db: Db,
   accountId: number,
   lotId: number,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<ManualEditResult, LotsRepoError> {
   try {
     const result = db.transaction((tx) => {
@@ -206,7 +206,7 @@ export function applyStockSplitRatio(
   accountId: number,
   pdno: string,
   ratioPct: number,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<{ before: LotRow[]; after: LotRow[] }, LotsRepoError> {
   if (!Number.isFinite(ratioPct) || ratioPct <= -100 || ratioPct === 0) {
     return err({
@@ -251,7 +251,7 @@ export function restoreFromSnapshot(
   accountId: number,
   pdno: string,
   snapshot: LotRow[],
-  broker: string = 'KIS',
+  broker: string,
 ): Result<{ restored: number }, LotsRepoError> {
   for (const row of snapshot) {
     if (row.accountId !== accountId || row.pdno !== pdno) {

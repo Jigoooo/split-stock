@@ -6,6 +6,7 @@ import { createTestDb } from '../db/client';
 import { SettingsRepo } from '../db/settings-repo';
 import { FeedBus } from '../realtime/feed-bus';
 import { SafetyStateRegistry } from '../safety/safety-state';
+import { seedDomesticAccounts } from '../testing/seed-accounts';
 import { AutoOrderBlockedError } from './auto-order-errors';
 import { LotsRepo } from './lots-repo';
 import { StockMasterRepo } from './stock-master-repo';
@@ -16,6 +17,7 @@ import { StrategyOrderError, type StrategyOrderInput } from './watch-order-execu
 function setup() {
   const db = createTestDb();
   bootstrapSchema(db);
+  seedDomesticAccounts(db);
   const settings = new SettingsRepo(db);
   const logger = { log: vi.fn() };
   const stockMasterRepo = new StockMasterRepo(db);

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { bootstrapSchema } from '../../db/bootstrap-schema';
 import { createTestDb, type Db } from '../../db/client';
 import { lots as lotsTable } from '../../db/schema';
+import { seedDomesticAccounts } from '../../testing/seed-accounts';
 import { LotsRepo } from '../../trading/lots-repo';
 import { StockMasterRepo } from '../../trading/stock-master-repo';
 import type { Context } from '../context';
@@ -20,6 +21,7 @@ interface SetupResult {
 function setup(): SetupResult {
   const db = createTestDb();
   bootstrapSchema(db);
+  seedDomesticAccounts(db);
   const master = new StockMasterRepo(db);
   master.upsertMany([
     { pdno: '005930', name: '삼성전자' },

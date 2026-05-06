@@ -82,6 +82,11 @@ export function repoErrorToTrpc(e: LotsRepoError): TRPCError {
         code: 'INTERNAL_SERVER_ERROR',
         message: lotsRepoErrorMessage(e),
       });
+    case 'INVALID_ACCOUNT':
+      return new TRPCError({
+        code: 'BAD_REQUEST',
+        message: lotsRepoErrorMessage(e),
+      });
   }
 }
 

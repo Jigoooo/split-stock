@@ -11,7 +11,7 @@ export function snapshot(
   db: Db,
   accountId: number,
   pdno: string,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<PositionSnapshot, LotsRepoError> {
   try {
     const rows = db
@@ -46,7 +46,7 @@ export function snapshot(
 export function insertLot(
   db: Db,
   input: InsertLotInput,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<number, LotsRepoError> {
   try {
     const id = db.transaction((tx) => {
@@ -101,7 +101,7 @@ export function replan(
   db: Db,
   accountId: number,
   plan: RespiitPlan,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<{ insertedIds: number[] }, LotsRepoError> {
   try {
     const insertedIds = db.transaction((tx) => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb, type Db } from '../db/client';
 import { lotsSnapshots, lots as lotsTable } from '../db/schema';
+import { seedDomesticAccounts } from '../testing/seed-accounts';
 import type { LotSnapshotEntry } from './lots-repo';
 import { LotsRepo } from './lots-repo';
 import { StockMasterRepo } from './stock-master-repo';
@@ -9,12 +10,14 @@ import { StockMasterRepo } from './stock-master-repo';
 function setupRepo() {
   const db = createTestDb();
   bootstrapSchema(db);
+  seedDomesticAccounts(db);
   return new LotsRepo(db);
 }
 
 function setupRepoWithMaster() {
   const db = createTestDb();
   bootstrapSchema(db);
+  seedDomesticAccounts(db);
   const master = new StockMasterRepo(db);
   master.upsertMany([
     { pdno: '005930', name: '삼성전자' },
@@ -955,6 +958,7 @@ describe('LotsRepo', () => {
     function setupRepoRaw(): { repo: LotsRepo; db: Db } {
       const db = createTestDb();
       bootstrapSchema(db);
+      seedDomesticAccounts(db);
       return { repo: new LotsRepo(db), db };
     }
 

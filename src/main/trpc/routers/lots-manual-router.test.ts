@@ -4,6 +4,7 @@ import { bootstrapSchema } from '../../db/bootstrap-schema';
 import { createTestDb, type Db } from '../../db/client';
 import type { EventLogEntry, EventLogger } from '../../logging/event-logger';
 import { SafetyStateRegistry } from '../../safety/safety-state';
+import { seedDomesticAccounts } from '../../testing/seed-accounts';
 import { LotsRepo } from '../../trading/lots-repo';
 import type { Context } from '../context';
 import { t } from '../trpc-core';
@@ -23,6 +24,7 @@ interface SetupResult {
 function setup(): SetupResult {
   const db = createTestDb();
   bootstrapSchema(db);
+  seedDomesticAccounts(db);
   const lotsRepo = new LotsRepo(db);
   const logged: EventLogEntry[] = [];
   const logger: EventLogger = { log: (e) => logged.push(e) };

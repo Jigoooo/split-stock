@@ -12,6 +12,7 @@ import { bootstrapSchema } from '../../db/bootstrap-schema';
 import { createTestDb } from '../../db/client';
 import { lots, orders } from '../../db/schema';
 import { SettingsRepo } from '../../db/settings-repo';
+import { seedDomesticAccounts } from '../../testing/seed-accounts';
 import { LotsRepo } from '../../trading/lots-repo';
 import type { Context } from '../context';
 import { t } from '../trpc-core';
@@ -31,6 +32,7 @@ afterEach(() => {
 function createOrderCtx(broker = new FakeBrokerAdapter({ startOrderId: 9000 })) {
   const db = createTestDb();
   bootstrapSchema(db);
+  seedDomesticAccounts(db);
   const trigger = vi.fn(() => ({ started: true }));
   const ctx = {
     currentEnv: 'MOCK',

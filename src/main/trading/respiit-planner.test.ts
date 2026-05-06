@@ -3,6 +3,7 @@ import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
 import type { EventLogger } from '../logging/event-logger';
 import { createSafetyState } from '../safety/safety-state';
+import { seedDomesticAccounts } from '../testing/seed-accounts';
 import { LotsRepo } from './lots-repo';
 import { applyPriceRatio, planFromCsv, planFromParams } from './respiit-planner';
 
@@ -167,6 +168,7 @@ describe('LotsRepo.replan', () => {
   function setupRepo() {
     const db = createTestDb();
     bootstrapSchema(db);
+    seedDomesticAccounts(db);
     return { db, repo: new LotsRepo(db) };
   }
 

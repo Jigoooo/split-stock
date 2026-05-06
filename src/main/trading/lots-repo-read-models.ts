@@ -25,7 +25,7 @@ export function listOpenLots(
   db: Db,
   accountId: number,
   pdno: string,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<LotRow[], LotsRepoError> {
   try {
     const rows = db
@@ -62,7 +62,7 @@ export function cyclesByPdno(
   db: Db,
   stockMasterRepo: StockMasterRepo | undefined,
   input: CyclesByPdnoInput,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<TradeCycle[], LotsRepoError> {
   try {
     const conditions = [eq(lotsTable.broker, broker), eq(lotsTable.accountId, input.accountId)];
@@ -128,7 +128,7 @@ export function listTradeHistoryLots(
   db: Db,
   stockMasterRepo: StockMasterRepo | undefined,
   input: TradeHistoryFilters,
-  broker: string = 'KIS',
+  broker: string,
 ): Result<TradeHistoryLot[], LotsRepoError> {
   try {
     const rows = db
@@ -200,8 +200,8 @@ export function listTradeHistoryLots(
 export function listRows(
   db: Db,
   accountId: number,
-  pdno?: string,
-  broker: string = 'KIS',
+  pdno: string | undefined,
+  broker: string,
 ): Result<LotRow[], LotsRepoError> {
   try {
     const conditions = [eq(lotsTable.broker, broker), eq(lotsTable.accountId, accountId)];
