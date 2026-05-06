@@ -89,6 +89,12 @@ vi.mock('@renderer/shared/api/trpc', () => ({
         useQuery: () => ({ data: { strategiesByPdno: {} }, isPending: false, error: null }),
       },
     },
+    // Phase 6 use-balance-with-lots: UPBIT 모드일 때만 활성 — stock 전용 테스트는 비활성 분기.
+    crypto: {
+      getBalances: {
+        useQuery: () => ({ data: undefined, isPending: false, error: null }),
+      },
+    },
     realtime: {
       watch: {
         useMutation: () => ({ mutate: vi.fn() }),

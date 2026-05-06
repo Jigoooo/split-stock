@@ -7,6 +7,9 @@ const mockUseActiveAccountId = vi.fn();
 
 vi.mock('@renderer/entities/account', () => ({
   useActiveAccountId: () => mockUseActiveAccountId(),
+  isCryptoAccount: (account: { broker?: string } | null | undefined) => account?.broker === 'UPBIT',
+  isDomesticAccount: (account: { broker?: string } | null | undefined) =>
+    account?.broker === 'KIS' || account?.broker === 'KIWOOM',
 }));
 
 vi.mock('@renderer/pages/trade', () => ({
