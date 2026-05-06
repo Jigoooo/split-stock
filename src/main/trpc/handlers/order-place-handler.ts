@@ -1,5 +1,4 @@
 import type { KisOrderRequestSchema } from '@shared/contracts';
-import { BROKERS } from '@shared/contracts';
 import { correctLimitPrice } from '@shared/market-rules';
 import { TRPCError } from '@trpc/server';
 import type { z } from 'zod';
@@ -8,6 +7,7 @@ import { orders } from '../../db/schema';
 import { readPendingCancelConfig, readPriceCorrectionConfig } from '../../db/settings-repo';
 import type { Context } from '../context';
 import { requireAccountId } from '../router-helpers';
+import { resolveActiveDomesticBroker } from './account-shared';
 import {
   assertManualOrderAllowed,
   cancelAcceptedOrderAfterLocalFailure,
@@ -17,14 +17,13 @@ import {
   toLegacyAck,
 } from './order-router-helpers';
 
-const STOCK_BROKER = BROKERS.KIS;
-
 type PlaceCashInput = z.infer<typeof KisOrderRequestSchema> & { accountId: number };
 
 export async function placeCashHandler(ctx: Context, input: PlaceCashInput) {
   const env = ctx.currentEnv;
   if (!env) throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
   const accountId = requireAccountId(input);
+  const brokerKey = resolveActiveDomesticBroker(ctx);
   const broker = ctx.brokerForAccount(accountId);
   if (!broker) {
     throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
@@ -61,14 +60,17 @@ export async function placeCashHandler(ctx: Context, input: PlaceCashInput) {
             qty: input.qty,
           }),
           side: 'BUY' as const,
+          broker: brokerKey,
         }
       : {
           ...reserveManualSellLot(ctx, {
             accountId,
             pdno: input.pdno,
             qty: input.qty,
+            broker: brokerKey,
           }),
           side: 'SELL' as const,
+          broker: brokerKey,
         };
 
   let placeR: Awaited<ReturnType<BrokerPort['placeOrder']>>;
@@ -100,7 +102,7 @@ export async function placeCashHandler(ctx: Context, input: PlaceCashInput) {
     ctx.db
       .insert(orders)
       .values({
-        broker: STOCK_BROKER,
+        broker: brokerKey,
         accountId,
         lotId: linkedLot.lotId,
         odno: result.value.odno,

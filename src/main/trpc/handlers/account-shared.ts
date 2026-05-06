@@ -1,15 +1,36 @@
-import type { AppEnv, Balance, BrokerError, KisError } from '@shared/contracts';
+import type { AppEnv, Balance, BrokerError, DomesticBroker, KisError } from '@shared/contracts';
 import { BROKERS } from '@shared/contracts';
 import { and, eq, gte, inArray, or } from 'drizzle-orm';
 import type { ActiveAccountRepo } from '../../account/active-account';
 import { repairStoredCredentialAccounts } from '../../account/repair-stored-accounts';
 import type { Db } from '../../db/client';
-import { orders as ordersTable } from '../../db/schema';
+import { accounts as accountsTable, orders as ordersTable } from '../../db/schema';
 import type { EventLogger } from '../../logging/event-logger';
 import type { CredentialsRepo } from '../../security/credentials-repo';
 import { SELL_SETTLEMENT_GRACE_MS } from '../../trading/current-state-sync';
 
-const STOCK_BROKER = BROKERS.KIS;
+/**
+ * Phase 5: 활성 계좌의 domestic broker 를 DB(accounts.broker) 로 직접 해결.
+ *
+ * brokerForAccount() 와 달리 BrokerPort(인증/HTTP/토큰) 를 인스턴스화하지 않고
+ * 단순 문자열만 가져온다 — 12개 핸들러가 broker 컬럼 필터/insert 만 필요하므로
+ * 런타임 비용 최소화.
+ *
+ * UPBIT 가 활성 계좌인 경우(코인 핸들러가 잘못 호출된 경우) KIS 로 fallback —
+ * 도메스틱 핸들러는 코인 데이터를 다루지 않으므로 안전한 기본값.
+ */
+export function resolveActiveDomesticBroker(ctx: {
+  db: Db;
+  activeAccountId: number | null;
+}): DomesticBroker {
+  if (ctx.activeAccountId === null) return BROKERS.KIS;
+  const row = ctx.db
+    .select({ broker: accountsTable.broker })
+    .from(accountsTable)
+    .where(eq(accountsTable.id, ctx.activeAccountId))
+    .get();
+  return row?.broker === BROKERS.KIWOOM ? BROKERS.KIWOOM : BROKERS.KIS;
+}
 
 export function listAccountsWithActiveRepair(ctx: {
   activeAccounts: ActiveAccountRepo;
@@ -109,11 +130,7 @@ export function balanceErrorMessage(e: KisError): string {
   }
 }
 
-export function readRecentSellOrderPdnos(
-  db: Db,
-  accountId: number,
-  broker: string = STOCK_BROKER,
-): Set<string> {
+export function readRecentSellOrderPdnos(db: Db, accountId: number, broker: string): Set<string> {
   const cutoff = new Date(Date.now() - SELL_SETTLEMENT_GRACE_MS);
   const rows = db
     .select({ pdno: ordersTable.pdno })

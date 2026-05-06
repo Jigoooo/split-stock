@@ -546,8 +546,8 @@ const CryptoTradingWorkspace = ({
  * / WatchBoard) 를 broker='UPBIT' 로 직접 마운트.
  *
  * - L1=포지션 → L2 3탭 (실시간 잔고 / 체결 / 미체결). 차수·입출금 탭은 폐기 (R3 사용자 결정).
- * - L1=자동감시 → WatchBoard. 서버 핸들러는 R3-3 까지 STOCK_BROKER('KIS') 하드코딩 — UPBIT
- *   broker prop 은 schema/hook 차원만 prepared. 실제 watchOrder 데이터는 KIS 만 반환.
+ * - L1=자동감시 → WatchBoard. broker='UPBIT' 시 서버 listWatchOrders 핸들러가 cryptoAutoWatches
+ *   를 WatchOrder shape 으로 변환해 반환 (Phase 3 dispatch). history 도 event_logs 매핑 (Phase 4-bis).
  *
  * PositionsGrid `onSelect(pdno)` → onSelectMarket → 우측 CryptoTradeHistoryPanel 자동 필터.
  */

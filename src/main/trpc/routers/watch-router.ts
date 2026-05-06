@@ -17,8 +17,7 @@ const ListInputSchema = z.object({
   status: z.enum(['WATCHING', 'PAUSED', 'EXECUTED', 'FAILED', 'EXPIRED', 'CANCELLED']).optional(),
   source: z.enum(['BOOSTER', 'PREBUY', 'CUSTOM']).optional(),
   accountId: z.number().int().positive().optional(),
-  // Phase R3-2: client 가 broker 를 통과시킴 — 서버 측은 R3-3 까지 STOCK_BROKER('KIS') 하드코딩.
-  // schema 에서 받아만 두고 무시하면 zod strip 으로 인한 client 인자 손실 방지.
+  // Phase 5: client 가 broker 를 통과 — KIS/KIWOOM 은 watchEngine, UPBIT 는 cryptoAutoWatches 로 dispatch.
   broker: z.string().optional(),
 });
 

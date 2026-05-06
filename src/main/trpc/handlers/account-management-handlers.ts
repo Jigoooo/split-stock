@@ -1,4 +1,4 @@
-import { BROKERS, type CredentialsSchema, getCredentialsAccountRef } from '@shared/contracts';
+import { type CredentialsSchema, getCredentialsAccountRef } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { and, eq } from 'drizzle-orm';
 import type { z } from 'zod';
@@ -7,8 +7,6 @@ import { cryptoOrders as cryptoOrdersTable, lots as lotsTable } from '../../db/s
 import { SETTING_KEYS } from '../../db/settings-repo';
 import type { Context } from '../context';
 import { listAccountsWithActiveRepair } from './account-shared';
-
-const STOCK_BROKER = BROKERS.KIS;
 
 type AddAccountInput = z.infer<typeof CredentialsSchema> & { displayName?: string | undefined };
 
@@ -169,7 +167,7 @@ export function deleteAccountHandler(ctx: Context, input: { accountId: number })
     .from(lotsTable)
     .where(
       and(
-        eq(lotsTable.broker, STOCK_BROKER),
+        eq(lotsTable.broker, target.broker),
         eq(lotsTable.accountId, input.accountId),
         eq(lotsTable.status, 'OPEN'),
       ),

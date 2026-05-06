@@ -1,11 +1,9 @@
-import { BROKERS } from '@shared/contracts';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { orders } from '../../db/schema';
 import type { Context } from '../context';
 import { resolveAccountId } from '../router-helpers';
+import { resolveActiveDomesticBroker } from './account-shared';
 import { buildActiveOrderViews, readFilledQtyByOrderId } from './order-router-helpers';
-
-const STOCK_BROKER = BROKERS.KIS;
 
 /**
  * 주어진 pdno 목록에 대응하는 종목명 lookup map 을 stock_master 에서 일괄 조회.
@@ -27,7 +25,7 @@ export function listActiveOrdersHandler(
   input: { accountId?: number | undefined; broker?: string | undefined } = {},
 ) {
   const accountId = resolveAccountId(ctx, input);
-  const brokerKey = input.broker ?? STOCK_BROKER;
+  const brokerKey = input.broker ?? resolveActiveDomesticBroker(ctx);
   const rows = ctx.db
     .select()
     .from(orders)
@@ -43,6 +41,7 @@ export function listActiveOrdersHandler(
   const filledQtyByOrderId = readFilledQtyByOrderId(
     ctx.db,
     rows.map((row) => row.id),
+    brokerKey,
   );
   const views = buildActiveOrderViews(rows, filledQtyByOrderId);
   const namesByPdno = readNamesByPdno(
@@ -66,7 +65,7 @@ export function listMyFillsHandler(
   const accountId = resolveAccountId(ctx, input);
   const pdno = input.pdno;
   const limit = input.limit ?? 100;
-  const brokerKey = input.broker ?? STOCK_BROKER;
+  const brokerKey = input.broker ?? resolveActiveDomesticBroker(ctx);
   const conditions = [eq(orders.broker, brokerKey), eq(orders.accountId, accountId)];
   if (pdno) conditions.push(eq(orders.pdno, pdno));
   const rows = ctx.db
@@ -78,6 +77,7 @@ export function listMyFillsHandler(
   const filledQtyByOrderId = readFilledQtyByOrderId(
     ctx.db,
     rows.map((row) => row.id),
+    brokerKey,
   );
   const filtered = rows
     .filter(

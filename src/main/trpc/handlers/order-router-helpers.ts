@@ -1,5 +1,5 @@
 import type { OrderAck } from '@shared/contracts';
-import { BROKERS, makeBrokerError } from '@shared/contracts';
+import { makeBrokerError } from '@shared/contracts';
 import { getRegularMarketSessionKst } from '@shared/trading/market-session';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -10,8 +10,6 @@ import { lots, trades } from '../../db/schema';
 import type { EventLogger } from '../../logging/event-logger';
 import type { LotsRepo } from '../../trading/lots-repo';
 import { createPendingBuyLot } from '../../trading/order-lot-link';
-
-const STOCK_BROKER = BROKERS.KIS;
 
 /** 도메인 OrderAck → KIS NormalizedOrderAck shape (renderer wire compat). */
 export function toLegacyAck(ack: OrderAck) {
@@ -137,12 +135,16 @@ function parseYyyymmdd(yyyymmdd: string): Date {
   return new Date(y, m, d);
 }
 
-export function readFilledQtyByOrderId(db: Db, orderIds: number[]): Map<number, number> {
+export function readFilledQtyByOrderId(
+  db: Db,
+  orderIds: number[],
+  broker: string,
+): Map<number, number> {
   if (orderIds.length === 0) return new Map();
   const tradeRows = db
     .select()
     .from(trades)
-    .where(and(eq(trades.broker, STOCK_BROKER), inArray(trades.orderId, orderIds)))
+    .where(and(eq(trades.broker, broker), inArray(trades.orderId, orderIds)))
     .all();
   const filledQtyByOrderId = new Map<number, number>();
   for (const trade of tradeRows) {
@@ -206,7 +208,7 @@ export function reserveManualBuyLot(
 
 export function reserveManualSellLot(
   ctx: { db: Db; lotsRepo: Pick<LotsRepo, 'listRows'> },
-  input: { accountId: number; pdno: string; qty: number },
+  input: { accountId: number; pdno: string; qty: number; broker: string },
 ): { lotId: number; nth: number } {
   const rows = ctx.lotsRepo.listRows(input.accountId, input.pdno);
   if (rows.isErr()) {
@@ -226,7 +228,7 @@ export function reserveManualSellLot(
   const reserved = ctx.db
     .update(lots)
     .set({ status: 'SELLING' })
-    .where(and(eq(lots.broker, STOCK_BROKER), eq(lots.id, target.id), eq(lots.status, 'OPEN')))
+    .where(and(eq(lots.broker, input.broker), eq(lots.id, target.id), eq(lots.status, 'OPEN')))
     .run();
   if (reserved.changes === 0) {
     throw new TRPCError({
@@ -239,7 +241,7 @@ export function reserveManualSellLot(
 
 export function rollbackManualOrderLot(
   ctx: { db: Db; logger: Pick<EventLogger, 'log'>; lotsRepo: Pick<LotsRepo, 'updateLotStatus'> },
-  linkedLot: { lotId: number; side: 'BUY' | 'SELL' },
+  linkedLot: { lotId: number; side: 'BUY' | 'SELL'; broker: string },
 ): void {
   try {
     if (linkedLot.side === 'SELL') {
@@ -248,7 +250,7 @@ export function rollbackManualOrderLot(
     }
     ctx.db
       .delete(lots)
-      .where(and(eq(lots.id, linkedLot.lotId), eq(lots.broker, STOCK_BROKER)))
+      .where(and(eq(lots.id, linkedLot.lotId), eq(lots.broker, linkedLot.broker)))
       .run();
   } catch (cause) {
     ctx.logger.log({

@@ -1,12 +1,14 @@
-import { BROKERS } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { symbolMemos } from '../../db/schema';
+import { resolveActiveDomesticBroker } from '../handlers/account-shared';
 import { authedProcedure, router } from '../trpc-core';
 
-/** Phase R0: stock-context 전용 라우터 — broker='KIS' 만 다룬다. UPBIT 메모는 cryptoMarketMemos 사용. */
-const STOCK_BROKER = BROKERS.KIS;
+/**
+ * Phase 5: 도메스틱(KIS/KIWOOM) 메모 라우터 — 활성 계좌 broker 로 dispatch.
+ * UPBIT 메모는 cryptoMarketMemos 라우터 사용.
+ */
 
 /**
  * 종목 메모 라우터 — 글로벌(계좌 비종속) 종목별 단일 메모.
@@ -24,11 +26,8 @@ const ContentSchema = z.string().max(10_000, '메모는 최대 10,000자까지 �
 export const symbolMemoRouter = router({
   get: authedProcedure.input(z.object({ pdno: PdnoSchema })).query(({ ctx, input }) => {
     try {
-      const rows = ctx.db
-        .select()
-        .from(symbolMemos)
-        .where(and(eq(symbolMemos.broker, STOCK_BROKER), eq(symbolMemos.pdno, input.pdno)))
-        .all();
+      // 메모는 종목코드(pdno) 단일 PK — 도메스틱 broker(KIS/KIWOOM) 간 메모 공유.
+      const rows = ctx.db.select().from(symbolMemos).where(eq(symbolMemos.pdno, input.pdno)).all();
       const row = rows[0];
       if (!row) return null;
       return { content: row.content, updatedAt: row.updatedAt };
@@ -45,10 +44,11 @@ export const symbolMemoRouter = router({
     .mutation(({ ctx, input }) => {
       try {
         const now = Date.now();
+        const brokerKey = resolveActiveDomesticBroker(ctx);
         ctx.db
           .insert(symbolMemos)
           .values({
-            broker: STOCK_BROKER,
+            broker: brokerKey,
             pdno: input.pdno,
             content: input.content,
             updatedAt: now,

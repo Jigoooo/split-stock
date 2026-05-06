@@ -1,5 +1,4 @@
 import type { KisOrderAmendRequestSchema } from '@shared/contracts';
-import { BROKERS } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { z } from 'zod';
@@ -7,6 +6,7 @@ import { lots, orders } from '../../db/schema';
 import { reconcileCancelledSellLot } from '../../trading/partial-sell-lot-reconciliation';
 import type { Context } from '../context';
 import { requireAccountId } from '../router-helpers';
+import { resolveActiveDomesticBroker } from './account-shared';
 import {
   brokerAmend,
   brokerCancel,
@@ -14,14 +14,13 @@ import {
   toLegacyAck,
 } from './order-router-helpers';
 
-const STOCK_BROKER = BROKERS.KIS;
-
 type AmendInput = z.infer<typeof KisOrderAmendRequestSchema> & { accountId: number };
 
 export async function amendOrderHandler(ctx: Context, input: AmendInput) {
   const env = ctx.currentEnv;
   if (!env) throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
   const accountId = requireAccountId(input);
+  const brokerKey = resolveActiveDomesticBroker(ctx);
   const broker = ctx.brokerForAccount(accountId);
   if (!broker) {
     throw new TRPCError({ code: 'UNAUTHORIZED', message: '자격증명 없음' });
@@ -31,7 +30,7 @@ export async function amendOrderHandler(ctx: Context, input: AmendInput) {
     .from(orders)
     .where(
       and(
-        eq(orders.broker, STOCK_BROKER),
+        eq(orders.broker, brokerKey),
         eq(orders.odno, input.orgOdno),
         eq(orders.accountId, accountId),
       ),
@@ -63,7 +62,7 @@ export async function amendOrderHandler(ctx: Context, input: AmendInput) {
       .set({ status: 'CANCELLED' })
       .where(
         and(
-          eq(orders.broker, STOCK_BROKER),
+          eq(orders.broker, brokerKey),
           eq(orders.odno, input.orgOdno),
           eq(orders.accountId, accountId),
         ),
@@ -81,12 +80,13 @@ export async function cancelManyOrdersHandler(
   const env = ctx.currentEnv;
   if (!env) throw new TRPCError({ code: 'UNAUTHORIZED', message: '환경 미선택' });
   const accountId = requireAccountId(input);
+  const brokerKey = resolveActiveDomesticBroker(ctx);
   const rows = ctx.db
     .select()
     .from(orders)
     .where(
       and(
-        eq(orders.broker, STOCK_BROKER),
+        eq(orders.broker, brokerKey),
         inArray(orders.odno, input.odnos),
         eq(orders.accountId, accountId),
       ),
@@ -100,6 +100,7 @@ export async function cancelManyOrdersHandler(
   const filledQtyByOrderId = readFilledQtyByOrderId(
     ctx.db,
     rows.map((row) => row.id),
+    brokerKey,
   );
   for (const row of rows) {
     const filledQty = Math.min(row.qty, filledQtyByOrderId.get(row.id) ?? 0);
@@ -110,7 +111,7 @@ export async function cancelManyOrdersHandler(
         .set({ status: 'FILLED', filledAt: row.filledAt ?? new Date() })
         .where(
           and(
-            eq(orders.broker, STOCK_BROKER),
+            eq(orders.broker, brokerKey),
             eq(orders.odno, row.odno),
             eq(orders.accountId, accountId),
           ),
@@ -141,7 +142,7 @@ export async function cancelManyOrdersHandler(
       symbol: row.pdno,
     });
     if (r.isOk()) {
-      markCancelledOrder(ctx, row, filledQty, accountId);
+      markCancelledOrder(ctx, row, filledQty, accountId, brokerKey);
       cancelPendingWatcherEntry(ctx, row.odno);
       results.push({ odno: row.odno, ok: true });
     } else {
@@ -156,16 +157,13 @@ function markCancelledOrder(
   row: typeof orders.$inferSelect,
   filledQty: number,
   accountId: number,
+  brokerKey: string,
 ): void {
   ctx.db
     .update(orders)
     .set({ status: 'CANCELLED' })
     .where(
-      and(
-        eq(orders.broker, STOCK_BROKER),
-        eq(orders.odno, row.odno),
-        eq(orders.accountId, accountId),
-      ),
+      and(eq(orders.broker, brokerKey), eq(orders.odno, row.odno), eq(orders.accountId, accountId)),
     )
     .run();
   if (row.lotId === null) return;
@@ -173,7 +171,7 @@ function markCancelledOrder(
     if (filledQty === 0) {
       ctx.db
         .delete(lots)
-        .where(and(eq(lots.id, row.lotId), eq(lots.broker, STOCK_BROKER)))
+        .where(and(eq(lots.id, row.lotId), eq(lots.broker, brokerKey)))
         .run();
     } else {
       ctx.db
@@ -184,7 +182,7 @@ function markCancelledOrder(
           qty: filledQty,
           amountKrw: row.price * filledQty,
         })
-        .where(and(eq(lots.id, row.lotId), eq(lots.broker, STOCK_BROKER)))
+        .where(and(eq(lots.id, row.lotId), eq(lots.broker, brokerKey)))
         .run();
     }
   } else if (row.side === 'SELL') {

@@ -1,4 +1,3 @@
-import { BROKERS } from '@shared/contracts';
 import { buildLotOverlay, type LotOverlaySnapshot } from '@shared/trading/lot-overlay';
 import { TRPCError } from '@trpc/server';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -11,12 +10,11 @@ import { resolveAccountId } from '../router-helpers';
 import {
   balanceErrorMessage,
   readRecentSellOrderPdnos,
+  resolveActiveDomesticBroker,
   serializeCause,
   toLegacyBalance,
   toLegacyKisError,
 } from './account-shared';
-
-const STOCK_BROKER = BROKERS.KIS;
 
 export async function getBalanceHandler(
   ctx: Context,
@@ -38,7 +36,7 @@ export async function getBalanceWithLotsHandler(
   const { accountId, balance, broker } = await fetchLegacyBalance(ctx, input, {
     logMessage: 'account.getBalanceWithLots.failed',
   });
-  const brokerKey = input.broker ?? STOCK_BROKER;
+  const brokerKey = input.broker ?? resolveActiveDomesticBroker(ctx);
   const lotsByPdno = readLotsByPdno(ctx, accountId, brokerKey);
   const strategiesByPdno = readStrategiesByPdno(
     ctx,
@@ -92,7 +90,7 @@ export function getPositionOverlayHandler(
   },
 ) {
   const accountId = resolveAccountId(ctx, input);
-  const brokerKey = input.broker ?? STOCK_BROKER;
+  const brokerKey = input.broker ?? resolveActiveDomesticBroker(ctx);
   const snap = ctx.lotsRepo.snapshot(accountId, input.pdno, brokerKey);
   if (snap.isErr()) {
     throw new TRPCError({
@@ -181,7 +179,7 @@ async function fetchLegacyBalance(
 function readLotsByPdno(
   ctx: Context,
   accountId: number,
-  broker: string = STOCK_BROKER,
+  broker: string,
 ): Record<string, LotSnapshotEntry[]> {
   let lotsByPdno: Record<string, LotSnapshotEntry[]> = {};
   try {
