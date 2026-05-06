@@ -2,11 +2,15 @@ import { sql } from 'drizzle-orm';
 import type { Db } from './client';
 
 /**
- * drizzle-kit 생성 마이그레이션이 없을 때 쓰는 raw CREATE.
- * 테스트용 인메모리 DB에서 스키마를 즉시 구축할 때 사용.
- * 운영 DB는 반드시 drizzle-kit 마이그레이션(`pnpm db:generate` → `migrate()`) 사용.
+ * 모든 테이블을 IF NOT EXISTS 로 생성하는 raw CREATE 시퀀스.
+ * 운영 부팅과 테스트 모두에서 main path 로 사용 — runtime-schema-repair 가 그 위에
+ * 누락 컬럼 / 인덱스 / DROP 을 idempotent 하게 보장한다.
+ * drizzle-kit 은 dev/CI 에서 schema.ts 변경 시 새 마이그레이션 SQL 을 generate 하는
+ * 도구로만 사용 (`pnpm db:generate`). 운영 부팅은 drizzle migrate 를 호출하지 않는다 —
+ * `__drizzle_migrations` 추적표 vs 실제 스키마 불일치 시 ALTER TABLE 이 매번 충돌하던
+ * 노이즈 원인이었다.
  *
- * 중요: schema.ts와 항상 동기화해야 한다. 누락 시 테스트는 통과하나 운영 DB와 어긋남.
+ * 중요: schema.ts 와 항상 동기화해야 한다. 누락 시 테스트는 통과하나 운영 DB 와 어긋남.
  */
 const CREATE_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS credentials (

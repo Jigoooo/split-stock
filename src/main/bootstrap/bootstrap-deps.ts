@@ -19,7 +19,7 @@ import { KIWOOM_BASE_URL } from '../brokers/kiwoom/metadata/endpoints';
 import { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
 import { CryptoRealtimeService } from '../crypto/crypto-realtime-service';
 import { bootstrapSchema } from '../db/bootstrap-schema';
-import { defaultDbPath, migrate, openDb } from '../db/client';
+import { defaultDbPath, openDb } from '../db/client';
 import {
   repairAccountsRuntimeSchema,
   repairBrokerColumnsRuntimeSchema,
@@ -75,13 +75,6 @@ import { StrategyRepo } from '../trading/strategy-repo';
 import { TradingCalendarService } from '../trading/trading-calendar-service';
 import { createContextFactory } from '../trpc/context';
 
-function resolveMigrationsDir(): string {
-  // dev: projectRoot/drizzle
-  // packaged: extraResources 설정에 따라 process.resourcesPath/drizzle
-  if (isDev) return join(process.cwd(), 'drizzle');
-  return join(process.resourcesPath, 'drizzle');
-}
-
 export function bootstrapDeps(userDataDir: string) {
   markStartup('bootstrap.start');
   const bootStatus = new BootStatusService();
@@ -89,25 +82,13 @@ export function bootstrapDeps(userDataDir: string) {
   const db = openDb(defaultDbPath(userDataDir));
   markStartup('db.open.end');
   markStartup('db.migrate.start');
-  try {
-    migrate(db, resolveMigrationsDir());
-  } catch (error) {
-    // 사용자 DB 가 _journal 과 어긋난 상태 (db:push 후 마이그레이션 추적 망가짐 / 일부
-    // 마이그레이션 누락 등) 에서 drizzle migrate 가 실패할 수 있다. fallback:
-    //   1) bootstrapSchema 로 누락된 테이블을 IF NOT EXISTS 로 생성 (broker 컬럼 포함된
-    //      최신 schema 정의 사용)
-    //   2) runtime-schema-repair 가 누락 컬럼 / 인덱스 / DROP 을 idempotent 로 강제
-    // 이 두 단계로 어떤 손상 상태든 invariant 를 복구한다.
-    console.warn(
-      '[bootstrap] drizzle migrate failed, falling back to bootstrapSchema + runtime-schema-repair:',
-      error,
-    );
-    try {
-      bootstrapSchema(db);
-    } catch (bootstrapError) {
-      console.error('[bootstrap] bootstrapSchema fallback failed:', bootstrapError);
-    }
-  }
+  // 부팅 schema invariant 는 bootstrapSchema(CREATE TABLE IF NOT EXISTS)
+  // + runtime-schema-repair(idempotent column/index 추가/DROP) 으로 보장한다.
+  // drizzle migrate 는 schema 추가 시 SQL 을 generate 하는 dev/CI 도구로만 사용 — 프로덕션
+  // 부팅에서는 __drizzle_migrations 추적표 vs 실제 스키마 불일치 시 매번 ALTER TABLE 충돌
+  // (예: duplicate column 'broker') 이 나서 노이즈만 만들고, 결과적으로 동일한 fallback
+  // 경로로 떨어지던 redundant 단계였다.
+  bootstrapSchema(db);
   markStartup('db.migrate.end');
   markStartup('db.runtime-repair.start');
   repairAccountsRuntimeSchema(db);
