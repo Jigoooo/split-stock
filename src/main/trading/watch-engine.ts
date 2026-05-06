@@ -1,3 +1,4 @@
+import { BROKERS } from '@shared/contracts';
 import { eq } from 'drizzle-orm';
 import type { Result } from 'neverthrow';
 import { watchOrders } from '../db/schema';
@@ -25,9 +26,15 @@ import {
 } from './watch-order-store';
 
 /**
- * Phase 6: WatchEngine 은 도메스틱 broker(KIS+KIWOOM) 모두 처리. 행 단위 dispatch —
- * watchOrders.broker 컬럼을 read 결과에 그대로 보존, 트리거 시점에 brokerForAccount(accountId)
- * 로 BrokerPort 라우팅. UPBIT 자동감시는 별도 cryptoAutoWatches 테이블에서 운영.
+ * Phase 6: WatchEngine 은 도메스틱 broker(KIS+KIWOOM) 모두 처리. 행 단위 dispatch.
+ *
+ * 흐름: watch-order-store.loadWatchingOrders 가 도메스틱 broker 만 SELECT 하여 큐 적재 →
+ * onPrice() 에서 가격 매칭 시 fire() 호출 → fire() 가 row 의 broker 화이트리스트 검증 후
+ * source 별 handler 를 실행. 실제 BrokerPort 라우팅은 handler 측에서 수행 (예:
+ * watch-order-executor 가 deps.getBrokerForAccount(order.accountId) 호출).
+ *
+ * UPBIT 자동감시는 별도 cryptoAutoWatches 테이블 + CryptoAutoTradingRepo 에서 운영 — 본
+ * 엔진 미관여.
  */
 
 export type {
@@ -202,6 +209,13 @@ export class WatchEngine {
     try {
       const row = this.opts.db.select().from(watchOrders).where(eq(watchOrders.id, entry.id)).get();
       if (!row) {
+        this.dequeue(entry.id);
+        stillQueued = false;
+        return;
+      }
+      // M4 가드: 도메스틱(KIS/KIWOOM) 외 broker row 가 큐에 잘못 적재되었을 경우 안전 종료.
+      // loadWatchingOrders 가 inArray 화이트리스트로 거르므로 정상 경로에선 발생 X.
+      if (row.broker !== BROKERS.KIS && row.broker !== BROKERS.KIWOOM) {
         this.dequeue(entry.id);
         stillQueued = false;
         return;

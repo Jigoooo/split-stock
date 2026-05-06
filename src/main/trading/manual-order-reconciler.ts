@@ -1,4 +1,5 @@
 import type { TradeExecutionEvent } from '@shared/contracts';
+import { BROKERS } from '@shared/contracts';
 import { and, eq, inArray } from 'drizzle-orm';
 import { realTimer, type Timer } from '../brokers/core/types';
 import type { BrokerPort } from '../brokers/ports/broker-port';
@@ -98,11 +99,18 @@ export class ManualOrderReconciler {
     if (this.disposed || this.running) return;
     this.running = true;
     try {
-      // Phase 6: 도메스틱 broker (KIS+KIWOOM) 모두 폴링. 행 단위 broker dispatch.
+      // Phase 6 + M1: 도메스틱(KIS+KIWOOM) 만 명시 화이트리스트 + 행 단위 broker dispatch.
+      // orders 테이블은 도메스틱 전용이지만, 미래에 외환/해외주식 broker 추가 시 무차별
+      // 폴링 방지를 위해 명시 inArray 유지.
       let pending = this.opts.db
         .select()
         .from(orders)
-        .where(inArray(orders.status, ['PENDING', 'PARTIAL']))
+        .where(
+          and(
+            inArray(orders.broker, [BROKERS.KIS, BROKERS.KIWOOM]),
+            inArray(orders.status, ['PENDING', 'PARTIAL']),
+          ),
+        )
         .all() as PendingOrderRow[];
       if (target?.accountId !== undefined) {
         pending = pending.filter((row) => row.accountId === target.accountId);
