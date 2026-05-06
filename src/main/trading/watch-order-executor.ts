@@ -210,6 +210,7 @@ export async function executeStrategyOrder(
   try {
     recordStrategyOrder(deps, input, result.value, attemptedAt, preparedLot, {
       reconciled: false,
+      broker: broker.brokerId,
     });
   } catch (cause) {
     rollbackPreparedOrderLot(deps, preparedLot);
@@ -250,6 +251,7 @@ async function executeReconcileOnlyStrategyOrder(
     preparedLot = prepareStrategyOrderLot(deps, input, attemptedAt);
     recordStrategyOrder(deps, input, recoverableAck, attemptedAt, preparedLot, {
       reconciled: true,
+      broker: broker.brokerId,
     });
   } catch (cause) {
     if (preparedLot !== null) rollbackPreparedOrderLot(deps, preparedLot);
@@ -276,6 +278,7 @@ async function handleRejectedStrategyOrder(
       try {
         recordStrategyOrder(deps, input, recoverableAck, attemptedAt, preparedLot, {
           reconciled: true,
+          broker: broker.brokerId,
         });
       } catch (cause) {
         rollbackPreparedOrderLot(deps, preparedLot);

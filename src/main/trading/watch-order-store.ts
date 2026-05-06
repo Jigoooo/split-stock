@@ -1,8 +1,9 @@
 import { BROKERS } from '@shared/contracts';
 import { and, eq, inArray } from 'drizzle-orm';
 import { err, ok, type Result } from 'neverthrow';
+import { getDomesticBrokerForAccount } from '../db/account-broker';
 import type { Db } from '../db/client';
-import { accounts, watchOrders } from '../db/schema';
+import { watchOrders } from '../db/schema';
 import {
   ACTIVE_CONTROL_STATUSES,
   rowToOrder,
@@ -16,16 +17,6 @@ import {
 
 /** Phase 6: WatchEngine 은 도메스틱 broker(KIS+KIWOOM) 모두 처리. UPBIT 는 cryptoAutoWatches 별도. */
 const DOMESTIC_BROKERS_FILTER = [BROKERS.KIS, BROKERS.KIWOOM] as const;
-
-/** accounts.broker 직접 read — INSERT 시 broker 컬럼 결정. KIWOOM/UPBIT 미존재 시 KIS fallback. */
-function resolveBrokerForAccount(db: Db, accountId: number): string {
-  const row = db
-    .select({ broker: accounts.broker })
-    .from(accounts)
-    .where(eq(accounts.id, accountId))
-    .get();
-  return row?.broker === BROKERS.KIWOOM ? BROKERS.KIWOOM : BROKERS.KIS;
-}
 
 export function loadWatchingOrders(db: Db): WatchOrder[] {
   return db
@@ -47,7 +38,15 @@ export function upsertWatchOrder(db: Db, input: WatchOrderInput): Result<WatchOr
     return err({ kind: 'VALIDATION', message: parsed.error.issues[0]?.message ?? 'invalid' });
   }
   const v = parsed.data;
-  const broker = resolveBrokerForAccount(db, v.accountId);
+  // Phase 6 H1 fix: 명시적 broker resolution. 미존재/non-domestic 계좌면 VALIDATION 에러
+  // (silent KIS fallback 금지 — KIWOOM 의도였던 row 가 KIS 로 misclassify 되는 race 방지).
+  const broker = getDomesticBrokerForAccount(db, v.accountId);
+  if (!broker) {
+    return err({
+      kind: 'VALIDATION',
+      message: `account ${v.accountId} 가 존재하지 않거나 도메스틱 broker (KIS/KIWOOM) 가 아닙니다`,
+    });
+  }
   const now = new Date();
   const expiresAt =
     v.expiresAt === undefined
