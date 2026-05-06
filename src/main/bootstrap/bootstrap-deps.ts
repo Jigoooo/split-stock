@@ -18,6 +18,7 @@ import { KiwoomHttpClient } from '../brokers/kiwoom/http-client';
 import { KIWOOM_BASE_URL } from '../brokers/kiwoom/metadata/endpoints';
 import { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
 import { CryptoRealtimeService } from '../crypto/crypto-realtime-service';
+import { bootstrapSchema } from '../db/bootstrap-schema';
 import { defaultDbPath, migrate, openDb } from '../db/client';
 import {
   repairAccountsRuntimeSchema,
@@ -91,14 +92,21 @@ export function bootstrapDeps(userDataDir: string) {
   try {
     migrate(db, resolveMigrationsDir());
   } catch (error) {
-    // 사용자 dev 환경에서 schema.ts 변경이 db:push 등으로 미리 반영됐을 때 _journal 0020+
-    // 마이그레이션이 ALTER TABLE 충돌로 실패할 수 있다. 후속 runtime-schema-repair 가
-    // idempotent ADD COLUMN / DROP IF EXISTS 로 invariant 를 강제하므로 무시하고 진행한다.
-    // (drizzle 자체는 transaction 안에서 실패한 마이그레이션 외 statement 는 적용 안 함.)
+    // 사용자 DB 가 _journal 과 어긋난 상태 (db:push 후 마이그레이션 추적 망가짐 / 일부
+    // 마이그레이션 누락 등) 에서 drizzle migrate 가 실패할 수 있다. fallback:
+    //   1) bootstrapSchema 로 누락된 테이블을 IF NOT EXISTS 로 생성 (broker 컬럼 포함된
+    //      최신 schema 정의 사용)
+    //   2) runtime-schema-repair 가 누락 컬럼 / 인덱스 / DROP 을 idempotent 로 강제
+    // 이 두 단계로 어떤 손상 상태든 invariant 를 복구한다.
     console.warn(
-      '[bootstrap] drizzle migrate failed, falling back to runtime-schema-repair:',
+      '[bootstrap] drizzle migrate failed, falling back to bootstrapSchema + runtime-schema-repair:',
       error,
     );
+    try {
+      bootstrapSchema(db);
+    } catch (bootstrapError) {
+      console.error('[bootstrap] bootstrapSchema fallback failed:', bootstrapError);
+    }
   }
   markStartup('db.migrate.end');
   markStartup('db.runtime-repair.start');
