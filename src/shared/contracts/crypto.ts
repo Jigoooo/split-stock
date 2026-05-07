@@ -178,14 +178,14 @@ export const CryptoStrategyProfileSchema = CryptoStrategyProfileBaseSchema.super
   (profile, ctx) => {
     if (profile.buyRules.length < profile.maxStages) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom' as const,
         path: ['buyRules'],
         message: 'buyRules는 maxStages 이상 채워야 합니다.',
       });
     }
     if (profile.sellRules.length < profile.maxStages) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom' as const,
         path: ['sellRules'],
         message: 'sellRules는 maxStages 이상 채워야 합니다.',
       });
@@ -196,7 +196,7 @@ export const CryptoStrategyProfileSchema = CryptoStrategyProfileBaseSchema.super
       const rule = profile.buyRules[index];
       if (!rule || rule.nth !== nth) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom' as const,
           path: ['buyRules'],
           message: 'buyRules nth는 1차부터 순서대로 채워야 합니다.',
         });
@@ -204,14 +204,14 @@ export const CryptoStrategyProfileSchema = CryptoStrategyProfileBaseSchema.super
       }
       if (nth === 1 && rule.triggerDropPct !== null) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom' as const,
           path: ['buyRules', index, 'triggerDropPct'],
           message: '1차 triggerDropPct는 null이어야 합니다.',
         });
       }
       if (nth > 1 && rule.triggerDropPct === null) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom' as const,
           path: ['buyRules', index, 'triggerDropPct'],
           message: '2차 이후 triggerDropPct가 필요합니다.',
         });
@@ -223,7 +223,7 @@ export const CryptoStrategyProfileSchema = CryptoStrategyProfileBaseSchema.super
       const rule = profile.sellRules[index];
       if (!rule || rule.nth !== nth) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom' as const,
           path: ['sellRules'],
           message: 'sellRules nth는 1차부터 순서대로 채워야 합니다.',
         });
@@ -504,7 +504,7 @@ export const CryptoOrderIntentSchema = z
   .superRefine((order, ctx) => {
     if (order.timeInForce === 'post_only' && order.smpType !== undefined) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom' as const,
         path: ['smpType'],
         message: 'post_only cannot be used with smp_type',
       });
@@ -512,10 +512,10 @@ export const CryptoOrderIntentSchema = z
 
     if (order.ordType === 'limit') {
       if (!order.price) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['price'], message: 'price required' });
+        ctx.addIssue({ code: 'custom' as const, path: ['price'], message: 'price required' });
       }
       if (!order.volume) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['volume'], message: 'volume required' });
+        ctx.addIssue({ code: 'custom' as const, path: ['volume'], message: 'volume required' });
       }
       return;
     }
@@ -523,17 +523,17 @@ export const CryptoOrderIntentSchema = z
     if (order.ordType === 'price') {
       if (order.side !== 'bid') {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom' as const,
           path: ['side'],
           message: 'price order must be bid',
         });
       }
       if (!order.price) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['price'], message: 'price required' });
+        ctx.addIssue({ code: 'custom' as const, path: ['price'], message: 'price required' });
       }
       if (order.volume !== undefined) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom' as const,
           path: ['volume'],
           message: 'volume must be omitted',
         });
@@ -544,17 +544,17 @@ export const CryptoOrderIntentSchema = z
     if (order.ordType === 'market') {
       if (order.side !== 'ask') {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom' as const,
           path: ['side'],
           message: 'market order must be ask',
         });
       }
       if (!order.volume) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['volume'], message: 'volume required' });
+        ctx.addIssue({ code: 'custom' as const, path: ['volume'], message: 'volume required' });
       }
       if (order.price !== undefined) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom' as const,
           path: ['price'],
           message: 'price must be omitted',
         });
@@ -564,29 +564,29 @@ export const CryptoOrderIntentSchema = z
 
     if (!order.timeInForce || order.timeInForce === 'post_only') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom' as const,
         path: ['timeInForce'],
         message: 'best order requires ioc or fok',
       });
     }
     if (order.side === 'bid') {
       if (!order.price) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['price'], message: 'price required' });
+        ctx.addIssue({ code: 'custom' as const, path: ['price'], message: 'price required' });
       }
       if (order.volume !== undefined) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom' as const,
           path: ['volume'],
           message: 'volume must be omitted',
         });
       }
     } else {
       if (!order.volume) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['volume'], message: 'volume required' });
+        ctx.addIssue({ code: 'custom' as const, path: ['volume'], message: 'volume required' });
       }
       if (order.price !== undefined) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom' as const,
           path: ['price'],
           message: 'price must be omitted',
         });
