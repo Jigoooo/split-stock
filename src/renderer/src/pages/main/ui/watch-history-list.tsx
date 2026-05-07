@@ -184,23 +184,38 @@ function historyLabel(message: string): string {
     case 'watch.global.off':
       return '전역 자동감시 OFF';
     // auto-crypto.{kind}.{action} — cryptoEventToWatchHistoryItem 에서 생성
-    case 'auto-crypto.dry-run.buy':
+    // kind: dry-run | live-place | live-cancel | blocked | smoke | config | decimal-error
+    // action: plan-buy | plan-sell | cancel-stale | noop | config | smoke
+    case 'auto-crypto.dry-run.plan-buy':
       return '드라이런 매수';
-    case 'auto-crypto.dry-run.sell':
+    case 'auto-crypto.dry-run.plan-sell':
       return '드라이런 매도';
-    case 'auto-crypto.live.buy':
+    case 'auto-crypto.dry-run.cancel-stale':
+      return '드라이런 취소';
+    case 'auto-crypto.dry-run.noop':
+      return '드라이런 대기';
+    case 'auto-crypto.live-place.plan-buy':
       return '실거래 매수';
-    case 'auto-crypto.live.sell':
+    case 'auto-crypto.live-place.plan-sell':
       return '실거래 매도';
-    case 'auto-crypto.blocked.buy':
+    case 'auto-crypto.live-cancel.cancel-stale':
+      return '실거래 취소';
+    case 'auto-crypto.live-place.noop':
+    case 'auto-crypto.live-cancel.noop':
+      return '실거래 대기';
+    case 'auto-crypto.blocked.plan-buy':
       return '매수 차단';
-    case 'auto-crypto.blocked.sell':
+    case 'auto-crypto.blocked.plan-sell':
       return '매도 차단';
-    case 'auto-crypto.decimal-error.buy':
+    case 'auto-crypto.blocked.noop':
+      return '자동매매 차단';
+    case 'auto-crypto.decimal-error.plan-buy':
       return '수량 오류(매수)';
-    case 'auto-crypto.decimal-error.sell':
+    case 'auto-crypto.decimal-error.plan-sell':
       return '수량 오류(매도)';
-    case 'auto-crypto.config.update':
+    case 'auto-crypto.smoke.smoke':
+      return '스모크 테스트';
+    case 'auto-crypto.config.config':
       return '설정 변경';
     default:
       // auto-crypto.* 미분류 케이스 — kind.action 부분만 노출
