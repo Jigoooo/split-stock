@@ -17,8 +17,8 @@ export interface UseWatchOrdersResult {
  * 통합 자동감시주문 목록.
  * status / source / accountId 필터링 지원. W3-5 watch-board 4탭에서 사용.
  *
- * broker 인자 — KIS/KIWOOM=watchOrders 테이블, UPBIT=cryptoAutoWatches → WatchOrder shape
- * 변환 (Phase 3 dispatch). 서버 listWatchOrders 핸들러가 broker 별로 데이터 소스 라우팅.
+ * broker 인자 — 모든 broker 가 watchOrders 테이블에 저장됨 (P4-4 후 단일 source-of-truth).
+ * 서버 listWatchOrders 핸들러가 broker 필터로 분기: KIS/KIWOOM=watchEngine, UPBIT=직접 SELECT.
  */
 export function useWatchOrders(
   filter: UseWatchOrdersFilter = {},

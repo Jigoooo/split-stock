@@ -17,7 +17,8 @@ const ListInputSchema = z.object({
   status: z.enum(['WATCHING', 'PAUSED', 'EXECUTED', 'FAILED', 'EXPIRED', 'CANCELLED']).optional(),
   source: z.enum(['BOOSTER', 'PREBUY', 'CUSTOM']).optional(),
   accountId: z.number().int().positive().optional(),
-  // Phase 5: client 가 broker 를 통과 — KIS/KIWOOM 은 watchEngine, UPBIT 는 cryptoAutoWatches 로 dispatch.
+  // Phase 5+P4-4: client 가 broker 를 통과 — KIS/KIWOOM 은 watchEngine,
+  // UPBIT 는 watchOrders(broker='UPBIT') 직접 SELECT (P4-4 후 단일 테이블 source-of-truth).
   broker: z.string().optional(),
 });
 

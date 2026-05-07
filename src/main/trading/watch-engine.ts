@@ -33,8 +33,8 @@ import {
  * source 별 handler 를 실행. 실제 BrokerPort 라우팅은 handler 측에서 수행 (예:
  * watch-order-executor 가 deps.getBrokerForAccount(order.accountId) 호출).
  *
- * UPBIT 자동감시는 별도 cryptoAutoWatches 테이블 + CryptoAutoTradingRepo 에서 운영 — 본
- * 엔진 미관여.
+ * UPBIT 자동감시는 watchOrders(broker='UPBIT') row + CryptoAutoTradingRepo 에서 운영 — 본
+ * 엔진은 도메스틱(KIS/KIWOOM) 만 처리하며 UPBIT row 는 큐 적재 시점에 화이트리스트로 거름.
  */
 
 export type {

@@ -15,7 +15,8 @@ import {
   type WatchStatus,
 } from './watch-engine-types';
 
-/** Phase 6: WatchEngine 은 도메스틱 broker(KIS+KIWOOM) 모두 처리. UPBIT 는 cryptoAutoWatches 별도. */
+/** Phase 6 + P4-4: WatchEngine 은 도메스틱 broker(KIS+KIWOOM) row 만 처리. UPBIT 는 같은
+ *  watchOrders 테이블에 저장되지만 본 store 의 화이트리스트 필터로 큐 적재에서 제외됨. */
 const DOMESTIC_BROKERS_FILTER = [BROKERS.KIS, BROKERS.KIWOOM] as const;
 
 export function loadWatchingOrders(db: Db): WatchOrder[] {
