@@ -20,14 +20,16 @@ function setup(now: Date = new Date('2026-05-07T00:30:00.000Z')) {
   const protectionGuard = new CryptoProtectionGuard(db, protectionLimitsRepo, () => now);
   const rateGuardRepo = createRateGuardRepo(db);
   const repo = new CryptoAutoTradingRepo(db);
+  const sellOnlyNotify = vi.fn();
   const guard = new CryptoAutoBuyGuard({
     logger: logger as never,
     protectionGuard,
     rateGuardRepo,
     repo,
     now: () => now,
+    onSellOnly: { notify: sellOnlyNotify },
   });
-  return { db, guard, logger, protectionLimitsRepo, rateGuardRepo, repo };
+  return { db, guard, logger, protectionLimitsRepo, rateGuardRepo, repo, sellOnlyNotify };
 }
 
 function insertTodayBuyOrder(db: ReturnType<typeof createTestDb>): void {
@@ -143,6 +145,35 @@ describe('CryptoAutoBuyGuard', () => {
 
     const strategy = repo.getStrategy(1, MARKET);
     expect(deriveCryptoStrategyAutoMode(strategy)).toBe('SELL_ONLY');
+  });
+
+  it('SELL_ONLY 자동 전환 성공 시 onSellOnly sink가 호출된다', () => {
+    const { guard, rateGuardRepo, sellOnlyNotify } = setup();
+    rateGuardRepo.updateSettings(1, true, 40, 1);
+
+    guard.assertAutoBuyAllowed({
+      accountId: 1,
+      market: MARKET,
+      amountKrw: 50_000,
+      source: 'STRATEGY',
+    });
+
+    expectBlocked(() => {
+      guard.assertAutoBuyAllowed({
+        accountId: 1,
+        market: MARKET,
+        amountKrw: 50_000,
+        source: 'STRATEGY',
+      });
+    }, 'AUTO_BUY_RATE_GUARD');
+
+    expect(sellOnlyNotify).toHaveBeenCalledTimes(1);
+    expect(sellOnlyNotify).toHaveBeenCalledWith({
+      accountId: 1,
+      market: MARKET,
+      count: 2,
+      windowSeconds: 40,
+    });
   });
 
   it('보호 한도 위반 시 RateGuard 카운트를 증가시키지 않는다', () => {

@@ -133,4 +133,57 @@ describe('createContextFactory account realtime wiring', () => {
       ]),
     );
   });
+
+  it('setEnvAndAccount 와 setActiveAccountId 가 onActiveAccountChanged 콜백을 호출한다', () => {
+    // post-E2 hardening: 멀티 계좌에서 cryptoBooster 가 새 계좌의 fill event 를 수신
+    // 하도록 활성 계좌 전환 시점에 콜백을 발화한다.
+    const onActiveAccountChanged = vi.fn();
+    const factory = createContextFactory({
+      logger: { log: vi.fn() },
+      credentialsRepo: { loadCredentials: () => ok(null) },
+      kiwoomTokenStore: { load: () => ok(null) },
+      kiwoomWsFactory: () => ({}) as never,
+      kiwoomHttpByEnv: { MOCK: {}, PROD: {} },
+      httpByEnv: { MOCK: {}, PROD: {} },
+      auth: {},
+      db: {},
+      settingsRepo: {},
+      safetyRegistry: { get: () => ({}) },
+      strategyRepo: {},
+      stockMasterRepo: {},
+      stockMasterSync: {},
+      candlesRepo: {},
+      tradingCalendar: { getTradingDayStatus: vi.fn() },
+      lotsRepo: {},
+      prebuyRepo: {},
+      activeAccounts: {},
+      timeWindowRepo: {},
+      rateGuardRepo: {},
+      protectionLimitsRepo: {},
+      watchEngine: null,
+      strategyEngine: null,
+      pendingOrderWatcher: null,
+      bus: {},
+      aiCredentialsRepo: null,
+      llmClient: null,
+      dartClient: null,
+      dartCorpCodeRepo: null,
+      marketContextService: null,
+      naverDatalabClient: null,
+      newsFetcher: null,
+      initialActiveAccountId: null,
+      onActiveAccountChanged,
+    } as unknown as ContextFactoryOptions);
+
+    factory.setEnvAndAccount({ env: 'MOCK', accountId: 7 });
+    expect(onActiveAccountChanged).toHaveBeenLastCalledWith(7);
+
+    factory.setActiveAccountId(11);
+    expect(onActiveAccountChanged).toHaveBeenLastCalledWith(11);
+
+    factory.setEnvAndAccount({ env: null, accountId: null });
+    expect(onActiveAccountChanged).toHaveBeenLastCalledWith(null);
+
+    expect(onActiveAccountChanged).toHaveBeenCalledTimes(3);
+  });
 });

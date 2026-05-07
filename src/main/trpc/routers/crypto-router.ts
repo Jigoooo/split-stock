@@ -180,21 +180,14 @@ function createPrivateUpbit(ctx: Context, accountId: number): UpbitExchangeAdapt
 
 function createCryptoAutoService(ctx: Context): CryptoAutoTradingService {
   const rateGuard = ctx.rateGuard;
-  const cryptoProtectionGuard = ctx.cryptoProtectionGuard;
   const cryptoAutoBuyGuard = ctx.cryptoAutoBuyGuard;
+  // post-E2 hardening: cryptoProtectionGuard 는 cryptoAutoBuyGuard 내부에서 단일 호출.
+  // gate 측 중복 검사 제거로 blocked event 이중 기록 방지.
   return new CryptoAutoTradingService({
     repo: new CryptoAutoTradingRepo(ctx.db),
     logger: ctx.logger,
     safetyRegistry: ctx.safetyRegistry,
     ...(rateGuard ? { rateGuard } : {}),
-    ...(cryptoProtectionGuard
-      ? {
-          protectionGuard: {
-            canBuyToday: (accountId, market, amountKrw) =>
-              cryptoProtectionGuard.canBuyToday(accountId, market, amountKrw),
-          },
-        }
-      : {}),
     ...(cryptoAutoBuyGuard ? { cryptoAutoBuyGuard } : {}),
   });
 }

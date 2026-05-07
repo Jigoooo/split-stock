@@ -20,7 +20,6 @@ import { err, ok } from 'neverthrow';
 import { flattenError } from 'zod';
 import type { EventLogger } from '../logging/event-logger';
 import type { CryptoAutoBuyGuardPort } from '../safety/crypto-auto-buy-guard';
-import type { ProtectionGuardError } from '../safety/protection-guard';
 import type { CryptoAutoTradingRepo } from './crypto-auto-repo';
 import {
   assertDecimalString,
@@ -64,17 +63,12 @@ export interface CryptoAutoServiceOptions {
     checkAndPossiblyDisableAuto(accountId: number): { switchedToManual: boolean };
   };
   /**
-   * 일/계좌 한도 가드 — broker-agnostic CryptoProtectionGuard. (RALPLAN P6 A3)
-   * plan-buy 직전 canBuyToday 호출 — Result.err 면 gate 차단.
+   * 일/계좌 한도 + RateGuard per-symbol SELL_ONLY 전환. (E2-2)
+   *
+   * post-E2 hardening: 보호 한도 검사는 cryptoAutoBuyGuard 단일 호출로 통일.
+   * 이전에는 gate 측 protectionGuard.canBuyToday 와 cryptoAutoBuyGuard 내부의
+   * 동일 검사가 중복 호출되어 blocked event 가 두 군데 기록되던 문제가 있었다.
    */
-  protectionGuard?: {
-    canBuyToday(
-      accountId: number,
-      market: string,
-      amountKrw: number,
-    ): Result<void, ProtectionGuardError>;
-  };
-  /** 일/계좌 한도 + RateGuard per-symbol SELL_ONLY 전환. (E2-2) */
   cryptoAutoBuyGuard?: CryptoAutoBuyGuardPort;
 }
 
@@ -212,7 +206,6 @@ export class CryptoAutoTradingService {
   private readonly now: () => number;
   private readonly safetyRegistry: CryptoAutoServiceOptions['safetyRegistry'];
   private readonly rateGuard: CryptoAutoServiceOptions['rateGuard'];
-  private readonly protectionGuard: CryptoAutoServiceOptions['protectionGuard'];
   private readonly cryptoAutoBuyGuard: CryptoAutoServiceOptions['cryptoAutoBuyGuard'];
 
   constructor(options: CryptoAutoServiceOptions) {
@@ -221,7 +214,6 @@ export class CryptoAutoTradingService {
     this.now = options.now ?? Date.now;
     this.safetyRegistry = options.safetyRegistry;
     this.rateGuard = options.rateGuard;
-    this.protectionGuard = options.protectionGuard;
     this.cryptoAutoBuyGuard = options.cryptoAutoBuyGuard;
   }
 
@@ -292,13 +284,11 @@ export class CryptoAutoTradingService {
       if (decimalGtStrict(nextExposure, config.maxTotalExposureKrw)) {
         blockedReasons.push('총 노출 KRW 상한을 초과했습니다.');
       }
-      if (this.protectionGuard) {
-        const amount = Number(input.intent.krwAmount);
-        if (Number.isFinite(amount) && amount > 0) {
-          const verdict = this.protectionGuard.canBuyToday(input.accountId, market.value, amount);
-          if (verdict.isErr()) blockedReasons.push(protectionGuardErrorMessage(verdict.error));
-        }
-      }
+      // NOTE: protectionGuard.canBuyToday 검사는 cryptoAutoBuyGuard.assertAutoBuyAllowed
+      // 가 runLiveTick 직전에 단일 호출하도록 통일했다 (post-E2 hardening). gate 측에서
+      // 호출하면 blocked event 가 두 군데(insertEvent kind='blocked' x2) 기록되어
+      // 중복 추적 비용이 발생. UI 측 getGate (intent 미전달) 는 이 분기에 진입조차 하지
+      // 않으므로 표시 회귀 없음.
     }
 
     if (input.intent?.kind === 'plan-sell') {
@@ -684,20 +674,5 @@ export class CryptoAutoTradingService {
         createdAt: input.smoke.checkedAt,
       });
     }
-  }
-}
-
-function protectionGuardErrorMessage(error: ProtectionGuardError): string {
-  switch (error.kind) {
-    case 'LIMIT_PER_SYMBOL_DAILY_BUYS':
-      return `보호 한도 초과: 종목별 1일 최대 매수 횟수(${error.max}회)에 도달했습니다.`;
-    case 'LIMIT_DAILY_TOTAL_COUNT':
-      return `보호 한도 초과: 1일 총 최대 매수 건수(${error.max}회)에 도달했습니다.`;
-    case 'LIMIT_DAILY_TOTAL_AMOUNT':
-      return `보호 한도 초과: 1일 총 최대 매수 금액(${error.maxKrw.toLocaleString('ko-KR')}원)을 초과합니다.`;
-    case 'LIMIT_ACCOUNT_TOTAL_AMOUNT':
-      return `보호 한도 초과: 계좌 총 최대 매수 금액(${error.maxKrw.toLocaleString('ko-KR')}원)을 초과합니다.`;
-    case 'DB_ERROR':
-      return '보호 한도 초과: 보호 한도 확인 중 오류가 발생했습니다.';
   }
 }

@@ -13,6 +13,14 @@ export interface AutoBuyGuardInput {
   source: 'STRATEGY' | 'WATCH';
 }
 
+/**
+ * RateGuard 가 종목을 SELL_ONLY 로 자동 전환했을 때 호출되는 알림 sink.
+ * bootstrap-deps 에서 OS Notification + IPC broadcast 로 연결.
+ */
+export interface AutoBuyGuardSellOnlySink {
+  notify(input: { accountId: number; pdno: string; count: number; windowSeconds: number }): void;
+}
+
 export interface AutoBuyGuardOptions {
   logger: EventLogger;
   protectionGuard: ProtectionGuard;
@@ -20,6 +28,8 @@ export interface AutoBuyGuardOptions {
   strategyRepo: StrategyRepo;
   timeWindowRepo: TimeWindowRepo;
   now?: () => Date;
+  /** SELL_ONLY 자동 전환 성공 시 호출 — OS notification + renderer broadcast. */
+  onSellOnly?: AutoBuyGuardSellOnlySink;
 }
 
 interface RateAttemptHistory {
@@ -153,6 +163,15 @@ export class AutoBuyGuard implements AutoBuyGuardPort {
         windowSeconds,
       },
     });
+    if (saved.isOk()) {
+      // OS Notification + renderer broadcast — log only 였던 회귀 차단.
+      this.opts.onSellOnly?.notify({
+        accountId: input.accountId,
+        pdno: input.pdno,
+        count,
+        windowSeconds,
+      });
+    }
   }
 }
 

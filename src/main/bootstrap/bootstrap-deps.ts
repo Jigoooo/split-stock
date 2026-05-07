@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { type AppEnv, isUpbitCredentials } from '@shared/contracts';
+import { type AppEnv, type AutoSellOnlyEvent, isUpbitCredentials } from '@shared/contracts';
 import WebSocket from 'ws';
 import { ActiveAccountRepo } from '../account/active-account';
 import { repairAccountFromStoredCredentials } from '../account/repair-stored-accounts';
@@ -58,7 +58,11 @@ import {
 import { createFileLogger } from '../logging/file-logger';
 // Sentry 일시 비활성화 — 향후 빌드 환경변수 방식으로 재활성화 예정.
 // import { initSentryFromSettings } from '../monitoring/sentry';
-import { notifyTrade, notifyWatchOutcome } from '../notification/trade-notifier';
+import {
+  notifySellOnlyAuto,
+  notifyTrade,
+  notifyWatchOutcome,
+} from '../notification/trade-notifier';
 import { configureStartupPerf, markStartup } from '../perf/startup-perf';
 import { createAccountSyncRuntime } from '../runtime/account-sync-runtime';
 import { createCryptoPendingCancelWatcher } from '../runtime/crypto-pending-cancel-runtime';
@@ -348,6 +352,19 @@ export function bootstrapDeps(userDataDir: string) {
     factoryRef,
     watchEvents,
     broadcastToAllWindows,
+    autoBuyGuardSink: {
+      notify: ({ accountId, pdno, count, windowSeconds }) => {
+        dispatchAutoSellOnly({
+          scope: 'KIS',
+          accountId,
+          symbol: pdno,
+          name: stockMasterRepo.find(pdno)?.name ?? null,
+          count,
+          windowSeconds,
+          occurredAt: Date.now(),
+        });
+      },
+    },
   });
   const { bus, watchEngine, strategyEngine, pendingOrderWatcher, prebuyWatchers, boosterService } =
     tradingRuntime;
@@ -366,12 +383,39 @@ export function bootstrapDeps(userDataDir: string) {
   // BUY placement 는 runLiveTick 의 entryCondition 충돌을 피하기 위해 직접 adapter.createOrder
   // 호출 + 수동 gate 컴포지션 (도메스틱 executeStrategyOrder 동등).
   const cryptoAutoRepo = new CryptoAutoTradingRepo(db);
+  // post-E2 hardening: SELL_ONLY 자동 전환 시 OS Notification + renderer broadcast 로
+  // 사용자에게 즉시 통지. log only 였던 회귀 차단.
+  const dispatchAutoSellOnly = (event: AutoSellOnlyEvent): void => {
+    notifySellOnlyAuto({
+      scope: event.scope,
+      accountId: event.accountId,
+      symbol: event.symbol,
+      name: event.name,
+      count: event.count,
+      windowSeconds: event.windowSeconds,
+      occurredAt: event.occurredAt,
+    });
+    broadcastToAllWindows('appShell:auto-sell-only', event);
+  };
   // E2-2 — CryptoAutoBuyGuard: 일/계좌 한도 + RateGuard per-symbol SELL_ONLY 전환.
   const cryptoAutoBuyGuard = new CryptoAutoBuyGuard({
     logger: eventLogger,
     protectionGuard: cryptoProtectionGuard,
     rateGuardRepo,
     repo: cryptoAutoRepo,
+    onSellOnly: {
+      notify: ({ accountId, market, count, windowSeconds }) => {
+        dispatchAutoSellOnly({
+          scope: 'UPBIT',
+          accountId,
+          symbol: market,
+          name: null,
+          count,
+          windowSeconds,
+          occurredAt: Date.now(),
+        });
+      },
+    },
   });
   const cryptoBoosterService = new CryptoBoosterService({
     timer: realTimer,
@@ -392,13 +436,26 @@ export function bootstrapDeps(userDataDir: string) {
     logger: eventLogger,
   });
   // crypto-realtime-service.applyPrivateOrder → bus.publishPrivateOrder 이후 호출.
-  // accountId 별 구독 — initialActiveAccountId 가 있으면 즉시, 없으면 setEnvAndAccount 에서
-  // 향후 활성화. 현재 활성 계좌 1개만 처리 (코인 멀티 계좌는 향후 phase).
-  if (initialActiveAccountId !== null) {
-    cryptoRealtime.bus.subscribePrivateOrder(initialActiveAccountId, (event) => {
+  // accountId 별 구독. setEnvAndAccount 가 새 활성 계좌로 전환되면 자동 재구독한다
+  // (post-E2 hardening: 멀티 계좌에서도 booster 가 새 계좌의 fill event 를 수신).
+  let cryptoBoosterUnsub: (() => void) | null = null;
+  const rebindCryptoBoosterSubscription = (accountId: number | null): void => {
+    if (cryptoBoosterUnsub) {
+      cryptoBoosterUnsub();
+      cryptoBoosterUnsub = null;
+    }
+    if (accountId === null) return;
+    cryptoBoosterUnsub = cryptoRealtime.bus.subscribePrivateOrder(accountId, (event) => {
       cryptoBoosterService.handleCryptoFill(event);
     });
-  }
+    eventLogger.log({
+      level: 'INFO',
+      category: 'WS',
+      message: 'crypto-booster.subscription.bound',
+      payload: { accountId },
+    });
+  };
+  rebindCryptoBoosterSubscription(initialActiveAccountId);
 
   // RALPLAN P6 A4 — UPBIT 미체결 자동취소 watcher. PendingOrderWatcher 재사용 + UPBIT cancelOrder.
   const cryptoPendingOrderWatcher = createCryptoPendingCancelWatcher({
@@ -454,6 +511,10 @@ export function bootstrapDeps(userDataDir: string) {
     // Sub-AC 3-2-2: SWR 재검증 성공 시 renderer 에 fresh candles IPC push.
     onCandlesRevalidated: (pdno, period, candles) => {
       broadcastToAllWindows('appShell:candles-updated', { pdno, period, candles });
+    },
+    // post-E2 hardening: 활성 계좌 전환 시 cryptoBooster fill event 구독을 새 계좌로 재바인딩.
+    onActiveAccountChanged: (accountId) => {
+      rebindCryptoBoosterSubscription(accountId);
     },
   });
   factoryRef.factory = factory;

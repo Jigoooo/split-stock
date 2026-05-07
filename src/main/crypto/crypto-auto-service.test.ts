@@ -3,6 +3,7 @@ import { err, ok } from 'neverthrow';
 import { describe, expect, it, vi } from 'vitest';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
+import { AutoOrderBlockedError } from '../trading/auto-order-errors';
 import { CryptoAutoTradingRepo } from './crypto-auto-repo';
 import { type CryptoAutoLiveAdapter, CryptoAutoTradingService } from './crypto-auto-service';
 
@@ -375,5 +376,62 @@ describe('CryptoAutoTradingService', () => {
 
     expect(result.isErr()).toBe(true);
     expect(adapter.createOrder).toHaveBeenCalledOnce();
+  });
+
+  it('post-E2: cryptoAutoBuyGuard 차단 시 blocked event 가 단일 기록된다', async () => {
+    // post-E2 hardening 회귀 테스트: 이전에는 gate 측 protectionGuard.canBuyToday 와
+    // cryptoAutoBuyGuard.assertAutoBuyAllowed 가 동일 조건을 중복 검사하여
+    // insertEvent(kind='blocked') 가 두 번 기록됐다. 이제 cryptoAutoBuyGuard 단일 호출만
+    // 남으므로 blocked event 는 정확히 1건이어야 한다.
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const repo = new CryptoAutoTradingRepo(db);
+    const logger = { log: vi.fn() };
+    const adapter = fakeAdapter();
+    seedWatching(repo, 1, 'KRW-BTC');
+    // dry-run history 1회 → live-small 진입 가능. 이후 markReadonlySmokeSucceeded.
+    const tempService = new CryptoAutoTradingService({ repo, logger: logger as never });
+    repo.upsertConfig(1, 'KRW-BTC', { mode: 'dry-run', emergencyDisabled: true });
+    expect(
+      tempService
+        .runDryTick({ accountId: 1, market: 'KRW-BTC', balances, tradePrice: '100000000' })
+        .isOk(),
+    ).toBe(true);
+    repo.markReadonlySmokeSucceeded(1, 'KRW-BTC', 99_000);
+    repo.upsertConfig(1, 'KRW-BTC', {
+      mode: 'live-small',
+      emergencyDisabled: false,
+    });
+    const service = new CryptoAutoTradingService({
+      repo,
+      logger: logger as never,
+      cryptoAutoBuyGuard: {
+        assertAutoBuyAllowed: () => {
+          throw new AutoOrderBlockedError(
+            'AUTO_BUY_PROTECTION_LIMIT',
+            '자동매수 차단: 보호 한도 초과 (테스트)',
+          );
+        },
+      },
+    });
+
+    const before = repo.listRecentEvents(1, 'KRW-BTC', 50).length;
+    const result = await service.runLiveTick({
+      accountId: 1,
+      market: 'KRW-BTC',
+      balances,
+      tradePrice: '97000000',
+      adapter,
+    });
+    if (result.isErr()) {
+      throw new Error(`runLiveTick failed: ${result.error.kind} ${result.error.message}`);
+    }
+
+    const after = repo.listRecentEvents(1, 'KRW-BTC', 50);
+    const newEvents = after.slice(0, after.length - before);
+    const blockedEvents = newEvents.filter((event) => event.kind === 'blocked');
+    expect(blockedEvents).toHaveLength(1);
+    expect(blockedEvents[0]?.reason).toContain('보호 한도');
+    expect(adapter.createOrder).not.toHaveBeenCalled();
   });
 });

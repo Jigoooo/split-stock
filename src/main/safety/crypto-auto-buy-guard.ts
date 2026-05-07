@@ -30,12 +30,27 @@ export interface CryptoStrategyRepo {
   ): CryptoStrategyProfile;
 }
 
+/**
+ * RateGuard 가 마켓을 SELL_ONLY 로 자동 전환했을 때 호출되는 알림 sink.
+ * bootstrap-deps 에서 OS Notification + IPC broadcast 로 연결.
+ */
+export interface CryptoAutoBuyGuardSellOnlySink {
+  notify(input: {
+    accountId: number;
+    market: CryptoKrwMarketCode;
+    count: number;
+    windowSeconds: number;
+  }): void;
+}
+
 export interface CryptoAutoBuyGuardOptions {
   logger: EventLogger;
   protectionGuard: CryptoProtectionGuard;
   rateGuardRepo: RateGuardRepo;
   repo: CryptoStrategyRepo;
   now?: () => Date;
+  /** SELL_ONLY 자동 전환 성공 시 호출 — OS notification + renderer broadcast. */
+  onSellOnly?: CryptoAutoBuyGuardSellOnlySink;
 }
 
 interface RateAttemptHistory {
@@ -140,6 +155,13 @@ export class CryptoAutoBuyGuard implements CryptoAutoBuyGuardPort {
           source: input.source,
           windowSeconds,
         },
+      });
+      // OS Notification + renderer broadcast — log only 였던 회귀 차단.
+      this.opts.onSellOnly?.notify({
+        accountId: input.accountId,
+        market: parsed.data,
+        count,
+        windowSeconds,
       });
     } catch (cause) {
       this.opts.logger.log({

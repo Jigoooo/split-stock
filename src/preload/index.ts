@@ -1,5 +1,6 @@
 import type {
   AutoOrderRetryEvent,
+  AutoSellOnlyEvent,
   CandlesUpdatedEvent,
   EventLogPush,
   TradeExecutionEvent,
@@ -97,6 +98,15 @@ contextBridge.exposeInMainWorld('appShell', {
     return () => ipcRenderer.off('appShell:event-log-appended', handler);
   },
   /**
+   * RateGuard 가 종목/마켓을 SELL_ONLY 로 자동 전환했을 때 renderer 에 push.
+   * renderer 는 toast/banner + 자동매매 query invalidate 로 즉시 반영.
+   */
+  onAutoSellOnly: (listener: (event: AutoSellOnlyEvent) => void): (() => void) => {
+    const handler = (_: unknown, event: AutoSellOnlyEvent): void => listener(event);
+    ipcRenderer.on('appShell:auto-sell-only', handler);
+    return () => ipcRenderer.off('appShell:auto-sell-only', handler);
+  },
+  /**
    * SWR 재검증 완료 push — main 이 fresh candles 를 받으면 renderer 에 전달.
    * renderer 는 이 이벤트를 수신해 해당 (pdno, period) 캔들 상태를 갱신한다 (Sub-AC 3-2-2).
    */
@@ -152,6 +162,8 @@ export type AppShellBridge = {
     listener: (event: { pdno: string; failures: number; reason: string }) => void,
   ) => () => void;
   onEventLogAppended?: (listener: (entry: EventLogPush) => void) => () => void;
+  /** RateGuard SELL_ONLY 자동 전환 push — toast/banner + invalidate 트리거 (post-E2 hardening). */
+  onAutoSellOnly?: (listener: (event: AutoSellOnlyEvent) => void) => () => void;
   /** SWR 재검증 완료 push — renderer candle 상태 자동 갱신 (Sub-AC 3-2-2). */
   onCandlesUpdated?: (listener: (event: CandlesUpdatedEvent) => void) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;

@@ -42,6 +42,47 @@ export function notifyTrade(param: TradeNotifyParams): void {
   }
 }
 
+export interface SellOnlyAutoEvent {
+  /** 'KIS' (도메스틱 종목) 또는 'UPBIT' (코인) — 알림 제목 분기 + renderer scope 분류용. */
+  scope: 'KIS' | 'UPBIT';
+  accountId: number;
+  /** 도메스틱: pdno (6자리), 코인: KRW-BTC 형태 마켓 코드. */
+  symbol: string;
+  /** 종목명 — 도메스틱은 stock_master, 코인은 마켓 코드 그대로. */
+  name?: string | null;
+  /** 윈도우 내 감지된 자동매수 시도 횟수 (>= maxCount + 1). */
+  count: number;
+  /** RateGuard 윈도우 길이 (초). */
+  windowSeconds: number;
+  /** triggered timestamp (ms). renderer toast/banner debounce 에 사용. */
+  occurredAt: number;
+}
+
+/**
+ * RateGuard 가 종목/마켓을 SELL_ONLY 로 자동 전환했음을 사용자에게 즉시 통지.
+ *
+ * - OS Notification: 백그라운드에서도 알림 센터 / Toast 로 푸시.
+ * - 호출측은 별도로 broadcastToAllWindows('appShell:auto-sell-only', event) 를 통해
+ *   renderer toast/banner 트리거. 본 함수는 OS 레벨만 담당.
+ */
+export function notifySellOnlyAuto(event: SellOnlyAutoEvent): void {
+  const subject =
+    event.name && event.name.trim().length > 0 ? `${event.name} (${event.symbol})` : event.symbol;
+  const scopeLabel = event.scope === 'UPBIT' ? '코인' : '주식';
+  const title = `${scopeLabel} 자동매도 전환`;
+  const body = `${subject} · ${event.windowSeconds}초 내 자동매수 ${event.count}회 감지 → 매도 전용으로 자동 전환`;
+
+  try {
+    new Notification({
+      title,
+      body,
+      timeoutType: 'default',
+    }).show();
+  } catch (error) {
+    console.warn('[trade-notifier] SellOnly Notification API 사용 불가', error);
+  }
+}
+
 export function notifyWatchOutcome(event: WatchOutcomeEvent, name?: string | null): void {
   const statusLabel =
     event.status === 'EXECUTED'

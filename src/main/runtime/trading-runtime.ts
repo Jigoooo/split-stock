@@ -17,7 +17,7 @@ import type { RateGuardRepo } from '../safety/rate-guard';
 import type { SafetyStateRegistry } from '../safety/safety-state';
 import type { TimeWindowRepo } from '../safety/time-window';
 import type { CredentialsRepo } from '../security/credentials-repo';
-import { AutoBuyGuard } from '../trading/auto-buy-guard';
+import { AutoBuyGuard, type AutoBuyGuardSellOnlySink } from '../trading/auto-buy-guard';
 import { isAutoOrderBlockedError } from '../trading/auto-order-errors';
 import { BoosterService } from '../trading/booster-service';
 import { createEnvAwarePricePoller } from '../trading/env-aware-price-poller';
@@ -70,6 +70,8 @@ export function createTradingRuntime(input: {
   factoryRef: { factory: RuntimeContextFactory | null };
   watchEvents: WatchEventDispatchers;
   broadcastToAllWindows: (channel: string, ...args: unknown[]) => void;
+  /** SELL_ONLY 자동 전환 알림 sink — bootstrap-deps 에서 OS Notification + IPC broadcast 로 연결. */
+  autoBuyGuardSink?: AutoBuyGuardSellOnlySink;
 }): TradingRuntime {
   quarantineLegacyWatchRows(input.db, input.logger);
 
@@ -203,6 +205,7 @@ export function createTradingRuntime(input: {
     rateGuardRepo: input.rateGuardRepo,
     strategyRepo: input.strategyRepo,
     timeWindowRepo: input.timeWindowRepo,
+    ...(input.autoBuyGuardSink ? { onSellOnly: input.autoBuyGuardSink } : {}),
   });
   const runWatchedOrder = async (order: WatchOrder, triggerPrice: number): Promise<void> => {
     await executeWatchOrder(

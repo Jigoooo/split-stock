@@ -225,6 +225,24 @@ export const CandlesUpdatedEventSchema = z.object({
 });
 export type CandlesUpdatedEvent = z.infer<typeof CandlesUpdatedEventSchema>;
 
+/**
+ * RateGuard 가 종목/마켓을 SELL_ONLY 로 자동 전환했음을 renderer 에 알림.
+ *
+ * - log only 였던 회귀를 차단해 사용자가 즉시 인지 가능.
+ * - scope='KIS' 는 도메스틱 종목 (symbol = pdno 6자리), 'UPBIT' 는 코인 마켓 (symbol = KRW-XXX).
+ * - renderer 는 이 이벤트를 수신해 toast/banner 표시 + 자동매매 화면 query invalidate.
+ */
+export const AutoSellOnlyEventSchema = z.object({
+  scope: z.enum(['KIS', 'UPBIT']),
+  accountId: z.number().int().positive(),
+  symbol: z.string().min(1),
+  name: z.string().nullable(),
+  count: z.number().int().positive(),
+  windowSeconds: z.number().int().positive(),
+  occurredAt: z.number().int().positive(),
+});
+export type AutoSellOnlyEvent = z.infer<typeof AutoSellOnlyEventSchema>;
+
 export const EventLogPushSchema = z.object({
   id: z.number().int().positive(),
   ts: z.number().int().positive(),

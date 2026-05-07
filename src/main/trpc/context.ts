@@ -164,6 +164,14 @@ export interface ContextFactoryOptions
   /** 부팅 시 ensureActive 결과로 채울 초기 활성 계좌 ID. */
   initialActiveAccountId?: number | null;
   /**
+   * 활성 계좌가 변경됐을 때 호출되는 콜백 (post-E2 hardening).
+   *
+   * setEnvAndAccount / setActiveAccountId 가 새 accountId 로 전환된 직후 호출.
+   * bootstrap-deps 에서 cryptoBoosterService 의 fill event 구독을 새 계좌로 재바인딩하는
+   * 데 사용. 이전: initialActiveAccountId 로만 1회 구독 → 계좌 전환 후 새 계좌 fill 무시.
+   */
+  onActiveAccountChanged?: (accountId: number | null) => void;
+  /**
    * SWR 재검증 성공 콜백 — fresh candles 수신 시 IPC push 트리거.
    * bootstrap-deps 에서 broadcastToAllWindows 로 연결 (Sub-AC 3-2-2).
    */
@@ -199,7 +207,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
    */
   getBroker: () => BrokerPort | null;
 } {
-  const { realtimeFactory, initialActiveAccountId, ...deps } = opts;
+  const { realtimeFactory, initialActiveAccountId, onActiveAccountChanged, ...deps } = opts;
   let currentEnv: AppEnv | null = null;
   let activeAccountId: number | null = initialActiveAccountId ?? null;
   let realtime: RealtimeService | null = null;
@@ -351,6 +359,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
     activeAccountId = id;
     syncWatchEngine(id);
     syncAccountRealtimeSubscription();
+    onActiveAccountChanged?.(id);
   };
   const setEnvAndAccount = (next: { env: AppEnv | null; accountId: number | null }): void => {
     clearAccountRealtimeSubscription();
@@ -364,6 +373,7 @@ export function createContextFactory(opts: ContextFactoryOptions): {
       realtime = realtimeFactory(next.env);
     }
     syncAccountRealtimeSubscription();
+    onActiveAccountChanged?.(next.accountId);
   };
   const setBackupScheduler = (scheduler: BackupScheduler | null): void => {
     backupScheduler = scheduler;

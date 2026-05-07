@@ -21,6 +21,7 @@ function setup(now: Date = new Date('2026-04-24T00:30:00.000Z')) {
   const rateGuardRepo = createRateGuardRepo(db);
   const timeWindowRepo = createTimeWindowRepo(db);
   const strategyRepo = new StrategyRepo(new SettingsRepo(db), logger as never);
+  const sellOnlyNotify = vi.fn();
   const guard = new AutoBuyGuard({
     logger: logger as never,
     protectionGuard,
@@ -28,8 +29,18 @@ function setup(now: Date = new Date('2026-04-24T00:30:00.000Z')) {
     strategyRepo,
     timeWindowRepo,
     now: () => now,
+    onSellOnly: { notify: sellOnlyNotify },
   });
-  return { db, guard, logger, protectionLimitsRepo, rateGuardRepo, strategyRepo, timeWindowRepo };
+  return {
+    db,
+    guard,
+    logger,
+    protectionLimitsRepo,
+    rateGuardRepo,
+    strategyRepo,
+    timeWindowRepo,
+    sellOnlyNotify,
+  };
 }
 
 function insertTodayBuyOrder(db: ReturnType<typeof createTestDb>): void {
@@ -135,5 +146,34 @@ describe('AutoBuyGuard', () => {
     const active = strategyRepo.getActive(1, '005930')._unsafeUnwrap();
     expect(active).not.toBeNull();
     expect(active ? deriveStrategyAutoMode(active) : null).toBe('SELL_ONLY');
+  });
+
+  it('SELL_ONLY 자동 전환 성공 시 onSellOnly sink가 호출된다', () => {
+    const { guard, rateGuardRepo, sellOnlyNotify } = setup();
+    rateGuardRepo.updateSettings(1, true, 40, 1);
+
+    guard.assertAutoBuyAllowed({
+      accountId: 1,
+      amountKrw: 10_000,
+      pdno: '005930',
+      source: 'WATCH',
+    });
+
+    expectBlocked(() => {
+      guard.assertAutoBuyAllowed({
+        accountId: 1,
+        amountKrw: 10_000,
+        pdno: '005930',
+        source: 'WATCH',
+      });
+    }, 'AUTO_BUY_RATE_GUARD');
+
+    expect(sellOnlyNotify).toHaveBeenCalledTimes(1);
+    expect(sellOnlyNotify).toHaveBeenCalledWith({
+      accountId: 1,
+      pdno: '005930',
+      count: 2,
+      windowSeconds: 40,
+    });
   });
 });
