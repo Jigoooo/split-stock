@@ -1,8 +1,4 @@
-import type {
-  CryptoLot,
-  CryptoPrivateOrderEvent,
-  CryptoStrategyProfile,
-} from '@shared/contracts';
+import type { CryptoLot, CryptoPrivateOrderEvent, CryptoStrategyProfile } from '@shared/contracts';
 import { ok } from 'neverthrow';
 import { describe, expect, it, vi } from 'vitest';
 import { FakeTimer } from '../testing/fake-timer';
@@ -61,12 +57,10 @@ function makeService(opts: ServiceDeps = {}) {
   const realtime = { watchMarket: vi.fn(), unwatchMarket: vi.fn() };
   const tickerListeners = new Map<string, (ticker: { tradePrice: string }) => void>();
   const bus = {
-    subscribeTicker: vi.fn(
-      (market: string, listener: (ticker: { tradePrice: string }) => void) => {
-        tickerListeners.set(market, listener);
-        return () => tickerListeners.delete(market);
-      },
-    ),
+    subscribeTicker: vi.fn((market: string, listener: (ticker: { tradePrice: string }) => void) => {
+      tickerListeners.set(market, listener);
+      return () => tickerListeners.delete(market);
+    }),
   };
   const logger = { log: vi.fn() };
   const repo = {
@@ -77,9 +71,7 @@ function makeService(opts: ServiceDeps = {}) {
   };
   const createOrderMock = vi.fn(async () => ok({ uuid: 'placed-order-uuid' }));
   const adapter: CryptoBoosterAdapter & { createOrder: typeof createOrderMock } =
-    opts.adapter === undefined
-      ? { createOrder: createOrderMock }
-      : (opts.adapter as never);
+    opts.adapter === undefined ? { createOrder: createOrderMock } : (opts.adapter as never);
 
   type SafetySnapshot = {
     master: boolean;

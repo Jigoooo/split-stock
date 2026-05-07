@@ -382,7 +382,13 @@ export class CryptoBoosterService {
 function computeLastFilledPrice(event: CryptoPrivateOrderEvent): number | null {
   const funds = event.executedFunds === undefined ? null : Number(event.executedFunds);
   const volume = Number(event.executedVolume);
-  if (funds !== null && Number.isFinite(funds) && funds > 0 && Number.isFinite(volume) && volume > 0) {
+  if (
+    funds !== null &&
+    Number.isFinite(funds) &&
+    funds > 0 &&
+    Number.isFinite(volume) &&
+    volume > 0
+  ) {
     return funds / volume;
   }
   const price = Number(event.price);

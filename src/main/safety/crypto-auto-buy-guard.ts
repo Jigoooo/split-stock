@@ -1,7 +1,7 @@
 import {
   applyCryptoStrategyAutoMode,
-  CryptoKrwMarketCodeSchema,
   type CryptoKrwMarketCode,
+  CryptoKrwMarketCodeSchema,
   type CryptoStrategyProfile,
 } from '@shared/contracts';
 import type { EventLogger } from '../logging/event-logger';

@@ -18,6 +18,8 @@ import { listAccountsWithActiveRepair } from '../handlers/account-shared';
 import { authedProcedure, publicProcedure, router } from '../trpc-core';
 
 const AccountIdField = z.number().int().positive();
+// broker를 명시하지 않은 renderer 호출(useQuery(undefined) 패턴)에 대한 backward-compat 기본값.
+// KIS 단일 환경에서는 항상 'KIS'. KIWOOM 추가 시 renderer가 broker prop을 명시적으로 전달하므로 유지 필요.
 const BrokerField = z.string().optional().default('KIS');
 
 export const accountRouter = router({

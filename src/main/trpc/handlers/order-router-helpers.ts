@@ -275,6 +275,8 @@ export async function cancelAcceptedOrderAfterLocalFailure(
     logger: Pick<EventLogger, 'log'>;
   },
 ): Promise<void> {
+  // KIS 프로토콜: 취소 요청에 orgNo(원주문번호)가 필수. 누락 시 취소 불가능하므로 skip.
+  // KIWOOM은 orgNo 없이도 취소 가능 — brokerId 체크가 KIS 전용 guard 역할.
   if (!ack.orgNo && broker.brokerId === 'KIS') {
     opts.logger.log({
       level: 'WARN',

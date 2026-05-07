@@ -26,6 +26,8 @@ export function createEnvAwarePricePoller(opts: EnvAwarePricePollerOptions): Pri
     fetch: async (pdno): Promise<Result<{ price: number }, BrokerError>> => {
       const broker = opts.getBroker();
       if (!broker) {
+        // domestic-only poller: getBroker()는 KIS/KIWOOM 중 활성 브로커를 반환. null 시
+        // BrokerError 생성에 brokerId가 필요하므로 placeholder로 'KIS' 사용 (에러 경로 전용).
         return err(
           makeBrokerError({
             brokerId: 'KIS',

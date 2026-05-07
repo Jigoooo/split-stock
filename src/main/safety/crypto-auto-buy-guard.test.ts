@@ -1,14 +1,14 @@
 import { deriveCryptoStrategyAutoMode } from '@shared/contracts';
 import { describe, expect, it, vi } from 'vitest';
+import { CryptoAutoTradingRepo } from '../crypto/crypto-auto-repo';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { createTestDb } from '../db/client';
 import { cryptoOrders } from '../db/schema';
-import { CryptoAutoTradingRepo } from '../crypto/crypto-auto-repo';
+import { AutoOrderBlockedError } from '../trading/auto-order-errors';
+import { CryptoAutoBuyGuard } from './crypto-auto-buy-guard';
 import { CryptoProtectionGuard } from './crypto-protection-guard';
 import { ProtectionLimitsRepo } from './protection-limits-repo';
 import { createRateGuardRepo } from './rate-guard';
-import { CryptoAutoBuyGuard } from './crypto-auto-buy-guard';
-import { AutoOrderBlockedError } from '../trading/auto-order-errors';
 
 const MARKET = 'KRW-BTC';
 
@@ -105,8 +105,18 @@ describe('CryptoAutoBuyGuard', () => {
     const { guard, rateGuardRepo } = setup();
     rateGuardRepo.updateSettings(1, false, 40, 1);
 
-    guard.assertAutoBuyAllowed({ accountId: 1, market: MARKET, amountKrw: 50_000, source: 'STRATEGY' });
-    guard.assertAutoBuyAllowed({ accountId: 1, market: MARKET, amountKrw: 50_000, source: 'STRATEGY' });
+    guard.assertAutoBuyAllowed({
+      accountId: 1,
+      market: MARKET,
+      amountKrw: 50_000,
+      source: 'STRATEGY',
+    });
+    guard.assertAutoBuyAllowed({
+      accountId: 1,
+      market: MARKET,
+      amountKrw: 50_000,
+      source: 'STRATEGY',
+    });
 
     // no throw — guard is disabled
   });
@@ -146,13 +156,23 @@ describe('CryptoAutoBuyGuard', () => {
 
     // protection block — should not increment rate guard
     expectBlocked(() => {
-      guard.assertAutoBuyAllowed({ accountId: 1, market: MARKET, amountKrw: 50_000, source: 'STRATEGY' });
+      guard.assertAutoBuyAllowed({
+        accountId: 1,
+        market: MARKET,
+        amountKrw: 50_000,
+        source: 'STRATEGY',
+      });
     }, 'AUTO_BUY_PROTECTION_LIMIT');
 
     // rate guard was not incremented — still at 0 of 1, no throw yet even if protection is lifted
     // verify by checking guard throws PROTECTION not RATE_GUARD on second blocked call
     expectBlocked(() => {
-      guard.assertAutoBuyAllowed({ accountId: 1, market: MARKET, amountKrw: 50_000, source: 'STRATEGY' });
+      guard.assertAutoBuyAllowed({
+        accountId: 1,
+        market: MARKET,
+        amountKrw: 50_000,
+        source: 'STRATEGY',
+      });
     }, 'AUTO_BUY_PROTECTION_LIMIT');
   });
 
@@ -162,18 +182,38 @@ describe('CryptoAutoBuyGuard', () => {
     rateGuardRepo.updateSettings(2, true, 40, 1);
 
     // accountId=1: 1st attempt (ok)
-    guard.assertAutoBuyAllowed({ accountId: 1, market: MARKET, amountKrw: 50_000, source: 'STRATEGY' });
+    guard.assertAutoBuyAllowed({
+      accountId: 1,
+      market: MARKET,
+      amountKrw: 50_000,
+      source: 'STRATEGY',
+    });
     // accountId=2: 1st attempt (ok — independent counter)
-    guard.assertAutoBuyAllowed({ accountId: 2, market: MARKET, amountKrw: 50_000, source: 'STRATEGY' });
+    guard.assertAutoBuyAllowed({
+      accountId: 2,
+      market: MARKET,
+      amountKrw: 50_000,
+      source: 'STRATEGY',
+    });
 
     // accountId=1: 2nd attempt (blocked)
     expectBlocked(() => {
-      guard.assertAutoBuyAllowed({ accountId: 1, market: MARKET, amountKrw: 50_000, source: 'STRATEGY' });
+      guard.assertAutoBuyAllowed({
+        accountId: 1,
+        market: MARKET,
+        amountKrw: 50_000,
+        source: 'STRATEGY',
+      });
     }, 'AUTO_BUY_RATE_GUARD');
 
     // accountId=2: 2nd attempt (also blocked — its own counter hit)
     expectBlocked(() => {
-      guard.assertAutoBuyAllowed({ accountId: 2, market: MARKET, amountKrw: 50_000, source: 'STRATEGY' });
+      guard.assertAutoBuyAllowed({
+        accountId: 2,
+        market: MARKET,
+        amountKrw: 50_000,
+        source: 'STRATEGY',
+      });
     }, 'AUTO_BUY_RATE_GUARD');
   });
 
@@ -181,10 +221,20 @@ describe('CryptoAutoBuyGuard', () => {
     const { guard, rateGuardRepo } = setup();
     rateGuardRepo.updateSettings(1, true, 40, 1);
 
-    guard.assertAutoBuyAllowed({ accountId: 1, market: MARKET, amountKrw: 50_000, source: 'BOOSTER' });
+    guard.assertAutoBuyAllowed({
+      accountId: 1,
+      market: MARKET,
+      amountKrw: 50_000,
+      source: 'BOOSTER',
+    });
 
     expectBlocked(() => {
-      guard.assertAutoBuyAllowed({ accountId: 1, market: MARKET, amountKrw: 50_000, source: 'BOOSTER' });
+      guard.assertAutoBuyAllowed({
+        accountId: 1,
+        market: MARKET,
+        amountKrw: 50_000,
+        source: 'BOOSTER',
+      });
     }, 'AUTO_BUY_RATE_GUARD');
   });
 });
