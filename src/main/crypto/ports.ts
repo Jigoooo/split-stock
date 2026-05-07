@@ -23,6 +23,8 @@ export interface CryptoMarketDataAdapter {
   readonly exchangeId: 'UPBIT';
   listMarkets(): Promise<Result<CryptoMarketSummary[], CryptoExchangeError>>;
   getTicker(market: string): Promise<Result<CryptoTicker, CryptoExchangeError>>;
+  /** 다중 마켓 ticker batch — Upbit /v1/ticker?markets=A,B,C 1회 호출. 빈 입력은 즉시 ok([]). */
+  getTickers(markets: string[]): Promise<Result<CryptoTicker[], CryptoExchangeError>>;
   getOrderbook(
     market: string,
     count?: number,

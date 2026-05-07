@@ -94,6 +94,9 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       getBalances: {
         useQuery: () => ({ data: undefined, isPending: false, error: null }),
       },
+      getTickers: {
+        useQuery: () => ({ data: { tickers: [] }, isPending: false, error: null }),
+      },
     },
     realtime: {
       watch: {

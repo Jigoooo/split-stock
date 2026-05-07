@@ -363,6 +363,15 @@ export const cryptoRouter = router({
       return result.value;
     }),
 
+  /** NM-017: 다중 마켓 ticker batch — UPBIT 잔고 실시간 평가용. 1 batch API call. */
+  getTickers: publicProcedure
+    .input(z.object({ markets: z.array(CryptoMarketCodeSchema).min(1).max(100) }))
+    .query(async ({ input }) => {
+      const result = await createPublicUpbit().getTickers(input.markets);
+      if (result.isErr()) throwUpbitError(result.error);
+      return { tickers: result.value };
+    }),
+
   getOrderbookInstruments: publicProcedure
     .input(z.object({ markets: z.array(CryptoMarketCodeSchema).min(1).max(50) }))
     .query(async ({ input }) => {

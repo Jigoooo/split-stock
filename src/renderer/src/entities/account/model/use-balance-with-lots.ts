@@ -263,6 +263,25 @@ export function useBalanceWithLots(broker?: string): UseBalanceWithLotsResult {
       staleTime: 0,
     },
   );
+  // NM-017: UPBIT 잔고 보유 마켓에 대해 ticker batch 조회. 1 batch API call / 3초.
+  const upbitMarkets = useMemo(() => {
+    if (!isUpbitMode) return [] as string[];
+    const balances = cryptoBalancesQuery.data?.balances ?? [];
+    return balances
+      .filter(
+        (b) => b.currency !== QUOTE_CURRENCIES.KRW && Number(b.balance) + Number(b.locked) > 0,
+      )
+      .map((b) => `${b.unitCurrency || 'KRW'}-${b.currency}`)
+      .sort();
+  }, [cryptoBalancesQuery.data?.balances, isUpbitMode]);
+  const upbitTickersQuery = trpc.crypto.getTickers.useQuery(
+    upbitMarkets.length > 0 ? { markets: upbitMarkets } : skipToken,
+    {
+      enabled: isUpbitMode && upbitMarkets.length > 0,
+      refetchInterval: 3000,
+      staleTime: 1000,
+    },
+  );
 
   useEffect(() => {
     if (!query.data) return;
@@ -293,38 +312,50 @@ export function useBalanceWithLots(broker?: string): UseBalanceWithLotsResult {
   if (isUpbitMode) {
     const balances = cryptoBalancesQuery.data?.balances ?? [];
     const krw = balances.find((b) => b.currency === QUOTE_CURRENCIES.KRW);
+    // NM-017: ticker batch 결과를 market → tradePrice map 으로 변환
+    const tickerMap = new Map<string, number>();
+    for (const t of upbitTickersQuery.data?.tickers ?? []) {
+      tickerMap.set(t.market, num(t.tradePrice));
+    }
     const upbitPositions: BalanceWithLotsPosition[] = balances
       .filter((b) => b.currency !== 'KRW')
       .map((b) => {
         // balance 는 거래가능, locked 는 주문대기 — 둘 다 보유 수량
         const qty = num(b.balance) + num(b.locked);
         const avgPrice = num(b.avgBuyPrice);
-        // 라이브 ticker 는 별도 query 미연결 — avgPrice 로 fallback (pnl 0 표시).
-        // 추후 phase 에서 markets ticker 합쳐서 currentPrice 갱신 예정.
-        const currentPrice = avgPrice;
+        const code = `${b.unitCurrency || 'KRW'}-${b.currency}`;
+        // NM-017: ticker map 에서 현재가 lookup. 미응답 시 avgPrice fallback (pnl=0).
+        const tickerPrice = tickerMap.get(code);
+        const currentPrice = tickerPrice && tickerPrice > 0 ? tickerPrice : avgPrice;
         const evalAmount = qty * currentPrice;
+        const buyAmount = qty * avgPrice;
+        const pnlAmount = evalAmount - buyAmount;
+        const pnlRate = buyAmount > 0 ? pnlAmount / buyAmount : 0;
         return {
-          code: `${b.unitCurrency || 'KRW'}-${b.currency}`,
+          code,
           name: b.currency,
           qty,
           avgPrice,
           currentPrice,
           evalAmount,
-          pnlAmount: 0,
-          pnlRate: 0,
+          pnlAmount,
+          pnlRate,
         };
       })
       .filter((p) => p.qty > 0);
     const upbitTotalEval = upbitPositions.reduce((sum, p) => sum + p.evalAmount, 0);
     const upbitTotalBuyAmount = upbitPositions.reduce((sum, p) => sum + p.qty * p.avgPrice, 0);
+    const upbitTotalPnlAmount = upbitTotalEval - upbitTotalBuyAmount;
+    const upbitTotalPnlRate =
+      upbitTotalBuyAmount > 0 ? upbitTotalPnlAmount / upbitTotalBuyAmount : 0;
     const upbitDeposit = num(krw?.balance);
     const upbitSummary: BalanceWithLotsSummary = {
       deposit: upbitDeposit,
       d2Deposit: upbitDeposit,
       totalBuyAmount: upbitTotalBuyAmount,
       totalEval: upbitTotalEval,
-      totalPnlAmount: 0,
-      totalPnlRate: 0,
+      totalPnlAmount: upbitTotalPnlAmount,
+      totalPnlRate: upbitTotalPnlRate,
       estimatedAsset: upbitDeposit + upbitTotalEval,
     };
     const upbitUnauthorized = isUnauthorizedTrpcError(cryptoBalancesQuery.error);

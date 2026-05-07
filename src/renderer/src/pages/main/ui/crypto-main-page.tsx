@@ -572,7 +572,8 @@ const CryptoLeftPane = ({
   if (leftTab === 'auto') {
     content = <WatchBoard accountId={accountId} broker="UPBIT" />;
   } else if (holdingsTab === 'filled') {
-    content = <FilledPane selectedPdno={market} broker="UPBIT" />;
+    // NM-017: 도메스틱과 동등하게 전체 계좌 체결 표시 (selectedPdno=null).
+    content = <FilledPane selectedPdno={null} broker="UPBIT" />;
   } else if (holdingsTab === 'open') {
     content = <ActiveOrdersPanel pdnoFilter={market} broker="UPBIT" />;
   } else if (holdingsTab === 'past') {

@@ -1,5 +1,6 @@
+import { isCryptoBroker } from '@shared/contracts';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
-import { orders } from '../../db/schema';
+import { cryptoFills, cryptoInstruments, cryptoOrders, orders } from '../../db/schema';
 import type { Context } from '../context';
 import { resolveAccountId } from '../router-helpers';
 import { resolveActiveDomesticBroker } from './account-shared';
@@ -53,6 +54,76 @@ export function listActiveOrdersHandler(
   };
 }
 
+/**
+ * NM-017: UPBIT 체결 내역 — cryptoFills 권위적 source. cryptoOrders join 으로 ordType 획득,
+ * cryptoInstruments lookup 으로 한글명. 도메스틱 orders row shape 으로 normalize 후 반환.
+ */
+function listCryptoFills(
+  ctx: Context,
+  accountId: number,
+  pdno: string | undefined,
+  limit: number,
+): { orders: ReturnType<typeof normalizeCryptoFillRow>[] } {
+  const conditions = [eq(cryptoFills.accountId, accountId), eq(cryptoFills.exchange, 'UPBIT')];
+  if (pdno) conditions.push(eq(cryptoFills.market, pdno));
+  const fillRows = ctx.db
+    .select()
+    .from(cryptoFills)
+    .where(and(...conditions))
+    .orderBy(desc(cryptoFills.executedAt))
+    .limit(limit)
+    .all();
+  if (fillRows.length === 0) return { orders: [] };
+
+  const uuids = Array.from(new Set(fillRows.map((r) => r.orderUuid)));
+  const orderRows = ctx.db
+    .select({
+      uuid: cryptoOrders.uuid,
+      ordType: cryptoOrders.ordType,
+      placedAt: cryptoOrders.placedAt,
+    })
+    .from(cryptoOrders)
+    .where(and(eq(cryptoOrders.accountId, accountId), inArray(cryptoOrders.uuid, uuids)))
+    .all();
+  const orderByUuid = new Map(orderRows.map((o) => [o.uuid ?? '', o]));
+
+  const markets = Array.from(new Set(fillRows.map((r) => r.market)));
+  const instrumentRows = ctx.db
+    .select({ market: cryptoInstruments.market, koreanName: cryptoInstruments.koreanName })
+    .from(cryptoInstruments)
+    .where(and(eq(cryptoInstruments.exchange, 'UPBIT'), inArray(cryptoInstruments.market, markets)))
+    .all();
+  const nameByMarket = new Map(instrumentRows.map((i) => [i.market, i.koreanName]));
+
+  return {
+    orders: fillRows.map((row) => normalizeCryptoFillRow(row, orderByUuid, nameByMarket)),
+  };
+}
+
+function normalizeCryptoFillRow(
+  fill: typeof cryptoFills.$inferSelect,
+  orderByUuid: Map<string, { uuid: string | null; ordType: string; placedAt: Date }>,
+  nameByMarket: Map<string, string>,
+) {
+  const order = orderByUuid.get(fill.orderUuid);
+  const ordType = order?.ordType ?? 'limit';
+  const division = ordType === 'limit' ? 'LIMIT' : 'MARKET';
+  return {
+    id: fill.id,
+    accountId: fill.accountId,
+    broker: 'UPBIT' as const,
+    pdno: fill.market,
+    name: nameByMarket.get(fill.market) ?? null,
+    side: fill.side === 'bid' ? ('BUY' as const) : ('SELL' as const),
+    qty: Number(fill.volume),
+    price: Number(fill.price),
+    division,
+    status: 'FILLED' as const,
+    placedAt: order?.placedAt?.getTime() ?? fill.executedAt.getTime(),
+    filledAt: fill.executedAt.getTime(),
+  };
+}
+
 export function listMyFillsHandler(
   ctx: Context,
   input: {
@@ -66,6 +137,10 @@ export function listMyFillsHandler(
   const pdno = input.pdno;
   const limit = input.limit ?? 100;
   const brokerKey = input.broker ?? resolveActiveDomesticBroker(ctx);
+  // NM-017: UPBIT 분기 — cryptoFills 기반 정규화 반환.
+  if (isCryptoBroker(brokerKey)) {
+    return listCryptoFills(ctx, accountId, pdno, limit);
+  }
   const conditions = [eq(orders.broker, brokerKey), eq(orders.accountId, accountId)];
   if (pdno) conditions.push(eq(orders.pdno, pdno));
   const rows = ctx.db

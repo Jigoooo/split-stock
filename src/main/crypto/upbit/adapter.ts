@@ -240,6 +240,34 @@ export class UpbitExchangeAdapter implements CryptoMarketDataAdapter {
     }
   }
 
+  async getTickers(
+    markets: string[],
+  ): Promise<Result<CryptoTicker[], ReturnType<typeof toUpbitExchangeError>>> {
+    if (markets.length === 0) return ok([]);
+    try {
+      const csv = Array.from(new Set(markets)).join(',');
+      const rows = await this.limiter.schedule('ticker', () =>
+        this.client.tickers.listByTradingPairs({ markets: csv }),
+      );
+      return ok(
+        rows.map((ticker) => ({
+          market: ticker.market,
+          tradePrice: decimalString(ticker.trade_price),
+          openingPrice: decimalString(ticker.opening_price),
+          highPrice: decimalString(ticker.high_price),
+          lowPrice: decimalString(ticker.low_price),
+          signedChangePrice: decimalString(ticker.signed_change_price),
+          signedChangeRate: decimalString(ticker.signed_change_rate),
+          accTradePrice24h: decimalString(ticker.acc_trade_price_24h),
+          accTradeVolume24h: decimalString(ticker.acc_trade_volume_24h),
+          timestamp: ticker.timestamp,
+        })),
+      );
+    } catch (cause) {
+      return err(toUpbitExchangeError(cause));
+    }
+  }
+
   async getOrderbookInstruments(
     markets: string[],
   ): Promise<Result<CryptoOrderbookInstrument[], ReturnType<typeof toUpbitExchangeError>>> {
