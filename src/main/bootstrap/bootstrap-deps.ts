@@ -322,6 +322,7 @@ export function bootstrapDeps(userDataDir: string) {
     broadcastToAllWindows,
     notifyWatchOutcome,
     notifyTrade,
+    resolveStockName: (pdno) => stockMasterRepo.find(pdno)?.name ?? null,
   });
   const factoryRef: { factory: ReturnType<typeof createContextFactory> | null } = { factory: null };
   markStartup('trading-runtime.create.start');

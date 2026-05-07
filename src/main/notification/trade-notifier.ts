@@ -42,15 +42,17 @@ export function notifyTrade(param: TradeNotifyParams): void {
   }
 }
 
-export function notifyWatchOutcome(event: WatchOutcomeEvent): void {
+export function notifyWatchOutcome(event: WatchOutcomeEvent, name?: string | null): void {
   const statusLabel =
     event.status === 'EXECUTED'
       ? '자동감시 실행'
       : event.status === 'FAILED'
         ? '자동감시 실패'
         : '자동감시 만료';
+  // 종목명 있으면 "삼성전자 (005930)" 형태로 표시 — notifyTrade 와 일관.
+  const subject = name && name.trim().length > 0 ? `${name} (${event.pdno})` : event.pdno;
   const bodyParts = [
-    `${event.pdno}`,
+    subject,
     `${event.side === 'BUY' ? '매수' : '매도'}`,
     `목표가 ${event.targetPrice.toLocaleString('ko-KR')}원`,
   ];

@@ -54,7 +54,7 @@ export function createWatchEventDispatchers(input: {
   settingsRepo: NotificationSettings;
   logger: EventLogger;
   broadcastToAllWindows: (channel: string, ...args: unknown[]) => void;
-  notifyWatchOutcome: (event: WatchOutcomeEvent) => void;
+  notifyWatchOutcome: (event: WatchOutcomeEvent, name?: string | null) => void;
   notifyTrade: (event: {
     pdno: string;
     side: 'buy' | 'sell';
@@ -62,6 +62,8 @@ export function createWatchEventDispatchers(input: {
     price: number;
     name: string;
   }) => void;
+  /** pdno → 종목명 lookup (stockMasterRepo). 없으면 pdno 만 알림에 표시. */
+  resolveStockName?: (pdno: string) => string | null;
   now?: () => number;
 }): WatchEventDispatchers {
   const now = input.now ?? Date.now;
@@ -73,7 +75,8 @@ export function createWatchEventDispatchers(input: {
       createWatchOutcomeEvent({ status, order, extras, now }),
     broadcastWatchOutcome: (event) => {
       if (osNotificationsEnabled()) {
-        input.notifyWatchOutcome(event);
+        const name = input.resolveStockName?.(event.pdno) ?? null;
+        input.notifyWatchOutcome(event, name);
       }
       input.broadcastToAllWindows('appShell:watch-event', event);
     },

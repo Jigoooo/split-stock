@@ -80,7 +80,7 @@ describe('watch event helpers', () => {
     dispatchers.broadcastWatchOutcome(outcome);
     dispatchers.broadcastTradeExecution(trade);
 
-    expect(notifyWatchOutcome).toHaveBeenCalledWith(outcome);
+    expect(notifyWatchOutcome).toHaveBeenCalledWith(outcome, null);
     expect(notifyTrade).toHaveBeenCalledWith({
       pdno: '005930',
       side: 'sell',
