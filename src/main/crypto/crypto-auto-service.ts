@@ -18,6 +18,7 @@ import {
 import type { Result } from 'neverthrow';
 import { err, ok } from 'neverthrow';
 import type { EventLogger } from '../logging/event-logger';
+import type { ProtectionGuardError } from '../safety/protection-guard';
 import type { CryptoAutoTradingRepo } from './crypto-auto-repo';
 import {
   assertDecimalString,
@@ -69,7 +70,7 @@ export interface CryptoAutoServiceOptions {
       accountId: number,
       market: string,
       amountKrw: number,
-    ): { ok: boolean; reason?: string };
+    ): Result<void, ProtectionGuardError>;
   };
 }
 
@@ -286,7 +287,7 @@ export class CryptoAutoTradingService {
         const amount = Number(input.intent.krwAmount);
         if (Number.isFinite(amount) && amount > 0) {
           const verdict = this.protectionGuard.canBuyToday(input.accountId, market.value, amount);
-          if (!verdict.ok) blockedReasons.push(verdict.reason ?? '보호 한도 초과');
+          if (verdict.isErr()) blockedReasons.push(protectionGuardErrorMessage(verdict.error));
         }
       }
     }
@@ -641,5 +642,20 @@ export class CryptoAutoTradingService {
         createdAt: input.smoke.checkedAt,
       });
     }
+  }
+}
+
+function protectionGuardErrorMessage(error: ProtectionGuardError): string {
+  switch (error.kind) {
+    case 'LIMIT_PER_SYMBOL_DAILY_BUYS':
+      return `보호 한도 초과: 종목별 1일 최대 매수 횟수(${error.max}회)에 도달했습니다.`;
+    case 'LIMIT_DAILY_TOTAL_COUNT':
+      return `보호 한도 초과: 1일 총 최대 매수 건수(${error.max}회)에 도달했습니다.`;
+    case 'LIMIT_DAILY_TOTAL_AMOUNT':
+      return `보호 한도 초과: 1일 총 최대 매수 금액(${error.maxKrw.toLocaleString('ko-KR')}원)을 초과합니다.`;
+    case 'LIMIT_ACCOUNT_TOTAL_AMOUNT':
+      return `보호 한도 초과: 계좌 총 최대 매수 금액(${error.maxKrw.toLocaleString('ko-KR')}원)을 초과합니다.`;
+    case 'DB_ERROR':
+      return '보호 한도 초과: 보호 한도 확인 중 오류가 발생했습니다.';
   }
 }

@@ -3,6 +3,7 @@ import { err, ok, type Result } from 'neverthrow';
 import type { Db } from '../db/client';
 import { lots, orders } from '../db/schema';
 import type { ProtectionLimitsRepo } from './protection-limits-repo';
+import { kstMidnightUtc } from './time-window';
 
 export type ProtectionGuardError =
   | { kind: 'LIMIT_PER_SYMBOL_DAILY_BUYS'; current: number; max: number }
@@ -10,19 +11,6 @@ export type ProtectionGuardError =
   | { kind: 'LIMIT_DAILY_TOTAL_AMOUNT'; currentKrw: number; maxKrw: number }
   | { kind: 'LIMIT_ACCOUNT_TOTAL_AMOUNT'; currentKrw: number; maxKrw: number }
   | { kind: 'DB_ERROR'; cause: unknown };
-
-/**
- * KST 기준 오늘 00:00:00.000 의 UTC Date 반환.
- * KST = UTC+9.
- */
-function kstMidnightUtc(now: Date = new Date()): Date {
-  // KST 시각으로 변환 후 날짜 추출
-  const kstOffset = 9 * 60 * 60 * 1000;
-  const kstNow = new Date(now.getTime() + kstOffset);
-  const kstDateStr = kstNow.toISOString().slice(0, 10); // "YYYY-MM-DD"
-  // KST 00:00을 UTC로 역산
-  return new Date(`${kstDateStr}T00:00:00.000Z`);
-}
 
 /**
  * 자동매매 보호 한도 가드 — placeCash 진입 전 검사.

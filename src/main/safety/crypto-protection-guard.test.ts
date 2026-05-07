@@ -16,7 +16,7 @@ function setup() {
 describe('CryptoProtectionGuard', () => {
   it('passes when no limits configured', () => {
     const { guard } = setup();
-    expect(guard.canBuyToday(1, 'KRW-BTC', 5000).ok).toBe(true);
+    expect(guard.canBuyToday(1, 'KRW-BTC', 5000).isOk()).toBe(true);
   });
 
   it('blocks when daily total amount limit would be exceeded', () => {
@@ -35,9 +35,9 @@ describe('CryptoProtectionGuard', () => {
         updatedAt: new Date('2026-05-03T10:00:00+09:00'),
       })
       .run();
-    const verdict = guard.canBuyToday(1, 'KRW-BTC', 5000);
-    expect(verdict.ok).toBe(false);
-    expect(verdict.reason).toMatch(/일일 매수 금액/);
+    const result = guard.canBuyToday(1, 'KRW-BTC', 5000);
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().kind).toBe('LIMIT_DAILY_TOTAL_AMOUNT');
   });
 
   it('blocks when account total exposure would be exceeded', () => {
@@ -60,9 +60,9 @@ describe('CryptoProtectionGuard', () => {
         boughtAt: new Date('2026-05-03T10:00:00+09:00'),
       })
       .run();
-    const verdict = guard.canBuyToday(1, 'KRW-BTC', 6000);
-    expect(verdict.ok).toBe(false);
-    expect(verdict.reason).toMatch(/계좌 총 노출/);
+    const result = guard.canBuyToday(1, 'KRW-BTC', 6000);
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().kind).toBe('LIMIT_ACCOUNT_TOTAL_AMOUNT');
   });
 
   it('blocks when per-symbol daily buy count exceeded', () => {
@@ -81,8 +81,8 @@ describe('CryptoProtectionGuard', () => {
         updatedAt: new Date('2026-05-03T10:00:00+09:00'),
       })
       .run();
-    const verdict = guard.canBuyToday(1, 'KRW-BTC', 5000);
-    expect(verdict.ok).toBe(false);
-    expect(verdict.reason).toMatch(/종목 일일 매수 횟수/);
+    const result = guard.canBuyToday(1, 'KRW-BTC', 5000);
+    expect(result.isErr()).toBe(true);
+    expect(result._unsafeUnwrapErr().kind).toBe('LIMIT_PER_SYMBOL_DAILY_BUYS');
   });
 });

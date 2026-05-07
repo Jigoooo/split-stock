@@ -2,6 +2,14 @@ import { and, eq } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { timeWindows } from '../db/schema';
 
+/** KST 기준 오늘 00:00:00.000 의 UTC Date 반환. KST = UTC+9. */
+export function kstMidnightUtc(now: Date = new Date()): Date {
+  const kstOffset = 9 * 60 * 60 * 1000;
+  const kstNow = new Date(now.getTime() + kstOffset);
+  const kstDateStr = kstNow.toISOString().slice(0, 10);
+  return new Date(`${kstDateStr}T00:00:00.000Z`);
+}
+
 export type TradeSide = 'BUY' | 'SELL';
 
 /**
