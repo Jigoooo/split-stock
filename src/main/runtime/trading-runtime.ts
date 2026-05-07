@@ -17,6 +17,7 @@ import type { TimeWindowRepo } from '../safety/time-window';
 import type { CredentialsRepo } from '../security/credentials-repo';
 import { AutoBuyGuard } from '../trading/auto-buy-guard';
 import { isAutoOrderBlockedError } from '../trading/auto-order-errors';
+import { BoosterService } from '../trading/booster-service';
 import { createEnvAwarePricePoller } from '../trading/env-aware-price-poller';
 import { createInFlightCoordinator } from '../trading/in-flight-coordinator';
 import type { LotsRepo } from '../trading/lots-repo';
@@ -46,6 +47,7 @@ export interface TradingRuntime {
   prebuyWatchers: Map<number, PrebuyWatcher>;
   quoteFeed: RotatingQuoteFeed;
   realtimeFactory: (env: AppEnv | null) => RealtimeService | null;
+  boosterService: BoosterService;
 }
 
 export function createTradingRuntime(input: {
@@ -302,6 +304,26 @@ export function createTradingRuntime(input: {
     return lastRealtime;
   };
 
+  const boosterService = new BoosterService({
+    timer: realTimer,
+    bus,
+    getRealtime: () => lastRealtime,
+    db: input.db,
+    settingsRepo: input.settingsRepo,
+    getBrokerForAccount: (accountId) => {
+      const ctx = input.factoryRef.factory;
+      if (!ctx || ctx.getActiveAccountId() !== accountId) return null;
+      return ctx.getBroker();
+    },
+    safetyRegistry: input.safetyRegistry,
+    pendingOrderWatcher,
+    logger: input.logger,
+    lotsRepo: input.lotsRepo,
+    strategyRepo: input.strategyRepo,
+    marketSessionGuard,
+    autoBuyGuard,
+  });
+
   return {
     bus,
     watchEngine,
@@ -310,6 +332,7 @@ export function createTradingRuntime(input: {
     prebuyWatchers,
     quoteFeed,
     realtimeFactory,
+    boosterService,
   };
 }
 

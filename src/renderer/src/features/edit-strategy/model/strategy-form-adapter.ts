@@ -65,6 +65,8 @@ export function toProfile(
       ...(base.autoTradingEnabled !== undefined
         ? { autoTradingEnabled: base.autoTradingEnabled }
         : {}),
+      // NM-004 부스터 설정은 폼에서 편집하지 않으므로 기존 값을 보존.
+      ...(base.profitBooster ? { profitBooster: base.profitBooster } : {}),
     },
     raw.autoMode,
   );

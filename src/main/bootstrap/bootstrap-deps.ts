@@ -345,7 +345,8 @@ export function bootstrapDeps(userDataDir: string) {
     watchEvents,
     broadcastToAllWindows,
   });
-  const { bus, watchEngine, strategyEngine, pendingOrderWatcher, prebuyWatchers } = tradingRuntime;
+  const { bus, watchEngine, strategyEngine, pendingOrderWatcher, prebuyWatchers, boosterService } =
+    tradingRuntime;
   markStartup('trading-runtime.create.end');
 
   markStartup('crypto-realtime.create.start');
@@ -477,7 +478,12 @@ export function bootstrapDeps(userDataDir: string) {
     logger: eventLogger,
     strategyEngine,
     backfillStrategiesForAccount,
-    broadcastTradeExecution: watchEvents.broadcastTradeExecution,
+    broadcastTradeExecution: (event) => {
+      watchEvents.broadcastTradeExecution(event);
+      // NM-004 부스터 — 1차 SELL FILLED 감지해 부스터 task 자동 등록.
+      // BoosterService 내부에서 lots snapshot + strategy.profitBooster.enabled 검증.
+      boosterService.handleTradeExecution(event);
+    },
   });
   const { balanceSync, currentStateSync, manualOrderReconciler } = accountSyncRuntime;
   markStartup('account-sync-runtime.create.end');

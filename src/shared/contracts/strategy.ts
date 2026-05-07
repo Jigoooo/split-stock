@@ -44,6 +44,21 @@ export const StrategySellRuleSchema = z.object({
 });
 export type StrategySellRule = z.infer<typeof StrategySellRuleSchema>;
 
+/**
+ * NM-004 수익 부스터 설정.
+ * 1차 전량 매도 후 lastFilledPrice * (1 - dropPct) 도달 시 1차 재매수.
+ * dropPct <= 0 이면 즉시 트리거 (홀딩 유지 효과).
+ * amountKrw: 재매수 금액. null/undefined 면 buyRules[0].amountKrw 사용.
+ */
+export const ProfitBoosterSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** 재매수 트리거 하락률 (0.01 = 1%). 0 이하면 즉시 트리거. */
+  dropPct: z.number().default(0),
+  /** 만료 시간 (ms 절대시각). 미지정 시 만료 없음 (다음 재시작까지). */
+  expiresAt: z.number().int().nullable().default(null),
+});
+export type ProfitBoosterConfig = z.infer<typeof ProfitBoosterSchema>;
+
 const StrategyProfileBaseSchema = z.object({
   version: z.literal(2).default(2),
   maxStages: z.number().int().min(1).max(MAX_STRATEGY_STAGES),
@@ -55,6 +70,8 @@ const StrategyProfileBaseSchema = z.object({
   autoSellOrderType: z.enum(['LIMIT', 'MARKET']).default('LIMIT'),
   respiitPlan: RespiitPlanSchema.optional(),
   autoTradingEnabled: z.boolean().optional(),
+  /** NM-004 수익 부스터 설정 — optional 로 기존 저장값과 호환. */
+  profitBooster: ProfitBoosterSchema.optional(),
 });
 
 /**
