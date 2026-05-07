@@ -1,4 +1,6 @@
+import { useActiveAccountId } from '@renderer/entities/account';
 import { useGetDisplaySettings } from '@renderer/entities/display-settings';
+import { CatchUpRuntime } from '@renderer/features/catch-up-confirm';
 import {
   useTradeNotifications,
   useWatchEventNotifications,
@@ -183,10 +185,12 @@ const MainWindowRuntimes = (): ReactElement => {
     staleTime: 500,
   });
   const runtimeReady = bootStatus.data?.phase === 'runtime-ready';
+  const { accountId } = useActiveAccountId();
   return (
     <>
       <AiDataAutoRefreshRuntime enabled={runtimeReady} />
       <AppNotificationsRuntime />
+      {runtimeReady ? <CatchUpRuntime accountId={accountId} /> : null}
     </>
   );
 };

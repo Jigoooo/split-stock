@@ -4,6 +4,7 @@ import { aiRouter } from './routers/ai-router';
 import { authRouter } from './routers/auth-router';
 import { backupRouter } from './routers/backup-router';
 import { bootRouter } from './routers/boot-router';
+import { catchUpRouter } from './routers/catch-up-router';
 import { cryptoMemoRouter } from './routers/crypto-memo-router';
 import { cryptoPendingCancelRouter } from './routers/crypto-pending-cancel-router';
 import { cryptoRouter } from './routers/crypto-router';
@@ -32,6 +33,7 @@ import { router } from './trpc-core';
 export const appRouter = router({
   boot: bootRouter,
   auth: authRouter,
+  catchUp: catchUpRouter,
   account: accountRouter,
   ai: aiRouter,
   backup: backupRouter,
