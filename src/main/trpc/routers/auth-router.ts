@@ -149,6 +149,20 @@ export const authRouter = router({
   }),
 
   /**
+   * PROD 전환 모달에서 사용자가 취소한 경우 audit log 기록.
+   * 실제 env 는 바뀌지 않음 — 시도 흔적만 남긴다.
+   */
+  logEnvSwitchCancelled: publicProcedure.mutation(({ ctx }) => {
+    ctx.logger.log({
+      level: 'INFO',
+      category: 'AUTH',
+      message: 'env.switch-to-prod-cancelled',
+      payload: { from: ctx.currentEnv },
+    });
+    return { ok: true as const };
+  }),
+
+  /**
    * 저장된 자격증명이 있는 env 리스트 (마스킹된 미리보기).
    * 한 env 당 정확히 1개 (UNIQUE INDEX 보장).
    */

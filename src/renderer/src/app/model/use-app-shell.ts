@@ -64,7 +64,13 @@ export function useAppShell(): UseAppShellReturn {
     });
   };
 
+  const logEnvSwitchCancelled = trpc.auth.logEnvSwitchCancelled.useMutation();
+
   const cancelEnvSwitch = (): void => {
+    // PROD 전환 시도 취소 시 audit log 기록 (MOCK 취소는 노이즈).
+    if (pendingEnv === 'PROD') {
+      logEnvSwitchCancelled.mutate();
+    }
     setPendingEnv(null);
   };
 

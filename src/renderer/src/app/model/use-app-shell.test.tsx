@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppShell } from './use-app-shell';
 
@@ -8,6 +8,7 @@ const listStoredUseQuery = vi.fn();
 const listAccountsUseQuery = vi.fn();
 const getActiveUseQuery = vi.fn();
 const setEnvUseMutation = vi.fn();
+const logEnvSwitchCancelledUseMutation = vi.fn();
 const invalidate = vi.fn();
 const invalidateEnv = vi.fn();
 const cancelQueries = vi.fn();
@@ -22,6 +23,9 @@ vi.mock('@renderer/shared/api/trpc', () => ({
       getEnv: { useQuery: () => getEnvUseQuery() },
       listStored: { useQuery: () => listStoredUseQuery() },
       setEnv: { useMutation: (options: unknown) => setEnvUseMutation(options) },
+      logEnvSwitchCancelled: {
+        useMutation: () => logEnvSwitchCancelledUseMutation(),
+      },
     },
     account: {
       listAccounts: { useQuery: () => listAccountsUseQuery() },
@@ -46,6 +50,7 @@ describe('useAppShell', () => {
     listAccountsUseQuery.mockReturnValue({ data: { accounts: [] }, isPending: false });
     getActiveUseQuery.mockReturnValue({ data: { accountId: 1 }, isPending: false });
     setEnvUseMutation.mockReturnValue({ mutate: vi.fn(), isPending: false });
+    logEnvSwitchCancelledUseMutation.mockReturnValue({ mutate: vi.fn() });
     invalidate.mockReset();
     invalidateEnv.mockReset();
     cancelQueries.mockReset();
@@ -61,6 +66,32 @@ describe('useAppShell', () => {
       undefined,
       expect.objectContaining({ enabled: true, staleTime: 60_000 }),
     );
+  });
+
+  it('cancelEnvSwitch — PROD 전환 시도 취소 시 logEnvSwitchCancelled.mutate 호출', () => {
+    const mutate = vi.fn();
+    logEnvSwitchCancelledUseMutation.mockReturnValue({ mutate });
+
+    const { result } = renderHook(() => useAppShell());
+
+    // requestEnvSwitch → pendingEnv='PROD' 로 state 갱신 후 re-render.
+    act(() => { result.current.requestEnvSwitch('PROD'); });
+    // re-render 이후 result.current.cancelEnvSwitch 는 pendingEnv='PROD' 를 포함한 최신 closure.
+    act(() => { result.current.cancelEnvSwitch(); });
+
+    expect(mutate).toHaveBeenCalledOnce();
+  });
+
+  it('cancelEnvSwitch — MOCK 전환 취소 시 logEnvSwitchCancelled.mutate 호출 안 함', () => {
+    const mutate = vi.fn();
+    logEnvSwitchCancelledUseMutation.mockReturnValue({ mutate });
+
+    const { result } = renderHook(() => useAppShell());
+
+    act(() => { result.current.requestEnvSwitch('MOCK'); });
+    act(() => { result.current.cancelEnvSwitch(); });
+
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it('환경이 없으면 활성 계좌 쿼리를 초기화 gate로 쓰지 않는다', () => {

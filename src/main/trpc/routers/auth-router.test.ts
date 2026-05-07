@@ -126,6 +126,21 @@ describe('authRouter provider-aware credentials', () => {
     expect(ctx.activeAccountId).toBeNull();
   });
 
+  it('logEnvSwitchCancelled — PROD 전환 시도 취소 시 AUTH/env.switch-to-prod-cancelled 기록', async () => {
+    const deps = setupRepo();
+    const ctx = createAuthContext({ ...deps, activeAccountId: null, currentEnv: 'MOCK' });
+
+    const result = await createCaller(ctx).logEnvSwitchCancelled();
+
+    expect(result).toEqual({ ok: true });
+    expect(ctx.logger.log).toHaveBeenCalledWith({
+      level: 'INFO',
+      category: 'AUTH',
+      message: 'env.switch-to-prod-cancelled',
+      payload: { from: 'MOCK' },
+    });
+  });
+
   it('setEnv keeps the active UPBIT account when PROD has multiple providers', async () => {
     const deps = setupRepo();
     seedCredential(deps, {

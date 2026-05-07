@@ -43,6 +43,8 @@ export const SwitchEnvSection = (): ReactElement => {
     },
   });
 
+  const logEnvSwitchCancelled = trpc.auth.logEnvSwitchCancelled.useMutation();
+
   const [target, setTarget] = useState<Env | null>(null);
   const gate = usePhraseGate();
   const { reset: resetGate } = gate;
@@ -50,6 +52,10 @@ export const SwitchEnvSection = (): ReactElement => {
   const currentEnv = envQuery.data?.env ?? null;
 
   const reset = (): void => {
+    // PROD 전환 시도 취소 시 audit log 기록 (MOCK 취소는 노이즈).
+    if (target === 'PROD') {
+      logEnvSwitchCancelled.mutate();
+    }
     setTarget(null);
     resetGate();
   };
