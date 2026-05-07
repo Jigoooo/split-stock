@@ -14,9 +14,36 @@ export interface RecommendStrategyButtonProps {
   /** 사용자 승인 후 폼에 적용 — initialOverride 로 흘려보내기. */
   onApply: (profile: StrategyProfile, reasoning: string) => void;
   dense?: boolean;
+  broker?: string;
 }
 
 export const RecommendStrategyButton = (props: RecommendStrategyButtonProps): ReactElement => {
+  if (props.broker === 'UPBIT') {
+    return <CryptoUnsupportedStrategyButton dense={props.dense ?? false} />;
+  }
+  return <DomesticRecommendStrategyButton {...props} />;
+};
+
+const CryptoUnsupportedStrategyButton = ({ dense }: { dense: boolean }): ReactElement => (
+  <Button
+    variant="ghost"
+    dense={dense}
+    iconLeading={<Sparkles size={14} />}
+    disabled
+    title="코인 strategy 추천 미지원"
+    aria-label="AI 추천 strategy (미지원)"
+    style={{
+      color: '#D97757',
+      borderColor: '#D97757',
+      borderStyle: 'solid',
+      borderWidth: '0.1rem',
+    }}
+  >
+    AI 추천
+  </Button>
+);
+
+const DomesticRecommendStrategyButton = (props: RecommendStrategyButtonProps): ReactElement => {
   const session = useOptionalStrategyRecommendationSession();
 
   if (session) {

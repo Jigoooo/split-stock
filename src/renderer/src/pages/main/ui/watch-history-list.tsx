@@ -112,7 +112,9 @@ const WatchHistoryRow = ({
         <span className="muted">전체 자동감시</span>
       )}
     </TableGrid.Cell>
-    <TableGrid.Cell width="9rem">{item.source ? sourceLabel(item.source) : '-'}</TableGrid.Cell>
+    <TableGrid.Cell width="9rem">
+      {item.source ? sourceLabel(item.source, item.message) : '-'}
+    </TableGrid.Cell>
     <TableGrid.Cell width="8.8rem" numeric>
       {item.watchId ? `#${item.watchId}` : '-'}
     </TableGrid.Cell>
@@ -181,12 +183,37 @@ function historyLabel(message: string): string {
       return '전역 자동감시 ON';
     case 'watch.global.off':
       return '전역 자동감시 OFF';
+    // auto-crypto.{kind}.{action} — cryptoEventToWatchHistoryItem 에서 생성
+    case 'auto-crypto.dry-run.buy':
+      return '드라이런 매수';
+    case 'auto-crypto.dry-run.sell':
+      return '드라이런 매도';
+    case 'auto-crypto.live.buy':
+      return '실거래 매수';
+    case 'auto-crypto.live.sell':
+      return '실거래 매도';
+    case 'auto-crypto.blocked.buy':
+      return '매수 차단';
+    case 'auto-crypto.blocked.sell':
+      return '매도 차단';
+    case 'auto-crypto.decimal-error.buy':
+      return '수량 오류(매수)';
+    case 'auto-crypto.decimal-error.sell':
+      return '수량 오류(매도)';
+    case 'auto-crypto.config.update':
+      return '설정 변경';
     default:
+      // auto-crypto.* 미분류 케이스 — kind.action 부분만 노출
+      if (message.startsWith('auto-crypto.')) {
+        return message.slice('auto-crypto.'.length);
+      }
       return message;
   }
 }
 
-function sourceLabel(source: NonNullable<WatchHistoryItem['source']>): string {
+function sourceLabel(source: NonNullable<WatchHistoryItem['source']>, message?: string): string {
+  // auto-crypto 이벤트는 source='CUSTOM' 이지만 "예약매수" 가 아닌 "코인 자동매매" 로 표시
+  if (message?.startsWith('auto-crypto.')) return '코인 자동매매';
   switch (source) {
     case 'BOOSTER':
       return '구버전';

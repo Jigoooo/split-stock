@@ -1,3 +1,4 @@
+import { RecommendStrategyButton } from '@renderer/features/ai-strategy-recommend';
 import { trpc } from '@renderer/shared/api/trpc';
 import { alertDialog, Button, DialogType, Select, TextInput } from '@renderer/shared/ui';
 import {
@@ -154,6 +155,7 @@ export const CryptoAutoStrategyTabBody = ({
         <Button dense onClick={openTemplateManagementPopout} disabled={pending}>
           템플릿 관리
         </Button>
+        <RecommendStrategyButton broker="UPBIT" pdno={market} onApply={() => {}} dense />
       </div>
       <CryptoAutoPanel
         enabled={market.startsWith('KRW-')}
