@@ -72,6 +72,17 @@ export function migrateLegacyStrategyKeys(
   return { migrated };
 }
 
+/**
+ * "기본값 그대로인데 자동매매 ON" 으로 설정된 strategy 를 강제로 OFF 처리하는 안전 정책의
+ * 1회 실행 플래그. 한 번 실행된 후 (= 이 키가 settings 에 저장된 후) 부터는 사용자가
+ * "default-shape + 자동매매 ON" 을 명시적으로 선택해도 다시 OFF 로 reset 하지 않는다.
+ *
+ * 사유: 이 정책은 legacy 사용자가 의도치 않게 default 자동매매를 켠 채 첫 부팅하는 회귀를
+ * 1회 차단하는 목적이었으나, 매 부팅마다 실행되어 "사용자가 ON 으로 토글한 게 재시작 시
+ * OFF 로 돌아가는" 회귀를 유발했다. 한 번 정착되면 이후는 사용자 명시 선택 우선.
+ */
+const SAFETY_AUTO_DISABLE_MIGRATED_KEY = 'strategy.safety.auto_disable.v1.migrated_at';
+
 export function upgradeStoredStrategyProfiles(
   settings: SettingsRepo,
   logger: EventLogger,
@@ -79,6 +90,7 @@ export function upgradeStoredStrategyProfiles(
   let upgraded = 0;
   let recovered = 0;
   let autoDisabled = 0;
+  const shouldApplyAutoDisable = settings.get(SAFETY_AUTO_DISABLE_MIGRATED_KEY) === null;
 
   for (const row of settings.list()) {
     if (!isStrategyRepoProfileKey(row.key)) continue;
@@ -87,7 +99,11 @@ export function upgradeStoredStrategyProfiles(
     let nextProfile = recovery.profile;
     if (recovery.recoveredWithDefault) recovered += 1;
 
-    if (row.key.startsWith('strategy.active.') && isUnsafeDefaultAutoProfile(nextProfile)) {
+    if (
+      shouldApplyAutoDisable &&
+      row.key.startsWith('strategy.active.') &&
+      isUnsafeDefaultAutoProfile(nextProfile)
+    ) {
       nextProfile = {
         ...nextProfile,
         autoBuyEnabled: false,
@@ -127,6 +143,11 @@ export function upgradeStoredStrategyProfiles(
       message: 'strategy.default_auto.disabled',
       payload: { count: autoDisabled },
     });
+  }
+  // 1회 실행 후 플래그 set — 이후 부팅에서는 default-shape + 자동매매 ON 을 강제 OFF 하지 않음.
+  // 사용자 ON 토글이 재시작 시 OFF 로 reset 되던 회귀를 차단.
+  if (shouldApplyAutoDisable) {
+    settings.set(SAFETY_AUTO_DISABLE_MIGRATED_KEY, new Date().toISOString());
   }
   return { upgraded, recovered, autoDisabled };
 }
