@@ -181,6 +181,7 @@ function createPrivateUpbit(ctx: Context, accountId: number): UpbitExchangeAdapt
 function createCryptoAutoService(ctx: Context): CryptoAutoTradingService {
   const rateGuard = ctx.rateGuard;
   const cryptoProtectionGuard = ctx.cryptoProtectionGuard;
+  const cryptoAutoBuyGuard = ctx.cryptoAutoBuyGuard;
   return new CryptoAutoTradingService({
     repo: new CryptoAutoTradingRepo(ctx.db),
     logger: ctx.logger,
@@ -194,6 +195,7 @@ function createCryptoAutoService(ctx: Context): CryptoAutoTradingService {
           },
         }
       : {}),
+    ...(cryptoAutoBuyGuard ? { cryptoAutoBuyGuard } : {}),
   });
 }
 

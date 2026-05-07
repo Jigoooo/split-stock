@@ -18,6 +18,7 @@ import {
 import type { Result } from 'neverthrow';
 import { err, ok } from 'neverthrow';
 import type { EventLogger } from '../logging/event-logger';
+import type { CryptoAutoBuyGuardPort } from '../safety/crypto-auto-buy-guard';
 import type { ProtectionGuardError } from '../safety/protection-guard';
 import type { CryptoAutoTradingRepo } from './crypto-auto-repo';
 import {
@@ -72,6 +73,8 @@ export interface CryptoAutoServiceOptions {
       amountKrw: number,
     ): Result<void, ProtectionGuardError>;
   };
+  /** 일/계좌 한도 + RateGuard per-symbol SELL_ONLY 전환. (E2-2) */
+  cryptoAutoBuyGuard?: CryptoAutoBuyGuardPort;
 }
 
 export interface CryptoAutoTickInput {
@@ -206,6 +209,7 @@ export class CryptoAutoTradingService {
   private readonly safetyRegistry: CryptoAutoServiceOptions['safetyRegistry'];
   private readonly rateGuard: CryptoAutoServiceOptions['rateGuard'];
   private readonly protectionGuard: CryptoAutoServiceOptions['protectionGuard'];
+  private readonly cryptoAutoBuyGuard: CryptoAutoServiceOptions['cryptoAutoBuyGuard'];
 
   constructor(options: CryptoAutoServiceOptions) {
     this.repo = options.repo;
@@ -214,6 +218,7 @@ export class CryptoAutoTradingService {
     this.safetyRegistry = options.safetyRegistry;
     this.rateGuard = options.rateGuard;
     this.protectionGuard = options.protectionGuard;
+    this.cryptoAutoBuyGuard = options.cryptoAutoBuyGuard;
   }
 
   getGate(input: {
@@ -551,6 +556,39 @@ export class CryptoAutoTradingService {
         gate: gate.value,
         event,
       });
+    }
+
+    if (this.cryptoAutoBuyGuard && planned.value.kind === 'plan-buy') {
+      try {
+        this.cryptoAutoBuyGuard.assertAutoBuyAllowed({
+          accountId: input.accountId,
+          market: market.value,
+          amountKrw: Number(planned.value.krwAmount),
+          source: 'STRATEGY',
+        });
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        const event = this.repo.insertEvent({
+          accountId: input.accountId,
+          market: market.value,
+          mode: 'live-small',
+          kind: 'blocked',
+          action: planned.value.kind,
+          reason,
+          intent: planned.value,
+          result: null,
+          idempotencyKey,
+          createdAt: this.now(),
+        });
+        return ok({
+          accountId: input.accountId,
+          market: market.value,
+          mode: 'live-small',
+          intent: planned.value,
+          gate: gate.value,
+          event,
+        });
+      }
     }
 
     let orderIntent: CryptoOrderIntent;

@@ -67,6 +67,7 @@ import { createWatchEventDispatchers } from '../runtime/watch-events';
 import { CryptoProtectionGuard } from '../safety/crypto-protection-guard';
 import { ProtectionGuard } from '../safety/protection-guard';
 import { ProtectionLimitsRepo } from '../safety/protection-limits-repo';
+import { CryptoAutoBuyGuard } from '../safety/crypto-auto-buy-guard';
 import { createRateGuard, createRateGuardRepo } from '../safety/rate-guard';
 import { SafetyStateRegistry } from '../safety/safety-state';
 import { createTimeWindowRepo } from '../safety/time-window';
@@ -365,6 +366,13 @@ export function bootstrapDeps(userDataDir: string) {
   // BUY placement 는 runLiveTick 의 entryCondition 충돌을 피하기 위해 직접 adapter.createOrder
   // 호출 + 수동 gate 컴포지션 (도메스틱 executeStrategyOrder 동등).
   const cryptoAutoRepo = new CryptoAutoTradingRepo(db);
+  // E2-2 — CryptoAutoBuyGuard: 일/계좌 한도 + RateGuard per-symbol SELL_ONLY 전환.
+  const cryptoAutoBuyGuard = new CryptoAutoBuyGuard({
+    logger: eventLogger,
+    protectionGuard: cryptoProtectionGuard,
+    rateGuardRepo,
+    repo: cryptoAutoRepo,
+  });
   const cryptoBoosterService = new CryptoBoosterService({
     timer: realTimer,
     bus: cryptoRealtime.bus,
@@ -379,10 +387,7 @@ export function bootstrapDeps(userDataDir: string) {
       });
     },
     safetyRegistry,
-    protectionGuard: {
-      canBuyToday: (accountId, market, amountKrw) =>
-        cryptoProtectionGuard.canBuyToday(accountId, market, amountKrw),
-    },
+    cryptoAutoBuyGuard,
     rateGuard,
     logger: eventLogger,
   });
@@ -430,6 +435,7 @@ export function bootstrapDeps(userDataDir: string) {
     rateGuard,
     protectionLimitsRepo,
     cryptoProtectionGuard,
+    cryptoAutoBuyGuard,
     watchEngine,
     strategyEngine,
     pendingOrderWatcher,

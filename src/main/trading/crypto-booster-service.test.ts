@@ -92,8 +92,8 @@ function makeService(opts: ServiceDeps = {}) {
       getSnapshot: () => ({ master: true, errorLock: { active: false } }),
     })),
   };
-  const protectionGuard = {
-    canBuyToday: vi.fn(() => ok(undefined)),
+  const cryptoAutoBuyGuard = {
+    assertAutoBuyAllowed: vi.fn(() => undefined),
   };
   const rateGuard = {
     recordBuy: vi.fn(),
@@ -108,7 +108,7 @@ function makeService(opts: ServiceDeps = {}) {
     getRealtime: () => realtime,
     getAdapter: () => adapter,
     safetyRegistry,
-    protectionGuard,
+    cryptoAutoBuyGuard,
     rateGuard,
     logger: logger as never,
     now: () => timer.now(),
@@ -123,7 +123,7 @@ function makeService(opts: ServiceDeps = {}) {
     repo,
     adapter,
     safetyRegistry,
-    protectionGuard,
+    cryptoAutoBuyGuard,
     rateGuard,
     timer,
   };
@@ -261,14 +261,12 @@ describe('CryptoBoosterService trigger flow', () => {
     expect(adapter?.createOrder).not.toHaveBeenCalled();
   });
 
-  it('protectionGuard.canBuyToday 가 err 면 createOrder 호출 안 함', async () => {
-    const { service, tickerListeners, adapter, protectionGuard } = makeService();
+  it('cryptoAutoBuyGuard.assertAutoBuyAllowed 가 throw 면 createOrder 호출 안 함', async () => {
+    const { service, tickerListeners, adapter, cryptoAutoBuyGuard } = makeService();
     service.handleCryptoFill(baseFillEvent);
-    protectionGuard.canBuyToday.mockReturnValueOnce(
-      // neverthrow err로 표현 — kind 만 검사
-      // biome-ignore lint/suspicious/noExplicitAny: test stub
-      { isErr: () => true, error: { kind: 'LIMIT_DAILY_TOTAL_COUNT', max: 5 } } as any,
-    );
+    cryptoAutoBuyGuard.assertAutoBuyAllowed.mockImplementationOnce(() => {
+      throw new Error('AUTO_BUY_PROTECTION_LIMIT');
+    });
 
     tickerListeners.get('KRW-BTC')?.({ tradePrice: '69000000' });
     await new Promise((resolve) => setImmediate(resolve));

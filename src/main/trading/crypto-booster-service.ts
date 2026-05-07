@@ -10,7 +10,7 @@ import type { Result } from 'neverthrow';
 import type { CryptoAutoTradingRepo } from '../crypto/crypto-auto-repo';
 import type { Timer } from '../kis/ws-client';
 import type { EventLogger } from '../logging/event-logger';
-import type { ProtectionGuardError } from '../safety/protection-guard';
+import type { CryptoAutoBuyGuardPort } from '../safety/crypto-auto-buy-guard';
 import { type BoosterTask, type BoosterTriggerContext, BoosterWatcher } from './booster-watcher';
 
 /**
@@ -66,14 +66,8 @@ export interface CryptoBoosterServiceDeps {
       getSnapshot(): { master: boolean; errorLock: { active: boolean; reason?: string | null } };
     };
   };
-  /** 일/계좌 한도. canBuyToday 결과 err 면 트리거 차단. */
-  protectionGuard?: {
-    canBuyToday(
-      accountId: number,
-      market: string,
-      amountKrw: number,
-    ): Result<void, ProtectionGuardError>;
-  };
+  /** 일/계좌 한도 + RateGuard per-symbol SELL_ONLY 전환. (E2-2) */
+  cryptoAutoBuyGuard?: CryptoAutoBuyGuardPort;
   /** 연속매수 방지. 매수 성공 직후 recordBuy. */
   rateGuard?: {
     recordBuy(accountId: number, symbol: string, ts: number): void;
@@ -236,14 +230,18 @@ export class CryptoBoosterService {
         }
       }
 
-      if (this.deps.protectionGuard) {
-        const verdict = this.deps.protectionGuard.canBuyToday(
-          task.accountId,
-          market.data,
-          task.amountKrw,
-        );
-        if (verdict.isErr()) {
-          this.logTriggerSkipped(task, 'protection-guard', { kind: verdict.error.kind });
+      if (this.deps.cryptoAutoBuyGuard) {
+        try {
+          this.deps.cryptoAutoBuyGuard.assertAutoBuyAllowed({
+            accountId: task.accountId,
+            market: market.data,
+            amountKrw: task.amountKrw,
+            source: 'BOOSTER',
+          });
+        } catch (e) {
+          this.logTriggerSkipped(task, 'auto-buy-guard', {
+            reason: e instanceof Error ? e.message : String(e),
+          });
           return;
         }
       }

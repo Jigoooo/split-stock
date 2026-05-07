@@ -22,6 +22,7 @@ import type { KisHttpClient } from '../kis/http-client';
 import type { EventLogger } from '../logging/event-logger';
 import type { FeedBus } from '../realtime/feed-bus';
 import type { RealtimeService } from '../realtime/realtime-service';
+import type { CryptoAutoBuyGuard } from '../safety/crypto-auto-buy-guard';
 import type { CryptoProtectionGuard } from '../safety/crypto-protection-guard';
 import type { ProtectionLimitsRepo } from '../safety/protection-limits-repo';
 import type { RateGuard, RateGuardRepo } from '../safety/rate-guard';
@@ -85,6 +86,9 @@ export interface Context {
   /** 코인 전용 ProtectionGuard — 일/계좌 한도. (RALPLAN P6 A3)
    *  테스트 fixture 에서는 미주입 가능. */
   cryptoProtectionGuard: CryptoProtectionGuard | undefined;
+  /** 코인 전용 AutoBuyGuard — 일/계좌 한도 + RateGuard per-symbol SELL_ONLY. (E2-2)
+   *  테스트 fixture 에서는 미주입 가능. */
+  cryptoAutoBuyGuard: CryptoAutoBuyGuard | undefined;
   watchEngine: WatchEngine | null;
   strategyEngine: StrategyExecutionEngine | null;
   currentStateSync: CurrentStateSync | undefined;

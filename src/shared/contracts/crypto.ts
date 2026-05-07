@@ -282,6 +282,17 @@ export function deriveCryptoStrategyAutoMode(
   return profile.autoBuyEnabled ? 'BUY_ONLY' : 'SELL_ONLY';
 }
 
+export function applyCryptoStrategyAutoMode(
+  profile: CryptoStrategyProfile,
+  mode: CryptoStrategyAutoMode,
+): CryptoStrategyProfile {
+  return {
+    ...profile,
+    autoBuyEnabled: mode !== 'ALL_OFF' && mode !== 'SELL_ONLY',
+    autoSellEnabled: mode !== 'ALL_OFF' && mode !== 'BUY_ONLY',
+  };
+}
+
 export const CryptoAutoWatchStatusSchema = z.enum([
   'WATCHING',
   'PAUSED',
