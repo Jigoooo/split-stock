@@ -446,6 +446,9 @@ export function bootstrapDeps(userDataDir: string) {
     }
     if (accountId === null) return;
     cryptoBoosterUnsub = cryptoRealtime.bus.subscribePrivateOrder(accountId, (event) => {
+      // lots 동기화: 앱 외부 수동 매도 시에도 idempotency 가드가 올바르게 동작하도록
+      // handleCryptoFill 진입 전에 open live lots 를 close 처리한다.
+      cryptoAutoRepo.syncLotsFromFillEvent(event);
       cryptoBoosterService.handleCryptoFill(event);
     });
     eventLogger.log({

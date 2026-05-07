@@ -75,9 +75,13 @@ describe('useAppShell', () => {
     const { result } = renderHook(() => useAppShell());
 
     // requestEnvSwitch → pendingEnv='PROD' 로 state 갱신 후 re-render.
-    act(() => { result.current.requestEnvSwitch('PROD'); });
+    act(() => {
+      result.current.requestEnvSwitch('PROD');
+    });
     // re-render 이후 result.current.cancelEnvSwitch 는 pendingEnv='PROD' 를 포함한 최신 closure.
-    act(() => { result.current.cancelEnvSwitch(); });
+    act(() => {
+      result.current.cancelEnvSwitch();
+    });
 
     expect(mutate).toHaveBeenCalledOnce();
   });
@@ -88,8 +92,12 @@ describe('useAppShell', () => {
 
     const { result } = renderHook(() => useAppShell());
 
-    act(() => { result.current.requestEnvSwitch('MOCK'); });
-    act(() => { result.current.cancelEnvSwitch(); });
+    act(() => {
+      result.current.requestEnvSwitch('MOCK');
+    });
+    act(() => {
+      result.current.cancelEnvSwitch();
+    });
 
     expect(mutate).not.toHaveBeenCalled();
   });

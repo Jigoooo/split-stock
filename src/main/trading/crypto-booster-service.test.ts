@@ -265,6 +265,23 @@ describe('CryptoBoosterService trigger flow', () => {
     expect(adapter?.createOrder).not.toHaveBeenCalled();
   });
 
+  it('adapter.createOrder 가 throw 하면 ERROR 로그 기록 + cleanup(size=0), insertEvent 미호출', async () => {
+    const { service, tickerListeners, adapter, repo, realtime } = makeService();
+    adapter.createOrder.mockImplementationOnce(() => {
+      throw new Error('NETWORK_TIMEOUT');
+    });
+    service.handleCryptoFill(baseFillEvent);
+
+    tickerListeners.get('KRW-BTC')?.({ tradePrice: '69000000' });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // throw path: insertEvent 는 isErr() 분기에서만 호출되므로 미호출
+    expect(repo.insertEvent).not.toHaveBeenCalled();
+    // finally 에서 cleanupSubscription 호출 → size=0, unwatchMarket 호출
+    expect(service.size()).toBe(0);
+    expect(realtime.unwatchMarket).toHaveBeenCalled();
+  });
+
   it('트리거 시점에 lots 가 생긴 경우 (수동 1차 매수 등) 트리거 skip', async () => {
     const { service, tickerListeners, adapter, repo } = makeService();
     service.handleCryptoFill(baseFillEvent);
@@ -292,5 +309,90 @@ describe('CryptoBoosterService trigger flow', () => {
     tickerListeners.get('KRW-BTC')?.({ tradePrice: '69000000' });
     await new Promise((resolve) => setImmediate(resolve));
     expect(adapter?.createOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe('CryptoBoosterService boundary conditions', () => {
+  it('expiresAt = 0 이면 등록 직후 즉시 만료 (timer.advance(1))', () => {
+    const { service, timer, realtime } = makeService({
+      profile: makeProfile({
+        profitBooster: { enabled: true, dropPct: '0.01', expiresAt: 0 },
+      }),
+    });
+    service.handleCryptoFill(baseFillEvent);
+    // expiresAt=0 은 이미 과거이므로 advance(1) 시 만료
+    timer.advance(1);
+    expect(service.size()).toBe(0);
+    expect(realtime.unwatchMarket).toHaveBeenCalled();
+  });
+
+  it('executedFunds = "0" 이면 computeLastFilledPrice → null → task 등록 안 됨', () => {
+    const { service } = makeService();
+    service.handleCryptoFill({ ...baseFillEvent, executedFunds: '0' });
+    expect(service.size()).toBe(0);
+  });
+
+  it('executedVolume = "0" 이면 computeLastFilledPrice → null → task 등록 안 됨', () => {
+    const { service } = makeService();
+    // executedVolume=0 이고 price=0 이면 price fallback 도 null
+    service.handleCryptoFill({ ...baseFillEvent, executedVolume: '0', price: '0' });
+    expect(service.size()).toBe(0);
+  });
+
+  it('dropPct = "0" 이면 boosterPct=0 → register 즉시 trigger (즉시 매수 효과), size=0 + createOrder 호출', async () => {
+    // DecimalStringSchema 정규식: ^(0|[1-9]\d*)(\.\d+)?$ → 음수 거부.
+    // 클라이언트에서 음수 입력 시 Zod parse 실패 → UI 레벨에서 차단되므로 DB에 저장 불가.
+    // dropPct='0' 은 합법적 값이며 BoosterWatcher.register 에서 즉시 trigger 처리됨.
+    const { service, adapter } = makeService({
+      profile: makeProfile({
+        profitBooster: { enabled: true, dropPct: '0', expiresAt: null },
+      }),
+    });
+    service.handleCryptoFill(baseFillEvent);
+    // boosterPct=0 → BoosterWatcher 내부에서 즉시 trigger → entries 에서 제거 → size=0
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.size()).toBe(0);
+    expect(adapter.createOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it('safetyRegistry 가 undefined 이면 safety guard 를 skip 하고 createOrder 호출', async () => {
+    // safetyRegistry 를 undefined 로 대체하는 서비스 별도 생성
+    const tickerListeners2 = new Map<string, (ticker: { tradePrice: string }) => void>();
+    const bus = {
+      subscribeTicker: vi.fn(
+        (market: string, listener: (ticker: { tradePrice: string }) => void) => {
+          tickerListeners2.set(market, listener);
+          return () => tickerListeners2.delete(market);
+        },
+      ),
+    };
+    const repo = {
+      listOpenLots: vi.fn(() => []),
+      getStrategy: vi.fn(() => makeProfile()),
+      insertEvent: vi.fn(),
+      markLiveAction: vi.fn(),
+    };
+    const createOrderMock = vi.fn(async () => ok({ uuid: 'placed-order-uuid' }));
+    const { FakeTimer } = await import('../testing/fake-timer');
+    const { CryptoBoosterService } = await import('./crypto-booster-service');
+    const timer2 = new FakeTimer();
+    const svc2 = new CryptoBoosterService({
+      timer: timer2,
+      bus,
+      repo: repo as never,
+      getRealtime: () => ({ watchMarket: vi.fn(), unwatchMarket: vi.fn() }),
+      getAdapter: () => ({ createOrder: createOrderMock }),
+      cryptoAutoBuyGuard: { assertAutoBuyAllowed: vi.fn() },
+      rateGuard: {
+        recordBuy: vi.fn(),
+        checkAndPossiblyDisableAuto: vi.fn(() => ({ switchedToManual: false })),
+      },
+      logger: { log: vi.fn() } as never,
+      now: () => timer2.now(),
+    });
+    svc2.handleCryptoFill(baseFillEvent);
+    tickerListeners2.get('KRW-BTC')?.({ tradePrice: '69000000' });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(createOrderMock).toHaveBeenCalledTimes(1);
   });
 });

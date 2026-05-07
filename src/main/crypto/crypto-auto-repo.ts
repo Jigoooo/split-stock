@@ -14,6 +14,7 @@ import type {
   CryptoAutoWatchUpsertInput,
   CryptoKrwMarketCode,
   CryptoLot,
+  CryptoPrivateOrderEvent,
   CryptoStrategyProfile,
   CryptoAutoEvent as SharedCryptoAutoEvent,
 } from '@shared/contracts';
@@ -865,6 +866,28 @@ export class CryptoAutoTradingRepo {
       })
       .where(and(eq(lots.id, input.lotId), eq(lots.broker, 'UPBIT')))
       .run();
+  }
+
+  /**
+   * SELL FILLED 이벤트를 받아 해당 (accountId, market)의 open live lots를 모두 close 처리.
+   * 앱 외부(UPBIT 웹/앱)에서 수동 매도한 경우에도 lots 테이블을 동기화해
+   * CryptoBoosterService.handleCryptoFill의 idempotency 가드가 올바르게 동작하도록 한다.
+   * side='ask' + state='done' + remainingVolume='0' 조건만 처리 (전량 매도 완결).
+   */
+  syncLotsFromFillEvent(event: CryptoPrivateOrderEvent): void {
+    const isSellFilled =
+      event.side === 'ask' && event.state === 'done' && Number(event.remainingVolume) === 0;
+    if (!isSellFilled) return;
+
+    const openLots = this.listOpenLots(
+      event.accountId,
+      event.market as CryptoKrwMarketCode,
+      'live',
+    );
+    const now = Date.now();
+    for (const lot of openLots) {
+      this.closeLot({ lotId: lot.id, realizedPnl: '0', closedAt: now });
+    }
   }
 
   insertEvent(input: PersistEventInput): CryptoAutoEvent {
