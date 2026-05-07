@@ -152,6 +152,11 @@ export class WsPoolManager {
   private readonly debounceMs: number;
   private readonly slots = new Map<number, AccountSlot>();
   private rebalanceHandle: { clear: () => void } | null = null;
+  /**
+   * WS 연결 가용성 플래그 — false 면 pickWsActive 가 항상 빈 집합 반환 (전체 REST fallback).
+   * setWsAvailable(false/true) 로 제어. capacity 와 독립 관리.
+   */
+  private wsAvailable = true;
 
   constructor(opts: WsPoolManagerOptions) {
     this.ws = opts.ws;
@@ -202,6 +207,26 @@ export class WsPoolManager {
       return;
     }
     this.scheduleRebalance();
+  }
+
+  /**
+   * WS 연결 가용 여부 설정 — WsClient 의 phase 변화에 따라 RealtimeService 가 호출.
+   *
+   * false: 모든 종목을 REST fallback 으로 즉시 이동 (WS drop 시 ≤1s 내 자동 복구 보장).
+   * true: 종목을 capacity + priority 기준으로 WS 슬롯 재배치.
+   *
+   * capacity 값은 변경되지 않으므로 getCapacity() 는 항상 원래 값을 반환.
+   */
+  setWsAvailable(available: boolean): void {
+    if (this.wsAvailable === available) return;
+    this.wsAvailable = available;
+    this.scheduleRebalance();
+    this.logger.log({
+      level: 'INFO',
+      category: 'WS',
+      message: 'ws-pool.ws_available_changed',
+      payload: { available },
+    });
   }
 
   /** 계좌별 capacity 동적 변경 — KIS 가 60종목으로 확장될 때 사용. */
@@ -304,7 +329,8 @@ export class WsPoolManager {
   }
 
   private reconcileSlot(accountId: number, slot: AccountSlot): void {
-    const desiredWs = pickWsActive(slot);
+    // wsAvailable=false 시 WS 슬롯을 0으로 강제 — 전체 REST fallback.
+    const desiredWs = this.wsAvailable ? pickWsActive(slot) : new Set<string>();
     const desiredRest = new Set<string>();
     for (const [pdno, rec] of slot.records) {
       // PRICE 또는 BOTH 는 가격이 필요하므로 WS 미배정 시 REST fallback.

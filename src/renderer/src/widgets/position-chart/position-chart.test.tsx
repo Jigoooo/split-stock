@@ -598,4 +598,27 @@ describe('PositionChart', () => {
     expect(createChartMock.mock.calls.length).toBe(initialChartCallCount);
     expect(window.localStorage.getItem('split-stock.chart.drawings.005930')).toBeNull();
   });
+
+  // ─── Sub-AC 1.3: 자동 복구 중 안내 ────────────────────────────────────────
+
+  it('fetch가 완료되지 않고 캐시도 비어있으면 자동 복구 중 안내를 표시한다', async () => {
+    // never resolves — adapter 내부 retry 중 isLoading=true, candles=0 상태를 재현
+    fetchChartMock.mockImplementation(() => new Promise(() => {}));
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+    expect(await screen.findByText(/자동 복구 중/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '봉 다시 시도' })).not.toBeInTheDocument();
+  });
+
+  it('캐시에 데이터가 있으면 자동 복구 중 안내를 숨기고 차트를 표시한다', async () => {
+    window.localStorage.setItem(
+      'split-stock.position-chart.005930.D',
+      JSON.stringify([
+        { date: '2026-04-18', open: 10000, high: 12345, low: 9800, close: 12000, volume: 123456 },
+      ]),
+    );
+    fetchChartMock.mockImplementation(() => new Promise(() => {}));
+    render(<PositionChart pdno="005930" name="삼성전자" lines={[]} />);
+    await waitFor(() => expect(createChartMock).toHaveBeenCalled());
+    expect(screen.queryByText(/자동 복구 중/)).not.toBeInTheDocument();
+  });
 });

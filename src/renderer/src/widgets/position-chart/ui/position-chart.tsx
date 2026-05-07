@@ -131,6 +131,19 @@ export const PositionChart = ({
             </Button>
           </div>
         ) : null}
+        {chart.isAutoRecovering ? (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              color: 'var(--fg-2)',
+              fontSize: '0.9rem',
+              marginBottom: '0.4rem',
+            }}
+          >
+            자동 복구 중…
+          </div>
+        ) : null}
         {hasNoCandles ? (
           <div
             role="status"

@@ -1,7 +1,8 @@
 import { type LiveTick, useLiveTick } from '@renderer/entities/realtime';
 import { trpc } from '@renderer/shared/api/trpc';
 import { usePopoutVisibility } from '@renderer/shared/lib/popout-window';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { DataFreshnessTracker } from '@shared/data-freshness-tracker';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 export type { LiveTick } from '@renderer/entities/realtime';
 export { useLiveTick } from '@renderer/entities/realtime';
@@ -124,6 +125,84 @@ export function useTradeFeed(pdno: string, capacity = 200): LiveTick[] {
   }, [tick, capacity]);
 
   return feed;
+}
+
+/**
+ * 데이터 신선도 가드 (D3 chart_swr_cache).
+ *
+ * pdno 종목의 실시간 tick 이 수신되는지 추적한다.
+ * - isStale: 마지막 tick 이후 staleThresholdMs(기본 10s) 경과 시 true.
+ *   → UI 에서 오래된 데이터 인디케이터 표시 (badge/색상 변경 등).
+ * - showReconnectButton: 마지막 tick 이후 30s 이상 미수신 시 true.
+ *   → 자동 복구가 실패한 경우에만 사용자에게 버튼 노출.
+ * - reconnectNow: 재연결 버튼 클릭 핸들러 (tRPC → RealtimeService.reconnectWs).
+ *
+ * 30s 이전에는 D2(WS 끊김 → REST fallback 1s) 자동 복구가 담당하므로
+ * 사용자 개입 없이 데이터가 복구된다.
+ */
+export interface DataFreshnessState {
+  /** staleThresholdMs 이상 tick 없음 → stale 인디케이터. */
+  isStale: boolean;
+  /** 30s 이상 tick 없음 → 재연결 버튼 노출. */
+  showReconnectButton: boolean;
+  /** 재연결 버튼 클릭 핸들러. */
+  reconnectNow: () => void;
+}
+
+export function useDataFreshnessGuard(
+  pdno: string,
+  opts: {
+    /** tick 없음 → stale 판정 임계(ms). 기본 10s. */
+    staleThresholdMs?: number;
+    /** tick 없음 → 재연결 버튼 노출 임계(ms). 기본 30s. */
+    reconnectButtonAfterMs?: number;
+    /** 체크 주기(ms). 기본 1000ms. */
+    checkIntervalMs?: number;
+  } = {},
+): DataFreshnessState {
+  const {
+    staleThresholdMs = 10_000,
+    reconnectButtonAfterMs = 30_000,
+    checkIntervalMs = 1_000,
+  } = opts;
+
+  // DataFreshnessTracker 인스턴스 — 임계값이 바뀔 때만 재생성.
+  const tracker = useMemo(
+    () => new DataFreshnessTracker({ staleThresholdMs, reconnectButtonAfterMs }),
+    [staleThresholdMs, reconnectButtonAfterMs],
+  );
+  // tracker ref: setInterval 콜백 안에서 최신 인스턴스 참조용.
+  const trackerRef = useRef(tracker);
+  trackerRef.current = tracker;
+
+  const [isStale, setIsStale] = useState(false);
+  const [showReconnectButton, setShowReconnectButton] = useState(false);
+
+  // 실시간 tick 구독 — tick 수신 시 tracker 에 기록 후 stale 즉시 해제.
+  const tick = useLiveTick(pdno, checkIntervalMs);
+  useEffect(() => {
+    if (!tick) return;
+    trackerRef.current.recordDataReceived();
+    setIsStale(false);
+    setShowReconnectButton(false);
+  }, [tick]);
+
+  // 주기적으로 tracker 상태 조회 → stale/button 상태 갱신.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const state = trackerRef.current.getState();
+      setIsStale(state.isStale);
+      setShowReconnectButton(state.showReconnectButton);
+    }, checkIntervalMs);
+    return () => clearInterval(id);
+  }, [checkIntervalMs]);
+
+  const reconnectMutation = trpc.realtime.reconnectWs.useMutation();
+  const reconnectNow = useCallback(() => {
+    reconnectMutation.mutate();
+  }, [reconnectMutation]);
+
+  return { isStale, showReconnectButton, reconnectNow };
 }
 
 /**

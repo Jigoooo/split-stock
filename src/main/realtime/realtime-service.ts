@@ -17,6 +17,7 @@ import {
 } from '../kis/ws-frame-parser';
 import type { EventLogger } from '../logging/event-logger';
 import type { FeedBus } from './feed-bus';
+import type { OrderbookRestPoller } from './orderbook-rest-poller';
 import {
   type RestFallbackAdapter,
   type WsKind,
@@ -68,6 +69,11 @@ export interface RealtimeServiceDeps {
    * WS Pool 재배치 debounce ms (기본 200). 0 이면 즉시 동기 적용 — 테스트용.
    */
   rebalanceDebounceMs?: number;
+  /**
+   * WS 단절 시 REST inquireOrderbook 1 Hz 폴링 어댑터 (D2).
+   * 미주입 시 REST fallback 없음 — 기존 BC 보존.
+   */
+  orderbookPoller?: OrderbookRestPoller;
 }
 
 /**
@@ -108,11 +114,29 @@ export class RealtimeService {
       http: this.deps.http,
       factory: this.deps.factory,
       logger: this.deps.logger,
+      timer: this.timer,
       ...(this.deps.maxSubscriptions !== undefined && {
         maxSubscriptions: this.deps.maxSubscriptions,
       }),
       onMessage: (msg) => this.dispatchFrame(msg),
       onCniNotice: (notice) => this.dispatchCniNotice(notice),
+      /**
+       * WS phase 변화 → WsPoolManager 에 가용 여부 전파.
+       * open: WS 활성, 그 외: REST fallback 으로 즉시 전환.
+       * pool 참조는 lazy — start() 에서 pool 이 생성된 후 이 콜백이 처음 유의미하게 실행됨.
+       */
+      onPhaseChange: (phase) => {
+        if (this.pool) this.pool.setWsAvailable(phase === 'open');
+        // WS 복구 시 REST 폴링 중단
+        if (phase === 'open') this.deps.orderbookPoller?.stop();
+      },
+      /**
+       * WS 단절 직후 한 번 발화 — REST fallback 폴링 즉시 시작.
+       * queueMicrotask 로 전달되므로 pool.setWsAvailable(false) 보다 늦게 도달하지 않음.
+       */
+      onFallbackStart: () => {
+        this.deps.orderbookPoller?.start();
+      },
     });
     const r = await client.start(appKey, appSecret);
     if (r.isErr()) {
@@ -147,6 +171,7 @@ export class RealtimeService {
   }
 
   stop(): void {
+    this.deps.orderbookPoller?.dispose();
     if (this.pool) {
       this.pool.dispose();
       this.pool = null;
@@ -217,6 +242,22 @@ export class RealtimeService {
     this.pool?.setSessionCapacity(this.getAccountIdOrZero(), capacity);
   }
 
+  /**
+   * WS 즉시 재연결 — UI "재연결" 버튼 또는 자동화 트리거용 (D3).
+   *
+   * 자동 복구가 30s 이상 성공하지 못해 showReconnectButton=true 가 된 경우에만
+   * renderer 에서 이 메서드를 호출한다.
+   * started 이전이거나 client 가 없으면 no-op.
+   */
+  reconnectWs(): void {
+    this.client?.reconnectNow();
+    this.deps.logger.log({
+      level: 'INFO',
+      category: 'WS',
+      message: 'realtime.reconnect_ws.triggered',
+    });
+  }
+
   /** WS/REST 라우팅 결과 조회 — renderer 폴링 인디케이터에 노출. */
   getActiveSubscriptions(): WsPoolSubscriptionView[] {
     if (!this.pool) return [];
@@ -262,6 +303,15 @@ export class RealtimeService {
   /** [BC] tick/orderbook refcount 스냅샷. */
   getWatched(): Array<{ pdno: string; tick: number; orderbook: number }> {
     return Array.from(this.watches.values()).map((e) => ({ ...e }));
+  }
+
+  /**
+   * 현재 focused(priority=100) 종목 코드 반환.
+   * 단일 focus 정책으로 최대 1개 — 없으면 null.
+   * OrderbookRestPoller.getFocusedSymbol 에 사용.
+   */
+  getFocusedSymbol(): string | null {
+    return this.focused.values().next().value ?? null;
   }
 
   /* ----------------------------- internals ------------------------------ */

@@ -1,5 +1,6 @@
 import type {
   AutoOrderRetryEvent,
+  CandlesUpdatedEvent,
   EventLogPush,
   TradeExecutionEvent,
   WatchOutcomeEvent,
@@ -95,6 +96,15 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:event-log-appended', handler);
     return () => ipcRenderer.off('appShell:event-log-appended', handler);
   },
+  /**
+   * SWR 재검증 완료 push — main 이 fresh candles 를 받으면 renderer 에 전달.
+   * renderer 는 이 이벤트를 수신해 해당 (pdno, period) 캔들 상태를 갱신한다 (Sub-AC 3-2-2).
+   */
+  onCandlesUpdated: (listener: (event: CandlesUpdatedEvent) => void): (() => void) => {
+    const handler = (_: unknown, event: CandlesUpdatedEvent): void => listener(event);
+    ipcRenderer.on('appShell:candles-updated', handler);
+    return () => ipcRenderer.off('appShell:candles-updated', handler);
+  },
   setAlwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('appShell:setAlwaysOnTop', on),
   fitContentHeight: (height: number): Promise<void> =>
     ipcRenderer.invoke('appShell:fitContentHeight', height),
@@ -142,6 +152,8 @@ export type AppShellBridge = {
     listener: (event: { pdno: string; failures: number; reason: string }) => void,
   ) => () => void;
   onEventLogAppended?: (listener: (entry: EventLogPush) => void) => () => void;
+  /** SWR 재검증 완료 push — renderer candle 상태 자동 갱신 (Sub-AC 3-2-2). */
+  onCandlesUpdated?: (listener: (event: CandlesUpdatedEvent) => void) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;
   fitContentHeight: (height: number) => Promise<void>;
   markPopoutShellReady?: (route: string) => void;

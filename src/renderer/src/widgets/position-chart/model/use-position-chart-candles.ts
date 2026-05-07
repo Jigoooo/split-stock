@@ -8,6 +8,12 @@ export interface UsePositionChartCandlesResult {
   candles: Candle[];
   error: string | null;
   fetchMore: () => Promise<void>;
+  /**
+   * true = 로딩 중이면서 표시할 캐시 데이터도 없는 상태.
+   * adapter 내부 retry(5xx/timeout) 중 사용자에게 "자동 복구 중" 안내를 표시할 때 사용.
+   * 참고: 첫 fetch(~200ms)도 짧게 true 가 되지만, 빠르게 해소되므로 UX 영향 없음.
+   */
+  isAutoRecovering: boolean;
   isLoading: boolean;
   reachedEnd: boolean;
   retry: () => void;
@@ -154,6 +160,32 @@ export function usePositionChartCandles(
     };
   }, [pdno, period, reloadSeq]);
 
+  // Sub-AC 3-2-2: SWR 재검증 완료 push 수신 → candle 상태 자동 병합.
+  // 같은 (pdno, period) 키의 fresh candles 를 date map 으로 upsert 후 날짜 순 재정렬.
+  // setError(null) 은 stale 에러 배너를 해제해 사용자가 수동 재시도 버튼을 볼 필요가 없게 한다.
+  useEffect(() => {
+    const unsubscribe = window.appShell?.onCandlesUpdated?.((event) => {
+      if (event.pdno !== pdno || event.period !== period) return;
+      if (event.candles.length === 0) return;
+
+      setCandles((prev) => {
+        const dateMap = new Map(prev.map((c) => [c.date, c]));
+        for (const c of event.candles) {
+          dateMap.set(c.date, c);
+        }
+        const merged = Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+        candlesRef.current = merged;
+        return merged;
+      });
+
+      setError(null);
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [pdno, period]);
+
   const fetchMore = async (): Promise<void> => {
     if (loadingRef.current || reachedEndRef.current) return;
 
@@ -206,5 +238,7 @@ export function usePositionChartCandles(
     setReloadSeq((seq) => seq + 1);
   };
 
-  return { candles, error, fetchMore, isLoading, reachedEnd, retry };
+  const isAutoRecovering = isLoading && candles.length === 0;
+
+  return { candles, error, fetchMore, isAutoRecovering, isLoading, reachedEnd, retry };
 }

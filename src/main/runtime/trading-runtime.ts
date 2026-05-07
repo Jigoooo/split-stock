@@ -1,4 +1,4 @@
-import type { AppEnv } from '@shared/contracts';
+import type { AppEnv, StockSymbol } from '@shared/contracts';
 import { isRegularMarketOpenKst } from '@shared/trading/market-session';
 import WebSocket from 'ws';
 import type { ActiveAccountRepo } from '../account/active-account';
@@ -7,8 +7,10 @@ import { readRealtimeConfig, type SettingsRepo } from '../db/settings-repo';
 import type { AuthService } from '../kis/auth';
 import type { KisHttpClient } from '../kis/http-client';
 import { realTimer, type WsLike } from '../kis/ws-client';
+import type { OrderbookUpdate } from '../kis/ws-frame-parser';
 import type { EventLogger } from '../logging/event-logger';
 import { FeedBus } from '../realtime/feed-bus';
+import { OrderbookRestPoller } from '../realtime/orderbook-rest-poller';
 import { RealtimeService } from '../realtime/realtime-service';
 import type { ProtectionGuard } from '../safety/protection-guard';
 import type { RateGuardRepo } from '../safety/rate-guard';
@@ -280,6 +282,37 @@ export function createTradingRuntime(input: {
 
   const prebuyWatchers = createPrebuyWatchers(input, watchEngine, runWatchedOrder);
   let lastRealtime: RealtimeService | null = null;
+
+  /**
+   * WS 단절 시 REST inquireOrderbook 1 Hz 폴링 어댑터.
+   * `getFocusedSymbol` 은 `lastRealtime` 을 lazy 참조 (closure) — WS 복구 이전까지
+   * focused 종목 1개만 폴링하므로 최대 1 RPS → KIS rate-limit 침해 없음.
+   */
+  const orderbookPoller = new OrderbookRestPoller({
+    fetchOrderbook: async (pdno: string): Promise<OrderbookUpdate | null> => {
+      const broker = input.factoryRef.factory?.getBroker();
+      if (!broker) return null;
+      const result = await broker.getOrderbook(pdno as StockSymbol);
+      if (result.isErr()) return null;
+      const snap = result.value;
+      // broker-agnostic OrderbookSnapshot (qty) → ws-frame-parser OrderbookUpdate (quantity)
+      return {
+        pdno: snap.symbol,
+        time: snap.time,
+        asks: snap.asks.map((a) => ({ price: a.price, quantity: a.qty })),
+        bids: snap.bids.map((b) => ({ price: b.price, quantity: b.qty })),
+        totalAskQty: snap.totalAskQty,
+        totalBidQty: snap.totalBidQty,
+        expectedPrice: snap.expectedPrice,
+        expectedQty: snap.expectedQty,
+      };
+    },
+    bus,
+    getFocusedSymbol: () => lastRealtime?.getFocusedSymbol() ?? null,
+    timer: realTimer,
+    logger: input.logger,
+  });
+
   const realtimeFactory = (env: AppEnv | null): RealtimeService | null => {
     if (lastRealtime) {
       lastRealtime.stop();
@@ -299,6 +332,7 @@ export function createTradingRuntime(input: {
           subscribe: (pdno: string) => sharedFeed.acquire(pdno),
           unsubscribe: (pdno: string) => sharedFeed.release(pdno),
         },
+        orderbookPoller,
       });
     }
     return lastRealtime;

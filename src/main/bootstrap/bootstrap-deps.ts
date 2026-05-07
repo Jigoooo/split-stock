@@ -403,6 +403,10 @@ export function bootstrapDeps(userDataDir: string) {
     newsFetcher,
     initialActiveAccountId,
     realtimeFactory: tradingRuntime.realtimeFactory,
+    // Sub-AC 3-2-2: SWR 재검증 성공 시 renderer 에 fresh candles IPC push.
+    onCandlesRevalidated: (pdno, period, candles) => {
+      broadcastToAllWindows('appShell:candles-updated', { pdno, period, candles });
+    },
   });
   factoryRef.factory = factory;
   markStartup('context-factory.create.end');

@@ -30,7 +30,7 @@ import type { TimeWindowRepo } from '../safety/time-window';
 import type { CredentialsRepo } from '../security/credentials-repo';
 import type { BalanceSync } from '../trading/balance-sync';
 import type { CurrentStateSync } from '../trading/current-state-sync';
-import type { DailyCandlesRepo } from '../trading/daily-candles-repo';
+import type { ChartPeriod, DailyCandle, DailyCandlesRepo } from '../trading/daily-candles-repo';
 import type { LotsRepo } from '../trading/lots-repo';
 import type { PendingOrderWatcher } from '../trading/pending-order-watcher';
 import type { PrebuyRepo } from '../trading/prebuy-repo';
@@ -159,6 +159,15 @@ export interface ContextFactoryOptions
   realtimeFactory?: (env: AppEnv | null) => RealtimeService | null;
   /** 부팅 시 ensureActive 결과로 채울 초기 활성 계좌 ID. */
   initialActiveAccountId?: number | null;
+  /**
+   * SWR 재검증 성공 콜백 — fresh candles 수신 시 IPC push 트리거.
+   * bootstrap-deps 에서 broadcastToAllWindows 로 연결 (Sub-AC 3-2-2).
+   */
+  onCandlesRevalidated?: (
+    pdno: string,
+    period: ChartPeriod,
+    candles: readonly DailyCandle[],
+  ) => void;
 }
 
 export function createContextFactory(opts: ContextFactoryOptions): {

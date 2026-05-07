@@ -162,4 +162,27 @@ describe('realtimeRouter subscriptions', () => {
 
     await iterator.return?.();
   });
+
+  // ─── D3: reconnectWs ─────────────────────────────────────────────────────
+
+  it('reconnectWs — realtime.reconnectWs() 호출 + ok:true 반환', async () => {
+    const reconnectWs = vi.fn();
+    const caller = createCaller({
+      currentEnv: 'MOCK',
+      realtime: { reconnectWs },
+    } as unknown as Context);
+
+    const result = await caller.reconnectWs();
+    expect(result).toEqual({ ok: true });
+    expect(reconnectWs).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconnectWs — realtime 미준비 시 ok:true 반환 (no-op)', async () => {
+    const caller = createCaller({
+      currentEnv: 'MOCK',
+      realtime: undefined,
+    } as unknown as Context);
+
+    await expect(caller.reconnectWs()).resolves.toEqual({ ok: true });
+  });
 });

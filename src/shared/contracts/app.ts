@@ -204,6 +204,27 @@ export const TradeExecutionEventSchema = z.object({
 });
 export type TradeExecutionEvent = z.infer<typeof TradeExecutionEventSchema>;
 
+/**
+ * SWR 백그라운드 재검증 성공 시 main → renderer IPC push 페이로드.
+ * swrRevalidator 가 fresh candles 를 받으면 broadcastToAllWindows 로 전파.
+ * renderer 는 이 이벤트를 수신해 캐시를 업데이트한다 (Sub-AC 3-2-2).
+ */
+export const CandlesUpdatedEventSchema = z.object({
+  pdno: z.string(),
+  period: z.enum(['D', 'W', 'M']),
+  candles: z.array(
+    z.object({
+      date: z.string(),
+      open: z.number(),
+      high: z.number(),
+      low: z.number(),
+      close: z.number(),
+      volume: z.number(),
+    }),
+  ),
+});
+export type CandlesUpdatedEvent = z.infer<typeof CandlesUpdatedEventSchema>;
+
 export const EventLogPushSchema = z.object({
   id: z.number().int().positive(),
   ts: z.number().int().positive(),

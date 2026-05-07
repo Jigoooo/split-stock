@@ -13,6 +13,7 @@ export interface UsePositionChartResult {
   liveCandle: Candle | null;
   error: string | null;
   fetchMore: () => Promise<void>;
+  isAutoRecovering: boolean;
   isLoading: boolean;
   period: ChartPeriod;
   reachedEnd: boolean;

@@ -23,6 +23,11 @@ export interface RetryOptions<E> {
   retryable: (err: E) => boolean;
   /** retry 직전 hook (관측용). */
   onRetry?: (attempt: number, err: E) => void;
+  /**
+   * 커스텀 sleep 구현체. 미주입 시 global setTimeout 사용.
+   * 테스트에서 vi.useFakeTimers() 간섭 방지 또는 즉시 resolve 가 필요할 때 주입.
+   */
+  sleepFn?: (ms: number) => Promise<void>;
 }
 
 export interface RetryStats {
@@ -64,7 +69,7 @@ export async function withExponentialBackoff<T, E>(
     options.onRetry?.(attempt + 1, r.error);
     const expDelay = Math.min(options.baseDelayMs * factor ** attempt, maxDelay);
     const jittered = Math.random() * expDelay; // full jitter
-    await sleep(jittered);
+    await (options.sleepFn ?? sleep)(jittered);
   }
   return {
     ok: false,

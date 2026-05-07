@@ -1,4 +1,6 @@
 import type { AppEnv } from '@shared/contracts';
+import { CandlesSWRCache } from '../brokers/core/candles-swr-cache';
+import { CandlesSWRRevalidator } from '../brokers/core/candles-swr-revalidate';
 import type { WsFactory } from '../brokers/core/types';
 import { createBrokerPort } from '../brokers/factory';
 import { KisRealtimeAdapter } from '../brokers/kis/realtime-adapter';
@@ -31,6 +33,15 @@ export function createContextBrokerResolver(
   state: ContextBrokerState,
 ): ContextBrokerResolver {
   const brokerCache = new Map<string, BrokerPort>();
+  // SWR 캐시는 브로커 재생성 시에도 유지 (stale-while-revalidate 목적상 singleton)
+  const kisSwrCache = new CandlesSWRCache();
+  // SWR 재검증 트리거 — swrCache 명중(stale 데이터 반환) 시 백그라운드 fresh fetch
+  // onCandlesRevalidated: 성공 시 IPC push (Sub-AC 3-2-2) → bootstrap 에서 broadcastToAllWindows 주입
+  const kisSwrRevalidator = new CandlesSWRRevalidator(
+    kisSwrCache,
+    deps.logger,
+    deps.onCandlesRevalidated,
+  );
 
   const clearBrokerCache = (): void => {
     for (const port of brokerCache.values()) port.dispose();
@@ -123,6 +134,8 @@ export function createContextBrokerResolver(
         },
         logger: deps.logger,
         tradingCalendar: deps.tradingCalendar,
+        swrCache: kisSwrCache,
+        swrRevalidator: kisSwrRevalidator,
       };
       port = createBrokerPort({
         brokerId: 'KIS',

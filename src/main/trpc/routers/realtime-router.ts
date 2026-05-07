@@ -188,6 +188,15 @@ export const realtimeRouter = router({
   }),
 
   /**
+   * WS 즉시 재연결 — showReconnectButton=true 일 때 사용자가 "재연결" 버튼을 누르면 호출.
+   * 자동 복구 30s 이상 실패 후 노출된 버튼만 이 경로로 진입한다 (D3).
+   */
+  reconnectWs: runtimeProcedure.mutation(({ ctx }) => {
+    ctx.realtime?.reconnectWs();
+    return { ok: true as const };
+  }),
+
+  /**
    * WS/REST 라우팅 결과 — 호가창 등 UI 인디케이터에서 종목별 폴링/실시간 모드 표시용.
    * pdno 미지정 시 활성 계좌 전체 반환.
    */

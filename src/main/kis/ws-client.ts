@@ -95,14 +95,42 @@ export interface KisWsClientOptions {
   heartbeatMs?: number;
   /** 초기 백오프 ms (기본 1000). */
   reconnectBaseMs?: number;
-  /** 최대 백오프 ms (기본 30s). */
+  /** 최대 백오프 ms (기본 30s). KIS rate-limit 준수. */
   reconnectMaxMs?: number;
+  /**
+   * 재연결 최대 시도 횟수.
+   * 미설정 시 무한 재연결 (기존 BC 유지).
+   * 0 이면 첫 끊김 즉시 exhausted (재시도 없음).
+   */
+  maxReconnectAttempts?: number;
   onMessage?: (msg: RealtimeMessage) => void;
   /** 체결통보 수신 시 콜백. AES 복호화 성공한 레코드만 전달. */
   onCniNotice?: (notice: CniNotice) => void;
+  /**
+   * maxReconnectAttempts 소진 시 1회 호출.
+   * UI 에서 "재연결" 버튼을 표시하는 트리거로 사용.
+   */
+  onReconnectExhausted?: () => void;
+  /**
+   * WS 연결 phase 변화 시 호출 — RealtimeService 가 WsPoolManager.setWsAvailable 을 연동하는 데 사용.
+   * open → true, open 이 아닌 모든 phase → false.
+   */
+  onPhaseChange?: (phase: WsPhase) => void;
+  /**
+   * WS 단절 감지 즉시 호출 — REST fallback 시작 트리거.
+   * 한 단절 세션(open → close … open)당 정확히 1회 발행.
+   * queueMicrotask 로 defer되어 내부 상태 업데이트 완료 후 실행됨.
+   */
+  onFallbackStart?: () => void;
 }
 
-type WsPhase = 'idle' | 'connecting' | 'open' | 'reconnect-wait' | 'closed';
+export type WsPhase =
+  | 'idle'
+  | 'connecting'
+  | 'open'
+  | 'reconnect-wait'
+  | 'reconnect-exhausted'
+  | 'closed';
 
 interface ConnectedState {
   ws: WsLike;
@@ -143,8 +171,12 @@ export class KisWsClient {
   private readonly heartbeatMs: number;
   private readonly reconnectBaseMs: number;
   private readonly reconnectMaxMs: number;
+  private readonly maxReconnectAttempts: number;
   private readonly onMessage?: (msg: RealtimeMessage) => void;
   private readonly onCniNotice?: (notice: CniNotice) => void;
+  private readonly onReconnectExhausted?: () => void;
+  private readonly _onPhaseChange?: (phase: WsPhase) => void;
+  private readonly _onFallbackStart?: () => void;
 
   private approvalKey: string | null = null;
   private readonly subscriptions = new Map<string, SubscriptionKey>();
@@ -156,6 +188,8 @@ export class KisWsClient {
   private reconnectStabilityTimer: { clear: () => void } | null = null;
   private readonly deduper = new WsDeduper(2048);
   private cniSeq = 0;
+  /** WS 단절 후 재연결 시도 중임을 나타내는 플래그. open 또는 stop/exhausted 시 false 로 초기화. */
+  private _isReconnecting = false;
 
   constructor(opts: KisWsClientOptions) {
     this.env = opts.env;
@@ -167,12 +201,33 @@ export class KisWsClient {
     this.heartbeatMs = opts.heartbeatMs ?? 30_000;
     this.reconnectBaseMs = opts.reconnectBaseMs ?? 1_000;
     this.reconnectMaxMs = opts.reconnectMaxMs ?? 30_000;
+    this.maxReconnectAttempts = opts.maxReconnectAttempts ?? Number.POSITIVE_INFINITY;
     if (opts.onMessage) this.onMessage = opts.onMessage;
     if (opts.onCniNotice) this.onCniNotice = opts.onCniNotice;
+    if (opts.onReconnectExhausted) this.onReconnectExhausted = opts.onReconnectExhausted;
+    if (opts.onPhaseChange) this._onPhaseChange = opts.onPhaseChange;
+    if (opts.onFallbackStart) this._onFallbackStart = opts.onFallbackStart;
+  }
+
+  /** phase 를 변경하고 onPhaseChange 콜백을 안전하게 호출. */
+  private setPhase(next: WsPhase): void {
+    if (this.phase === next) return;
+    this.phase = next;
+    if (this._onPhaseChange) {
+      // 콜백이 KisWsClient 내부 메서드를 재진입하지 않도록 queueMicrotask 로 defer.
+      const cb = this._onPhaseChange;
+      const p = next;
+      queueMicrotask(() => cb(p));
+    }
   }
 
   getPhase(): WsPhase {
     return this.phase;
+  }
+
+  /** WS 단절 후 재연결 시도 중 여부. open / stop / exhausted 시 false 로 초기화. */
+  getIsReconnecting(): boolean {
+    return this._isReconnecting;
   }
 
   getSubscriptions(): SubscriptionKey[] {
@@ -188,7 +243,8 @@ export class KisWsClient {
   }
 
   stop(): void {
-    this.phase = 'closed';
+    this._isReconnecting = false;
+    this.setPhase('closed');
     if (this.reconnectTimer) {
       this.reconnectTimer.clear();
       this.reconnectTimer = null;
@@ -239,12 +295,13 @@ export class KisWsClient {
       });
       return;
     }
-    this.phase = 'connecting';
+    this.setPhase('connecting');
     const url = KIS_WS_URL[this.env];
     const ws = this.factory(url);
 
     const onOpen = (): void => {
-      this.phase = 'open';
+      this._isReconnecting = false;
+      this.setPhase('open');
       this.clearReconnectStabilityTimer();
       this.reconnectStabilityTimer = this.timer.setTimeout(() => {
         this.reconnectStabilityTimer = null;
@@ -311,7 +368,32 @@ export class KisWsClient {
 
   private scheduleReconnect(): void {
     if (this.phase === 'closed') return;
-    this.phase = 'reconnect-wait';
+
+    // 한 단절 세션의 첫 진입 시 fallback:start 발행 + isReconnecting 활성화.
+    // 동일 세션 내 재시도(attempt>0, isReconnecting=true)에서는 중복 발행하지 않음.
+    if (!this._isReconnecting) {
+      this._isReconnecting = true;
+      if (this._onFallbackStart) {
+        const cb = this._onFallbackStart;
+        queueMicrotask(() => cb());
+      }
+    }
+
+    // exhaustion check BEFORE delay calc (attempt=0이면 maxReconnectAttempts=0 → 즉시 exhausted)
+    if (this.reconnectAttempt >= this.maxReconnectAttempts) {
+      this._isReconnecting = false;
+      this.setPhase('reconnect-exhausted');
+      this.logger.log({
+        level: 'WARN',
+        category: 'WS',
+        message: 'ws.reconnect.exhausted',
+        payload: { attempt: this.reconnectAttempt, max: this.maxReconnectAttempts },
+      });
+      if (this.onReconnectExhausted) this.onReconnectExhausted();
+      return;
+    }
+
+    this.setPhase('reconnect-wait');
     const attempt = this.reconnectAttempt;
     const delay = reconnectDelayMs(this.reconnectBaseMs, this.reconnectMaxMs, attempt);
     this.reconnectAttempt += 1;
@@ -325,6 +407,30 @@ export class KisWsClient {
       this.reconnectTimer = null;
       this.openSocket();
     }, delay);
+  }
+
+  /**
+   * 수동 즉시 재연결 — UI "재연결" 버튼 또는 자동화 트리거용.
+   *
+   * - 'reconnect-exhausted': attempt 카운터를 초기화하고 즉시 openSocket().
+   * - 'reconnect-wait': 대기 중인 타이머를 취소하고 즉시 openSocket().
+   * - 'closed': no-op (의도적 stop이므로 무시).
+   * - 기타 상태 (connecting, open): no-op.
+   */
+  reconnectNow(): void {
+    if (this.phase === 'closed') return;
+    if (this.phase === 'reconnect-exhausted') {
+      this.reconnectAttempt = 0;
+      this.openSocket();
+      return;
+    }
+    if (this.phase === 'reconnect-wait') {
+      if (this.reconnectTimer) {
+        this.reconnectTimer.clear();
+        this.reconnectTimer = null;
+      }
+      this.openSocket();
+    }
   }
 
   private sendControl(ws: WsLike, sub: SubscriptionKey, type: '1' | '2'): void {

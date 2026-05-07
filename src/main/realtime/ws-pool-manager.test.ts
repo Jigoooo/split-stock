@@ -310,6 +310,87 @@ describe('WsPoolManager — capacity 라우팅', () => {
     expect(view[0]).toMatchObject({ pdno: '000001', kind: 'PRICE', isWS: true });
   });
 
+  // ─── D2: setWsAvailable ──────────────────────────────────────────────────
+
+  it('setWsAvailable(false) — 모든 WS 종목이 REST 로 강제 이동', () => {
+    const ws = createFakeWs();
+    const rest = createFakeRest();
+    const mgr = new WsPoolManager({
+      ws,
+      rest,
+      logger: createFakeLogger(),
+      timer: fakeTimer,
+      defaultCapacity: 20,
+      rebalanceDebounceMs: 0,
+    });
+    mgr.subscribe({ accountId: 1, pdno: '000001', kind: 'PRICE', priority: 50 });
+    mgr.subscribe({ accountId: 1, pdno: '000002', kind: 'PRICE', priority: 50 });
+    expect(mgr.getActiveSubscriptions(1).every((s) => s.isWS)).toBe(true);
+
+    // WS 비활성화 — 모든 종목을 REST 로 위임
+    mgr.setWsAvailable(false);
+
+    const views = mgr.getActiveSubscriptions(1);
+    expect(views.every((s) => s.fallbackToRest)).toBe(true);
+    expect(ws.calls.filter((c) => c.op === 'unsub')).toHaveLength(2);
+    expect(rest.calls.filter((c) => c.op === 'sub')).toHaveLength(2);
+  });
+
+  it('setWsAvailable(true) — WS 복구 후 기존 종목 WS 슬롯으로 재배치', () => {
+    const ws = createFakeWs();
+    const rest = createFakeRest();
+    const mgr = new WsPoolManager({
+      ws,
+      rest,
+      logger: createFakeLogger(),
+      timer: fakeTimer,
+      defaultCapacity: 20,
+      rebalanceDebounceMs: 0,
+    });
+    mgr.subscribe({ accountId: 1, pdno: '000001', kind: 'PRICE', priority: 50 });
+    mgr.subscribe({ accountId: 1, pdno: '000002', kind: 'PRICE', priority: 50 });
+
+    // 먼저 WS 비활성화
+    mgr.setWsAvailable(false);
+    expect(mgr.getActiveSubscriptions(1).every((s) => s.fallbackToRest)).toBe(true);
+
+    // calls 리셋 후 WS 활성화 — 재구독 검증만 격리
+    ws.calls.length = 0;
+    rest.calls.length = 0;
+
+    // 다시 WS 활성화 — WS 슬롯으로 복귀
+    mgr.setWsAvailable(true);
+    const views = mgr.getActiveSubscriptions(1);
+    expect(views.every((s) => s.isWS)).toBe(true);
+    expect(
+      ws.calls
+        .filter((c) => c.op === 'sub')
+        .map((c) => c.pdno)
+        .sort(),
+    ).toEqual(['000001', '000002']);
+    expect(rest.calls.filter((c) => c.op === 'unsub')).toHaveLength(2);
+  });
+
+  it('setWsAvailable(false) 중 신규 subscribe — REST 로 즉시 배정', () => {
+    const ws = createFakeWs();
+    const rest = createFakeRest();
+    const mgr = new WsPoolManager({
+      ws,
+      rest,
+      logger: createFakeLogger(),
+      timer: fakeTimer,
+      defaultCapacity: 20,
+      rebalanceDebounceMs: 0,
+    });
+    mgr.setWsAvailable(false);
+    mgr.subscribe({ accountId: 1, pdno: '000001', kind: 'PRICE', priority: 50 });
+
+    const views = mgr.getActiveSubscriptions(1);
+    expect(views[0]).toMatchObject({ isWS: false, fallbackToRest: true });
+    expect(ws.calls.filter((c) => c.op === 'sub')).toHaveLength(0);
+    expect(rest.calls.filter((c) => c.op === 'sub')).toHaveLength(1);
+  });
+
   it('dispose — 모든 active 구독 해지 + 슬롯 비우기', () => {
     const ws = createFakeWs();
     const rest = createFakeRest();
