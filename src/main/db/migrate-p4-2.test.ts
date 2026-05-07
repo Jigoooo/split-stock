@@ -92,12 +92,43 @@ function readSetting(db: Db, key: string): string | null {
   return row?.value ?? null;
 }
 
+/**
+ * Phase 4-4: bootstrapSchema 가 crypto_auto_watches 를 더 이상 생성하지 않음.
+ * 본 migration 이 처리하는 source 테이블이라 테스트에서 직접 CREATE 한다.
+ * (production 에서는 P4-3 이전 사용자의 기존 row 만 처리 — fresh DB 에선 자동 no-op.)
+ */
+function createLegacyCryptoAutoWatchesTable(db: Db): void {
+  db.run(
+    sql.raw(
+      `CREATE TABLE IF NOT EXISTS crypto_auto_watches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_id INTEGER NOT NULL,
+        exchange TEXT NOT NULL DEFAULT 'UPBIT',
+        market TEXT NOT NULL,
+        label TEXT,
+        status TEXT NOT NULL DEFAULT 'PAUSED',
+        entry_condition_json TEXT NOT NULL DEFAULT '{"type":"immediate","price":null}',
+        strategy_json TEXT NOT NULL,
+        guard_json TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+    ),
+  );
+  db.run(
+    sql.raw(
+      'CREATE UNIQUE INDEX IF NOT EXISTS crypto_auto_watches_account_market_uniq ON crypto_auto_watches(account_id, exchange, market)',
+    ),
+  );
+}
+
 describe('migrateCryptoAutoWatchesToWatchOrders (Phase 4-2)', () => {
   let db: Db;
 
   beforeEach(() => {
     db = createTestDb();
     bootstrapSchema(db);
+    createLegacyCryptoAutoWatchesTable(db);
   });
 
   afterEach(() => {

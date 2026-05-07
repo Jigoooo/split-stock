@@ -390,27 +390,10 @@ export const cryptoAutoConfigs = sqliteTable(
   (t) => [primaryKey({ columns: [t.accountId, t.exchange, t.market] })],
 );
 
-export const cryptoAutoWatches = sqliteTable(
-  'crypto_auto_watches',
-  {
-    id: integer('id').primaryKey({ autoIncrement: true }),
-    accountId: integer('account_id').notNull(),
-    exchange: text('exchange').notNull().default('UPBIT'),
-    market: text('market').notNull(),
-    label: text('label'),
-    status: text('status').notNull().default('PAUSED'),
-    entryConditionJson: text('entry_condition_json')
-      .notNull()
-      .default('{"type":"immediate","price":null}'),
-    strategyJson: text('strategy_json').notNull(),
-    guardJson: text('guard_json'),
-    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
-  },
-  (t) => [
-    uniqueIndex('crypto_auto_watches_account_market_uniq').on(t.accountId, t.exchange, t.market),
-  ],
-);
+// Phase 4-4: cryptoAutoWatches 테이블 폐기. P4-1/2/3 으로 watchOrders(broker='UPBIT')
+// 가 source-of-truth 가 된 후 데이터 / 코드 의존성 모두 정리. drizzle 자동 생성 SQL 은
+// `DROP INDEX crypto_auto_watches_account_market_uniq;` + `DROP TABLE crypto_auto_watches;`.
+// runtime-schema-repair.repairCryptoAutoWatchesDropRuntimeSchema 가 idempotent fallback.
 
 export const cryptoAutoTemplates = sqliteTable(
   'crypto_auto_templates',

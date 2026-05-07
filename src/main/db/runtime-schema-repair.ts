@@ -242,20 +242,7 @@ export function repairCryptoRuntimeSchema(db: Db): void {
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (account_id, exchange, market)
     )`,
-    `CREATE TABLE IF NOT EXISTS crypto_auto_watches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      account_id INTEGER NOT NULL,
-      exchange TEXT NOT NULL DEFAULT 'UPBIT',
-      market TEXT NOT NULL,
-      label TEXT,
-      status TEXT NOT NULL DEFAULT 'PAUSED',
-      entry_condition_json TEXT NOT NULL DEFAULT '{"type":"immediate","price":null}',
-      strategy_json TEXT NOT NULL,
-      guard_json TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    )`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS crypto_auto_watches_account_market_uniq ON crypto_auto_watches(account_id, exchange, market)`,
+    // Phase 4-4: crypto_auto_watches CREATE 제거 — repairCryptoAutoWatchesDropRuntimeSchema 로 이관.
     `CREATE TABLE IF NOT EXISTS crypto_auto_templates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       account_id INTEGER NOT NULL,
@@ -368,6 +355,21 @@ export function repairCryptoAutoTablesDropRuntimeSchema(db: Db): void {
     db.run(sql.raw('DROP INDEX IF EXISTS crypto_auto_events_idempotency_uniq'));
     db.run(sql.raw('DROP TABLE IF EXISTS crypto_auto_lots'));
     db.run(sql.raw('DROP TABLE IF EXISTS crypto_auto_events'));
+  } catch {
+    return;
+  }
+}
+
+/**
+ * Phase 4-4 (drizzle 0002_curved_cable) fallback — crypto_auto_watches 테이블 + 인덱스 DROP idempotent.
+ *
+ * P4-1/2/3 으로 watchOrders(broker='UPBIT') 가 source-of-truth 가 된 후, P4-4 에서
+ * cryptoAutoWatches 폐기. drizzle migrate 가 실행 안 된 환경에서도 부팅 시 정리되도록 fallback.
+ */
+export function repairCryptoAutoWatchesDropRuntimeSchema(db: Db): void {
+  try {
+    db.run(sql.raw('DROP INDEX IF EXISTS crypto_auto_watches_account_market_uniq'));
+    db.run(sql.raw('DROP TABLE IF EXISTS crypto_auto_watches'));
   } catch {
     return;
   }

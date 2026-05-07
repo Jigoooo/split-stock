@@ -243,20 +243,8 @@ const CREATE_STATEMENTS: readonly string[] = [
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (account_id, exchange, market)
   )`,
-  `CREATE TABLE IF NOT EXISTS crypto_auto_watches (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_id INTEGER NOT NULL,
-    exchange TEXT NOT NULL DEFAULT 'UPBIT',
-    market TEXT NOT NULL,
-    label TEXT,
-    status TEXT NOT NULL DEFAULT 'PAUSED',
-    entry_condition_json TEXT NOT NULL DEFAULT '{"type":"immediate","price":null}',
-    strategy_json TEXT NOT NULL,
-    guard_json TEXT,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
-  )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS crypto_auto_watches_account_market_uniq ON crypto_auto_watches(account_id, exchange, market)`,
+  // Phase 4-4: crypto_auto_watches CREATE 제거. P4-1/2/3 으로 watchOrders 가 source-of-truth.
+  // runtime-schema-repair.repairCryptoAutoWatchesDropRuntimeSchema 가 idempotent DROP fallback.
   `CREATE TABLE IF NOT EXISTS crypto_auto_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id INTEGER NOT NULL,

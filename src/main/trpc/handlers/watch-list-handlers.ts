@@ -1,12 +1,10 @@
-import { isCryptoBroker } from '@shared/contracts';
+import { BROKERS, isCryptoBroker } from '@shared/contracts';
 import { TRPCError } from '@trpc/server';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { CryptoAutoTradingRepo } from '../../crypto/crypto-auto-repo';
-import { eventLogs } from '../../db/schema';
-import {
-  cryptoEventsToWatchHistoryItems,
-  cryptoWatchesToWatchOrders,
-} from '../../trading/watch-order-broker-adapter';
+import { eventLogs, watchOrders } from '../../db/schema';
+import type { WatchOrder, WatchSource, WatchStatus } from '../../trading/watch-engine-types';
+import { cryptoEventsToWatchHistoryItems } from '../../trading/watch-order-broker-adapter';
 import type { Context } from '../context';
 import {
   ensureActiveAccountId,
@@ -16,9 +14,36 @@ import {
   type WatchListInput,
 } from './watch-handler-shared';
 
+/** watchOrders DB 행 → WatchOrder shape 매핑. drizzle 의 timestamp_ms 모드는 Date 로 변환됨. */
+function mapWatchOrderRow(row: typeof watchOrders.$inferSelect): WatchOrder {
+  return {
+    id: row.id,
+    accountId: row.accountId,
+    pdno: row.pdno,
+    source: row.source as WatchSource,
+    side: row.side as 'BUY' | 'SELL',
+    targetPrice: row.targetPrice,
+    comparator: row.comparator as 'LTE' | 'GTE',
+    orderType: row.orderType as 'MARKET' | 'LIMIT',
+    qtyOrAmountMode: row.qtyOrAmountMode as 'QTY' | 'AMOUNT',
+    qty: row.qty,
+    amountKrw: row.amountKrw,
+    nth: row.nth,
+    sourceRefId: row.sourceRefId,
+    expiresAt: row.expiresAt,
+    status: row.status as WatchStatus,
+    lastFailureReason: row.lastFailureReason,
+    metadata: row.metadata,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    executedAt: row.executedAt,
+  };
+}
+
 /**
- * Phase 3: broker dispatch — input.broker 가 코인 broker (UPBIT) 면 cryptoAutoWatches 데이터를
- * WatchOrder shape 으로 변환해 반환. 그렇지 않으면 기본 stock watchEngine 사용.
+ * Phase 3 → P4-4: broker dispatch. UPBIT 는 watchOrders(broker='UPBIT') 직접 조회
+ * (P4-3 이후 cryptoAutoWatches 폐기, watchOrders 가 source-of-truth). KIS/KIWOOM 은
+ * 기존 watchEngine 사용. 코인 자동감시는 BOOSTER source 가 없어 별도 필터 불필요.
  */
 export function listWatchOrders(ctx: Context, input: WatchListInput) {
   const activeAccountId = ensureActiveAccountId(ctx.activeAccountId);
@@ -29,16 +54,19 @@ export function listWatchOrders(ctx: Context, input: WatchListInput) {
     });
   }
   if (isCryptoBroker(input.broker)) {
-    const watches = new CryptoAutoTradingRepo(ctx.db).listWatches(activeAccountId);
-    let orders = cryptoWatchesToWatchOrders(watches);
-    if (input.status !== undefined) {
-      const status = input.status;
-      orders = orders.filter((order) => order.status === status);
-    }
-    if (input.source !== undefined) {
-      const source = input.source;
-      orders = orders.filter((order) => order.source === source);
-    }
+    const filters = [
+      eq(watchOrders.broker, BROKERS.UPBIT),
+      eq(watchOrders.accountId, activeAccountId),
+    ];
+    if (input.status !== undefined) filters.push(eq(watchOrders.status, input.status));
+    if (input.source !== undefined) filters.push(eq(watchOrders.source, input.source));
+    const orders = ctx.db
+      .select()
+      .from(watchOrders)
+      .where(and(...filters))
+      .orderBy(desc(watchOrders.updatedAt))
+      .all()
+      .map(mapWatchOrderRow);
     return { orders };
   }
   const watchEngine = ensureWatchEngine(ctx);

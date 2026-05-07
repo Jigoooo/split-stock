@@ -25,6 +25,7 @@ import {
   repairAccountsRuntimeSchema,
   repairBrokerColumnsRuntimeSchema,
   repairCryptoAutoTablesDropRuntimeSchema,
+  repairCryptoAutoWatchesDropRuntimeSchema,
   repairCryptoRuntimeSchema,
   repairLotsDecimalRuntimeSchema,
   repairLotsSourceEventLogsRuntimeSchema,
@@ -113,6 +114,11 @@ export function bootstrapDeps(userDataDir: string) {
   markStartup('db.phase-4-2.start');
   migrateCryptoAutoWatchesToWatchOrders(db);
   markStartup('db.phase-4-2.end');
+
+  // Phase 4-4: cryptoAutoWatches DROP — migration 직후 실행. 테이블이 이미 없으면 no-op.
+  // 새 사용자(fresh DB) 는 bootstrapSchema 가 더 이상 cryptoAutoWatches 를 만들지 않으므로
+  // DROP IF EXISTS 가 즉시 no-op 으로 통과.
+  repairCryptoAutoWatchesDropRuntimeSchema(db);
 
   markStartup('bootstrap.repos.start');
   const credentialsRepo = new CredentialsRepo(db, {

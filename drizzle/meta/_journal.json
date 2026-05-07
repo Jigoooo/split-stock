@@ -15,6 +15,13 @@
       "when": 1778103045015,
       "tag": "0001_youthful_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1778111654827,
+      "tag": "0002_curved_cable",
+      "breakpoints": true
     }
   ]
 }
