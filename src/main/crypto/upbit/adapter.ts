@@ -15,6 +15,7 @@ import {
 } from '@shared/contracts';
 import Upbit from '@upbit-official/upbit-sdk';
 import { err, ok, type Result } from 'neverthrow';
+import { flattenError } from 'zod';
 import type { CryptoMarketDataAdapter } from '../ports';
 import { decimalGte, decimalMul, decimalString } from './decimal';
 import { toUpbitExchangeError } from './errors';
@@ -520,7 +521,7 @@ export class UpbitExchangeAdapter implements CryptoMarketDataAdapter {
         exchangeId: 'UPBIT',
         kind: 'VALIDATION',
         message: parsed.error.issues.map((issue) => issue.message).join(', '),
-        raw: parsed.error.flatten(),
+        raw: flattenError(parsed.error),
       });
     }
 

@@ -169,14 +169,14 @@ export const AutoOrderRetryEventSchema = z
   .superRefine((event, ctx) => {
     if (event.side === 'BUY' && event.triggerReason !== 'DROP_BUY') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom' as const,
         message: 'BUY retry event must use DROP_BUY triggerReason',
         path: ['triggerReason'],
       });
     }
     if (event.side === 'SELL' && event.triggerReason !== 'PROFIT_SELL') {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom' as const,
         message: 'SELL retry event must use PROFIT_SELL triggerReason',
         path: ['triggerReason'],
       });

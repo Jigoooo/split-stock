@@ -84,14 +84,14 @@ const StrategyProfileBaseSchema = z.object({
 export const StrategyProfileSchema = StrategyProfileBaseSchema.superRefine((profile, ctx) => {
   if (profile.buyRules.length < profile.maxStages) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom' as const,
       path: ['buyRules'],
       message: 'buyRules는 활성 maxStages 이상 채워야 합니다.',
     });
   }
   if (profile.sellRules.length < profile.maxStages) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom' as const,
       path: ['sellRules'],
       message: 'sellRules는 활성 maxStages 이상 채워야 합니다.',
     });
@@ -103,7 +103,7 @@ export const StrategyProfileSchema = StrategyProfileBaseSchema.superRefine((prof
 
     if (!buyRule || buyRule.nth !== nth) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom' as const,
         path: ['buyRules'],
         message: 'buyRules nth는 1차부터 저장된 차수까지 순서대로 채워야 합니다.',
       });
@@ -111,14 +111,14 @@ export const StrategyProfileSchema = StrategyProfileBaseSchema.superRefine((prof
     }
     if (nth === 1 && buyRule.triggerDropPct !== null) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom' as const,
         path: ['buyRules', nth - 1, 'triggerDropPct'],
         message: '1차는 수동 진입이므로 triggerDropPct가 없어야 합니다.',
       });
     }
     if (nth > 1 && buyRule.triggerDropPct === null) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom' as const,
         path: ['buyRules', nth - 1, 'triggerDropPct'],
         message: '2차 이후는 triggerDropPct가 필요합니다.',
       });
@@ -131,7 +131,7 @@ export const StrategyProfileSchema = StrategyProfileBaseSchema.superRefine((prof
 
     if (!sellRule || sellRule.nth !== nth) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom' as const,
         path: ['sellRules'],
         message: 'sellRules nth는 1차부터 저장된 차수까지 순서대로 채워야 합니다.',
       });
