@@ -17,7 +17,9 @@ import { BootStatusService } from '../boot/boot-status';
 import { KiwoomHttpClient } from '../brokers/kiwoom/http-client';
 import { KIWOOM_BASE_URL } from '../brokers/kiwoom/metadata/endpoints';
 import { KiwoomTokenStore } from '../brokers/kiwoom/token-store';
+import { CryptoAutoTradingRepo } from '../crypto/crypto-auto-repo';
 import { CryptoRealtimeService } from '../crypto/crypto-realtime-service';
+import { UpbitExchangeAdapter } from '../crypto/upbit/adapter';
 import { bootstrapSchema } from '../db/bootstrap-schema';
 import { defaultDbPath, openDb } from '../db/client';
 import { migrateCryptoAutoWatchesToWatchOrders } from '../db/migrate-p4-2';
@@ -69,6 +71,7 @@ import { createRateGuard, createRateGuardRepo } from '../safety/rate-guard';
 import { SafetyStateRegistry } from '../safety/safety-state';
 import { createTimeWindowRepo } from '../safety/time-window';
 import { CredentialsRepo } from '../security/credentials-repo';
+import { CryptoBoosterService } from '../trading/crypto-booster-service';
 import { DailyCandlesRepo } from '../trading/daily-candles-repo';
 import { LotsRepo } from '../trading/lots-repo';
 import { PrebuyRepo } from '../trading/prebuy-repo';
@@ -352,6 +355,45 @@ export function bootstrapDeps(userDataDir: string) {
   markStartup('crypto-realtime.create.start');
   const cryptoRealtime = new CryptoRealtimeService(db, eventLogger);
   markStartup('crypto-realtime.create.end');
+
+  // E2-1 코인 부스터 — 1차 전량 매도 (UPBIT ask done remainingVolume=0) 직후 lastFilledPrice
+  // * (1 - dropPct) 도달 시 1차 자동 재매수. 도메스틱 BoosterService 와 평행 분리:
+  //  - TradeExecutionEvent (KIS, 6자리 pdno, integer price) vs CryptoPrivateOrderEvent
+  //    (UPBIT, KRW-XXX, DecimalString) 스키마가 강하게 달라 union 강제 시 도메인 의미 파괴.
+  //  - ProtectionGuard ↔ CryptoProtectionGuard 가 이미 별도 — 동일 패턴 적용.
+  //  - BoosterWatcher (broker-agnostic, pdno: string) 는 재사용.
+  // BUY placement 는 runLiveTick 의 entryCondition 충돌을 피하기 위해 직접 adapter.createOrder
+  // 호출 + 수동 gate 컴포지션 (도메스틱 executeStrategyOrder 동등).
+  const cryptoAutoRepo = new CryptoAutoTradingRepo(db);
+  const cryptoBoosterService = new CryptoBoosterService({
+    timer: realTimer,
+    bus: cryptoRealtime.bus,
+    repo: cryptoAutoRepo,
+    getRealtime: () => cryptoRealtime,
+    getAdapter: (accountId) => {
+      const cred = credentialsRepo.loadCredentials(accountId);
+      if (cred.isErr() || !cred.value || !isUpbitCredentials(cred.value)) return null;
+      return new UpbitExchangeAdapter({
+        accessKey: cred.value.accessKey,
+        secretKey: cred.value.secretKey,
+      });
+    },
+    safetyRegistry,
+    protectionGuard: {
+      canBuyToday: (accountId, market, amountKrw) =>
+        cryptoProtectionGuard.canBuyToday(accountId, market, amountKrw),
+    },
+    rateGuard,
+    logger: eventLogger,
+  });
+  // crypto-realtime-service.applyPrivateOrder → bus.publishPrivateOrder 이후 호출.
+  // accountId 별 구독 — initialActiveAccountId 가 있으면 즉시, 없으면 setEnvAndAccount 에서
+  // 향후 활성화. 현재 활성 계좌 1개만 처리 (코인 멀티 계좌는 향후 phase).
+  if (initialActiveAccountId !== null) {
+    cryptoRealtime.bus.subscribePrivateOrder(initialActiveAccountId, (event) => {
+      cryptoBoosterService.handleCryptoFill(event);
+    });
+  }
 
   // RALPLAN P6 A4 — UPBIT 미체결 자동취소 watcher. PendingOrderWatcher 재사용 + UPBIT cancelOrder.
   const cryptoPendingOrderWatcher = createCryptoPendingCancelWatcher({

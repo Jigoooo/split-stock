@@ -145,6 +145,21 @@ export const CryptoStrategySellRuleSchema = z.object({
 });
 export type CryptoStrategySellRule = z.infer<typeof CryptoStrategySellRuleSchema>;
 
+/**
+ * E2-1 코인 수익 부스터 설정.
+ * 1차 전량 매도 후 lastFilledPrice * (1 - dropPct) 도달 시 1차 재매수.
+ * dropPct 는 DecimalString (crypto schema 컨벤션). '0' 이하면 즉시 트리거 (홀딩 유지 효과).
+ * amountKrwOverride 미지정 시 buyRules[0].amountKrw 사용.
+ */
+export const CryptoProfitBoosterSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** 재매수 트리거 하락률 (DecimalString, '0.01' = 1%). '0' 이하면 즉시 트리거. */
+  dropPct: DecimalStringSchema.default('0'),
+  /** 만료 시간 (ms 절대시각). null 이면 만료 없음. */
+  expiresAt: z.number().int().nullable().default(null),
+});
+export type CryptoProfitBoosterConfig = z.infer<typeof CryptoProfitBoosterSchema>;
+
 const CryptoStrategyProfileBaseSchema = z.object({
   version: z.literal(1).default(1),
   market: CryptoKrwMarketCodeSchema,
@@ -155,6 +170,8 @@ const CryptoStrategyProfileBaseSchema = z.object({
   autoBuyOrderType: CryptoStrategyOrderTypeSchema.default('MARKET'),
   autoSellEnabled: z.boolean().default(false),
   autoSellOrderType: CryptoStrategyOrderTypeSchema.default('MARKET'),
+  /** E2-1 코인 수익 부스터 — optional 로 기존 저장값과 호환. */
+  profitBooster: CryptoProfitBoosterSchema.optional(),
 });
 
 export const CryptoStrategyProfileSchema = CryptoStrategyProfileBaseSchema.superRefine(
