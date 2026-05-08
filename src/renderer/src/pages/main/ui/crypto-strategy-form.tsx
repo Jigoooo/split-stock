@@ -7,6 +7,7 @@ import { StageRulesEditor } from '@renderer/features/edit-strategy/ui/stage-rule
 import { Button, Select } from '@renderer/shared/ui';
 import type { CryptoStrategyAutoMode, CryptoStrategyProfile } from '@shared/contracts';
 import {
+  applyCryptoStrategyAutoMode,
   createCryptoStrategyRules,
   deriveCryptoStrategyAutoMode,
   MAX_CRYPTO_STRATEGY_STAGES,
@@ -29,17 +30,6 @@ const sanitizeDecimal = (value: string): string => {
   const [whole = '', ...fractions] = normalized.split('.');
   return fractions.length > 0 ? `${whole}.${fractions.join('')}` : whole;
 };
-
-function applyCryptoStrategyAutoMode(
-  profile: CryptoStrategyProfile,
-  mode: CryptoStrategyAutoMode,
-): CryptoStrategyProfile {
-  return {
-    ...profile,
-    autoBuyEnabled: mode === 'ALL_ON' || mode === 'BUY_ONLY',
-    autoSellEnabled: mode === 'ALL_ON' || mode === 'SELL_ONLY',
-  };
-}
 
 function resizeMaxStages(profile: CryptoStrategyProfile, maxStages: number): CryptoStrategyProfile {
   const safeMaxStages = Math.max(

@@ -1,6 +1,7 @@
 import { applyStrategyAutoMode } from '@shared/contracts';
 import type { EventLogger } from '../logging/event-logger';
-import type { ProtectionGuard, ProtectionGuardError } from '../safety/protection-guard';
+import { protectionErrorMessage } from '../safety/protection-error-message';
+import type { ProtectionGuard } from '../safety/protection-guard';
 import type { RateGuardRepo } from '../safety/rate-guard';
 import { isTradeAllowedAt, type TimeWindowRepo } from '../safety/time-window';
 import { AutoOrderBlockedError } from './auto-order-errors';
@@ -178,19 +179,4 @@ export class AutoBuyGuard implements AutoBuyGuardPort {
 function kstMinuteOfDay(now: Date): number {
   const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return kst.getUTCHours() * 60 + kst.getUTCMinutes();
-}
-
-function protectionErrorMessage(error: ProtectionGuardError): string {
-  switch (error.kind) {
-    case 'LIMIT_PER_SYMBOL_DAILY_BUYS':
-      return `자동매수 차단: 종목별 1일 최대 매수 횟수(${error.max}회)에 도달했습니다.`;
-    case 'LIMIT_DAILY_TOTAL_COUNT':
-      return `자동매수 차단: 1일 총 최대 매수 건수(${error.max}회)에 도달했습니다.`;
-    case 'LIMIT_DAILY_TOTAL_AMOUNT':
-      return `자동매수 차단: 1일 총 최대 매수 금액(${error.maxKrw.toLocaleString('ko-KR')}원)을 초과합니다.`;
-    case 'LIMIT_ACCOUNT_TOTAL_AMOUNT':
-      return `자동매수 차단: 계좌 총 최대 매수 금액(${error.maxKrw.toLocaleString('ko-KR')}원)을 초과합니다.`;
-    case 'DB_ERROR':
-      return '자동매수 차단: 보호 한도 확인 중 오류가 발생했습니다.';
-  }
 }

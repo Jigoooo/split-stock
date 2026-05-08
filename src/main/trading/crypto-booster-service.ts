@@ -60,16 +60,16 @@ export interface CryptoBoosterServiceDeps {
     unwatchMarket(input: { market: string; candleUnit: '1m' }): void;
   } | null;
   /** 글로벌 자동매매 잠금. broker-agnostic. */
-  safetyRegistry?: {
+  safetyRegistry: {
     get(accountId: number): {
       canTrade(symbol: string): boolean;
       getSnapshot(): { master: boolean; errorLock: { active: boolean; reason?: string | null } };
     };
   };
   /** 일/계좌 한도 + RateGuard per-symbol SELL_ONLY 전환. (E2-2) */
-  cryptoAutoBuyGuard?: CryptoAutoBuyGuardPort;
+  cryptoAutoBuyGuard: CryptoAutoBuyGuardPort;
   /** 연속매수 방지. 매수 성공 직후 recordBuy. */
-  rateGuard?: {
+  rateGuard: {
     recordBuy(accountId: number, symbol: string, ts: number): void;
     checkAndPossiblyDisableAuto(accountId: number): { switchedToManual: boolean };
   };
@@ -218,32 +218,28 @@ export class CryptoBoosterService {
         return;
       }
 
-      if (this.deps.safetyRegistry) {
-        const snap = this.deps.safetyRegistry.get(task.accountId).getSnapshot();
-        if (!snap.master) {
-          this.logTriggerSkipped(task, 'safety-master-off');
-          return;
-        }
-        if (snap.errorLock.active) {
-          this.logTriggerSkipped(task, 'safety-error-lock', { reason: snap.errorLock.reason });
-          return;
-        }
+      const snap = this.deps.safetyRegistry.get(task.accountId).getSnapshot();
+      if (!snap.master) {
+        this.logTriggerSkipped(task, 'safety-master-off');
+        return;
+      }
+      if (snap.errorLock.active) {
+        this.logTriggerSkipped(task, 'safety-error-lock', { reason: snap.errorLock.reason });
+        return;
       }
 
-      if (this.deps.cryptoAutoBuyGuard) {
-        try {
-          this.deps.cryptoAutoBuyGuard.assertAutoBuyAllowed({
-            accountId: task.accountId,
-            market: market.data,
-            amountKrw: task.amountKrw,
-            source: 'BOOSTER',
-          });
-        } catch (e) {
-          this.logTriggerSkipped(task, 'auto-buy-guard', {
-            reason: e instanceof Error ? e.message : String(e),
-          });
-          return;
-        }
+      try {
+        this.deps.cryptoAutoBuyGuard.assertAutoBuyAllowed({
+          accountId: task.accountId,
+          market: market.data,
+          amountKrw: task.amountKrw,
+          source: 'BOOSTER',
+        });
+      } catch (e) {
+        this.logTriggerSkipped(task, 'auto-buy-guard', {
+          reason: e instanceof Error ? e.message : String(e),
+        });
+        return;
       }
 
       const adapter = this.deps.getAdapter(task.accountId);
@@ -282,17 +278,15 @@ export class CryptoBoosterService {
 
       this.deps.repo.markLiveAction(task.accountId, market.data, this.now());
 
-      if (this.deps.rateGuard) {
-        this.deps.rateGuard.recordBuy(task.accountId, market.data, this.now());
-        const guard = this.deps.rateGuard.checkAndPossiblyDisableAuto(task.accountId);
-        if (guard.switchedToManual) {
-          this.deps.logger.log({
-            level: 'WARN',
-            category: 'ORDER',
-            message: 'crypto-booster.rate-guard.disabled',
-            payload: { accountId: task.accountId, market: market.data },
-          });
-        }
+      this.deps.rateGuard.recordBuy(task.accountId, market.data, this.now());
+      const rateGuardResult = this.deps.rateGuard.checkAndPossiblyDisableAuto(task.accountId);
+      if (rateGuardResult.switchedToManual) {
+        this.deps.logger.log({
+          level: 'WARN',
+          category: 'ORDER',
+          message: 'crypto-booster.rate-guard.disabled',
+          payload: { accountId: task.accountId, market: market.data },
+        });
       }
 
       this.deps.repo.insertEvent({

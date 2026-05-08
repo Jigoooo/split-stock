@@ -7,7 +7,7 @@ import {
 import type { EventLogger } from '../logging/event-logger';
 import { AutoOrderBlockedError } from '../trading/auto-order-errors';
 import type { CryptoProtectionGuard } from './crypto-protection-guard';
-import type { ProtectionGuardError } from './protection-guard';
+import { protectionErrorMessage } from './protection-error-message';
 import type { RateGuardRepo } from './rate-guard';
 
 export interface CryptoAutoBuyGuardInput {
@@ -58,6 +58,16 @@ interface RateAttemptHistory {
 }
 
 export class CryptoAutoBuyGuard implements CryptoAutoBuyGuardPort {
+  /**
+   * 시도 직전(pre-attempt) 연속매수 카운터. 키: `${accountId}:${market}`.
+   *
+   * 역할이 다른 두 레이어가 공존한다:
+   *  - 이 Map: 매수 시도 직전에 카운트하며, 임계 초과 시 해당 market 만 SELL_ONLY 로 전환 (surgical).
+   *  - createRateGuard 의 history: 주문 체결 성공 후 recordBuy 로 카운트하며, 임계 초과 시
+   *    account 전체의 master=false (nuclear). broker-agnostic 이라 도메스틱 HTS 와도 공유.
+   *
+   * 두 Map 은 시점·키·액션·blast-radius 가 모두 달라 중복이 아니다.
+   */
   private readonly histories = new Map<string, RateAttemptHistory>();
   private readonly now: () => Date;
 
@@ -178,20 +188,5 @@ export class CryptoAutoBuyGuard implements CryptoAutoBuyGuardPort {
         },
       });
     }
-  }
-}
-
-function protectionErrorMessage(error: ProtectionGuardError): string {
-  switch (error.kind) {
-    case 'LIMIT_PER_SYMBOL_DAILY_BUYS':
-      return `자동매수 차단: 종목별 1일 최대 매수 횟수(${error.max}회)에 도달했습니다.`;
-    case 'LIMIT_DAILY_TOTAL_COUNT':
-      return `자동매수 차단: 1일 총 최대 매수 건수(${error.max}회)에 도달했습니다.`;
-    case 'LIMIT_DAILY_TOTAL_AMOUNT':
-      return `자동매수 차단: 1일 총 최대 매수 금액(${error.maxKrw.toLocaleString('ko-KR')}원)을 초과합니다.`;
-    case 'LIMIT_ACCOUNT_TOTAL_AMOUNT':
-      return `자동매수 차단: 계좌 총 최대 매수 금액(${error.maxKrw.toLocaleString('ko-KR')}원)을 초과합니다.`;
-    case 'DB_ERROR':
-      return '자동매수 차단: 보호 한도 확인 중 오류가 발생했습니다.';
   }
 }
