@@ -60,7 +60,33 @@ FeedBus.emitTick(pdno, price)
 | B5 | onTrigger → BUY 1차 주문 | ✅ 정상 | qty=0 시 skip |
 | **B6** | **reconcileLinkedLot 타이밍** | 🔴 **버그** | **booster 등록 skip 가능** |
 
-## 검증 결과
+## 검증 결과 (1차)
 
 ✅ B1-B5 정상.
-🔴 B6 즉시 검증 + 조치 필요.
+🔴 B6 즉시 검증 + 조치 필요. → ✅ Fix `d470d7a` (reconcileLinkedLot 우선 실행)
+
+---
+
+## 추가 깊이 검증 (B6 fix 후, scientist B-deep)
+
+### Bd2 — multi-lot 동시 SELL booster 누락 (HIGH)
+- **위치**: `booster-service.ts:54-56` `hasActiveCycle(snapshot.value.lots)`
+- **문제**: 1차 SELL FILLED 처리 중 2차 lot 이 SELLING 상태면 hasActiveCycle=true → booster register skip. silent miss (보정 수단 없음).
+- **발생 조건**: 분할매수 전략에서 2개 이상 lot 이 거의 동시에 SELL FILLED. 단일 lot 전략은 무영향.
+- **Fix 권고**: `snapshot.lots.filter(l => l.id !== event.lotId)` 후 hasActiveCycle 검사.
+
+### Bd4 — onTrigger 실패 시 retry/failed-queue 없음 (HIGH)
+- **위치**: `booster-service.ts:184-198` finally cleanupSubscription
+- **문제**: KIS API 장애/timeout/rate limit 등으로 BUY 주문 실패 시 task 영구 소멸. 사용자 보정 기회 없음 (ERROR log 만 남음).
+- **Fix 권고**: 1회 재시도 (지수 백오프) + 그래도 실패면 cleanup. 또는 별도 failed-queue + IPC API.
+
+### Bd6 — env 전환 후 WS 재구독 누락 (LOW/MID)
+- **위치**: `bootstrap-deps.ts` env 전환 hook
+- **문제**: env 전환으로 RealtimeService 재생성 시 BoosterService 의 활성 task 가 newRealtime.watch() 재호출 안 됨. WS 끊김.
+- **완화**: bus.subscribeTick 은 살아있고 REST quoteFeed 가 같은 bus 에 publish 하므로 silent failure 아니나, WS vs REST 폴링 주기 차이로 트리거 지연.
+- **Fix 권고**: env 전환 hook 에 booster.list() 순회 후 newRealtime.watch() 재호출.
+
+### Bd1, Bd3, Bd5 (INFO)
+- Bd1 broadcastTradeExecution 체인 — B6 fix 로 해소됨.
+- Bd3 nth=null manual order skip — 의도된 설계 (booster 이중 진입 방지). 주석 명시 권고.
+- Bd5 source 'STRATEGY' 하드코딩 — telemetry 만 영향. 'BOOSTER' source 추가 선택적.
