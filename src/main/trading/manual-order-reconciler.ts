@@ -298,6 +298,18 @@ export class ManualOrderReconciler {
             })
             .run();
 
+          // B6 fix: reconcileLinkedLot 을 먼저 실행해야 BoosterService 가
+          // snapshot 읽는 시점에 lot 이 이미 SOLD 상태가 된다.
+          // readLotNth 는 status 무관하게 nth 컬럼만 읽으므로 순서 변경 안전.
+          if (row.lotId !== null) {
+            reconcileLinkedLot(this.opts.db, {
+              decision,
+              lotId: row.lotId,
+              side: row.side === 'SELL' ? 'SELL' : 'BUY',
+              now,
+            });
+          }
+
           this.opts.onTradeExecution({
             accountId: row.accountId,
             odno: row.odno,
@@ -312,15 +324,6 @@ export class ManualOrderReconciler {
             nth: row.lotId !== null ? readLotNth(this.opts.db, row.lotId) : null,
             price: decision.executionPrice,
             occurredAt: now.getTime(),
-          });
-        }
-
-        if (row.lotId !== null) {
-          reconcileLinkedLot(this.opts.db, {
-            decision,
-            lotId: row.lotId,
-            side: row.side === 'SELL' ? 'SELL' : 'BUY',
-            now,
           });
         }
 

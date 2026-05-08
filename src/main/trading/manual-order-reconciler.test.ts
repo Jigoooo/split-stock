@@ -406,6 +406,97 @@ describe('ManualOrderReconciler lot reconciliation', () => {
     expect(updatedTrades.map((trade) => trade.qty)).toEqual([2, 2]);
   });
 
+  // B6 regression: onTradeExecution 발화 시점에 lot 이 이미 SOLD 상태여야 한다.
+  // BoosterService.handleTradeExecution 가 snapshot 읽을 때 hasActiveCycle=false 가 되어야
+  // booster register 가 skip 되지 않음을 보장하는 테스트.
+  it('B6 — SELL FILLED 처리 시 onTradeExecution 호출 전에 lot 이 SOLD 로 전이된다', async () => {
+    const db = createTestDb();
+    bootstrapSchema(db);
+    const now = new Date('2026-04-22T09:00:00+09:00');
+    const lot = db
+      .insert(lots)
+      .values({
+        accountId: 1,
+        pdno: '005930',
+        nth: 2,
+        buyPrice: 10000,
+        qty: 10,
+        amountKrw: 100000,
+        status: 'SELLING',
+        boughtAt: now,
+      })
+      .returning({ id: lots.id })
+      .get();
+
+    db.insert(orders)
+      .values({
+        accountId: 1,
+        lotId: lot.id,
+        odno: 'ORD-SELL-1',
+        orgNo: 'ORG-S-1',
+        pdno: '005930',
+        side: 'SELL',
+        division: 'LIMIT',
+        qty: 10,
+        price: 11000,
+        status: 'PENDING',
+        placedAt: now,
+      })
+      .run();
+
+    const broker = {
+      brokerId: 'KIS',
+      env: 'MOCK',
+      listDailyExecutions: async () => ({
+        isOk: () => true,
+        isErr: () => false,
+        value: [
+          {
+            brokerOrderId: 'ORD-SELL-1',
+            symbol: '005930',
+            name: '삼성전자',
+            side: 'SELL',
+            orderQty: 10,
+            orderPrice: 11000,
+            orderedAt: '090000',
+            totalFilledQty: 10,
+            remainingQty: 0,
+            avgFillPrice: 11000,
+            cancelled: false,
+            rejectedQty: 0,
+          },
+        ],
+      }),
+    } as unknown as BrokerPort;
+
+    // onTradeExecution 발화 시점의 lot status 를 캡처한다.
+    let lotStatusAtCallback: string | undefined;
+    const reconciler = new ManualOrderReconciler({
+      db,
+      getBrokerForAccount: () => broker,
+      logger: { log: () => undefined } satisfies EventLogger,
+      onTradeExecution: (evt) => {
+        if (evt.lotId === lot.id) {
+          const row = db
+            .select({ status: lots.status })
+            .from(lots)
+            .where(eq(lots.id, lot.id))
+            .get();
+          lotStatusAtCallback = row?.status;
+        }
+      },
+      stalePendingGraceMs: 0,
+    });
+
+    await reconciler.poll();
+
+    // B6 fix 검증: onTradeExecution 콜백 시점에 lot 은 이미 SOLD 여야 한다.
+    expect(lotStatusAtCallback).toBe('SOLD');
+    // 최종 상태도 SOLD 확인.
+    const finalLot = db.select().from(lots).where(eq(lots.id, lot.id)).get();
+    expect(finalLot).toMatchObject({ status: 'SOLD' });
+  });
+
   // Phase 6 multi-broker — KIS+KIWOOM mixed pending 모두 row.broker 기반 dispatch.
   it('도메스틱 broker 별 PENDING row 가 각자의 BrokerPort 로 dispatch 된다', async () => {
     const db = createTestDb();
