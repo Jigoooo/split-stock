@@ -869,24 +869,67 @@ export class CryptoAutoTradingRepo {
   }
 
   /**
-   * SELL FILLED 이벤트를 받아 해당 (accountId, market)의 open live lots를 모두 close 처리.
+   * lot 수량을 부분 차감한다. 차수를 close 하지 않고 qtyDecimal 만 감소.
+   * 매도 수량이 lot 수량보다 적을 때(부분 매도) 사용.
+   */
+  partialReduceLot(input: { lotId: number; reduceQty: string; now: number }): void {
+    const row = this.db.select().from(lots).where(eq(lots.id, input.lotId)).get();
+    if (!row) return;
+    const currentQty = Number(row.qtyDecimal ?? '0');
+    const newQty = currentQty - Number(input.reduceQty);
+    this.db
+      .update(lots)
+      .set({ qtyDecimal: String(Math.max(0, newQty)) })
+      .where(and(eq(lots.id, input.lotId), eq(lots.broker, 'UPBIT')))
+      .run();
+  }
+
+  /**
+   * SELL FILLED 이벤트를 받아 해당 (accountId, market)의 open live lots를
+   * executedVolume 만큼 낮은 nth(차수)부터 FIFO 순으로 차감한다.
+   *
+   * - 변경 전: 단일 SELL fill 로 모든 open lots 일괄 close — 차수 매매 위반.
+   * - 변경 후: executedVolume 만큼 1차→2차→3차 순으로 FIFO 차감.
+   *   lot.qty ≤ remaining → 해당 lot 전량 close.
+   *   lot.qty > remaining → 해당 lot 수량만 차감(partialReduceLot), 이후 중단.
+   *   executedVolume > 전체 open lots 합 → 전부 close 후 경고 로그.
+   *
    * 앱 외부(UPBIT 웹/앱)에서 수동 매도한 경우에도 lots 테이블을 동기화해
    * CryptoBoosterService.handleCryptoFill의 idempotency 가드가 올바르게 동작하도록 한다.
-   * side='ask' + state='done' + remainingVolume='0' 조건만 처리 (전량 매도 완결).
+   * side='ask' 이벤트만 처리 (state='done' 조건 제거 — 부분 체결 중간 이벤트도 반영).
    */
   syncLotsFromFillEvent(event: CryptoPrivateOrderEvent): void {
-    const isSellFilled =
-      event.side === 'ask' && event.state === 'done' && Number(event.remainingVolume) === 0;
-    if (!isSellFilled) return;
+    if (event.side !== 'ask') return;
+    const executedVolume = Number(event.executedVolume);
+    if (executedVolume <= 0) return;
 
+    // listOpenLots 는 asc(lots.nth) 정렬 — 1차→2차→3차 FIFO 보장.
     const openLots = this.listOpenLots(
       event.accountId,
       event.market as CryptoKrwMarketCode,
       'live',
     );
     const now = Date.now();
+    let remaining = executedVolume;
+
     for (const lot of openLots) {
-      this.closeLot({ lotId: lot.id, realizedPnl: '0', closedAt: now });
+      if (remaining <= 0) break;
+      const lotQty = Number(lot.quantity); // CryptoLot.quantity = qtyDecimal
+      if (lotQty <= remaining) {
+        this.closeLot({ lotId: lot.id, realizedPnl: '0', closedAt: now });
+        remaining -= lotQty;
+      } else {
+        // 부분 매도 — lot 수량만 차감, status 유지
+        this.partialReduceLot({ lotId: lot.id, reduceQty: String(remaining), now });
+        remaining = 0;
+      }
+    }
+
+    if (remaining > 0) {
+      // executedVolume 이 open lots 전체 합보다 큼 — 불일치 경고 (무시하고 진행)
+      console.warn(
+        `[syncLotsFromFillEvent] executedVolume(${executedVolume}) > total open lots qty for market=${event.market} accountId=${event.accountId}. remaining=${remaining} ignored.`,
+      );
     }
   }
 
