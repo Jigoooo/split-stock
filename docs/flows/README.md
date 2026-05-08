@@ -95,13 +95,22 @@
 
 ---
 
+## ✅ B 영역 추가 fix (W6 후속)
+
+### 8. Bd2 / Bd4 / Bd6 / Bd3 / Bd5 ✅ Fix `dc550dd`
+
+- ✅ Bd2 multi-lot 동시 SELL booster 누락 — `event.nth` 제외 검사 (도메스틱)
+- ✅ Bd4 onTrigger 실패 시 5초 후 1회 재시도 (retriedTasks Map, 도메스틱+크립토)
+- ✅ Bd6 env 전환 후 booster.list() 순회 → newRealtime.watch() 재구독
+- ✅ Bd3 nth=null manual order skip 의도 주석 명시
+- ✅ Bd5 AutoBuyGuardInput.source 에 'BOOSTER' 추가 (telemetry 구분)
+
+---
+
 ## 🟡 잔여 backlog (다음 세션)
 
 | 항목 | 파일 | 우선순위 |
 |---|---|---|
-| Bd2 — multi-lot 동시 SELL booster 누락 | [02-sell-booster.md](./02-sell-booster.md) | HIGH |
-| Bd4 — onTrigger 실패 시 retry/failed-queue 없음 | [02-sell-booster.md](./02-sell-booster.md) | HIGH |
-| Bd6 — env 전환 후 WS 재구독 누락 | [02-sell-booster.md](./02-sell-booster.md) | LOW/MID |
 | H3 — priority sort 미구현 (FIFO) | [08-stock-data.md](./08-stock-data.md) | MID |
 | C12-c — 이중 history Map 통일 | [03-safety.md](./03-safety.md) | LOW |
 | C12-a 옵션 B — UPBIT 다중 계좌 동시 booster | [04-realtime.md](./04-realtime.md) | LOW |
