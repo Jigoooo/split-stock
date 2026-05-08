@@ -54,8 +54,14 @@ export const ProfitBoosterSchema = z.object({
   enabled: z.boolean().default(false),
   /** 재매수 트리거 하락률 (0.01 = 1%). 0 이하면 즉시 트리거. */
   dropPct: z.number().default(0),
-  /** 만료 시간 (ms 절대시각). 미지정 시 만료 없음 (다음 재시작까지). */
-  expiresAt: z.number().int().nullable().default(null),
+  /** 만료 시간 (ms 절대시각). 미지정 시 만료 없음 (다음 재시작까지). 2^31-1 초과 시 setTimeout overflow 버그 방지. */
+  expiresAt: z
+    .number()
+    .int()
+    .min(0)
+    .max(2 ** 31 - 1)
+    .nullable()
+    .default(null),
 });
 export type ProfitBoosterConfig = z.infer<typeof ProfitBoosterSchema>;
 

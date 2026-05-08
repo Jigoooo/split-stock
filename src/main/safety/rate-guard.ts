@@ -102,7 +102,17 @@ export interface CreateRateGuardOptions {
 
 export function createRateGuard(opts: CreateRateGuardOptions): RateGuard {
   const now = opts.now ?? (() => Date.now());
-  // accountId → pdno → sorted timestamps (ms)
+  /**
+   * 체결 성공 후(post-place) 연속매수 카운터. 키: accountId → pdno → timestamps[].
+   *
+   * 역할이 다른 두 레이어가 공존한다:
+   *  - 이 Map: recordBuy 로 체결 후 카운트하며, 임계 초과 시 account 전체 master=false (nuclear).
+   *    broker-agnostic 이라 도메스틱 HTS 와도 공유 (crypto-auto-service, crypto-booster-service, crypto-router).
+   *  - CryptoAutoBuyGuard.histories: 매수 시도 직전에 카운트하며, 임계 초과 시 해당 market 만
+   *    SELL_ONLY 전환 (surgical).
+   *
+   * 두 Map 은 시점·키·액션·blast-radius 가 모두 달라 중복이 아니다.
+   */
   const history = new Map<number, Map<string, number[]>>();
 
   function getAccountHistory(accountId: number): Map<string, number[]> {

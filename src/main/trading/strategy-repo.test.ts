@@ -3,6 +3,7 @@ import {
   createStrategyRules,
   DEFAULT_STRATEGY_PROFILE,
   MAX_STRATEGY_STAGES,
+  ProfitBoosterSchema,
   type StrategyProfile,
 } from '@shared/contracts';
 import { describe, expect, it } from 'vitest';
@@ -282,5 +283,21 @@ describe('StrategyRepo — backfill', () => {
     });
     expect(updated?.buyRules[0]?.amountKrw).toBe(500_000);
     expect(repo.getActive(ACC_B, '000660')._unsafeUnwrap()?.autoBuyEnabled).toBe(false);
+  });
+});
+
+describe('ProfitBoosterSchema — expiresAt upper bound', () => {
+  it('0 이상 2^31-1 이하이면 valid', () => {
+    expect(ProfitBoosterSchema.safeParse({ expiresAt: 0 }).success).toBe(true);
+    expect(ProfitBoosterSchema.safeParse({ expiresAt: 2 ** 31 - 1 }).success).toBe(true);
+    expect(ProfitBoosterSchema.safeParse({ expiresAt: null }).success).toBe(true);
+  });
+
+  it('2^31 초과 또는 음수이면 invalid — setTimeout overflow 방지', () => {
+    expect(ProfitBoosterSchema.safeParse({ expiresAt: 2 ** 31 }).success).toBe(false);
+    expect(ProfitBoosterSchema.safeParse({ expiresAt: -1 }).success).toBe(false);
+    expect(ProfitBoosterSchema.safeParse({ expiresAt: Number.MAX_SAFE_INTEGER }).success).toBe(
+      false,
+    );
   });
 });

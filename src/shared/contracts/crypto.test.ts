@@ -11,6 +11,7 @@ import {
   CryptoCandleUnitSchema,
   CryptoKrwMarketCodeSchema,
   CryptoOrderIntentSchema,
+  CryptoProfitBoosterSchema,
   CryptoStrategyProfileSchema,
   CryptoTransferDirectionSchema,
   createDefaultCryptoStrategyProfile,
@@ -158,6 +159,18 @@ describe('crypto contracts', () => {
           { nth: 3, triggerDropPct: '0.03', amountKrw: '5000.5' },
         ],
       }).success,
+    ).toBe(false);
+  });
+
+  it('CryptoProfitBoosterSchema: expiresAt 은 0 이상 2^31-1 이하여야 한다', () => {
+    expect(CryptoProfitBoosterSchema.safeParse({ expiresAt: 0 }).success).toBe(true);
+    expect(CryptoProfitBoosterSchema.safeParse({ expiresAt: 2 ** 31 - 1 }).success).toBe(true);
+    expect(CryptoProfitBoosterSchema.safeParse({ expiresAt: null }).success).toBe(true);
+    expect(CryptoProfitBoosterSchema.safeParse({ expiresAt: 2 ** 31 }).success).toBe(false);
+    expect(CryptoProfitBoosterSchema.safeParse({ expiresAt: -1 }).success).toBe(false);
+    // Number.MAX_SAFE_INTEGER → setTimeout overflow 버그 방지
+    expect(
+      CryptoProfitBoosterSchema.safeParse({ expiresAt: Number.MAX_SAFE_INTEGER }).success,
     ).toBe(false);
   });
 

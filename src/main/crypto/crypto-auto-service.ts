@@ -17,7 +17,6 @@ import {
 } from '@shared/contracts';
 import type { Result } from 'neverthrow';
 import { err, ok } from 'neverthrow';
-import { flattenError } from 'zod';
 import type { EventLogger } from '../logging/event-logger';
 import type { CryptoAutoBuyGuardPort } from '../safety/crypto-auto-buy-guard';
 import type { CryptoAutoTradingRepo } from './crypto-auto-repo';
@@ -99,7 +98,9 @@ function safeKrwMarket(
   const parsed = CryptoKrwMarketCodeSchema.safeParse(market);
   if (!parsed.success) {
     return err(
-      cryptoExchangeError('자동매매는 Upbit KRW 마켓만 지원합니다.', flattenError(parsed.error)),
+      cryptoExchangeError('자동매매는 Upbit KRW 마켓만 지원합니다.', {
+        issueCount: parsed.error.issues.length,
+      }),
     );
   }
   return ok(parsed.data);
@@ -109,7 +110,9 @@ function ensureConfig(config: CryptoAutoConfig): Result<CryptoAutoConfig, Crypto
   const parsed = CryptoAutoGuardConfigSchema.safeParse(config);
   if (!parsed.success) {
     return err(
-      cryptoExchangeError('코인 자동매매 설정이 올바르지 않습니다.', flattenError(parsed.error)),
+      cryptoExchangeError('코인 자동매매 설정이 올바르지 않습니다.', {
+        issueCount: parsed.error.issues.length,
+      }),
     );
   }
   try {
@@ -136,10 +139,9 @@ function ensureStrategy(
   const parsed = CryptoStrategyProfileSchema.safeParse(strategy);
   if (!parsed.success) {
     return err(
-      cryptoExchangeError(
-        '코인 자동매매 차수 전략이 올바르지 않습니다.',
-        flattenError(parsed.error),
-      ),
+      cryptoExchangeError('코인 자동매매 차수 전략이 올바르지 않습니다.', {
+        issueCount: parsed.error.issues.length,
+      }),
     );
   }
   try {

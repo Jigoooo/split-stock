@@ -69,6 +69,23 @@ function fakeAdapter(): CryptoAutoLiveAdapter & {
 }
 
 describe('CryptoAutoTradingService', () => {
+  it('zod 오류 raw 에는 issueCount 만 포함되고 fieldErrors 는 누설되지 않는다', () => {
+    const { service } = setup();
+    const result = service.plan({
+      accountId: 1,
+      market: 'BTC-ETH', // non-KRW → safeKrwMarket 에서 zod validation fail
+      balances,
+      tradePrice: '100000000',
+    });
+    expect(result.isErr()).toBe(true);
+    if (!result.isErr()) return;
+    const raw = result.error.raw as Record<string, unknown>;
+    expect(raw).toHaveProperty('issueCount');
+    expect(typeof raw.issueCount).toBe('number');
+    expect(raw).not.toHaveProperty('fieldErrors');
+    expect(raw).not.toHaveProperty('formErrors');
+  });
+
   it('rejects non-KRW automation markets while generic manual crypto can remain broader', () => {
     const { service } = setup();
     const planned = service.plan({
