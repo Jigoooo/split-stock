@@ -243,6 +243,27 @@ export const AutoSellOnlyEventSchema = z.object({
 });
 export type AutoSellOnlyEvent = z.infer<typeof AutoSellOnlyEventSchema>;
 
+/**
+ * NM-016 catch-up 감지 시 main → renderer IPC push 페이로드.
+ * scan items.length > 0 이면 broadcastToAllWindows('appShell:catch-up-detected', ...) 로 전파.
+ * renderer 는 이 이벤트를 수신해 catch-up 통합 다이얼로그를 즉시 표시한다.
+ */
+export const CatchUpDetectedEventSchema = z.object({
+  accountId: z.number().int().positive(),
+  items: z.array(
+    z.object({
+      accountId: z.number().int().positive(),
+      pdno: z.string(),
+      name: z.string(),
+      currentPrice: z.number(),
+      maxReachedNth: z.number().int().positive().nullable(),
+      lots: z.array(z.unknown()),
+      triggers: z.array(z.unknown()),
+    }),
+  ),
+});
+export type CatchUpDetectedEvent = z.infer<typeof CatchUpDetectedEventSchema>;
+
 export const EventLogPushSchema = z.object({
   id: z.number().int().positive(),
   ts: z.number().int().positive(),

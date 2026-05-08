@@ -36,6 +36,7 @@ import {
   repairWatchOrdersJsonColumnsRuntimeSchema,
 } from '../db/runtime-schema-repair';
 import {
+  readCatchUpPending,
   readSafetyMaster,
   SETTING_KEYS,
   SettingsRepo,
@@ -369,6 +370,19 @@ export function bootstrapDeps(userDataDir: string) {
   const { bus, watchEngine, strategyEngine, pendingOrderWatcher, prebuyWatchers, boosterService } =
     tradingRuntime;
   markStartup('trading-runtime.create.end');
+
+  // NM-016: 부팅 시 pending catch-up batch 가 있으면 즉시 strategyEngine 을 pause.
+  // catch-up scan 은 WS tick 캐시가 채워진 뒤 renderer tRPC pull 로 실행되므로 여기서는 scan 하지 않음.
+  // pending batch 만 체크해 "나중에 결정" 상태가 남아 있는 경우 자동매매를 선제 차단한다.
+  if (readCatchUpPending(settingsRepo) !== null) {
+    strategyEngine.pause('catch-up-pending');
+    eventLogger.log({
+      level: 'INFO',
+      category: 'FSM',
+      message: 'strategy-engine.paused-on-boot',
+      payload: { reason: 'catch-up-pending' },
+    });
+  }
 
   markStartup('crypto-realtime.create.start');
   const cryptoRealtime = new CryptoRealtimeService(db, eventLogger);

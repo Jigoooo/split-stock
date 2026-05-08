@@ -698,4 +698,106 @@ describe('StrategyExecutionEngine', () => {
       }),
     );
   });
+
+  describe('pause / resume', () => {
+    function makeEngine() {
+      const { bus, lotsRepo, safetyRegistry, strategyRepo } = setup();
+      const logger = { log: vi.fn() };
+      const executeOrder = vi.fn(async () => undefined);
+      const engine = new StrategyExecutionEngine({
+        bus,
+        logger: logger as never,
+        lotsRepo,
+        strategyRepo,
+        safetyRegistry,
+        getActiveAccountId: () => 1,
+        executeOrder,
+      });
+      return { bus, engine, executeOrder };
+    }
+
+    it('초기 상태는 pause 아님', () => {
+      const { engine } = makeEngine();
+      expect(engine.isPaused()).toBe(false);
+    });
+
+    it('pause 후 isPaused() true', () => {
+      const { engine } = makeEngine();
+      engine.pause('catch-up-pending');
+      expect(engine.isPaused()).toBe(true);
+    });
+
+    it('동일 사유 중복 pause 는 idempotent', () => {
+      const { engine } = makeEngine();
+      engine.pause('catch-up-pending');
+      engine.pause('catch-up-pending');
+      // resume 한 번으로 해제돼야 한다 (중복 추가 안 됨).
+      engine.resume('catch-up-pending');
+      expect(engine.isPaused()).toBe(false);
+    });
+
+    it('resume 후 isPaused() false', () => {
+      const { engine } = makeEngine();
+      engine.pause('catch-up-pending');
+      engine.resume('catch-up-pending');
+      expect(engine.isPaused()).toBe(false);
+    });
+
+    it('없는 사유 resume 은 no-op (throw 없음)', () => {
+      const { engine } = makeEngine();
+      expect(() => engine.resume('catch-up-pending')).not.toThrow();
+      expect(engine.isPaused()).toBe(false);
+    });
+
+    it('pause 중에는 tick 이 와도 executeOrder 호출 안 함', async () => {
+      const {
+        bus: pauseBus,
+        lotsRepo: pauseLots,
+        safetyRegistry: pauseSafety,
+        strategyRepo: pauseStrategy,
+      } = setup();
+      pauseLots.insertLot({
+        accountId: 1,
+        pdno: '005930',
+        nth: 1,
+        buyPrice: 70_000,
+        qty: 10,
+        amountKrw: 700_000,
+        status: 'OPEN',
+        boughtAt: new Date(),
+      });
+      setDefaultProfile(pauseStrategy);
+      const executeOrderPaused = vi.fn(async () => undefined);
+      const pausedEngine = new StrategyExecutionEngine({
+        bus: pauseBus,
+        logger: { log: vi.fn() } as never,
+        lotsRepo: pauseLots,
+        strategyRepo: pauseStrategy,
+        safetyRegistry: pauseSafety,
+        getActiveAccountId: () => 1,
+        executeOrder: executeOrderPaused,
+      });
+      pausedEngine.refreshTrackedSymbols();
+      pausedEngine.pause('catch-up-pending');
+
+      pauseBus.emitTick({
+        pdno: '005930',
+        time: '093000',
+        price: 62_000,
+        dayChange: 0,
+        dayChangeRate: 0,
+        tickDirection: 'FLAT',
+        volume: 1,
+        accumVolume: 1,
+        open: 62_000,
+        high: 62_000,
+        low: 62_000,
+        bestAsk: 62_000,
+        bestBid: 62_000,
+      });
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(executeOrderPaused).not.toHaveBeenCalled();
+    });
+  });
 });

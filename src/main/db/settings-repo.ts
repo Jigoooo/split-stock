@@ -30,6 +30,12 @@ export class SettingsRepo {
 }
 
 export { BACKUP_AUTO_DEFAULTS, readBackupAutoConfig } from './settings-backup';
+export type { CatchUpPendingBatch, CatchUpPendingItem } from './settings-catch-up';
+export {
+  clearCatchUpPending,
+  readCatchUpPending,
+  writeCatchUpPending,
+} from './settings-catch-up';
 export type {
   BalanceStageCellMode,
   CrosshairModeType,

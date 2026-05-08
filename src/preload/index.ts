@@ -2,6 +2,7 @@ import type {
   AutoOrderRetryEvent,
   AutoSellOnlyEvent,
   CandlesUpdatedEvent,
+  CatchUpDetectedEvent,
   EventLogPush,
   TradeExecutionEvent,
   WatchOutcomeEvent,
@@ -115,6 +116,15 @@ contextBridge.exposeInMainWorld('appShell', {
     ipcRenderer.on('appShell:candles-updated', handler);
     return () => ipcRenderer.off('appShell:candles-updated', handler);
   },
+  /**
+   * NM-016 catch-up 감지 push — main 의 catch-up scan 이 items > 0 을 발견하면 즉시 push.
+   * renderer 는 이 이벤트를 수신해 catch-up 통합 다이얼로그를 즉시 표시한다.
+   */
+  onCatchUpDetected: (listener: (event: CatchUpDetectedEvent) => void): (() => void) => {
+    const handler = (_: unknown, event: CatchUpDetectedEvent): void => listener(event);
+    ipcRenderer.on('appShell:catch-up-detected', handler);
+    return () => ipcRenderer.off('appShell:catch-up-detected', handler);
+  },
   setAlwaysOnTop: (on: boolean): Promise<void> => ipcRenderer.invoke('appShell:setAlwaysOnTop', on),
   fitContentHeight: (height: number): Promise<void> =>
     ipcRenderer.invoke('appShell:fitContentHeight', height),
@@ -166,6 +176,8 @@ export type AppShellBridge = {
   onAutoSellOnly?: (listener: (event: AutoSellOnlyEvent) => void) => () => void;
   /** SWR 재검증 완료 push — renderer candle 상태 자동 갱신 (Sub-AC 3-2-2). */
   onCandlesUpdated?: (listener: (event: CandlesUpdatedEvent) => void) => () => void;
+  /** NM-016 catch-up 감지 push — catch-up 통합 다이얼로그 즉시 표시 트리거. */
+  onCatchUpDetected?: (listener: (event: CatchUpDetectedEvent) => void) => () => void;
   setAlwaysOnTop: (on: boolean) => Promise<void>;
   fitContentHeight: (height: number) => Promise<void>;
   markPopoutShellReady?: (route: string) => void;

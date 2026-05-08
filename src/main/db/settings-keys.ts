@@ -69,6 +69,13 @@ export const SETTING_KEYS = {
   BACKUP_AUTO_ENABLED: 'backup.autoEnabled',
   /** 자동 백업 보관 일수 (기본: 10일, 1~365 범위) */
   BACKUP_AUTO_RETENTION_DAYS: 'backup.autoRetentionDays',
+
+  /**
+   * NM-016 catch-up 통합 다이얼로그 — "나중에 결정" 시 영속화 batch JSON.
+   * 다음 부팅 시 새 scan 결과 + pending batch 합쳐 모달 재노출 (pending 우선 표시).
+   * 적용 / 명시적 무시 / 30초 timeout 시 삭제.
+   */
+  CATCH_UP_PENDING: 'catch_up.pending',
 } as const;
 
 export function watchGlobalEnabledKey(accountId: number): string {

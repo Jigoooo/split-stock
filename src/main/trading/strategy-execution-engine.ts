@@ -11,11 +11,20 @@ export type {
   StrategyExecutionOrderResult,
 } from './strategy-execution-types';
 
+/**
+ * StrategyExecutionEngine pause 사유.
+ * - `catch-up-pending`: 부팅 시 catch-up 감지 → 사용자 결정 전까지 자동매매 차단.
+ * 향후 추가 사유는 union 으로 확장.
+ */
+export type StrategyEnginePauseReason = 'catch-up-pending';
+
 export class StrategyExecutionEngine {
   private readonly unsubscribers = new Map<string, () => void>();
   private readonly inFlightPdnos = new Set<string>();
   private readonly timer: Timer;
   private readonly retryRuntime: StrategyRetryRuntime;
+  /** 활성 pause 사유 set. 비어 있으면 정상 가동. */
+  private readonly pauseReasons = new Set<StrategyEnginePauseReason>();
 
   constructor(private readonly opts: StrategyExecutionEngineOptions) {
     this.timer = opts.timer ?? realTimer;
@@ -28,6 +37,45 @@ export class StrategyExecutionEngine {
       safetyRegistry: opts.safetyRegistry,
       timer: this.timer,
     });
+  }
+
+  /**
+   * 자동매매 일시 정지 — 모든 onTick 평가가 즉시 return.
+   * pause 중에도 tick 구독은 유지 (resume 즉시 다음 tick 평가).
+   * 동일 사유 중복 호출은 idempotent.
+   */
+  pause(reason: StrategyEnginePauseReason): void {
+    if (this.pauseReasons.has(reason)) return;
+    this.pauseReasons.add(reason);
+    this.opts.logger.log({
+      level: 'WARN',
+      category: 'FSM',
+      message: 'strategy-engine.paused',
+      payload: { reason, activeReasons: Array.from(this.pauseReasons) },
+    });
+  }
+
+  /**
+   * pause 사유 해제. 모든 사유가 해제되면 자동매매 정상 가동.
+   * resume 직후 tracked 종목들의 최신 tick 으로 즉시 평가 (가격 변동 missed 보완).
+   */
+  resume(reason: StrategyEnginePauseReason): void {
+    if (!this.pauseReasons.has(reason)) return;
+    this.pauseReasons.delete(reason);
+    const remainingReasons = Array.from(this.pauseReasons);
+    this.opts.logger.log({
+      level: 'INFO',
+      category: 'FSM',
+      message: 'strategy-engine.resumed',
+      payload: { reason, remainingReasons },
+    });
+    if (remainingReasons.length === 0) {
+      this.evaluateLatestForTracked();
+    }
+  }
+
+  isPaused(): boolean {
+    return this.pauseReasons.size > 0;
   }
 
   refreshTrackedSymbols(): void {
@@ -105,6 +153,9 @@ export class StrategyExecutionEngine {
   private async onTick(pdno: string, price: number): Promise<void> {
     const accountId = this.opts.getActiveAccountId();
     if (accountId === null) return;
+    // NM-016: pause 중이면 사용자 결정 전까지 fsm 평가 차단.
+    // pause/resume 은 외부 (catch-up runtime 등) 가 트리거 — 여기서는 read-only.
+    if (this.pauseReasons.size > 0) return;
     if (this.inFlightPdnos.has(pdno)) return;
     if (!this.opts.safetyRegistry.get(accountId).canTrade(pdno)) return;
 
