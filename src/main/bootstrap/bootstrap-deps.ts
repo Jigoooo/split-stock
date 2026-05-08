@@ -438,12 +438,18 @@ export function bootstrapDeps(userDataDir: string) {
   // crypto-realtime-service.applyPrivateOrder → bus.publishPrivateOrder 이후 호출.
   // accountId 별 구독. setEnvAndAccount 가 새 활성 계좌로 전환되면 자동 재구독한다
   // (post-E2 hardening: 멀티 계좌에서도 booster 가 새 계좌의 fill event 를 수신).
+  // C12-a: 현재 코인 자동매매(booster)는 활성 계좌 1개만 동작한다.
+  //        계좌 전환 시 이전 계좌의 pending booster tasks 를 dispose() 로 정리해
+  //        ticker unsub / watcher 메모리 누수를 방지한다.
   let cryptoBoosterUnsub: (() => void) | null = null;
   const rebindCryptoBoosterSubscription = (accountId: number | null): void => {
+    // 이전 privateOrder 구독 해제
     if (cryptoBoosterUnsub) {
       cryptoBoosterUnsub();
       cryptoBoosterUnsub = null;
     }
+    // 이전 계좌의 stale booster tasks (ticker unsub + watcher) 전체 정리
+    cryptoBoosterService.dispose();
     if (accountId === null) return;
     cryptoBoosterUnsub = cryptoRealtime.bus.subscribePrivateOrder(accountId, (event) => {
       // lots 동기화: 앱 외부 수동 매도 시에도 idempotency 가드가 올바르게 동작하도록

@@ -382,6 +382,12 @@ describe('CryptoBoosterService boundary conditions', () => {
       repo: repo as never,
       getRealtime: () => ({ watchMarket: vi.fn(), unwatchMarket: vi.fn() }),
       getAdapter: () => ({ createOrder: createOrderMock }),
+      safetyRegistry: {
+        get: () => ({
+          canTrade: () => true,
+          getSnapshot: () => ({ master: true, errorLock: { active: false } }),
+        }),
+      },
       cryptoAutoBuyGuard: { assertAutoBuyAllowed: vi.fn() },
       rateGuard: {
         recordBuy: vi.fn(),
@@ -394,5 +400,45 @@ describe('CryptoBoosterService boundary conditions', () => {
     tickerListeners2.get('KRW-BTC')?.({ tradePrice: '69000000' });
     await new Promise((resolve) => setImmediate(resolve));
     expect(createOrderMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CryptoBoosterService.dispose (C12-a: 계좌 전환 시 stale tasks 정리)', () => {
+  it('dispose() 호출 시 등록된 task 가 모두 제거된다', () => {
+    const { service } = makeService();
+    service.handleCryptoFill(baseFillEvent);
+    expect(service.size()).toBe(1);
+
+    service.dispose();
+
+    expect(service.size()).toBe(0);
+    expect(service.has(1, 'KRW-BTC')).toBe(false);
+  });
+
+  it('dispose() 호출 시 ticker 구독(busUnsubs)이 해제된다', () => {
+    const { service, tickerListeners } = makeService();
+    service.handleCryptoFill(baseFillEvent);
+    expect(tickerListeners.has('KRW-BTC')).toBe(true);
+
+    service.dispose();
+
+    expect(tickerListeners.has('KRW-BTC')).toBe(false);
+  });
+
+  it('dispose() 후 재등록(rebind) 가능 — 계좌 전환 후 새 계좌 task 정상 등록', () => {
+    const { service } = makeService();
+    service.handleCryptoFill(baseFillEvent);
+    service.dispose();
+    expect(service.size()).toBe(0);
+
+    // 새 계좌(accountId=2) task 재등록
+    service.handleCryptoFill({ ...baseFillEvent, accountId: 2 });
+    expect(service.size()).toBe(1);
+    expect(service.has(2, 'KRW-BTC')).toBe(true);
+  });
+
+  it('task 없는 상태에서 dispose() 는 예외 없이 완료된다', () => {
+    const { service } = makeService();
+    expect(() => service.dispose()).not.toThrow();
   });
 });
