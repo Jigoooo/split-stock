@@ -152,7 +152,9 @@ export function createTradingRuntime(input: {
     getRatePerSec: () => {
       const env = input.factoryRef.factory?.getCurrentEnv() ?? null;
       if (env === 'MOCK') return isRegularMarketOpenKst() ? 4 : 2;
-      return isRegularMarketOpenKst() ? 18 : 6;
+      // KIS 공식 가이드라인 15rps. 안전 margin 위해 12rps 로 제한.
+      // 18rps 운영 시 RATE_LIMITED 에러 회귀 발생 확인 → 보수 조정.
+      return isRegularMarketOpenKst() ? 12 : 6;
     },
   });
   quoteFeed.on('quote', ({ pdno, price }) => {
