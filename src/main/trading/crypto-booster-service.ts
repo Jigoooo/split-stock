@@ -80,6 +80,8 @@ export interface CryptoBoosterServiceDeps {
 export class CryptoBoosterService {
   private readonly watcher: BoosterWatcher;
   private readonly busUnsubs = new Map<string, () => void>();
+  /** Bd4: 첫 실패 후 5 초 재시도를 예약한 task key 집합. 2차 실패면 cleanup. */
+  private readonly retriedTasks = new Set<string>();
   private readonly now: () => number;
 
   constructor(private readonly deps: CryptoBoosterServiceDeps) {
@@ -317,6 +319,27 @@ export class CryptoBoosterService {
         },
       });
     } catch (cause) {
+      const key = entryKey(task.accountId, task.pdno);
+      if (!this.retriedTasks.has(key)) {
+        // 1차 실패: 5 초 후 1회 재시도 — task 구독은 유지.
+        this.retriedTasks.add(key);
+        this.deps.timer.setTimeout(() => {
+          void this.onTrigger(task, ctx);
+        }, 5_000);
+        this.deps.logger.log({
+          level: 'WARN',
+          category: 'WATCH',
+          message: 'crypto-booster.trigger.retry-scheduled',
+          payload: {
+            accountId: task.accountId,
+            market: task.pdno,
+            reason: cause instanceof Error ? cause.message : String(cause),
+          },
+        });
+        return;
+      }
+      // 2차 실패: ERROR 로그 후 cleanup.
+      this.retriedTasks.delete(key);
       this.deps.logger.log({
         level: 'ERROR',
         category: 'WATCH',
@@ -327,9 +350,8 @@ export class CryptoBoosterService {
           reason: cause instanceof Error ? cause.message : String(cause),
         },
       });
-    } finally {
-      this.cleanupSubscription(task.accountId, task.pdno);
     }
+    this.cleanupSubscription(task.accountId, task.pdno);
   }
 
   private onExpire(task: BoosterTask): void {

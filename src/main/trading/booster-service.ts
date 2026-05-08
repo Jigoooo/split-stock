@@ -26,6 +26,8 @@ export interface BoosterServiceDeps extends WatchOrderExecutorDeps {
 export class BoosterService {
   private readonly watcher: BoosterWatcher;
   private readonly busUnsubs = new Map<string, () => void>();
+  /** Bd4: 첫 실패 후 5 초 재시도를 예약한 task key 집합. 2차 실패면 cleanup. */
+  private readonly retriedTasks = new Set<string>();
 
   constructor(private readonly deps: BoosterServiceDeps) {
     this.watcher = new BoosterWatcher({
@@ -44,6 +46,7 @@ export class BoosterService {
   handleTradeExecution(event: TradeExecutionEvent): void {
     if (
       event.side !== 'SELL' ||
+      // nth === null (lotId 없는 manual order) 도 여기서 차단됨 — booster 이중 진입 방지 의도.
       event.nth !== 1 ||
       event.status !== 'FILLED' ||
       event.remainingQty !== 0
@@ -53,7 +56,10 @@ export class BoosterService {
 
     const snapshot = this.deps.lotsRepo.snapshot(event.accountId, event.pdno);
     if (snapshot.isErr()) return;
-    if (hasActiveCycle(snapshot.value.lots)) return;
+    // Bd2: event.nth(방금 SELL FILLED 된 1차 lot)는 SELLING 상태로 남아있을 수 있으므로 제외.
+    // LotSnapshotEntry 에 id 없음 → nth 로 필터 (1차 = nth=1).
+    const otherLots = snapshot.value.lots.filter((l) => l.nth !== event.nth);
+    if (hasActiveCycle(otherLots)) return;
 
     const profile = resolveStrategyProfile(this.deps.strategyRepo, event.accountId, event.pdno);
     if (!profile?.profitBooster?.enabled) return;
@@ -132,6 +138,7 @@ export class BoosterService {
    * (d) try/catch + logger 기록.
    */
   private async onTrigger(task: BoosterTask, ctx: BoosterTriggerContext): Promise<void> {
+    let shouldCleanup = true;
     try {
       const snapshot = this.deps.lotsRepo.snapshot(task.accountId, task.pdno);
       if (snapshot.isErr()) {
@@ -182,18 +189,42 @@ export class BoosterService {
         },
       });
     } catch (cause) {
-      this.deps.logger.log({
-        level: 'ERROR',
-        category: 'WATCH',
-        message: 'booster.trigger.failed',
-        payload: {
-          accountId: task.accountId,
-          pdno: task.pdno,
-          reason: cause instanceof Error ? cause.message : String(cause),
-        },
-      });
+      const key = entryKey(task.accountId, task.pdno);
+      if (!this.retriedTasks.has(key)) {
+        // 1차 실패: 5 초 후 1회 재시도 — task 구독은 유지.
+        this.retriedTasks.add(key);
+        shouldCleanup = false;
+        this.deps.timer.setTimeout(() => {
+          void this.onTrigger(task, ctx);
+        }, 5_000);
+        this.deps.logger.log({
+          level: 'WARN',
+          category: 'WATCH',
+          message: 'booster.trigger.retry-scheduled',
+          payload: {
+            accountId: task.accountId,
+            pdno: task.pdno,
+            reason: cause instanceof Error ? cause.message : String(cause),
+          },
+        });
+      } else {
+        // 2차 실패: ERROR 로그 후 cleanup.
+        this.retriedTasks.delete(key);
+        this.deps.logger.log({
+          level: 'ERROR',
+          category: 'WATCH',
+          message: 'booster.trigger.failed',
+          payload: {
+            accountId: task.accountId,
+            pdno: task.pdno,
+            reason: cause instanceof Error ? cause.message : String(cause),
+          },
+        });
+      }
     } finally {
-      this.cleanupSubscription(task.accountId, task.pdno);
+      if (shouldCleanup) {
+        this.cleanupSubscription(task.accountId, task.pdno);
+      }
     }
   }
 

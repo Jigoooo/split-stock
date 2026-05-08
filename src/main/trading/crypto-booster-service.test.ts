@@ -265,8 +265,8 @@ describe('CryptoBoosterService trigger flow', () => {
     expect(adapter?.createOrder).not.toHaveBeenCalled();
   });
 
-  it('adapter.createOrder 가 throw 하면 ERROR 로그 기록 + cleanup(size=0), insertEvent 미호출', async () => {
-    const { service, tickerListeners, adapter, repo, realtime } = makeService();
+  it('adapter.createOrder 가 throw 하면 ERROR 로그 기록 + retry scheduled (Bd4)', async () => {
+    const { service, tickerListeners, adapter, repo, logger } = makeService();
     adapter.createOrder.mockImplementationOnce(() => {
       throw new Error('NETWORK_TIMEOUT');
     });
@@ -277,9 +277,13 @@ describe('CryptoBoosterService trigger flow', () => {
 
     // throw path: insertEvent 는 isErr() 분기에서만 호출되므로 미호출
     expect(repo.insertEvent).not.toHaveBeenCalled();
-    // finally 에서 cleanupSubscription 호출 → size=0, unwatchMarket 호출
-    expect(service.size()).toBe(0);
-    expect(realtime.unwatchMarket).toHaveBeenCalled();
+    // Bd4: 1차 실패 → retry-scheduled WARN log 발생 (5초 후 재시도, task 영구 소멸 방지)
+    expect(
+      logger.log.mock.calls.some(
+        (call: unknown[]) =>
+          (call[0] as { message?: string })?.message === 'crypto-booster.trigger.retry-scheduled',
+      ),
+    ).toBe(true);
   });
 
   it('트리거 시점에 lots 가 생긴 경우 (수동 1차 매수 등) 트리거 skip', async () => {

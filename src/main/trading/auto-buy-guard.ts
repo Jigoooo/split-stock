@@ -11,7 +11,7 @@ export interface AutoBuyGuardInput {
   accountId: number;
   amountKrw: number;
   pdno: string;
-  source: 'STRATEGY' | 'WATCH';
+  source: 'STRATEGY' | 'WATCH' | 'BOOSTER';
 }
 
 /**

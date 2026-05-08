@@ -318,6 +318,13 @@ export function createTradingRuntime(input: {
     logger: input.logger,
   });
 
+  /**
+   * Bd6: boosterService 가 아직 생성되지 않은 시점에 realtimeFactory 가 먼저 정의되므로
+   * forward-ref 로 참조. env 전환으로 새 RealtimeService 가 생성되면 활성 booster task 에
+   * 대해 새 인스턴스로 watch 를 재등록한다.
+   */
+  let boosterServiceRef: BoosterService | null = null;
+
   const realtimeFactory = (env: AppEnv | null): RealtimeService | null => {
     if (lastRealtime) {
       lastRealtime.stop();
@@ -339,6 +346,10 @@ export function createTradingRuntime(input: {
         },
         orderbookPoller,
       });
+      // 활성 booster task 를 새 RealtimeService 에 재구독.
+      for (const task of boosterServiceRef?.list() ?? []) {
+        lastRealtime.watch(task.pdno, 'tick');
+      }
     }
     return lastRealtime;
   };
@@ -362,6 +373,8 @@ export function createTradingRuntime(input: {
     marketSessionGuard,
     autoBuyGuard,
   });
+  // Bd6: forward-ref 연결 — realtimeFactory 가 env 전환 시 이 참조로 활성 task 를 재구독.
+  boosterServiceRef = boosterService;
 
   return {
     bus,
