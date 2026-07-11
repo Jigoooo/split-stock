@@ -1,130 +1,97 @@
 # split-stock
 
-박스권 분할매매 방식(N분할 하향매수 + 차수 독립 익절)을 한국투자증권 KIS API 위에 재구현하는 Electron 데스크톱 앱.
+한국투자증권 KIS를 중심으로 **N분할 매수·차수별 독립 익절** 전략을 모델링한 Electron 데스크톱 트레이딩 클라이언트입니다. 관심종목, 포지션, 분할 차수, 주문·체결, 차트와 리포트를 하나의 로컬 앱에서 관리합니다.
 
-> ⚠️ 본 저장소는 개발 초기 스캐폴딩 단계입니다. 실전 운영 전에는 `/.omc/prd.json`에 정의된 모든 User Story가 `passes: true` 상태여야 합니다.
+> 연구·개발용 프로젝트입니다. 실거래 성과를 주장하지 않으며, 실제 계정으로 실행하기 전에 모의환경·자격증명·주문 제한을 직접 검증해야 합니다.
 
-## 핵심 설계
+## 주요 기능
 
-- **플랫폼**: Electron 33 + Vite 5 + React 19 + TypeScript 5 (strict)
-- **빌드 툴**: `electron-vite` (alex8088) — main / preload / renderer 3-entry
-- **IPC**: `trpc-electron` v11 + `@trpc/react-query` — main↔renderer 타입 세이프
-- **상태 (renderer)**: TanStack Query v5 (trpc client 내장) + Zustand (UI 상태)
-- **DB**: SQLite(`better-sqlite3`) + Drizzle ORM
-- **검증**: Zod (모든 API 경계) + `neverthrow` Result 타입
-- **테스트**: Vitest (main/renderer 프로젝트 분리) + Playwright-electron (E2E)
-- **증권사 API**: 한국투자증권 KIS Developers (모의투자 VPS 우선)
-- **Renderer 아키텍처**: FSD(Feature-Sliced Design) — `app/pages/widgets/features/entities/shared`
+- **분할매매 상태 모델** — 종목별 N차 매수와 차수별 익절 상태를 독립적으로 추적합니다.
+- **Desktop trading workspace** — 관심종목, 포지션, 주문, 체결, 호가, 차트, 거래내역을 구성합니다.
+- **Market adapters** — KIS의 MOCK/PROD 경계를 분리하고 Upbit·Kiwoom adapter 확장 구조를 포함합니다.
+- **로컬 원장** — SQLite와 Drizzle ORM으로 계정·전략·주문·차수·이벤트를 저장합니다.
+- **Typed IPC** — renderer가 증권사 API를 직접 호출하지 않고 preload/tRPC를 통해 main process에 요청합니다.
+- **분석 UI** — candlestick chart, trade marker, drawing tool, daily P&L과 차수별 통계를 제공합니다.
+- **운영 가시성** — data freshness, market session, error/event log, position mismatch를 화면에 노출합니다.
 
-## 보안 원칙 (Security Invariants)
+## 아키텍처
 
-1. **자격증명 저장**: `electron.safeStorage.encryptString` 암호화 후 SQLite `credentials` 테이블에 BLOB으로 저장. 평문 저장 절대 금지.
-2. **로그 마스킹**: App Key / App Secret / Access Token은 마지막 4자만 남기고 `*`로 마스킹(`maskSecret`).
-3. **주문 호출 경로**: 오직 main 프로세스에서만 가능. Renderer는 tRPC 경유 요청만 발행.
-4. **환경 분리**: `AppEnv = 'MOCK' | 'PROD'` 상단 배지로 항상 표시. 전환 시 확인 다이얼로그 필수.
-5. **킬 스위치**: 글로벌 단축키 1개로 모든 자동매매 강제 중지(구현 예정 US-013).
-
-## 디렉토리 구조 (현재)
-
-```
-split-stock/
-├── .omc/                        # ralph / PRD / progress
-│   ├── prd.json
-│   └── progress.txt
-├── electron.vite.config.ts
-├── drizzle.config.ts
-├── vitest.config.ts
-├── biome.json
-├── tsconfig.json (refs)
-├── tsconfig.node.json           # main / preload / shared
-├── tsconfig.web.json            # renderer
-├── package.json
-├── .npmrc                       # pnpm + Electron 호환
-└── src/
-    ├── main/
-    │   ├── index.ts             # BrowserWindow 생성 + contextIsolation
-    │   ├── db/
-    │   │   ├── client.ts        # better-sqlite3 + drizzle
-    │   │   ├── schema.ts        # 차수 장부 포함 8개 테이블
-    │   │   └── bootstrap-schema.ts  # 테스트용 raw CREATE
-    │   └── security/
-    │       ├── mask-secret.ts
-    │       ├── mask-secret.test.ts
-    │       ├── credentials-repo.ts    # safeStorage + SQLite BLOB
-    │       └── credentials-repo.test.ts
-    ├── preload/
-    │   └── index.ts             # exposeElectronTRPC + appEnv
-    ├── renderer/
-    │   ├── index.html
-    │   ├── vitest.setup.ts
-    │   └── src/
-    │       ├── main.tsx
-    │       └── app/             # FSD app 레이어
-    │           ├── app.tsx
-    │           ├── app.css      # 1rem = 10px (clamp 반응형)
-    │           └── index.ts
-    └── shared/
-        └── contracts/           # Zod 스키마
-            ├── app.ts           # AppEnv, Credentials, SafetyFlags
-            ├── kis.ts           # KIS 요청/응답 스키마
-            └── index.ts
+```mermaid
+flowchart LR
+    U[React renderer] -->|typed tRPC| P[Preload bridge]
+    P --> M[Electron main]
+    M --> B[Broker adapters]
+    M --> S[Strategy & order services]
+    M --> D[(SQLite / Drizzle)]
+    B --> K[KIS / optional adapters]
+    S --> D
+    D --> M
+    M -->|events| U
 ```
 
-## 파일/폴더 네이밍
+| 계층 | 책임 |
+|---|---|
+| Renderer | FSD 기반 화면, chart, watchlist, settings, reports |
+| Preload | context-isolated typed bridge |
+| Main | broker I/O, 주문 orchestration, local persistence |
+| Shared | Zod contracts, market rules, lot calculation |
 
-- **전부 kebab-case** (`credentials-repo.ts`, `mask-secret.ts`, `app.tsx`).
-- 컴포넌트/타입 심볼은 PascalCase (`App`, `Credentials`).
-- Hook은 `useXxx` (`useBalance`).
-- `hooks/`, `types/`, `components/`, `utils/`, `helpers/` 같은 essence 기반 폴더 금지 (FSD rules §7.3).
+## 안전 경계
 
-## 설치 & 실행 (pnpm)
+- 자격증명은 Electron `safeStorage`로 암호화해 로컬 SQLite에 저장합니다.
+- App Key·Secret·Token은 로그에서 masking합니다.
+- broker 주문 호출은 main process에서만 수행합니다.
+- `MOCK`/`PROD` 상태를 명시적으로 구분하고 production 전환 확인 UI를 둡니다.
+- Zod contract로 IPC·broker request/response 경계를 검증합니다.
+- 공개 저장소에는 실제 API key, 계좌번호, 주문·체결 이력이 포함되지 않습니다.
+
+## 기술 스택
+
+| 영역 | 기술 |
+|---|---|
+| Desktop | Electron 41, electron-vite |
+| Frontend | React 19, TypeScript, TanStack Router/Query, Zustand |
+| IPC | tRPC 11, trpc-electron, Zod, SuperJSON |
+| Data | SQLite, better-sqlite3, Drizzle ORM |
+| Chart/UI | Lightweight Charts, Framer Motion, Floating UI |
+| Quality | Vitest, Playwright Electron, Biome, TypeScript project references |
+
+## 로컬 실행
+
+준비물: Node.js 20 이상, Corepack
 
 ```bash
-# 1. pnpm 9+ 설치 (없다면)
 corepack enable
-corepack prepare pnpm@9.14.4 --activate
-
-# 2. 의존성 설치 (.npmrc가 Electron 네이티브 모듈을 호이스트)
-pnpm install
-
-# 3. 네이티브 모듈(better-sqlite3)을 Electron ABI에 맞춰 리빌드
+pnpm install --frozen-lockfile
 pnpm rebuild
-
-# 4. Drizzle 마이그레이션 생성 (스키마 변경 시)
-pnpm db:generate
-
-# 5. 개발 서버
 pnpm dev
+```
 
-# 6. 검증
+기본 검증:
+
+```bash
 pnpm typecheck
 pnpm lint
 pnpm test
+pnpm test:e2e
+pnpm build
 ```
 
-## 반응형 폰트 스케일
+`better-sqlite3`는 Node와 Electron의 ABI가 다르므로 test와 desktop 실행 사이에 manifest의 rebuild script를 사용합니다.
 
-`app.css`:
-```css
-:root {
-  /* 9px ~ 11px 사이 뷰포트 반응 스케일 (1rem 기준) */
-  font-size: clamp(56.25%, 0.35vw + 57.5%, 68.75%);
-}
-html, body { font-size: 1.4rem; /* 14px 상당 */ }
-```
-이후 모든 크기는 `rem` 단위로 작성 (`10px → 1rem`).
+## 저장소 구조
 
-## Ralph 재개
-
-다음 라운드에서 이어갈 스토리와 수락 기준은 `.omc/prd.json`에 정의되어 있다. 진행 내역은 `.omc/progress.txt`.
-
-```
-pnpm dlx claude-code /ralph
-# 또는 이미 세션이 있으면 /ralph 명령
+```text
+src/main/       Electron bootstrap, broker, order, DB, security
+src/preload/    context-isolated IPC bridge
+src/renderer/   FSD pages, widgets, features, entities, shared UI
+src/shared/     contracts, market rules, lot calculation
+playwright/     Electron end-to-end scenarios
+drizzle/        additive local schema migrations
 ```
 
-## 참고
+## 현재 범위
 
-- KIS Developers: <https://apiportal.koreainvestment.com/intro>
-- KIS 공식 GitHub: <https://github.com/koreainvestment/open-trading-api>
-- FSD 공식: <https://feature-sliced.design>
+- 이력서·포트폴리오용 source project이며 hosted demo는 제공하지 않습니다.
+- 실제 broker 환경은 계정·시장·규정에 따라 결과가 달라질 수 있습니다.
+- 자동매매는 손실 가능성이 있으며 코드와 테스트가 투자 안전을 보장하지 않습니다.
